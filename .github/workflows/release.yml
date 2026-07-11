@@ -60,11 +60,10 @@ jobs:
 
       - name: Publish
         run: npm publish --provenance --access public
-        env:
-          # npm has no "pending publisher", so a brand-new package's FIRST
-          # publish must authenticate with a token. Add an npm automation/
-          # granular token (publish access to @novatorius) as the repo secret
-          # NPM_TOKEN. Provenance still works because id-token: write is set
-          # above. Once the package exists you may switch to pure OIDC trusted
-          # publishing and delete this secret.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Tokenless OIDC trusted publishing. @novatorius/siren@0.1.0 was
+        # bootstrapped with a temporary automation token (now deleted); the
+        # package exists, so configure it as a trusted publisher on npmjs.com
+        # (Package -> Settings -> Trusted Publisher -> GitHub Actions: repo
+        # Novatorius/siren-node, workflow release.yml, environment blank). The
+        # id-token: write permission above mints the OIDC token npm exchanges
+        # for short-lived publish credentials. No standing secret.
