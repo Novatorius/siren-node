@@ -60,5 +60,11 @@ jobs:
 
       - name: Publish
         run: npm publish --provenance --access public
-        # env:
-        #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}  # only for the classic-token fallback
+        env:
+          # npm has no "pending publisher", so a brand-new package's FIRST
+          # publish must authenticate with a token. Add an npm automation/
+          # granular token (publish access to @siren) as the repo secret
+          # NPM_TOKEN. Provenance still works because id-token: write is set
+          # above. Once the package exists you may switch to pure OIDC trusted
+          # publishing and delete this secret.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
