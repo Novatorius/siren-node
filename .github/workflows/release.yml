@@ -1,12 +1,12 @@
-# Release workflow — publishes @siren/sdk to npm.
+# Release workflow — publishes @novatorius/siren to npm.
 #
 # Trigger: a GitHub Release being published, or a v* tag being pushed.
 #
 # Publishing uses npm OIDC "trusted publishing" with provenance. This requires
 # NO NPM_TOKEN secret when configured correctly. Before the first release you
-# MUST configure @siren/sdk as a trusted publisher on npmjs.com:
+# MUST configure @novatorius/siren as a trusted publisher on npmjs.com:
 #
-#   npmjs.com → package @siren/sdk → Settings → Publishing access →
+#   npmjs.com → package @novatorius/siren → Settings → Publishing access →
 #   "Trusted Publisher" → GitHub Actions →
 #     Repository:  Novatorius/siren-node
 #     Workflow:    release.yml
@@ -63,7 +63,7 @@ jobs:
         env:
           # npm has no "pending publisher", so a brand-new package's FIRST
           # publish must authenticate with a token. Add an npm automation/
-          # granular token (publish access to @siren) as the repo secret
+          # granular token (publish access to @novatorius) as the repo secret
           # NPM_TOKEN. Provenance still works because id-token: write is set
           # above. Once the package exists you may switch to pure OIDC trusted
           # publishing and delete this secret.

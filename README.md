@@ -2,10 +2,10 @@
 
 Record affiliate and incentive events, and verify signed webhooks, in a few lines of TypeScript.
 
-[![npm version](https://img.shields.io/npm/v/@siren/sdk.svg)](https://www.npmjs.com/package/@siren/sdk)
+[![npm version](https://img.shields.io/npm/v/@novatorius/siren.svg)](https://www.npmjs.com/package/@novatorius/siren)
 [![CI](https://github.com/Novatorius/siren-node/actions/workflows/ci.yml/badge.svg)](https://github.com/Novatorius/siren-node/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Node](https://img.shields.io/node/v/@siren/sdk.svg)](https://www.npmjs.com/package/@siren/sdk)
+[![Node](https://img.shields.io/node/v/@novatorius/siren.svg)](https://www.npmjs.com/package/@novatorius/siren)
 
 ## What is Siren?
 
@@ -29,7 +29,7 @@ CJS, and full type declarations.
 ## Install
 
 ```sh
-npm install @siren/sdk
+npm install @novatorius/siren
 ```
 
 ## Quickstart: record a sale
@@ -37,7 +37,7 @@ npm install @siren/sdk
 Mint an API key in the Siren dashboard (Settings → API Keys), then:
 
 ```ts
-import { Siren } from '@siren/sdk';
+import { Siren } from '@novatorius/siren';
 
 const siren = new Siren({ apiKey: process.env.SIREN_API_KEY! });
 
@@ -89,7 +89,7 @@ request body keyed by your subscription's signing secret. `constructEvent` verif
 
 ```ts
 import express from 'express';
-import { Siren, SignatureVerificationError } from '@siren/sdk';
+import { Siren, SignatureVerificationError } from '@novatorius/siren';
 
 const siren = new Siren({ apiKey: process.env.SIREN_API_KEY! });
 const app = express();
@@ -125,7 +125,7 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
 Create the subscription (the `signingSecret` is returned **once** — store it):
 
 ```ts
-import { WebhookEventType } from '@siren/sdk';
+import { WebhookEventType } from '@novatorius/siren';
 
 const sub = await siren.webhooks.subscriptions.create({
   targetUrl: 'https://example.com/webhooks/siren',

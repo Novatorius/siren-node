@@ -10,7 +10,7 @@ import type { SirenOptions } from './types';
  * The Siren API client.
  *
  * ```ts
- * import { Siren } from '@siren/sdk';
+ * import { Siren } from '@novatorius/siren';
  *
  * const siren = new Siren({ apiKey: process.env.SIREN_API_KEY! });
  *

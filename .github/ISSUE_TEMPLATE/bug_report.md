@@ -28,7 +28,7 @@ What actually happened, including any error messages or stack traces.
 
 ## Environment
 
-- `@siren/sdk` version:
+- `@novatorius/siren` version:
 - Node.js version:
 - Operating system:
 
