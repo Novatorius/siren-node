@@ -1,0 +1,64 @@
+# Release workflow — publishes @siren/sdk to npm.
+#
+# Trigger: a GitHub Release being published, or a v* tag being pushed.
+#
+# Publishing uses npm OIDC "trusted publishing" with provenance. This requires
+# NO NPM_TOKEN secret when configured correctly. Before the first release you
+# MUST configure @siren/sdk as a trusted publisher on npmjs.com:
+#
+#   npmjs.com → package @siren/sdk → Settings → Publishing access →
+#   "Trusted Publisher" → GitHub Actions →
+#     Repository:  Novatorius/siren-node
+#     Workflow:    release.yml
+#     Environment: (leave blank unless you add one below)
+#
+# The `id-token: write` permission below is what lets GitHub mint the OIDC
+# token npm exchanges for short-lived publish credentials. Requires npm CLI
+# 11.5.1+ (bundled with recent Node); the setup-node step below pins a version
+# new enough. Provenance requires a public repository.
+#
+# FALLBACK (classic token): if you cannot use trusted publishing, create an
+# automation token on npmjs.com, add it as the repo secret NPM_TOKEN, and
+# uncomment the `NODE_AUTH_TOKEN` env line on the publish step below. Trusted
+# publishing is preferred — no long-lived secret to rotate or leak.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for npm OIDC trusted publishing + provenance
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        # env:
+        #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}  # only for the classic-token fallback
