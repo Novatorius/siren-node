@@ -193,7 +193,6 @@ Siren ships official SDKs in three languages, all built against the same API:
 Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to clone, build, test,
 and open a pull request. Please also review our [Code of Conduct](./CODE_OF_CONDUCT.md).
 
-
 ## Resources
 
 - [Siren homepage](https://sirenaffiliates.com)
