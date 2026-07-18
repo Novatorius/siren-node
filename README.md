@@ -193,6 +193,52 @@ Siren ships official SDKs in three languages, all built against the same API:
 Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to clone, build, test,
 and open a pull request. Please also review our [Code of Conduct](./CODE_OF_CONDUCT.md).
 
+## Error handling
+
+Every failure throws a typed subclass of `SirenError`, each carrying `message`, `code`, and
+`statusCode`. Catch the base class to handle any SDK error, or branch on a specific subclass:
+
+| Error | When it's thrown |
+|---|---|
+| `AuthenticationError` | Missing or invalid API key (401) |
+| `PermissionError` | Key lacks permission for the operation (403) |
+| `NotFoundError` | The requested resource does not exist (404) |
+| `ValidationError` | Request payload failed validation (422) |
+| `BadRequestError` | Malformed request (400) |
+| `ConflictError` | Conflicting state, e.g. a duplicate (409) |
+| `RateLimitError` | Rate limit exceeded (429); honors `Retry-After` |
+| `ApiError` | Unexpected server error (5xx) |
+| `ConnectionError` | Network failure reaching Siren |
+| `SignatureVerificationError` | A webhook signature did not verify |
+
+```ts
+import {
+  Siren,
+  SirenError,
+  RateLimitError,
+  ValidationError,
+  NotFoundError,
+} from '@novatorius/siren';
+
+const siren = new Siren({ apiKey: process.env.SIREN_API_KEY! });
+
+try {
+  await siren.events.sale({ orderId: 'order_123', amount: 4999 });
+} catch (err) {
+  if (err instanceof RateLimitError) {
+    // already retried with backoff; back off further or queue for later
+  } else if (err instanceof ValidationError) {
+    console.error('Invalid payload:', err.message, err.code);
+  } else if (err instanceof NotFoundError) {
+    // the order or program does not exist
+  } else if (err instanceof SirenError) {
+    console.error(`Siren error ${err.statusCode}:`, err.message);
+  } else {
+    throw err; // not a Siren error
+  }
+}
+```
+
 ## Resources
 
 - [Siren homepage](https://sirenaffiliates.com)
