@@ -14,3 +14,9 @@ knowledgeDependencies:
       - global-integration-testing-standards-introduction
       - global-e2e-testing-standards-introduction
       - global-pattern-decidability-doctrine
+
+autoMerge:
+  enabled: true
+  rubric: global-auto-merge-review-rubric
+  allowedCategories: [docs]          # narrow first opt-in; widen as trust builds
+  alwaysHuman: [payments, migrations, auth, security]
