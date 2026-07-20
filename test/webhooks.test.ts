@@ -101,9 +101,10 @@ describe('webhooks.constructEvent', () => {
 });
 
 describe('WebhookEventType', () => {
-  it('contains all 27 event types plus "*"', () => {
+  it('contains all 31 event types plus "*"', () => {
+    // The full canonical set is pinned in test/taxonomy.test.ts.
     const values = Object.values(WebhookEventType);
-    expect(values).toHaveLength(28);
+    expect(values).toHaveLength(32);
     expect(values).toContain('*');
     expect(values).toContain('conversion.approved');
     expect(values).toContain('transaction.created');

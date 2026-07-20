@@ -89,7 +89,7 @@ request body keyed by your subscription's signing secret. `constructEvent` verif
 
 ```ts
 import express from 'express';
-import { Siren, SignatureVerificationError } from '@novatorius/siren';
+import { Siren, SignatureVerificationError, WebhookEventType } from '@novatorius/siren';
 
 const siren = new Siren({ apiKey: process.env.SIREN_API_KEY! });
 const app = express();
@@ -110,10 +110,10 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
   }
 
   switch (event.type) {
-    case 'conversion.approved':
+    case WebhookEventType.ConversionApproved:
       // ...
       break;
-    case 'payout.paid':
+    case WebhookEventType.PayoutPaid:
       // ...
       break;
   }
@@ -149,6 +149,16 @@ await saveSecretSomewhereSafe(sub.signingSecret);
   `transactions`, `obligations`, and `payouts`.
 - **Typed errors** — every failure throws a typed subclass of `SirenError` carrying `message`,
   `code`, and `statusCode` (`NotFoundError`, `RateLimitError`, `ValidationError`, and more).
+- **Typed taxonomy** — Siren's domain vocabulary as constants, so no magic strings cross the
+  boundary: `WebhookEventType`, `EventSlug`, and the status vocabularies (`ConversionStatus`,
+  `TransactionStatus`, `ObligationStatus`, `PayoutStatus`, `FulfillmentStatus`,
+  `OpportunityStatus`, `ApiKeyStatus`, `WebhookSubscriptionStatus`).
+
+```ts
+import { ConversionStatus } from '@novatorius/siren';
+
+const approved = await siren.conversions.list({ status: ConversionStatus.Approved });
+```
 
 ```ts
 const conversions = await siren.conversions.list({ page: 1, perPage: 50 });
