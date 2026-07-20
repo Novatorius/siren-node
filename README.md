@@ -195,8 +195,11 @@ and open a pull request. Please also review our [Code of Conduct](./CODE_OF_COND
 
 ## Error handling
 
-Every failure throws a typed subclass of `SirenError`, each carrying `message`, `code`, and
-`statusCode`. Catch the base class to handle any SDK error, or branch on a specific subclass:
+API and network failures throw a typed subclass of `SirenError`. Catch the base class to
+handle any SDK error, or branch on a specific subclass. Every error has a `message`; `code`
+(the API's machine-readable error code) and `statusCode` (the HTTP status) are set when the
+failing response provides them — `ConnectionError` and `SignatureVerificationError`, for
+example, carry no `statusCode`:
 
 | Error | When it's thrown |
 |---|---|
@@ -210,6 +213,10 @@ Every failure throws a typed subclass of `SirenError`, each carrying `message`, 
 | `ApiError` | Unexpected server error (5xx) |
 | `ConnectionError` | Network failure reaching Siren |
 | `SignatureVerificationError` | A webhook signature did not verify |
+
+Two exceptions to the subclass rule: constructing a client without an `apiKey` throws the
+base `SirenError` itself, and `webhooks.constructEvent` throws a native `SyntaxError` — not
+a `SirenError` — when a correctly signed body is not valid JSON.
 
 ```ts
 import {
@@ -237,7 +244,8 @@ try {
   } else if (err instanceof NotFoundError) {
     // nothing matched — e.g. a refund for a sale Siren never recorded
   } else if (err instanceof SirenError) {
-    console.error(`Siren error ${err.statusCode}:`, err.message);
+    // statusCode/code are set when the API produced the failure
+    console.error(`Siren error ${err.statusCode ?? 'n/a'} (${err.name}):`, err.message);
   } else {
     throw err; // not a Siren error
   }
