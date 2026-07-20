@@ -223,14 +223,19 @@ import {
 const siren = new Siren({ apiKey: process.env.SIREN_API_KEY! });
 
 try {
-  await siren.events.sale({ orderId: 'order_123', amount: 4999 });
+  await siren.events.sale({
+    source: 'stripe',
+    externalId: 'cs_test_a1b2c3',
+    total: 49.99,
+    trackingId: 4021,
+  });
 } catch (err) {
   if (err instanceof RateLimitError) {
     // already retried with backoff; back off further or queue for later
   } else if (err instanceof ValidationError) {
     console.error('Invalid payload:', err.message, err.code);
   } else if (err instanceof NotFoundError) {
-    // the order or program does not exist
+    // nothing matched — e.g. a refund for a sale Siren never recorded
   } else if (err instanceof SirenError) {
     console.error(`Siren error ${err.statusCode}:`, err.message);
   } else {
