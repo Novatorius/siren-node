@@ -1,6 +1,17 @@
 export { Siren } from './client';
 export { WebhookEventType } from './event-types';
 export {
+  ApiKeyStatus,
+  ConversionStatus,
+  EventSlug,
+  FulfillmentStatus,
+  ObligationStatus,
+  OpportunityStatus,
+  PayoutStatus,
+  TransactionStatus,
+  WebhookSubscriptionStatus,
+} from './taxonomy';
+export {
   SirenError,
   BadRequestError,
   AuthenticationError,
