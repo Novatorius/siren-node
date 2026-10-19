@@ -138,7 +138,7 @@ export class HttpClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
       Accept: 'application/json',
-      'User-Agent': 'siren-sdk-typescript/0.2.0',
+      'User-Agent': 'siren-sdk-typescript/0.3.0',
     };
     const init: RequestInit = { method: req.method, headers };
     if (req.body !== undefined) {
