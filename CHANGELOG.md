@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@novatorius/siren/storefront`, a browser-safe subpath export. `SirenStorefront` records a
+  referred visit (`recordVisit`) and claims an order for a visit token (`claimOrder`) through
+  Siren's public storefront routes. It uses `fetch` and takes no API key. The subpath also exports
+  the request and answer types, the storage key, the token pattern, the attribution window
+  helpers, and `storefrontUrls`, which builds the visit and claim URLs from a source and its
+  storefront key. The build has a separate entry (`dist/storefront.js`) with no Node built-ins.
+- `npm install` from a Git reference builds `dist/` through a `prepare` script.
+
 ## [0.2.0] - 2026-10-19
 
 This is a minor bump, because the changes below break existing callers. Each one follows a rule

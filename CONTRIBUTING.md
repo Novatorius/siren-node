@@ -17,7 +17,7 @@ npm install
 
 ```sh
 npm test           # run the test suite (vitest, fully offline — fetch is mocked)
-npm run build      # bundle to dist/ (ESM + CJS + .d.ts) with tsup
+npm run build      # bundle to dist/ (ESM + CJS + .d.ts) with tsup, including the browser-safe storefront entry
 npm run typecheck  # tsc --noEmit
 ```
 
