@@ -1,5 +1,6 @@
 /**
- * Every event type Siren can deliver to a webhook subscription, plus `All`
+ * Every event type Siren can deliver to a webhook subscription, matching the
+ * list Siren serves at `GET /webhooks/events`, plus `All`
  * (`"*"`) to subscribe to everything. Use these constants instead of raw
  * strings for autocomplete and typo protection:
  *
@@ -15,12 +16,18 @@ export const WebhookEventType = {
   All: '*',
   AllocationCompleted: 'allocation.completed',
   CollaboratorCreated: 'collaborator.created',
+  CollaboratorDeactivated: 'collaborator.deactivated',
   CollaboratorRegistered: 'collaborator.registered',
+  CollaboratorUpdated: 'collaborator.updated',
   ConversionApproved: 'conversion.approved',
   ConversionCreated: 'conversion.created',
   ConversionRejected: 'conversion.rejected',
   ConversionRenewed: 'conversion.renewed',
   CouponApplied: 'coupon.applied',
+  CreditIssued: 'credit.issued',
+  CreditRedeemed: 'credit.redeemed',
+  CurrencyCreated: 'currency.created',
+  CurrencyDeleted: 'currency.deleted',
   DistributionCompleted: 'distribution.completed',
   EngagementAwarded: 'engagement.awarded',
   EngagementCompleted: 'engagement.completed',
@@ -35,6 +42,7 @@ export const WebhookEventType = {
   OpportunityInvalidated: 'opportunity.invalidated',
   PayoutCreated: 'payout.created',
   PayoutPaid: 'payout.paid',
+  ProgramCreated: 'program.created',
   RefundCreated: 'refund.created',
   RenewalCreated: 'renewal.created',
   SaleCreated: 'sale.created',

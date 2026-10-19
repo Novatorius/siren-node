@@ -1,11 +1,15 @@
 import type { HttpClient } from '../http';
+import { parseJsonBody } from '../http';
 import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '../types';
 
 /**
  * Event ingestion — the primary integration point. Wraps `POST /event/{slug}`.
  *
- * Every method resolves to an `EventResult` whose `opportunityId` is read
- * from the `X-Siren-OID` response header (the body is empty on success).
+ * Every method resolves to an `EventResult`. `opportunityId` comes from the
+ * `X-Siren-OID` response header, or from the body when the header is absent.
+ * Sales and site visits also return a body that says what Siren did, exposed
+ * as `status` and `body`. While the organization's engine is paused, Siren
+ * queues the event and answers 202, which sets `queued: true`.
  *
  * Event ingestion is safe to auto-retry, so these calls retry on network
  * errors and 429/5xx up to the client's `maxRetries`.
@@ -57,9 +61,31 @@ export class EventsResource {
       body: payload,
       retriable: true,
     });
+    const result: EventResult = {};
+
     const oid = response.headers.get('x-siren-oid');
-    if (oid == null || oid === '') return {};
-    const opportunityId = Number(oid);
-    return Number.isFinite(opportunityId) ? { opportunityId } : {};
+    if (oid != null && oid !== '') {
+      const opportunityId = Number(oid);
+      if (Number.isFinite(opportunityId)) result.opportunityId = opportunityId;
+    }
+
+    const body = await parseJsonBody(response);
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const outcome = body as Record<string, unknown>;
+      result.body = outcome;
+      if (typeof outcome.status === 'string') result.status = outcome.status;
+      if (outcome.queued === true || response.status === 202) result.queued = true;
+      if (
+        result.opportunityId === undefined &&
+        typeof outcome.opportunityId === 'number' &&
+        Number.isFinite(outcome.opportunityId)
+      ) {
+        result.opportunityId = outcome.opportunityId;
+      }
+    } else if (response.status === 202) {
+      result.queued = true;
+    }
+
+    return result;
   }
 }

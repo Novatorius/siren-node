@@ -13,7 +13,7 @@ export {
   ConnectionError,
   SignatureVerificationError,
 } from './errors';
-export type { SirenErrorDetails } from './errors';
+export type { SirenErrorDetails, FailedValidation } from './errors';
 export type {
   SirenOptions,
   EventResult,
@@ -22,6 +22,7 @@ export type {
   RefundParams,
   SiteVisitedParams,
   WebhookEvent,
+  WebhookHeaders,
   WebhookSubscription,
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,

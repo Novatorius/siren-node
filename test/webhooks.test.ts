@@ -61,26 +61,70 @@ describe('webhooks.verifySignature', () => {
   });
 });
 
+// Siren sends the event payload itself as the body, and puts the event type
+// and delivery id in the X-Siren-Event and X-Siren-Delivery headers
+// (WebhookDeliveryService::deliver() and docs/api/webhooks-delivery.md in the
+// Siren repo). These tests used to sign a `{ type, data, deliveryId }` body,
+// which Siren never sends, so a real delivery parsed to an empty type and
+// empty data. They now use the wire format.
 describe('webhooks.constructEvent', () => {
-  const payload = {
-    type: 'payout.paid',
-    data: { payoutId: 31, amount: 120.5 },
-    deliveryId: 'dlv_abc',
-  };
+  const payload = { payoutId: 31, amount: 120.5, type: 'stripe' };
   const body = JSON.stringify(payload);
+  const headers = {
+    'x-siren-event': 'payout.paid',
+    'x-siren-delivery': 'evt_8a3f1b2c4d5e6f7890abcdef12345678',
+  };
 
-  it('verifies and parses a valid delivery', () => {
-    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET);
+  it('verifies a delivery, returns the body as data, and reads type and id from the headers', () => {
+    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET, headers);
 
     expect(event.type).toBe('payout.paid');
-    expect(event.data).toEqual({ payoutId: 31, amount: 120.5 });
-    expect(event.deliveryId).toBe('dlv_abc');
+    expect(event.data).toEqual(payload);
+    expect(event.deliveryId).toBe('evt_8a3f1b2c4d5e6f7890abcdef12345678');
   });
 
-  it('works with raw Buffer bodies', () => {
+  it('works with raw Buffer bodies and a Fetch Headers object', () => {
     const bytes = Buffer.from(body, 'utf8');
-    const event = bareClient().webhooks.constructEvent(bytes, sign(bytes), SECRET);
+    const event = bareClient().webhooks.constructEvent(
+      bytes,
+      sign(bytes),
+      SECRET,
+      new Headers({ 'X-Siren-Event': 'payout.paid', 'X-Siren-Delivery': 'evt_1' }),
+    );
     expect(event.type).toBe('payout.paid');
+    expect(event.deliveryId).toBe('evt_1');
+  });
+
+  it('reads header names in any case and the first value of a repeated header', () => {
+    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET, {
+      'X-Siren-Event': ['payout.paid', 'ignored'],
+      'X-SIREN-DELIVERY': 'evt_2',
+    });
+    expect(event.type).toBe('payout.paid');
+    expect(event.deliveryId).toBe('evt_2');
+  });
+
+  it('never takes a payload field named type for the event type', () => {
+    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET);
+    expect(event.type).toBe('');
+    expect(event.deliveryId).toBeUndefined();
+    expect(event.data).toEqual(payload);
+  });
+
+  it('unwraps the envelope a Property-bound subscription receives', () => {
+    const envelope = JSON.stringify({
+      version: 1,
+      id: 'evt_3',
+      type: 'conversion.approved',
+      kind: 'engine',
+      propertyId: 4,
+      data: { conversionIds: [301] },
+      records: {},
+    });
+    const event = bareClient().webhooks.constructEvent(envelope, sign(envelope), SECRET);
+    expect(event.type).toBe('conversion.approved');
+    expect(event.deliveryId).toBe('evt_3');
+    expect(event.data).toEqual({ conversionIds: [301] });
   });
 
   it('throws SignatureVerificationError for a tampered body', () => {
@@ -101,9 +145,15 @@ describe('webhooks.constructEvent', () => {
 });
 
 describe('WebhookEventType', () => {
-  it('contains all 27 event types plus "*"', () => {
+  // The 34 events Siren's WebhookCatalog lists and GET /webhooks/events serves.
+  it('contains all 34 event types plus "*"', () => {
     const values = Object.values(WebhookEventType);
-    expect(values).toHaveLength(28);
+    expect(values).toHaveLength(35);
+    expect(values).toContain('program.created');
+    expect(values).toContain('collaborator.updated');
+    expect(values).toContain('collaborator.deactivated');
+    expect(values).toContain('credit.issued');
+    expect(values).toContain('currency.deleted');
     expect(values).toContain('*');
     expect(values).toContain('conversion.approved');
     expect(values).toContain('transaction.created');

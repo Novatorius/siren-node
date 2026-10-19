@@ -53,6 +53,14 @@ const { opportunityId } = await siren.events.sale({
 console.log(`Recorded against opportunity ${opportunityId}`);
 ```
 
+Each call also returns what Siren did with the event. A sale's `status` is `created`, `recorded`,
+`duplicate`, `unattributed` or `ignored`, and `body` holds the full answer. While your organization's
+engine is paused, Siren queues the event instead of refusing it and the result has `queued: true`.
+A queued event needs no resend.
+
+`currency` is optional and must be a currency your organization uses. Without it, the sale is
+recorded in your organization's default currency.
+
 With line items (per-unit `amount`; a missing `quantity` defaults to `1`):
 
 ```ts
@@ -79,8 +87,10 @@ await siren.events.ingest('loyalty-points-earned', { userId: 42, points: 100 });
 ## Quickstart: verify a webhook
 
 Siren signs every delivery with `X-Siren-Signature: sha256=<hmac>` — an HMAC-SHA256 of the raw
-request body keyed by your subscription's signing secret. `constructEvent` verifies the signature
-(constant-time) and parses the event in one call.
+request body keyed by your subscription's signing secret. The body is the event payload itself.
+The event type travels in the `X-Siren-Event` header and a unique delivery id in
+`X-Siren-Delivery`. `constructEvent` verifies the signature (constant-time) and parses the event in
+one call. Pass the request headers so it can fill in `type` and `deliveryId`.
 
 > **⚠️ You MUST pass the RAW request body bytes to `constructEvent`.**
 > Body parsers like `express.json()` re-serialize the payload, and the HMAC will never match a
@@ -101,6 +111,7 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
       req.body,                              // raw Buffer — exact bytes received
       req.header('X-Siren-Signature'),
       process.env.SIREN_WEBHOOK_SECRET!,
+      req.headers,                           // gives event.type and event.deliveryId
     );
   } catch (err) {
     if (err instanceof SignatureVerificationError) {
@@ -109,6 +120,7 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
     throw err;
   }
 
+  // Retries can deliver the same event twice. Skip a deliveryId you already handled.
   switch (event.type) {
     case 'conversion.approved':
       // ...
@@ -122,7 +134,8 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
 });
 ```
 
-Create the subscription (the `signingSecret` is returned **once** — store it):
+Create the subscription (the `signingSecret` is returned **once** — store it). Siren lists the
+event types it sends at `GET /webhooks/events`, and `WebhookEventType` holds the same names:
 
 ```ts
 import { WebhookEventType } from '@novatorius/siren';
@@ -151,12 +164,18 @@ await saveSecretSomewhereSafe(sub.signingSecret);
   `code`, and `statusCode` (`NotFoundError`, `RateLimitError`, `ValidationError`, and more).
 
 ```ts
-const conversions = await siren.conversions.list({ page: 1, perPage: 50 });
+const conversions = await siren.conversions.list({ page: 1, perPage: 50, status: 'approved' });
 console.log(conversions.estimatedCount); // total across all pages, if known
 
-const key = await siren.apiKeys.create({ label: 'Production server' });
+const key = await siren.apiKeys.create({ label: 'Production server', scopes: ['event:*'] });
 // key.rawKey (sk_live_...) is returned ONCE and cannot be retrieved later.
 ```
+
+Pages hold up to 200 records, and Siren's default page size is 10. An API key sends events and
+nothing else, so `apiKeys.create` takes event scopes only (`event:*` or `event:{slug}`).
+
+On Siren Cloud an API key authenticates event ingestion only. The webhook subscription, API key
+and reconciliation routes answer 401 to an API key.
 
 ## Configuration
 
@@ -198,16 +217,16 @@ and open a pull request. Please also review our [Code of Conduct](./CODE_OF_COND
 API and network failures throw a typed subclass of `SirenError`. Catch the base class to
 handle any SDK error, or branch on a specific subclass. Every error has a `message`; `code`
 (the API's machine-readable error code) and `statusCode` (the HTTP status) are set when the
-failing response provides them — `ConnectionError` and `SignatureVerificationError`, for
+failing response provides them, and `data` holds the error's `context` — `ConnectionError` and `SignatureVerificationError`, for
 example, carry no `statusCode`:
 
 | Error | When it's thrown |
 |---|---|
 | `AuthenticationError` | Missing or invalid API key (401) |
-| `PermissionError` | Key lacks permission for the operation (403) |
+| `PermissionError` | The credential may not do this, such as a key without the event's scope (403) |
 | `NotFoundError` | The requested resource does not exist (404) |
-| `ValidationError` | Request payload failed validation (422) |
-| `BadRequestError` | Malformed request (400) |
+| `BadRequestError` | Malformed request or failed validation (400). `fieldErrors` lists each broken rule |
+| `ValidationError` | Request payload failed validation on a route that answers 422 |
 | `ConflictError` | Conflicting state, e.g. a duplicate (409) |
 | `RateLimitError` | Rate limit exceeded (429); honors `Retry-After` |
 | `ApiError` | Unexpected server error (5xx) |
@@ -223,7 +242,7 @@ import {
   Siren,
   SirenError,
   RateLimitError,
-  ValidationError,
+  BadRequestError,
   NotFoundError,
 } from '@novatorius/siren';
 
@@ -239,8 +258,9 @@ try {
 } catch (err) {
   if (err instanceof RateLimitError) {
     // already retried with backoff; back off further or queue for later
-  } else if (err instanceof ValidationError) {
-    console.error('Invalid payload:', err.message, err.code);
+  } else if (err instanceof BadRequestError) {
+    // err.code is 'VALIDATION_FAILED' and err.fieldErrors names each field
+    console.error('Invalid payload:', err.message, err.fieldErrors);
   } else if (err instanceof NotFoundError) {
     // nothing matched — e.g. a refund for a sale Siren never recorded
   } else if (err instanceof SirenError) {

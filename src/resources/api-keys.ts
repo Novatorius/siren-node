@@ -11,6 +11,9 @@ export class ApiKeysResource {
    * The plaintext `rawKey` (`sk_live_...`) is returned exactly once and
    * cannot be retrieved later — store it securely. This write is never
    * auto-retried.
+   *
+   * `scopes` must hold at least one event scope (`event:*` or
+   * `event:{slug}`). Siren answers 400 for a resource scope.
    */
   create(params: CreateApiKeyParams): Promise<CreatedApiKey> {
     return this.http.requestData<CreatedApiKey>({

@@ -30,7 +30,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function parseJsonBody(response: Response): Promise<unknown> {
+export async function parseJsonBody(response: Response): Promise<unknown> {
   let text: string;
   try {
     text = await response.text();

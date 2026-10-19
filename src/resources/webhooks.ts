@@ -5,11 +5,42 @@ import type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
   WebhookEvent,
+  WebhookHeaders,
   WebhookSubscription,
 } from '../types';
 
 const SIGNATURE_PREFIX = 'sha256=';
 const HEX_DIGEST_PATTERN = /^[0-9a-f]{64}$/i;
+
+function readHeader(headers: WebhookHeaders | undefined, name: string): string | undefined {
+  if (!headers) return undefined;
+  if (typeof (headers as Headers).get === 'function') {
+    const value = (headers as Headers).get(name);
+    return value == null || value === '' ? undefined : value;
+  }
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers as Record<string, string | string[] | undefined>)) {
+    if (key.toLowerCase() !== wanted) continue;
+    const first = Array.isArray(value) ? value[0] : value;
+    return first == null || first === '' ? undefined : first;
+  }
+  return undefined;
+}
+
+/**
+ * Whether a body is the envelope Siren sends to a subscription bound to a
+ * connected site's Property: `{ version, id, type, data, records, ... }`.
+ * Every other subscription receives the event payload itself as the body.
+ */
+function isPropertyEnvelope(parsed: Record<string, unknown>): boolean {
+  return (
+    parsed.version !== undefined &&
+    typeof parsed.type === 'string' &&
+    !!parsed.data &&
+    typeof parsed.data === 'object' &&
+    !Array.isArray(parsed.data)
+  );
+}
 
 function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
   const bytes = typeof rawBody === 'string' ? Buffer.from(rawBody, 'utf8') : rawBody;
@@ -61,6 +92,9 @@ export class WebhookSubscriptionsResource {
  * `X-Siren-Signature: sha256=<hex hmac-sha256(rawBody, signingSecret)>`.
  * Verification MUST run against the exact raw bytes received — a
  * re-serialized object will not produce the same HMAC.
+ *
+ * The body is the event payload itself. The event type and the delivery id
+ * travel in the `X-Siren-Event` and `X-Siren-Delivery` headers.
  */
 export class WebhooksResource {
   readonly subscriptions: WebhookSubscriptionsResource;
@@ -77,6 +111,10 @@ export class WebhooksResource {
    *   NOT pass a re-parsed/re-serialized object.
    * @param signatureHeader The `X-Siren-Signature` header value.
    * @param secret The subscription's signing secret.
+   * @param headers The request headers (a Fetch `Headers` object or Node's
+   *   `req.headers`). The event type and delivery id are read from
+   *   `X-Siren-Event` and `X-Siren-Delivery`. Without them, `type` is empty
+   *   and `deliveryId` is unset.
    * @throws {SignatureVerificationError} when the header is missing or the
    *   signature does not match.
    */
@@ -84,6 +122,7 @@ export class WebhooksResource {
     rawBody: string | Uint8Array,
     signatureHeader: string | null | undefined,
     secret: string,
+    headers?: WebhookHeaders,
   ): WebhookEvent {
     if (signatureHeader == null || signatureHeader === '') {
       throw new SignatureVerificationError(
@@ -99,15 +138,25 @@ export class WebhooksResource {
 
     const text =
       typeof rawBody === 'string' ? rawBody : Buffer.from(rawBody).toString('utf8');
-    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const parsed = JSON.parse(text) as unknown;
+    const body: Record<string, unknown> =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    const envelope = isPropertyEnvelope(body);
+
+    let type = readHeader(headers, 'x-siren-event');
+    let deliveryId = readHeader(headers, 'x-siren-delivery');
+    if (envelope) {
+      type ??= body.type as string;
+      if (deliveryId === undefined && typeof body.id === 'string') deliveryId = body.id;
+    }
+
     const event: WebhookEvent = {
-      type: typeof parsed.type === 'string' ? parsed.type : '',
-      data:
-        parsed.data && typeof parsed.data === 'object'
-          ? (parsed.data as Record<string, unknown>)
-          : {},
+      type: type ?? '',
+      data: envelope ? (body.data as Record<string, unknown>) : body,
     };
-    if (typeof parsed.deliveryId === 'string') event.deliveryId = parsed.deliveryId;
+    if (deliveryId !== undefined) event.deliveryId = deliveryId;
     return event;
   }
 
