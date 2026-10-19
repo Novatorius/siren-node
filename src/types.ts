@@ -102,17 +102,23 @@ export interface SiteVisitedParams {
 export interface WebhookEvent {
   /**
    * Event type, e.g. `"conversion.approved"`, from the `X-Siren-Event`
-   * header. Empty when the headers were not passed to `constructEvent`.
+   * header, or from the envelope a connected site's subscription receives.
    */
   type: string;
-  /** Event payload: the JSON request body. */
+  /** Event payload: the JSON request body, or the envelope's `data`. */
   data: Record<string, unknown>;
   /**
-   * Unique delivery id (`evt_...`) from the `X-Siren-Delivery` header. Use it
-   * to skip a delivery you already processed. Absent when the headers were
-   * not passed to `constructEvent`.
+   * Unique delivery id (`evt_...`) from the `X-Siren-Delivery` header or the
+   * envelope's `id`. Use it to skip a delivery you already processed.
    */
   deliveryId?: string;
+  /**
+   * The whole parsed body. For most subscriptions this is the payload
+   * itself. A connected site's subscription receives an envelope, which also
+   * carries `version`, `kind`, `occurredAt`, `propertyId`, `match` and the
+   * related `records`. Always set by `constructEvent`.
+   */
+  body?: Record<string, unknown>;
 }
 
 /**

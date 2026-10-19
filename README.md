@@ -90,7 +90,10 @@ Siren signs every delivery with `X-Siren-Signature: sha256=<hmac>` — an HMAC-S
 request body keyed by your subscription's signing secret. The body is the event payload itself.
 The event type travels in the `X-Siren-Event` header and a unique delivery id in
 `X-Siren-Delivery`. `constructEvent` verifies the signature (constant-time) and parses the event in
-one call. Pass the request headers so it can fill in `type` and `deliveryId`.
+one call. Pass the request headers so it can fill in `type` and `deliveryId`. Without the
+`X-Siren-Event` header it throws `SignatureVerificationError`, because the body alone does not name
+the event. A connected site's subscription receives an envelope that names its own type and id, and
+`event.body` holds the whole envelope with its `records`.
 
 > **⚠️ You MUST pass the RAW request body bytes to `constructEvent`.**
 > Body parsers like `express.json()` re-serialize the payload, and the HMAC will never match a

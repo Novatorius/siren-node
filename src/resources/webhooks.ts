@@ -34,7 +34,7 @@ function readHeader(headers: WebhookHeaders | undefined, name: string): string |
  */
 function isPropertyEnvelope(parsed: Record<string, unknown>): boolean {
   return (
-    parsed.version !== undefined &&
+    typeof parsed.version === 'number' &&
     typeof parsed.type === 'string' &&
     !!parsed.data &&
     typeof parsed.data === 'object' &&
@@ -113,10 +113,12 @@ export class WebhooksResource {
    * @param secret The subscription's signing secret.
    * @param headers The request headers (a Fetch `Headers` object or Node's
    *   `req.headers`). The event type and delivery id are read from
-   *   `X-Siren-Event` and `X-Siren-Delivery`. Without them, `type` is empty
-   *   and `deliveryId` is unset.
-   * @throws {SignatureVerificationError} when the header is missing or the
-   *   signature does not match.
+   *   `X-Siren-Event` and `X-Siren-Delivery`. A delivery whose body is the
+   *   bare payload is refused without them. A connected site's envelope
+   *   names its own type and id.
+   * @throws {SignatureVerificationError} when the header is missing, the
+   *   signature does not match, the body is not a JSON object, or a bare
+   *   payload arrives without the `X-Siren-Event` header.
    */
   constructEvent(
     rawBody: string | Uint8Array,
@@ -138,23 +140,40 @@ export class WebhooksResource {
 
     const text =
       typeof rawBody === 'string' ? rawBody : Buffer.from(rawBody).toString('utf8');
-    const parsed = JSON.parse(text) as unknown;
-    const body: Record<string, unknown> =
-      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text) as unknown;
+    } catch (cause) {
+      throw new SignatureVerificationError('The webhook payload is not valid JSON.', { cause });
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new SignatureVerificationError('The webhook payload must be a JSON object.');
+    }
+    const body = parsed as Record<string, unknown>;
     const envelope = isPropertyEnvelope(body);
 
-    let type = readHeader(headers, 'x-siren-event');
+    let type = readHeader(headers, 'x-siren-event')?.trim() || undefined;
     let deliveryId = readHeader(headers, 'x-siren-delivery');
     if (envelope) {
       type ??= body.type as string;
       if (deliveryId === undefined && typeof body.id === 'string') deliveryId = body.id;
     }
 
+    // A plain subscription's body never names its event. Without the
+    // X-Siren-Event header there is nothing to dispatch on, so refuse the
+    // delivery loudly rather than return an event with an empty type that
+    // matches no handler. Code written for 0.1.0 passes no headers.
+    if (type === undefined) {
+      throw new SignatureVerificationError(
+        "Siren names this delivery's event in the X-Siren-Event header, and the body does not " +
+          'carry it. Pass the request headers as the fourth argument to constructEvent.',
+      );
+    }
+
     const event: WebhookEvent = {
-      type: type ?? '',
+      type,
       data: envelope ? (body.data as Record<string, unknown>) : body,
+      body,
     };
     if (deliveryId !== undefined) event.deliveryId = deliveryId;
     return event;

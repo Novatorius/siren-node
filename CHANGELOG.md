@@ -7,10 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The next release is 0.2.0, a minor bump, because the changes below break existing callers. Each
+one follows a rule Siren already enforces.
+
+### Breaking
+
+- `CreateApiKeyParams.scopes` is required, so TypeScript code that creates a key without scopes no
+  longer compiles. Siren answers 400 to a key without scopes.
+- `webhooks.constructEvent` returns the request body as `data`, and throws
+  `SignatureVerificationError` when a bare payload arrives without the `X-Siren-Event` header. The
+  three-argument call from 0.1.0 used to return an event with an empty type for every real
+  delivery, which no handler matched. Pass the request headers as the fourth argument.
+- `webhooks.constructEvent` throws `SignatureVerificationError` for a body that is not a JSON
+  object. It used to throw the parser's `SyntaxError` for bad JSON and return empty data for any
+  other value.
+
 ### Added
 
 - `webhooks.constructEvent` takes the request headers as a fourth argument and reads the event
   type from `X-Siren-Event` and the delivery id from `X-Siren-Delivery`.
+- `WebhookEvent.body` holds the whole parsed body, so a connected site can read the envelope's
+  `records`, `propertyId` and `kind`.
 - `EventResult` carries what Siren did with the event: `status`, `body`, and `queued` when Siren
   queued the event (HTTP 202) because the organization's engine is paused. A queued visit's
   `opportunityId` is read from the body, where Siren reports it.
@@ -42,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   working out the offset, and pass an explicit `number` or `offset` through.
 - `webhooks.constructEvent` read `type`, `data` and `deliveryId` from the body, which Siren never
   sends. A real delivery parsed to an empty type and empty data. `data` is now the body, and the
-  body of a Property-bound subscription's envelope is unwrapped.
+  body of a Property-bound subscription's envelope is unwrapped. The envelope is known by its
+  numeric `version`.
 - Errors read `error.context`, which Siren sends, instead of only `error.data`, which it does not.
   When the body has no `code`, `context.type` fills it.
 - `openapi.yaml` described every response as wrapped in `data`, list responses as bare arrays,

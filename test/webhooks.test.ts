@@ -104,11 +104,49 @@ describe('webhooks.constructEvent', () => {
     expect(event.deliveryId).toBe('evt_2');
   });
 
+  // Code written for 0.1.0 calls constructEvent with three arguments. A bare
+  // payload names no event (and this one has a `type` field of its own, as
+  // currency.created's does), so the SDK refuses it instead of returning an
+  // event with an empty type that no handler matches.
+  it('refuses a bare payload without the X-Siren-Event header', () => {
+    expect(() => bareClient().webhooks.constructEvent(body, sign(body), SECRET)).toThrow(
+      SignatureVerificationError,
+    );
+    expect(() => bareClient().webhooks.constructEvent(body, sign(body), SECRET)).toThrow(
+      /X-Siren-Event/,
+    );
+    expect(() =>
+      bareClient().webhooks.constructEvent(body, sign(body), SECRET, { 'x-siren-delivery': 'evt_1' }),
+    ).toThrow(/X-Siren-Event/);
+    expect(() =>
+      bareClient().webhooks.constructEvent(body, sign(body), SECRET, { 'x-siren-event': '  ' }),
+    ).toThrow(/X-Siren-Event/);
+  });
+
   it('never takes a payload field named type for the event type', () => {
-    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET);
-    expect(event.type).toBe('');
-    expect(event.deliveryId).toBeUndefined();
+    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET, {
+      'x-siren-event': 'currency.created',
+    });
+    expect(event.type).toBe('currency.created');
     expect(event.data).toEqual(payload);
+    expect(event.body).toEqual(payload);
+  });
+
+  it('treats a body without version as a bare payload even with type and data keys', () => {
+    const flat = JSON.stringify({ type: 'points', data: { note: 'x' } });
+    const event = bareClient().webhooks.constructEvent(flat, sign(flat), SECRET, {
+      'x-siren-event': 'currency.created',
+    });
+    expect(event.type).toBe('currency.created');
+    expect(event.data).toEqual({ type: 'points', data: { note: 'x' } });
+  });
+
+  it('throws SignatureVerificationError for a body that is not a JSON object', () => {
+    for (const raw of ['not json', '[1,2]', 'null']) {
+      expect(() =>
+        bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, headers),
+      ).toThrow(SignatureVerificationError);
+    }
   });
 
   it('unwraps the envelope a Property-bound subscription receives', () => {
@@ -125,6 +163,8 @@ describe('webhooks.constructEvent', () => {
     expect(event.type).toBe('conversion.approved');
     expect(event.deliveryId).toBe('evt_3');
     expect(event.data).toEqual({ conversionIds: [301] });
+    expect(event.body?.propertyId).toBe(4);
+    expect(event.body?.records).toEqual({});
   });
 
   it('throws SignatureVerificationError for a tampered body', () => {
