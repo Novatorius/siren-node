@@ -59,8 +59,10 @@ one follows a rule Siren already enforces.
   working out the offset, and pass an explicit `number` or `offset` through.
 - `webhooks.constructEvent` read `type`, `data` and `deliveryId` from the body, which Siren never
   sends. A real delivery parsed to an empty type and empty data. `data` is now the body, and the
-  body of a Property-bound subscription's envelope is unwrapped. The envelope is known by its
-  numeric `version`.
+  body of a Property-bound subscription's envelope is unwrapped. A body is read as an envelope only
+  when its `id` and `type` match the `X-Siren-Delivery` and `X-Siren-Event` headers, or when
+  neither header is passed, so a custom event's payload that holds `version`, `type` and `data`
+  keys stays whole.
 - Errors read `error.context`, which Siren sends, instead of only `error.data`, which it does not.
   When the body has no `code`, `context.type` fills it.
 - `openapi.yaml` described every response as wrapped in `data`, list responses as bare arrays,

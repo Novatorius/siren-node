@@ -31,14 +31,34 @@ function readHeader(headers: WebhookHeaders | undefined, name: string): string |
  * Whether a body is the envelope Siren sends to a subscription bound to a
  * connected site's Property: `{ version, id, type, data, records, ... }`.
  * Every other subscription receives the event payload itself as the body.
+ *
+ * Siren sends both with the same headers, and a plain payload, such as a
+ * custom event's, may hold `version`, `type` and `data` keys of its own.
+ * Only an envelope carries its own delivery id: Siren writes the
+ * `X-Siren-Delivery` value into the envelope's `id` and the `X-Siren-Event`
+ * value into its `type`. So when either header is present, the body must
+ * match them. Without either header the shape alone decides.
  */
-function isPropertyEnvelope(parsed: Record<string, unknown>): boolean {
-  return (
-    typeof parsed.version === 'number' &&
+function isPropertyEnvelope(
+  parsed: Record<string, unknown>,
+  eventType: string | undefined,
+  deliveryId: string | undefined,
+): boolean {
+  const shaped =
+    Number.isInteger(parsed.version) &&
+    typeof parsed.id === 'string' &&
+    parsed.id !== '' &&
     typeof parsed.type === 'string' &&
+    parsed.type !== '' &&
     !!parsed.data &&
     typeof parsed.data === 'object' &&
-    !Array.isArray(parsed.data)
+    !Array.isArray(parsed.data);
+  if (!shaped) return false;
+  if (eventType === undefined && deliveryId === undefined) return true;
+  return (
+    deliveryId !== undefined &&
+    parsed.id === deliveryId &&
+    (eventType === undefined || parsed.type === eventType)
   );
 }
 
@@ -94,7 +114,10 @@ export class WebhookSubscriptionsResource {
  * re-serialized object will not produce the same HMAC.
  *
  * The body is the event payload itself. The event type and the delivery id
- * travel in the `X-Siren-Event` and `X-Siren-Delivery` headers.
+ * travel in the `X-Siren-Event` and `X-Siren-Delivery` headers. A connected
+ * site's subscription receives an envelope with the same headers, whose `id`
+ * is the `X-Siren-Delivery` value and whose `type` is the `X-Siren-Event`
+ * value.
  */
 export class WebhooksResource {
   readonly subscriptions: WebhookSubscriptionsResource;
@@ -115,7 +138,10 @@ export class WebhooksResource {
    *   `req.headers`). The event type and delivery id are read from
    *   `X-Siren-Event` and `X-Siren-Delivery`. A delivery whose body is the
    *   bare payload is refused without them. A connected site's envelope
-   *   names its own type and id.
+   *   names its own type and id. When either header is present, a body is
+   *   read as an envelope only when its `id` equals `X-Siren-Delivery` and
+   *   its `type` equals `X-Siren-Event`. Without either header, a body
+   *   shaped like an envelope is read as one.
    * @throws {SignatureVerificationError} when the header is missing, the
    *   signature does not match, the body is not a JSON object, or a bare
    *   payload arrives without the `X-Siren-Event` header.
@@ -150,13 +176,13 @@ export class WebhooksResource {
       throw new SignatureVerificationError('The webhook payload must be a JSON object.');
     }
     const body = parsed as Record<string, unknown>;
-    const envelope = isPropertyEnvelope(body);
 
     let type = readHeader(headers, 'x-siren-event')?.trim() || undefined;
-    let deliveryId = readHeader(headers, 'x-siren-delivery');
+    let deliveryId = readHeader(headers, 'x-siren-delivery')?.trim() || undefined;
+    const envelope = isPropertyEnvelope(body, type, deliveryId);
     if (envelope) {
-      type ??= body.type as string;
-      if (deliveryId === undefined && typeof body.id === 'string') deliveryId = body.id;
+      type = body.type as string;
+      deliveryId = body.id as string;
     }
 
     // A plain subscription's body never names its event. Without the

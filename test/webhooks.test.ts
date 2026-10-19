@@ -132,7 +132,7 @@ describe('webhooks.constructEvent', () => {
     expect(event.body).toEqual(payload);
   });
 
-  it('treats a body without version as a bare payload even with type and data keys', () => {
+  it('treats a body without the envelope fields as a bare payload even with type and data keys', () => {
     const flat = JSON.stringify({ type: 'points', data: { note: 'x' } });
     const event = bareClient().webhooks.constructEvent(flat, sign(flat), SECRET, {
       'x-siren-event': 'currency.created',
@@ -165,6 +165,71 @@ describe('webhooks.constructEvent', () => {
     expect(event.data).toEqual({ conversionIds: [301] });
     expect(event.body?.propertyId).toBe(4);
     expect(event.body?.records).toEqual({});
+  });
+
+  it('unwraps an envelope whose id and type match the delivery headers', () => {
+    const envelope = JSON.stringify({
+      version: 1,
+      id: 'evt_4',
+      type: 'sale.created',
+      kind: 'store',
+      data: { transactionId: 77 },
+      records: {},
+    });
+    const event = bareClient().webhooks.constructEvent(envelope, sign(envelope), SECRET, {
+      'X-Siren-Event': 'sale.created',
+      'X-Siren-Delivery': 'evt_4',
+    });
+    expect(event.type).toBe('sale.created');
+    expect(event.deliveryId).toBe('evt_4');
+    expect(event.data).toEqual({ transactionId: 77 });
+  });
+
+  // A custom event's payload is whatever the sender posted, so it can look
+  // like an envelope. Delivered to an ordinary subscription, its id is not
+  // the delivery id in X-Siren-Delivery, so the whole body stays the data.
+  it('keeps a custom payload shaped like an envelope whole', () => {
+    const custom = { version: 2, id: 'order-81', type: 'subscription', data: { plan: 'pro' } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'plan.renewed',
+      'x-siren-delivery': 'evt_0f3a',
+    });
+    expect(event.type).toBe('plan.renewed');
+    expect(event.data).toEqual(custom);
+    expect(event.deliveryId).toBe('evt_0f3a');
+  });
+
+  it('keeps a version, type and data payload whole', () => {
+    const custom = { version: 1, type: 'refund', data: { orderId: 9 } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'order.synced',
+      'x-siren-delivery': 'evt_77',
+    });
+    expect(event.type).toBe('order.synced');
+    expect(event.data).toEqual(custom);
+  });
+
+  it('keeps an envelope-shaped body whole when X-Siren-Delivery is absent', () => {
+    const custom = { version: 1, id: 'evt_1', type: 'sale.created', data: { transactionId: 1 } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'sale.created',
+    });
+    expect(event.data).toEqual(custom);
+    expect(event.deliveryId).toBeUndefined();
+  });
+
+  it('keeps an envelope-shaped body whole when its type differs from X-Siren-Event', () => {
+    const custom = { version: 1, id: 'evt_5', type: 'refund', data: { orderId: 9 } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'order.synced',
+      'x-siren-delivery': 'evt_5',
+    });
+    expect(event.type).toBe('order.synced');
+    expect(event.data).toEqual(custom);
   });
 
   it('throws SignatureVerificationError for a tampered body', () => {
