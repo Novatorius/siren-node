@@ -73,7 +73,10 @@ one follows a rule Siren already enforces.
   paging as `page`/`perPage` with a maximum of 100, validation failures as 422, and API key scopes
   as optional. It now describes the routes as Siren serves them, adds `GET /webhooks/events`, the
   event outcome bodies and the 202 queued answer, and states that on Siren Cloud an API key
-  authenticates event ingestion only.
+  authenticates event ingestion only. Each operation lists the credentials it takes, so the
+  webhook, API key and reconciliation routes ask for a dashboard session and not an API key.
+  `GET /ping` is listed, and the page size schema no longer sets a maximum, because Siren lowers a
+  larger size to 200.
 
 ## [0.1.0] - 2026-07-11
 
