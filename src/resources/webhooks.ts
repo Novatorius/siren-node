@@ -67,7 +67,15 @@ function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
   return createHmac('sha256', secret).update(bytes).digest();
 }
 
-/** Manage webhook subscriptions (`/webhooks`). */
+/**
+ * Manage webhook subscriptions (`/webhooks`).
+ *
+ * Takes an API key with a webhook scope, or a signed-in dashboard session's
+ * access token. `webhook-subscriptions:read` opens `list()`, and
+ * `webhook-subscriptions:manage` opens every method here. The key must be
+ * organization-wide, because subscriptions are not kept by store. A key bound
+ * to one store gets a `StoreKeyNotAllowedError`.
+ */
 export class WebhookSubscriptionsResource {
   constructor(private readonly http: HttpClient) {}
 

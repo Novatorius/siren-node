@@ -22,6 +22,8 @@ This SDK is the Node.js and TypeScript integration point for Siren. In a few lin
 - **Record events** (`events.sale`, `events.refund`, `events.siteVisited`) so conversions and
   payouts compute.
 - **Verify signed webhooks** (`webhooks.constructEvent`) so you can trust inbound deliveries.
+- **Read the ledger** (`conversions`, `transactions`, `obligations`, `payouts`) and **manage webhook
+  subscriptions** with an API key that holds the ledger and webhook scopes.
 
 It runs on Node 18+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
 CJS, and full type declarations.
@@ -137,8 +139,9 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
 });
 ```
 
-Create the subscription (the `signingSecret` is returned **once** — store it). Siren lists the
-event types it sends at `GET /webhooks/events`, and `WebhookEventType` holds the same names:
+Create the subscription (the `signingSecret` is returned **once** — store it). The API key needs
+the `webhook-subscriptions:manage` scope. Siren lists the event types it sends at
+`GET /webhooks/events`, and `WebhookEventType` holds the same names:
 
 ```ts
 import { WebhookEventType } from '@novatorius/siren';
@@ -158,11 +161,11 @@ await saveSecretSomewhereSafe(sub.signingSecret);
   auto-retried on network errors and 429/5xx.
 - **Signed-webhook verification and subscriptions** — constant-time signature checks
   (`webhooks.constructEvent`, `webhooks.verifySignature`) plus subscription management
-  (`webhooks.subscriptions.create` / `list` / `delete`).
-- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`). The raw key
-  is returned once and cannot be retrieved later.
+  (`webhooks.subscriptions.create` / `list` / `delete`) with an API key that holds a webhook scope.
+- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`) with a
+  dashboard session's token. The raw key is returned once and cannot be retrieved later.
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
-  `transactions`, `obligations`, and `payouts`.
+  `transactions`, `obligations`, and `payouts`, with an API key that holds the ledger scopes.
 - **Typed errors** — every failure throws a typed subclass of `SirenError` carrying `message`,
   `code`, and `statusCode` (`NotFoundError`, `RateLimitError`, `ValidationError`, and more).
 
@@ -170,15 +173,50 @@ await saveSecretSomewhereSafe(sub.signingSecret);
 const conversions = await siren.conversions.list({ page: 1, perPage: 50, status: 'approved' });
 console.log(conversions.estimatedCount); // total across all pages, if known
 
-const key = await siren.apiKeys.create({ label: 'Production server', scopes: ['event:*'] });
+```
+
+Pages hold up to 200 records, and Siren's default page size is 10.
+
+## API key scopes
+
+An API key does what its scopes allow. `ApiKeyScope` names each one:
+
+| Scope | What the key can do |
+|---|---|
+| `ApiKeyScope.AllEvents` (`event:*`), `eventScope(slug)` | Send events |
+| `ApiKeyScope.LedgerConversionsRead` (`ledger:conversions:read`) | `conversions.list()` |
+| `ApiKeyScope.LedgerTransactionsRead` (`ledger:transactions:read`) | `transactions.list()` |
+| `ApiKeyScope.LedgerObligationsRead` (`ledger:obligations:read`) | `obligations.list()` |
+| `ApiKeyScope.LedgerPayoutsRead` (`ledger:payouts:read`) | `payouts.list()` |
+| `ApiKeyScope.WebhookSubscriptionsRead` (`webhook-subscriptions:read`) | `webhooks.subscriptions.list()` |
+| `ApiKeyScope.WebhookSubscriptionsManage` (`webhook-subscriptions:manage`) | Every `webhooks.subscriptions` call, and a test delivery (`POST /webhooks/{id}/test`, which the SDK has no method for) |
+
+Siren grants the ledger and webhook scopes only by their exact names. `*`, `event:*`, wildcards
+such as `ledger:*`, and older names such as `conversions:read` grant none of them, so a key made
+before these scopes existed reads nothing until you replace it with one that holds them. A key's
+requests count against the organization's API rate limit.
+
+`apiKeys.create`, `list` and `revoke` take a signed-in dashboard session's token. No API key scope
+reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
+
+```ts
+import { ApiKeyScope } from '@novatorius/siren';
+
+const key = await siren.apiKeys.create({
+  label: 'Accounting export',
+  scopes: [ApiKeyScope.LedgerConversionsRead, ApiKeyScope.LedgerPayoutsRead],
+});
 // key.rawKey (sk_live_...) is returned ONCE and cannot be retrieved later.
 ```
 
-Pages hold up to 200 records, and Siren's default page size is 10. An API key sends events and
-nothing else, so `apiKeys.create` takes event scopes only (`event:*` or `event:{slug}`).
+A key created with a `propertyId` is bound to that store. It reads only its own store's
+conversions, transactions and obligations, and Siren refuses it on payouts and webhook
+subscriptions with a `StoreKeyNotAllowedError`. An organization-wide key reads the whole
+organization, and narrows a ledger read to one store with `propertyId`:
 
-On Siren Cloud an API key authenticates event ingestion only. The webhook subscription, API key
-and reconciliation routes answer 401 to an API key.
+```ts
+const storeConversions = await siren.conversions.list({ propertyId: 5, status: 'approved' });
+```
 
 ## Configuration
 
@@ -225,8 +263,11 @@ example, carry no `statusCode`:
 
 | Error | When it's thrown |
 |---|---|
-| `AuthenticationError` | Missing or invalid API key (401) |
-| `PermissionError` | The credential may not do this, such as a key without the event's scope (403) |
+| `AuthenticationError` | Missing, invalid, expired or revoked API key (401) |
+| `ApiKeyNotAcceptedError` | The route takes a dashboard session and not an API key (401, `code` `api_key_not_accepted`). Extends `AuthenticationError` |
+| `PermissionError` | The credential may not do this (403) |
+| `MissingScopeError` | The key holds none of the route's scopes (403, `code` `missing_scope`). `scope` and `anyOf` name them. Extends `PermissionError` |
+| `StoreKeyNotAllowedError` | A key bound to one store asked for payouts or webhook subscriptions (403, `code` `store_key_not_allowed`). Extends `PermissionError` |
 | `NotFoundError` | The requested resource does not exist (404) |
 | `BadRequestError` | Malformed request or failed validation (400). `fieldErrors` lists each broken rule |
 | `ValidationError` | Request payload failed validation on a route that answers 422 |
@@ -236,9 +277,8 @@ example, carry no `statusCode`:
 | `ConnectionError` | Network failure reaching Siren |
 | `SignatureVerificationError` | A webhook signature did not verify |
 
-Two exceptions to the subclass rule: constructing a client without an `apiKey` throws the
-base `SirenError` itself, and `webhooks.constructEvent` throws a native `SyntaxError` — not
-a `SirenError` — when a correctly signed body is not valid JSON.
+One exception to the subclass rule: constructing a client without an `apiKey` throws the base
+`SirenError` itself. `ErrorCode` holds the codes the SDK raises a dedicated error for.
 
 ```ts
 import {

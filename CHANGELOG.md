@@ -24,6 +24,26 @@ one follows a rule Siren already enforces.
 
 ### Added
 
+- An API key reads Siren's ledger and manages webhook subscriptions, as Siren Cloud 3.6.259
+  allows. `conversions`, `transactions`, `obligations` and `payouts` take a key that holds the
+  matching ledger scope. `webhooks.subscriptions.list` takes a key with
+  `webhook-subscriptions:read` or `webhook-subscriptions:manage`, and `create` and `delete` take
+  one with `webhook-subscriptions:manage`. Since Siren Cloud 3.6.260 that scope also sends a test
+  delivery, and `openapi.yaml` lists the route, `POST /webhooks/{id}/test`.
+- `ApiKeyScope` names the scopes a key may hold: `AllEvents`, `FullAccess`, `Sale`, `Refund`,
+  `SiteVisited`, `LedgerConversionsRead`, `LedgerTransactionsRead`, `LedgerObligationsRead`,
+  `LedgerPayoutsRead`, `WebhookSubscriptionsRead` and `WebhookSubscriptionsManage`.
+  `LEDGER_READ_SCOPES` holds the four ledger scopes, and `eventScope(slug)` builds one event
+  scope. Siren grants the ledger and webhook scopes only by their exact names, so `*`, `event:*`
+  and older names such as `conversions:read` grant none of them.
+- `ApiKeyNotAcceptedError` (401, `api_key_not_accepted`), raised when a route takes a session and
+  not an API key, as every `apiKeys` route does. It extends `AuthenticationError`.
+- `MissingScopeError` (403, `missing_scope`), with `scope` and `anyOf` from `error.context`, and
+  `StoreKeyNotAllowedError` (403, `store_key_not_allowed`), raised when a key bound to one store
+  asks for payouts or webhook subscriptions, with the key's `propertyId`. Both extend
+  `PermissionError`. `ErrorCode` holds the three codes.
+- `ListParams.propertyId` narrows an organization-wide ledger read to one store. A key bound to
+  one store reads only its own store's rows.
 - `webhooks.constructEvent` takes the request headers as a fourth argument and reads the event
   type from `X-Siren-Event` and the delivery id from `X-Siren-Delivery`.
 - `WebhookEvent.body` holds the whole parsed body, so a connected site can read the envelope's
@@ -43,8 +63,8 @@ one follows a rule Siren already enforces.
 
 ### Changed
 
-- `CreateApiKeyParams.scopes` is required. Siren refuses a key with no scopes, and a key may hold
-  event scopes only (`event:*`, `event:{slug}`, `*`).
+- `CreateApiKeyParams.scopes` is required, and takes `ApiKeyScope` values or any other string.
+  Siren refuses a key with no scopes, and an older resource scope such as `programs:read`.
 - `SaleParams.currency` documents what Siren does: the code must be one the organization uses,
   and an omitted currency reads as the organization's default, not USD.
 - `ApiKey.createdAt` and `WebhookSubscription.createdAt` are deprecated. Siren sends `dateCreated`.
@@ -72,9 +92,9 @@ one follows a rule Siren already enforces.
 - `openapi.yaml` described every response as wrapped in `data`, list responses as bare arrays,
   paging as `page`/`perPage` with a maximum of 100, validation failures as 422, and API key scopes
   as optional. It now describes the routes as Siren serves them, adds `GET /webhooks/events`, the
-  event outcome bodies and the 202 queued answer, and states that on Siren Cloud an API key
-  authenticates event ingestion only. Each operation lists the credentials it takes, so the
-  webhook, API key and reconciliation routes ask for a dashboard session and not an API key.
+  event outcome bodies and the 202 queued answer. Each operation lists the credentials it takes.
+  The ledger and webhook operations take the `apiKey` scheme with the scopes each one needs, the
+  API key routes take a dashboard session only, and the new error codes are listed.
   `GET /ping` is listed, and the page size schema no longer sets a maximum, because Siren lowers a
   larger size to 200.
 

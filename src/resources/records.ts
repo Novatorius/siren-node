@@ -42,6 +42,11 @@ export function toListQuery(params: ListParams): Query {
  * (`/conversions`, `/transactions`, `/obligations`, `/payouts`). Used to
  * reconcile Siren's ledger against your own — deliberately not a full admin
  * client.
+ *
+ * Takes an API key that holds the collection's ledger scope, such as
+ * `ledger:conversions:read`, or a dashboard session's access token. A key
+ * bound to one store reads only its own store's conversions, transactions
+ * and obligations, and is refused on payouts with a `StoreKeyNotAllowedError`.
  */
 export class RecordsResource<T = Record<string, unknown>> {
   constructor(
@@ -51,7 +56,8 @@ export class RecordsResource<T = Record<string, unknown>> {
 
   /**
    * List one page of records. `page`/`perPage` paginate (Siren's default
-   * page size is 10, the largest is 200). Any other params pass through as
+   * page size is 10, the largest is 200). `propertyId` narrows an
+   * organization-wide read to one store. Any other params pass through as
    * query-string filters.
    *
    * Siren answers with `{ items, total, page, perPage, totalPages }`. The

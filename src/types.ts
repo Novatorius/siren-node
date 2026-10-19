@@ -1,3 +1,4 @@
+import type { ApiKeyScope } from './api-key-scopes';
 import type { WebhookEventType } from './event-types';
 
 /** Options accepted by `new Siren({...})`. */
@@ -175,7 +176,12 @@ export interface ApiKey {
   label: string;
   status?: string;
   scopes?: string[];
-  /** The Property the key stamps on what it ingests, or `null` for an org-wide key. */
+  /**
+   * The store (Property) the key is bound to, or `null` for an
+   * organization-wide key. A bound key stamps its store on the events it
+   * sends and reads only that store's conversions, transactions and
+   * obligations.
+   */
   propertyId?: number | null;
   expiresAt?: string | null;
   lastUsedAt?: string | null;
@@ -199,15 +205,23 @@ export interface CreateApiKeyParams {
   /** Human-readable label, e.g. `"Production server"`. Optional, and left out of the request when not given. */
   label?: string;
   /**
-   * Event scopes to grant. At least one is required. A key sends events and
-   * does nothing else, so Siren accepts only `event:*`, `event:{slug}` and
-   * the older `*`, and answers 400 for a resource scope such as
-   * `programs:read`.
+   * Scopes to grant, from {@link ApiKeyScope}. At least one is required.
+   * Event scopes (`event:*` or `event:{slug}`) send events. The ledger scopes,
+   * such as `ledger:conversions:read`, read conversions, transactions,
+   * obligations and payouts. `webhook-subscriptions:read` and
+   * `webhook-subscriptions:manage` read and manage webhook subscriptions.
+   * Siren answers 400 for an older resource scope such as `programs:read` or
+   * `conversions:read`.
    */
-  scopes: string[];
+  scopes: Array<ApiKeyScope | (string & {})>;
   /** When the key stops working, as an ISO 8601 date. Omit for a key that never expires. */
   expiresAt?: string;
-  /** Bind the key to one Property, which Siren stamps on everything it ingests. */
+  /**
+   * Bind the key to one store (Property). Siren stamps it on the key's
+   * events, and the key reads only that store's conversions, transactions and
+   * obligations. A bound key is refused on payouts and webhook subscriptions
+   * with a `StoreKeyNotAllowedError`.
+   */
   propertyId?: number;
 }
 
@@ -218,6 +232,11 @@ export interface CreateApiKeyParams {
  * filter, such as `status`.
  */
 export interface ListParams {
+  /**
+   * Narrow an organization-wide read to one store (Property). A key bound to
+   * one store reads only its own store's rows, whatever it sends here.
+   */
+  propertyId?: number;
   /** Page number, starting at 1. */
   page?: number;
   /** Page size, 1 to 200. Siren's default is 10. A larger value is lowered to 200. */

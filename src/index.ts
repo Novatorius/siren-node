@@ -1,10 +1,15 @@
 export { Siren } from './client';
 export { WebhookEventType } from './event-types';
+export { ApiKeyScope, LEDGER_READ_SCOPES, eventScope } from './api-key-scopes';
 export {
+  ErrorCode,
   SirenError,
   BadRequestError,
   AuthenticationError,
+  ApiKeyNotAcceptedError,
   PermissionError,
+  MissingScopeError,
+  StoreKeyNotAllowedError,
   NotFoundError,
   ConflictError,
   ValidationError,
