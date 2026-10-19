@@ -7,8 +7,8 @@
  * | status          | error class            |
  * |-----------------|------------------------|
  * | 400             | BadRequestError        |
- * | 401             | AuthenticationError    |
- * | 403             | PermissionError        |
+ * | 401             | AuthenticationError, or ApiKeyNotAcceptedError for `api_key_not_accepted` |
+ * | 403             | PermissionError, or MissingScopeError for `missing_scope` and StoreKeyNotAllowedError for `store_key_not_allowed` |
  * | 404             | NotFoundError          |
  * | 409             | ConflictError          |
  * | 422             | ValidationError        |
@@ -21,15 +21,48 @@
  */
 
 export interface SirenErrorDetails {
-  /** The API's machine-readable `error.code`, when present. */
+  /**
+   * The API's machine-readable `error.code`, when present. When the body has
+   * no code, this is `error.context.type` instead (for example
+   * `VALIDATION_FAILED` on a 400).
+   */
   code?: string;
   /** HTTP status code that produced this error, when applicable. */
   statusCode?: number;
-  /** The API's `error.data` payload, when present. */
+  /**
+   * Extra detail from the error body: `error.context` (what Siren's REST layer
+   * sends), or `error.data` when a body carries that instead.
+   */
   data?: unknown;
   /** Underlying cause (e.g. the network error behind a ConnectionError). */
   cause?: unknown;
 }
+
+/**
+ * The machine-readable `error.code` values this SDK raises a dedicated error
+ * for. Compare `error.code` against these, not the message, which can change.
+ */
+export const ErrorCode = {
+  /**
+   * 401: the route does not accept an API key, such as every `/api-keys`
+   * route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
+   */
+  ApiKeyNotAccepted: 'api_key_not_accepted',
+  /**
+   * 403: the API key holds none of the scopes the route needs.
+   * `error.context.scope` names one and `error.context.anyOf` lists every
+   * scope that opens the route. A {@link MissingScopeError}.
+   */
+  MissingScope: 'missing_scope',
+  /**
+   * 403: an API key bound to one store asked for records that are not kept by
+   * store, such as payouts or webhook subscriptions. A {@link StoreKeyNotAllowedError}.
+   */
+  StoreKeyNotAllowed: 'store_key_not_allowed',
+} as const;
+
+/** Union of the {@link ErrorCode} strings. */
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 /** Base class for every error thrown by this SDK. */
 export class SirenError extends Error {
@@ -46,15 +79,48 @@ export class SirenError extends Error {
   }
 }
 
-/** 400 — the request was malformed. */
+/** One broken rule from a 400 response's `error.context.failedValidations`. */
+export interface FailedValidation {
+  /** The request field that broke the rule. */
+  field: string;
+  /** A readable explanation. */
+  message: string;
+  /** A stable rule name you can branch on, such as `REQUIRED`. */
+  type?: string;
+  /** Limits behind the rule, such as `{ maxLength: 254 }`. */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * 400 — the request was malformed or failed validation. Siren answers a
+ * failed validation with 400, `code` set to `VALIDATION_FAILED`, and one
+ * entry per broken rule in `fieldErrors`.
+ */
 export class BadRequestError extends SirenError {
+  /** Each broken rule, from `error.context.failedValidations`. Empty when the body has none. */
+  readonly fieldErrors: FailedValidation[];
+
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, { ...details, statusCode: details.statusCode ?? 400 });
     this.name = 'BadRequestError';
+    this.fieldErrors = failedValidationsFrom(details.data);
   }
 }
 
-/** 401 — missing or invalid API key. */
+function failedValidationsFrom(data: unknown): FailedValidation[] {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
+  const list = (data as { failedValidations?: unknown }).failedValidations;
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (entry): entry is FailedValidation =>
+      !!entry &&
+      typeof entry === 'object' &&
+      typeof (entry as { field?: unknown }).field === 'string' &&
+      typeof (entry as { message?: unknown }).message === 'string',
+  );
+}
+
+/** 401 — missing, invalid, expired or revoked API key. */
 export class AuthenticationError extends SirenError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, { ...details, statusCode: details.statusCode ?? 401 });
@@ -62,11 +128,73 @@ export class AuthenticationError extends SirenError {
   }
 }
 
-/** 403 — the API key lacks the required scope. */
+/**
+ * 401 with `code` `api_key_not_accepted` — the key may be valid, but the route
+ * takes a signed-in dashboard session instead, as every `apiKeys` route does.
+ * Retrying with the same key fails again.
+ */
+export class ApiKeyNotAcceptedError extends AuthenticationError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, { ...details, code: details.code ?? ErrorCode.ApiKeyNotAccepted });
+    this.name = 'ApiKeyNotAcceptedError';
+  }
+}
+
+/** 403 — the credential may not do this. */
 export class PermissionError extends SirenError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, { ...details, statusCode: details.statusCode ?? 403 });
     this.name = 'PermissionError';
+  }
+}
+
+function contextOf(data: unknown): Record<string, unknown> {
+  return data && typeof data === 'object' && !Array.isArray(data)
+    ? (data as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * 403 with `code` `missing_scope` — the API key holds none of the scopes the
+ * route needs, such as a key without `ledger:conversions:read` reading
+ * conversions. Create a key that holds one of {@link anyOf}. Retrying with the
+ * same key fails again.
+ */
+export class MissingScopeError extends PermissionError {
+  /** The scope the route needs, from `error.context.scope`, when Siren names it. */
+  readonly scope?: string;
+  /**
+   * Every scope that opens the route, from `error.context.anyOf`, such as
+   * `['webhook-subscriptions:read', 'webhook-subscriptions:manage']`. Holding
+   * any one is enough. Empty when Siren does not list them.
+   */
+  readonly anyOf: string[];
+
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, { ...details, code: details.code ?? ErrorCode.MissingScope });
+    this.name = 'MissingScopeError';
+    const context = contextOf(details.data);
+    if (typeof context.scope === 'string' && context.scope !== '') this.scope = context.scope;
+    this.anyOf = Array.isArray(context.anyOf)
+      ? context.anyOf.filter((scope): scope is string => typeof scope === 'string' && scope !== '')
+      : [];
+  }
+}
+
+/**
+ * 403 with `code` `store_key_not_allowed` — an API key bound to one store asked
+ * for payouts or webhook subscriptions, which are not kept by store. Use an
+ * organization-wide key, one created without a `propertyId`.
+ */
+export class StoreKeyNotAllowedError extends PermissionError {
+  /** The store the key is bound to, from `error.context.propertyId`, when Siren names it. */
+  readonly propertyId?: number;
+
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, { ...details, code: details.code ?? ErrorCode.StoreKeyNotAllowed });
+    this.name = 'StoreKeyNotAllowedError';
+    const propertyId = contextOf(details.data).propertyId;
+    if (typeof propertyId === 'number' && Number.isInteger(propertyId)) this.propertyId = propertyId;
   }
 }
 
@@ -86,7 +214,10 @@ export class ConflictError extends SirenError {
   }
 }
 
-/** 422 — the request body failed validation. */
+/**
+ * 422 — the request body failed validation. Siren reports most validation
+ * failures as 400 ({@link BadRequestError}). A few routes still answer 422.
+ */
 export class ValidationError extends SirenError {
   /** Per-field validation errors from the API's `error.data`, when present. */
   readonly fieldErrors?: Record<string, unknown>;
@@ -140,10 +271,19 @@ export class SignatureVerificationError extends SirenError {
  * Extract message/code/data from a Siren error body. The `error` value is
  * polymorphic:
  *   - a plain string  → `{ "error": "something went wrong" }`
- *   - a structured object → `{ "error": { message, code, data? } }`
+ *   - a structured object → `{ "error": { message, code?, context? } }`
+ * Siren's REST layer puts extra detail in `context`, such as
+ * `{ type: "VALIDATION_FAILED", failedValidations: [...] }`. An older `data`
+ * key is read too. When there is no `code`, `context.type` stands in for it.
  * Anything else (non-JSON body, no `error` key) yields no message and the
  * caller falls back to the HTTP status text.
  */
+function isNonEmptyObject(value: unknown): value is Record<string, unknown> {
+  return (
+    !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0
+  );
+}
+
 function parseErrorBody(body: unknown): {
   message?: string;
   code?: string;
@@ -155,11 +295,18 @@ function parseErrorBody(body: unknown): {
     return { message: raw };
   }
   if (raw && typeof raw === 'object') {
-    const err = raw as { message?: unknown; code?: unknown; data?: unknown };
+    const err = raw as { message?: unknown; code?: unknown; data?: unknown; context?: unknown };
+    let data = err.data;
+    if (data === undefined && isNonEmptyObject(err.context)) data = err.context;
+    let code = typeof err.code === 'string' ? err.code : undefined;
+    if (code === undefined && isNonEmptyObject(data)) {
+      const type = (data as { type?: unknown }).type;
+      if (typeof type === 'string') code = type;
+    }
     return {
       message: typeof err.message === 'string' ? err.message : undefined,
-      code: typeof err.code === 'string' ? err.code : undefined,
-      data: err.data,
+      code,
+      data,
     };
   }
   return {};
@@ -189,8 +336,11 @@ export function errorFromResponse(
     case 400:
       return new BadRequestError(message, details);
     case 401:
+      if (parsed.code === ErrorCode.ApiKeyNotAccepted) return new ApiKeyNotAcceptedError(message, details);
       return new AuthenticationError(message, details);
     case 403:
+      if (parsed.code === ErrorCode.MissingScope) return new MissingScopeError(message, details);
+      if (parsed.code === ErrorCode.StoreKeyNotAllowed) return new StoreKeyNotAllowedError(message, details);
       return new PermissionError(message, details);
     case 404:
       return new NotFoundError(message, details);

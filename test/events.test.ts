@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { emptyResponse, makeClient } from './helpers';
+import { emptyResponse, jsonResponse, makeClient } from './helpers';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -47,6 +47,19 @@ describe('events.sale', () => {
       { name: 'Pro Plan (annual)', amount: 49.99, quantity: 1 },
       { externalId: 'sku-2', name: 'Add-on seat', quantity: 3, amount: 36.66 },
     ]);
+  });
+
+  it('sends a line item with only an amount and a numeric externalId', async () => {
+    const ctx = makeClient([emptyResponse(200, { 'X-Siren-OID': '7' })]);
+    await ctx.client.events.sale({
+      source: 'woocommerce',
+      externalId: 1001,
+      total: 10,
+      trackingId: 99,
+      items: [{ amount: 10 }],
+    });
+
+    expect(ctx.lastCall().body).toMatchObject({ externalId: 1001, items: [{ amount: 10, quantity: 1 }] });
   });
 
   it('omits items entirely when not provided (total becomes a single line server-side)', async () => {
@@ -125,5 +138,106 @@ describe('events.ingest', () => {
     );
     expect(call.body).toEqual(payload);
     expect(result).toEqual({ opportunityId: 9 });
+  });
+});
+
+// Siren returns a body for sales and site visits that says what happened
+// (SaleEventFactory and SiteVisitedFactory in the Siren repo), and queues an
+// event with a 202 while the organization's engine is paused
+// (IngestEvent::queue()). The SDK used to drop the body.
+describe('event outcomes', () => {
+  it('exposes the sale outcome body and its status', async () => {
+    const outcome = {
+      status: 'created',
+      created: true,
+      transactionId: 77,
+      conversions: [{ id: 301, status: 'pending' }],
+      message: 'The sale was recorded.',
+    };
+    const ctx = makeClient([jsonResponse(200, outcome, { 'X-Siren-OID': '4021' })]);
+    const result = await ctx.client.events.sale({
+      source: 'stripe',
+      externalId: 'x',
+      total: 9.99,
+      trackingId: 4021,
+    });
+
+    expect(result.opportunityId).toBe(4021);
+    expect(result.status).toBe('created');
+    expect(result.queued).toBeUndefined();
+    expect(result.body).toEqual(outcome);
+  });
+
+  it('reports a duplicate sale without treating it as an error', async () => {
+    const ctx = makeClient([
+      jsonResponse(200, { status: 'duplicate', created: false, transactionId: 77, conversions: [], message: 'Seen.' }),
+    ]);
+    const result = await ctx.client.events.sale({
+      source: 'stripe',
+      externalId: 'x',
+      total: 9.99,
+      trackingId: 1,
+    });
+
+    expect(result.status).toBe('duplicate');
+  });
+
+  it('marks a queued event and keeps it a success', async () => {
+    const ctx = makeClient([
+      jsonResponse(202, { status: 'queued', queued: true, message: 'Engine activity is paused.' }),
+    ]);
+    const result = await ctx.client.events.sale({
+      source: 'stripe',
+      externalId: 'x',
+      total: 9.99,
+      trackingId: 1,
+    });
+
+    expect(result.queued).toBe(true);
+    expect(result.status).toBe('queued');
+    expect(ctx.fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads a queued visit opportunityId from the body when the header is absent', async () => {
+    const ctx = makeClient([
+      jsonResponse(202, {
+        status: 'queued',
+        queued: true,
+        attributed: false,
+        opportunityId: 9001,
+        message: 'Queued.',
+      }),
+    ]);
+    const result = await ctx.client.events.siteVisited({ collaboratorId: 88 });
+
+    expect(result.opportunityId).toBe(9001);
+    expect(result.queued).toBe(true);
+  });
+
+  it('prefers the X-Siren-OID header over the body', async () => {
+    const ctx = makeClient([
+      jsonResponse(200, { status: 'attributed', attributed: true, opportunityId: 5 }, { 'X-Siren-OID': '6' }),
+    ]);
+    const result = await ctx.client.events.siteVisited({ collaboratorId: 88 });
+
+    expect(result.opportunityId).toBe(6);
+    expect(result.status).toBe('attributed');
+  });
+
+  it('reports a visit Siren did not attribute', async () => {
+    const ctx = makeClient([
+      jsonResponse(200, {
+        status: 'not_attributed',
+        attributed: false,
+        opportunityId: null,
+        reason: 'collaborator_not_found',
+        message: 'No collaborator with that id.',
+      }),
+    ]);
+    const result = await ctx.client.events.siteVisited({ collaboratorId: 404 });
+
+    expect(result.status).toBe('not_attributed');
+    expect(result.opportunityId).toBeUndefined();
+    expect(result.body?.reason).toBe('collaborator_not_found');
   });
 });

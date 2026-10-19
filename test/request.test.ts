@@ -41,15 +41,76 @@ describe('request construction', () => {
     expect(ctx.lastCall().url).toBe('http://localhost:8080/siren/v1/payouts');
   });
 
-  it('serializes pagination and passthrough filters as query params', async () => {
+  // Siren pages lists with `number` (page size) and `offset` (first row) and
+  // ignores `page` and `perPage` (PageSizeMiddleware in the Siren repo). This
+  // test used to expect `page` and `perPage` on the wire, which made every
+  // call return the first ten rows. The PHP SDK fixed the same bug in 0.2.0.
+  it('turns page and perPage into number and offset, and passes filters through', async () => {
     const ctx = makeClient([jsonResponse(200, [])]);
     await ctx.client.transactions.list({ page: 2, perPage: 50, status: 'completed' });
 
     const url = new URL(ctx.lastCall().url);
     expect(url.pathname).toBe('/siren/v1/transactions');
-    expect(url.searchParams.get('page')).toBe('2');
-    expect(url.searchParams.get('perPage')).toBe('50');
+    expect(url.searchParams.get('number')).toBe('50');
+    expect(url.searchParams.get('offset')).toBe('50');
+    expect(url.searchParams.has('page')).toBe(false);
+    expect(url.searchParams.has('perPage')).toBe(false);
     expect(url.searchParams.get('status')).toBe('completed');
+  });
+
+  it("uses Siren's default page size of 10 when only page is given", async () => {
+    const ctx = makeClient([jsonResponse(200, [])]);
+    await ctx.client.conversions.list({ page: 3 });
+
+    const url = new URL(ctx.lastCall().url);
+    expect(url.searchParams.get('number')).toBe('10');
+    expect(url.searchParams.get('offset')).toBe('20');
+  });
+
+  it('lowers a page size above 200 before working out the offset', async () => {
+    const ctx = makeClient([jsonResponse(200, [])]);
+    await ctx.client.payouts.list({ page: 2, perPage: 500 });
+
+    const url = new URL(ctx.lastCall().url);
+    expect(url.searchParams.get('number')).toBe('200');
+    expect(url.searchParams.get('offset')).toBe('200');
+  });
+
+  it('lets an explicit number and offset win over page and perPage', async () => {
+    const ctx = makeClient([jsonResponse(200, [])]);
+    await ctx.client.obligations.list({ page: 9, perPage: 5, number: 25, offset: 75 });
+
+    const url = new URL(ctx.lastCall().url);
+    expect(url.searchParams.get('number')).toBe('25');
+    expect(url.searchParams.get('offset')).toBe('75');
+  });
+
+  // Siren's ledger lists answer with ListResponseWrapperInterceptor's
+  // envelope. The reader used to look for a bare array only, so it returned
+  // an empty array for every real response.
+  it('reads the records and total from the list envelope', async () => {
+    const ctx = makeClient([
+      jsonResponse(
+        200,
+        { items: [{ id: 1 }, { id: 2 }], total: 42, page: 1, perPage: 10, totalPages: 5 },
+        { 'x-siren-estimated-count': '42' },
+      ),
+    ]);
+    const conversions = await ctx.client.conversions.list();
+
+    expect(Array.isArray(conversions)).toBe(true);
+    expect(conversions).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(conversions.estimatedCount).toBe(42);
+  });
+
+  it('reads an empty envelope as an empty list', async () => {
+    const ctx = makeClient([
+      jsonResponse(200, { items: [], total: 0, page: 1, perPage: 10, totalPages: 1 }),
+    ]);
+    const page = await ctx.client.transactions.list();
+
+    expect(page).toEqual([]);
+    expect(page.estimatedCount).toBe(0);
   });
 
   it('omits undefined query params', async () => {

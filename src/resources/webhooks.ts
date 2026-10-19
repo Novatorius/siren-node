@@ -5,18 +5,77 @@ import type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
   WebhookEvent,
+  WebhookHeaders,
   WebhookSubscription,
 } from '../types';
 
 const SIGNATURE_PREFIX = 'sha256=';
 const HEX_DIGEST_PATTERN = /^[0-9a-f]{64}$/i;
 
+function readHeader(headers: WebhookHeaders | undefined, name: string): string | undefined {
+  if (!headers) return undefined;
+  if (typeof (headers as Headers).get === 'function') {
+    const value = (headers as Headers).get(name);
+    return value == null || value === '' ? undefined : value;
+  }
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers as Record<string, string | string[] | undefined>)) {
+    if (key.toLowerCase() !== wanted) continue;
+    const first = Array.isArray(value) ? value[0] : value;
+    return first == null || first === '' ? undefined : first;
+  }
+  return undefined;
+}
+
+/**
+ * Whether a body is the envelope Siren sends to a subscription bound to a
+ * connected site's Property: `{ version, id, type, data, records, ... }`.
+ * Every other subscription receives the event payload itself as the body.
+ *
+ * Siren sends both with the same headers, and a plain payload, such as a
+ * custom event's, may hold `version`, `type` and `data` keys of its own.
+ * Only an envelope carries its own delivery id: Siren writes the
+ * `X-Siren-Delivery` value into the envelope's `id` and the `X-Siren-Event`
+ * value into its `type`. So when either header is present, the body must
+ * match them. Without either header the shape alone decides.
+ */
+function isPropertyEnvelope(
+  parsed: Record<string, unknown>,
+  eventType: string | undefined,
+  deliveryId: string | undefined,
+): boolean {
+  const shaped =
+    Number.isInteger(parsed.version) &&
+    typeof parsed.id === 'string' &&
+    parsed.id !== '' &&
+    typeof parsed.type === 'string' &&
+    parsed.type !== '' &&
+    !!parsed.data &&
+    typeof parsed.data === 'object' &&
+    !Array.isArray(parsed.data);
+  if (!shaped) return false;
+  if (eventType === undefined && deliveryId === undefined) return true;
+  return (
+    deliveryId !== undefined &&
+    parsed.id === deliveryId &&
+    (eventType === undefined || parsed.type === eventType)
+  );
+}
+
 function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
   const bytes = typeof rawBody === 'string' ? Buffer.from(rawBody, 'utf8') : rawBody;
   return createHmac('sha256', secret).update(bytes).digest();
 }
 
-/** Manage webhook subscriptions (`/webhooks`). */
+/**
+ * Manage webhook subscriptions (`/webhooks`).
+ *
+ * Takes an API key with a webhook scope, or a signed-in dashboard session's
+ * access token. `webhook-subscriptions:read` opens `list()`, and
+ * `webhook-subscriptions:manage` opens every method here. The key must be
+ * organization-wide, because subscriptions are not kept by store. A key bound
+ * to one store gets a `StoreKeyNotAllowedError`.
+ */
 export class WebhookSubscriptionsResource {
   constructor(private readonly http: HttpClient) {}
 
@@ -61,6 +120,12 @@ export class WebhookSubscriptionsResource {
  * `X-Siren-Signature: sha256=<hex hmac-sha256(rawBody, signingSecret)>`.
  * Verification MUST run against the exact raw bytes received — a
  * re-serialized object will not produce the same HMAC.
+ *
+ * The body is the event payload itself. The event type and the delivery id
+ * travel in the `X-Siren-Event` and `X-Siren-Delivery` headers. A connected
+ * site's subscription receives an envelope with the same headers, whose `id`
+ * is the `X-Siren-Delivery` value and whose `type` is the `X-Siren-Event`
+ * value.
  */
 export class WebhooksResource {
   readonly subscriptions: WebhookSubscriptionsResource;
@@ -77,13 +142,23 @@ export class WebhooksResource {
    *   NOT pass a re-parsed/re-serialized object.
    * @param signatureHeader The `X-Siren-Signature` header value.
    * @param secret The subscription's signing secret.
-   * @throws {SignatureVerificationError} when the header is missing or the
-   *   signature does not match.
+   * @param headers The request headers (a Fetch `Headers` object or Node's
+   *   `req.headers`). The event type and delivery id are read from
+   *   `X-Siren-Event` and `X-Siren-Delivery`. A delivery whose body is the
+   *   bare payload is refused without them. A connected site's envelope
+   *   names its own type and id. When either header is present, a body is
+   *   read as an envelope only when its `id` equals `X-Siren-Delivery` and
+   *   its `type` equals `X-Siren-Event`. Without either header, a body
+   *   shaped like an envelope is read as one.
+   * @throws {SignatureVerificationError} when the header is missing, the
+   *   signature does not match, the body is not a JSON object, or a bare
+   *   payload arrives without the `X-Siren-Event` header.
    */
   constructEvent(
     rawBody: string | Uint8Array,
     signatureHeader: string | null | undefined,
     secret: string,
+    headers?: WebhookHeaders,
   ): WebhookEvent {
     if (signatureHeader == null || signatureHeader === '') {
       throw new SignatureVerificationError(
@@ -99,15 +174,42 @@ export class WebhooksResource {
 
     const text =
       typeof rawBody === 'string' ? rawBody : Buffer.from(rawBody).toString('utf8');
-    const parsed = JSON.parse(text) as Record<string, unknown>;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text) as unknown;
+    } catch (cause) {
+      throw new SignatureVerificationError('The webhook payload is not valid JSON.', { cause });
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new SignatureVerificationError('The webhook payload must be a JSON object.');
+    }
+    const body = parsed as Record<string, unknown>;
+
+    let type = readHeader(headers, 'x-siren-event')?.trim() || undefined;
+    let deliveryId = readHeader(headers, 'x-siren-delivery')?.trim() || undefined;
+    const envelope = isPropertyEnvelope(body, type, deliveryId);
+    if (envelope) {
+      type = body.type as string;
+      deliveryId = body.id as string;
+    }
+
+    // A plain subscription's body never names its event. Without the
+    // X-Siren-Event header there is nothing to dispatch on, so refuse the
+    // delivery loudly rather than return an event with an empty type that
+    // matches no handler. Code written for 0.1.0 passes no headers.
+    if (type === undefined) {
+      throw new SignatureVerificationError(
+        "Siren names this delivery's event in the X-Siren-Event header, and the body does not " +
+          'carry it. Pass the request headers as the fourth argument to constructEvent.',
+      );
+    }
+
     const event: WebhookEvent = {
-      type: typeof parsed.type === 'string' ? parsed.type : '',
-      data:
-        parsed.data && typeof parsed.data === 'object'
-          ? (parsed.data as Record<string, unknown>)
-          : {},
+      type,
+      data: envelope ? (body.data as Record<string, unknown>) : body,
+      body,
     };
-    if (typeof parsed.deliveryId === 'string') event.deliveryId = parsed.deliveryId;
+    if (deliveryId !== undefined) event.deliveryId = deliveryId;
     return event;
   }
 

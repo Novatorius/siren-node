@@ -30,7 +30,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function parseJsonBody(response: Response): Promise<unknown> {
+export async function parseJsonBody(response: Response): Promise<unknown> {
   let text: string;
   try {
     text = await response.text();
@@ -138,7 +138,7 @@ export class HttpClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
       Accept: 'application/json',
-      'User-Agent': 'siren-sdk-typescript/0.1.0',
+      'User-Agent': 'siren-sdk-typescript/0.2.0',
     };
     const init: RequestInit = { method: req.method, headers };
     if (req.body !== undefined) {

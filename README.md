@@ -22,6 +22,8 @@ This SDK is the Node.js and TypeScript integration point for Siren. In a few lin
 - **Record events** (`events.sale`, `events.refund`, `events.siteVisited`) so conversions and
   payouts compute.
 - **Verify signed webhooks** (`webhooks.constructEvent`) so you can trust inbound deliveries.
+- **Read the ledger** (`conversions`, `transactions`, `obligations`, `payouts`) and **manage webhook
+  subscriptions** with an API key that holds the ledger and webhook scopes.
 
 It runs on Node 18+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
 CJS, and full type declarations.
@@ -53,6 +55,14 @@ const { opportunityId } = await siren.events.sale({
 console.log(`Recorded against opportunity ${opportunityId}`);
 ```
 
+Each call also returns what Siren did with the event. A sale's `status` is `created`, `recorded`,
+`duplicate`, `unattributed` or `ignored`, and `body` holds the full answer. While your organization's
+engine is paused, Siren queues the event instead of refusing it and the result has `queued: true`.
+A queued event needs no resend.
+
+`currency` is optional and must be a currency your organization uses. Without it, the sale is
+recorded in your organization's default currency.
+
 With line items (per-unit `amount`; a missing `quantity` defaults to `1`):
 
 ```ts
@@ -79,8 +89,13 @@ await siren.events.ingest('loyalty-points-earned', { userId: 42, points: 100 });
 ## Quickstart: verify a webhook
 
 Siren signs every delivery with `X-Siren-Signature: sha256=<hmac>` — an HMAC-SHA256 of the raw
-request body keyed by your subscription's signing secret. `constructEvent` verifies the signature
-(constant-time) and parses the event in one call.
+request body keyed by your subscription's signing secret. The body is the event payload itself.
+The event type travels in the `X-Siren-Event` header and a unique delivery id in
+`X-Siren-Delivery`. `constructEvent` verifies the signature (constant-time) and parses the event in
+one call. Pass the request headers so it can fill in `type` and `deliveryId`. Without the
+`X-Siren-Event` header it throws `SignatureVerificationError`, because the body alone does not name
+the event. A connected site's subscription receives an envelope that names its own type and id, and
+`event.body` holds the whole envelope with its `records`.
 
 > **⚠️ You MUST pass the RAW request body bytes to `constructEvent`.**
 > Body parsers like `express.json()` re-serialize the payload, and the HMAC will never match a
@@ -101,6 +116,7 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
       req.body,                              // raw Buffer — exact bytes received
       req.header('X-Siren-Signature'),
       process.env.SIREN_WEBHOOK_SECRET!,
+      req.headers,                           // gives event.type and event.deliveryId
     );
   } catch (err) {
     if (err instanceof SignatureVerificationError) {
@@ -109,6 +125,7 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
     throw err;
   }
 
+  // Retries can deliver the same event twice. Skip a deliveryId you already handled.
   switch (event.type) {
     case 'conversion.approved':
       // ...
@@ -122,7 +139,9 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
 });
 ```
 
-Create the subscription (the `signingSecret` is returned **once** — store it):
+Create the subscription (the `signingSecret` is returned **once** — store it). The API key needs
+the `webhook-subscriptions:manage` scope. Siren lists the event types it sends at
+`GET /webhooks/events`, and `WebhookEventType` holds the same names:
 
 ```ts
 import { WebhookEventType } from '@novatorius/siren';
@@ -142,20 +161,61 @@ await saveSecretSomewhereSafe(sub.signingSecret);
   auto-retried on network errors and 429/5xx.
 - **Signed-webhook verification and subscriptions** — constant-time signature checks
   (`webhooks.constructEvent`, `webhooks.verifySignature`) plus subscription management
-  (`webhooks.subscriptions.create` / `list` / `delete`).
-- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`). The raw key
-  is returned once and cannot be retrieved later.
+  (`webhooks.subscriptions.create` / `list` / `delete`) with an API key that holds a webhook scope.
+- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`) with a
+  dashboard session's token. The raw key is returned once and cannot be retrieved later.
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
-  `transactions`, `obligations`, and `payouts`.
+  `transactions`, `obligations`, and `payouts`, with an API key that holds the ledger scopes.
 - **Typed errors** — every failure throws a typed subclass of `SirenError` carrying `message`,
   `code`, and `statusCode` (`NotFoundError`, `RateLimitError`, `ValidationError`, and more).
 
 ```ts
-const conversions = await siren.conversions.list({ page: 1, perPage: 50 });
+const conversions = await siren.conversions.list({ page: 1, perPage: 50, status: 'approved' });
 console.log(conversions.estimatedCount); // total across all pages, if known
 
-const key = await siren.apiKeys.create({ label: 'Production server' });
+```
+
+Pages hold up to 200 records, and Siren's default page size is 10.
+
+## API key scopes
+
+An API key does what its scopes allow. `ApiKeyScope` names each one:
+
+| Scope | What the key can do |
+|---|---|
+| `ApiKeyScope.AllEvents` (`event:*`), `eventScope(slug)` | Send events |
+| `ApiKeyScope.LedgerConversionsRead` (`ledger:conversions:read`) | `conversions.list()` |
+| `ApiKeyScope.LedgerTransactionsRead` (`ledger:transactions:read`) | `transactions.list()` |
+| `ApiKeyScope.LedgerObligationsRead` (`ledger:obligations:read`) | `obligations.list()` |
+| `ApiKeyScope.LedgerPayoutsRead` (`ledger:payouts:read`) | `payouts.list()` |
+| `ApiKeyScope.WebhookSubscriptionsRead` (`webhook-subscriptions:read`) | `webhooks.subscriptions.list()` |
+| `ApiKeyScope.WebhookSubscriptionsManage` (`webhook-subscriptions:manage`) | Every `webhooks.subscriptions` call, and a test delivery (`POST /webhooks/{id}/test`, which the SDK has no method for) |
+
+Siren grants the ledger and webhook scopes only by their exact names. `*`, `event:*`, wildcards
+such as `ledger:*`, and older names such as `conversions:read` grant none of them, so a key made
+before these scopes existed reads nothing until you replace it with one that holds them. A key's
+requests count against the organization's API rate limit.
+
+`apiKeys.create`, `list` and `revoke` take a signed-in dashboard session's token. No API key scope
+reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
+
+```ts
+import { ApiKeyScope } from '@novatorius/siren';
+
+const key = await siren.apiKeys.create({
+  label: 'Accounting export',
+  scopes: [ApiKeyScope.LedgerConversionsRead, ApiKeyScope.LedgerPayoutsRead],
+});
 // key.rawKey (sk_live_...) is returned ONCE and cannot be retrieved later.
+```
+
+A key created with a `propertyId` is bound to that store. It reads only its own store's
+conversions, transactions and obligations, and Siren refuses it on payouts and webhook
+subscriptions with a `StoreKeyNotAllowedError`. An organization-wide key reads the whole
+organization, and narrows a ledger read to one store with `propertyId`:
+
+```ts
+const storeConversions = await siren.conversions.list({ propertyId: 5, status: 'approved' });
 ```
 
 ## Configuration
@@ -198,32 +258,34 @@ and open a pull request. Please also review our [Code of Conduct](./CODE_OF_COND
 API and network failures throw a typed subclass of `SirenError`. Catch the base class to
 handle any SDK error, or branch on a specific subclass. Every error has a `message`; `code`
 (the API's machine-readable error code) and `statusCode` (the HTTP status) are set when the
-failing response provides them — `ConnectionError` and `SignatureVerificationError`, for
+failing response provides them, and `data` holds the error's `context` — `ConnectionError` and `SignatureVerificationError`, for
 example, carry no `statusCode`:
 
 | Error | When it's thrown |
 |---|---|
-| `AuthenticationError` | Missing or invalid API key (401) |
-| `PermissionError` | Key lacks permission for the operation (403) |
+| `AuthenticationError` | Missing, invalid, expired or revoked API key (401) |
+| `ApiKeyNotAcceptedError` | The route takes a dashboard session and not an API key (401, `code` `api_key_not_accepted`). Extends `AuthenticationError` |
+| `PermissionError` | The credential may not do this (403) |
+| `MissingScopeError` | The key holds none of the route's scopes (403, `code` `missing_scope`). `scope` and `anyOf` name them. Extends `PermissionError` |
+| `StoreKeyNotAllowedError` | A key bound to one store asked for payouts or webhook subscriptions (403, `code` `store_key_not_allowed`). Extends `PermissionError` |
 | `NotFoundError` | The requested resource does not exist (404) |
-| `ValidationError` | Request payload failed validation (422) |
-| `BadRequestError` | Malformed request (400) |
+| `BadRequestError` | Malformed request or failed validation (400). `fieldErrors` lists each broken rule |
+| `ValidationError` | Request payload failed validation on a route that answers 422 |
 | `ConflictError` | Conflicting state, e.g. a duplicate (409) |
 | `RateLimitError` | Rate limit exceeded (429); honors `Retry-After` |
 | `ApiError` | Unexpected server error (5xx) |
 | `ConnectionError` | Network failure reaching Siren |
 | `SignatureVerificationError` | A webhook signature did not verify |
 
-Two exceptions to the subclass rule: constructing a client without an `apiKey` throws the
-base `SirenError` itself, and `webhooks.constructEvent` throws a native `SyntaxError` — not
-a `SirenError` — when a correctly signed body is not valid JSON.
+One exception to the subclass rule: constructing a client without an `apiKey` throws the base
+`SirenError` itself. `ErrorCode` holds the codes the SDK raises a dedicated error for.
 
 ```ts
 import {
   Siren,
   SirenError,
   RateLimitError,
-  ValidationError,
+  BadRequestError,
   NotFoundError,
 } from '@novatorius/siren';
 
@@ -239,8 +301,9 @@ try {
 } catch (err) {
   if (err instanceof RateLimitError) {
     // already retried with backoff; back off further or queue for later
-  } else if (err instanceof ValidationError) {
-    console.error('Invalid payload:', err.message, err.code);
+  } else if (err instanceof BadRequestError) {
+    // err.code is 'VALIDATION_FAILED' and err.fieldErrors names each field
+    console.error('Invalid payload:', err.message, err.fieldErrors);
   } else if (err instanceof NotFoundError) {
     // nothing matched — e.g. a refund for a sale Siren never recorded
   } else if (err instanceof SirenError) {

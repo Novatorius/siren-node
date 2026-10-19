@@ -61,26 +61,175 @@ describe('webhooks.verifySignature', () => {
   });
 });
 
+// Siren sends the event payload itself as the body, and puts the event type
+// and delivery id in the X-Siren-Event and X-Siren-Delivery headers
+// (WebhookDeliveryService::deliver() and docs/api/webhooks-delivery.md in the
+// Siren repo). These tests used to sign a `{ type, data, deliveryId }` body,
+// which Siren never sends, so a real delivery parsed to an empty type and
+// empty data. They now use the wire format.
 describe('webhooks.constructEvent', () => {
-  const payload = {
-    type: 'payout.paid',
-    data: { payoutId: 31, amount: 120.5 },
-    deliveryId: 'dlv_abc',
-  };
+  const payload = { payoutId: 31, amount: 120.5, type: 'stripe' };
   const body = JSON.stringify(payload);
+  const headers = {
+    'x-siren-event': 'payout.paid',
+    'x-siren-delivery': 'evt_8a3f1b2c4d5e6f7890abcdef12345678',
+  };
 
-  it('verifies and parses a valid delivery', () => {
-    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET);
+  it('verifies a delivery, returns the body as data, and reads type and id from the headers', () => {
+    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET, headers);
 
     expect(event.type).toBe('payout.paid');
-    expect(event.data).toEqual({ payoutId: 31, amount: 120.5 });
-    expect(event.deliveryId).toBe('dlv_abc');
+    expect(event.data).toEqual(payload);
+    expect(event.deliveryId).toBe('evt_8a3f1b2c4d5e6f7890abcdef12345678');
   });
 
-  it('works with raw Buffer bodies', () => {
+  it('works with raw Buffer bodies and a Fetch Headers object', () => {
     const bytes = Buffer.from(body, 'utf8');
-    const event = bareClient().webhooks.constructEvent(bytes, sign(bytes), SECRET);
+    const event = bareClient().webhooks.constructEvent(
+      bytes,
+      sign(bytes),
+      SECRET,
+      new Headers({ 'X-Siren-Event': 'payout.paid', 'X-Siren-Delivery': 'evt_1' }),
+    );
     expect(event.type).toBe('payout.paid');
+    expect(event.deliveryId).toBe('evt_1');
+  });
+
+  it('reads header names in any case and the first value of a repeated header', () => {
+    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET, {
+      'X-Siren-Event': ['payout.paid', 'ignored'],
+      'X-SIREN-DELIVERY': 'evt_2',
+    });
+    expect(event.type).toBe('payout.paid');
+    expect(event.deliveryId).toBe('evt_2');
+  });
+
+  // Code written for 0.1.0 calls constructEvent with three arguments. A bare
+  // payload names no event (and this one has a `type` field of its own, as
+  // currency.created's does), so the SDK refuses it instead of returning an
+  // event with an empty type that no handler matches.
+  it('refuses a bare payload without the X-Siren-Event header', () => {
+    expect(() => bareClient().webhooks.constructEvent(body, sign(body), SECRET)).toThrow(
+      SignatureVerificationError,
+    );
+    expect(() => bareClient().webhooks.constructEvent(body, sign(body), SECRET)).toThrow(
+      /X-Siren-Event/,
+    );
+    expect(() =>
+      bareClient().webhooks.constructEvent(body, sign(body), SECRET, { 'x-siren-delivery': 'evt_1' }),
+    ).toThrow(/X-Siren-Event/);
+    expect(() =>
+      bareClient().webhooks.constructEvent(body, sign(body), SECRET, { 'x-siren-event': '  ' }),
+    ).toThrow(/X-Siren-Event/);
+  });
+
+  it('never takes a payload field named type for the event type', () => {
+    const event = bareClient().webhooks.constructEvent(body, sign(body), SECRET, {
+      'x-siren-event': 'currency.created',
+    });
+    expect(event.type).toBe('currency.created');
+    expect(event.data).toEqual(payload);
+    expect(event.body).toEqual(payload);
+  });
+
+  it('treats a body without the envelope fields as a bare payload even with type and data keys', () => {
+    const flat = JSON.stringify({ type: 'points', data: { note: 'x' } });
+    const event = bareClient().webhooks.constructEvent(flat, sign(flat), SECRET, {
+      'x-siren-event': 'currency.created',
+    });
+    expect(event.type).toBe('currency.created');
+    expect(event.data).toEqual({ type: 'points', data: { note: 'x' } });
+  });
+
+  it('throws SignatureVerificationError for a body that is not a JSON object', () => {
+    for (const raw of ['not json', '[1,2]', 'null']) {
+      expect(() =>
+        bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, headers),
+      ).toThrow(SignatureVerificationError);
+    }
+  });
+
+  it('unwraps the envelope a Property-bound subscription receives', () => {
+    const envelope = JSON.stringify({
+      version: 1,
+      id: 'evt_3',
+      type: 'conversion.approved',
+      kind: 'engine',
+      propertyId: 4,
+      data: { conversionIds: [301] },
+      records: {},
+    });
+    const event = bareClient().webhooks.constructEvent(envelope, sign(envelope), SECRET);
+    expect(event.type).toBe('conversion.approved');
+    expect(event.deliveryId).toBe('evt_3');
+    expect(event.data).toEqual({ conversionIds: [301] });
+    expect(event.body?.propertyId).toBe(4);
+    expect(event.body?.records).toEqual({});
+  });
+
+  it('unwraps an envelope whose id and type match the delivery headers', () => {
+    const envelope = JSON.stringify({
+      version: 1,
+      id: 'evt_4',
+      type: 'sale.created',
+      kind: 'store',
+      data: { transactionId: 77 },
+      records: {},
+    });
+    const event = bareClient().webhooks.constructEvent(envelope, sign(envelope), SECRET, {
+      'X-Siren-Event': 'sale.created',
+      'X-Siren-Delivery': 'evt_4',
+    });
+    expect(event.type).toBe('sale.created');
+    expect(event.deliveryId).toBe('evt_4');
+    expect(event.data).toEqual({ transactionId: 77 });
+  });
+
+  // A custom event's payload is whatever the sender posted, so it can look
+  // like an envelope. Delivered to an ordinary subscription, its id is not
+  // the delivery id in X-Siren-Delivery, so the whole body stays the data.
+  it('keeps a custom payload shaped like an envelope whole', () => {
+    const custom = { version: 2, id: 'order-81', type: 'subscription', data: { plan: 'pro' } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'plan.renewed',
+      'x-siren-delivery': 'evt_0f3a',
+    });
+    expect(event.type).toBe('plan.renewed');
+    expect(event.data).toEqual(custom);
+    expect(event.deliveryId).toBe('evt_0f3a');
+  });
+
+  it('keeps a version, type and data payload whole', () => {
+    const custom = { version: 1, type: 'refund', data: { orderId: 9 } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'order.synced',
+      'x-siren-delivery': 'evt_77',
+    });
+    expect(event.type).toBe('order.synced');
+    expect(event.data).toEqual(custom);
+  });
+
+  it('keeps an envelope-shaped body whole when X-Siren-Delivery is absent', () => {
+    const custom = { version: 1, id: 'evt_1', type: 'sale.created', data: { transactionId: 1 } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'sale.created',
+    });
+    expect(event.data).toEqual(custom);
+    expect(event.deliveryId).toBeUndefined();
+  });
+
+  it('keeps an envelope-shaped body whole when its type differs from X-Siren-Event', () => {
+    const custom = { version: 1, id: 'evt_5', type: 'refund', data: { orderId: 9 } };
+    const raw = JSON.stringify(custom);
+    const event = bareClient().webhooks.constructEvent(raw, sign(raw), SECRET, {
+      'x-siren-event': 'order.synced',
+      'x-siren-delivery': 'evt_5',
+    });
+    expect(event.type).toBe('order.synced');
+    expect(event.data).toEqual(custom);
   });
 
   it('throws SignatureVerificationError for a tampered body', () => {
@@ -101,9 +250,15 @@ describe('webhooks.constructEvent', () => {
 });
 
 describe('WebhookEventType', () => {
-  it('contains all 27 event types plus "*"', () => {
+  // The 34 events Siren's WebhookCatalog lists and GET /webhooks/events serves.
+  it('contains all 34 event types plus "*"', () => {
     const values = Object.values(WebhookEventType);
-    expect(values).toHaveLength(28);
+    expect(values).toHaveLength(35);
+    expect(values).toContain('program.created');
+    expect(values).toContain('collaborator.updated');
+    expect(values).toContain('collaborator.deactivated');
+    expect(values).toContain('credit.issued');
+    expect(values).toContain('currency.deleted');
     expect(values).toContain('*');
     expect(values).toContain('conversion.approved');
     expect(values).toContain('transaction.created');

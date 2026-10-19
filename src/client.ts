@@ -27,15 +27,15 @@ export class Siren {
   readonly events: EventsResource;
   /** Verify inbound webhook signatures and manage subscriptions. */
   readonly webhooks: WebhooksResource;
-  /** Manage API keys. */
+  /** Manage API keys. Takes a signed-in dashboard session's token. */
   readonly apiKeys: ApiKeysResource;
-  /** Reconciliation reader for conversions. */
+  /** Reconciliation reader for conversions. An API key needs `ledger:conversions:read`. */
   readonly conversions: RecordsResource;
-  /** Reconciliation reader for transactions. */
+  /** Reconciliation reader for transactions. An API key needs `ledger:transactions:read`. */
   readonly transactions: RecordsResource;
-  /** Reconciliation reader for obligations. */
+  /** Reconciliation reader for obligations. An API key needs `ledger:obligations:read`. */
   readonly obligations: RecordsResource;
-  /** Reconciliation reader for payouts. */
+  /** Reconciliation reader for payouts. An API key needs `ledger:payouts:read`. */
   readonly payouts: RecordsResource;
 
   constructor(options: SirenOptions) {
