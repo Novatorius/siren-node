@@ -166,6 +166,8 @@ await saveSecretSomewhereSafe(sub.signingSecret);
   dashboard session's token. The raw key is returned once and cannot be retrieved later.
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
   `transactions`, `obligations`, and `payouts`, with an API key that holds the ledger scopes.
+- **Browser storefront module** — `@novatorius/siren/storefront` records referred visits and claims
+  orders from a shopper's browser, with no API key and no Node built-ins.
 - **Typed errors** — every failure throws a typed subclass of `SirenError` carrying `message`,
   `code`, and `statusCode` (`NotFoundError`, `RateLimitError`, `ValidationError`, and more).
 
@@ -176,6 +178,42 @@ console.log(conversions.estimatedCount); // total across all pages, if known
 ```
 
 Pages hold up to 200 records, and Siren's default page size is 10.
+
+## Storefront module (browser)
+
+Siren's storefront routes are public, because a shopper's browser calls them. The
+`@novatorius/siren/storefront` subpath holds the code for that. It uses `fetch`, needs no API key,
+and imports no Node built-ins, so a bundler can ship it to a browser.
+
+```ts
+import { SirenStorefront, storefrontUrls, isVisitToken } from '@novatorius/siren/storefront';
+
+// The URLs come from the storefront block of an inbound connection in Siren Cloud,
+// or from the source and its public storefront key.
+const { visitUrl, claimUrl } = storefrontUrls({ source: 'shopify', key: storefrontKey });
+const storefront = new SirenStorefront({ visitUrl, claimUrl });
+
+// A page opened with ?ref=jane. Resolves to null when Siren refuses the request,
+// so you can try again on the next page. A network failure rejects.
+const visit = await storefront.recordVisit({ ref: 'jane', visitToken: storedToken });
+if (visit?.recorded && isVisitToken(visit.visitToken)) {
+  keepToken(visit.visitToken, visit.attributionWindowDays);
+}
+
+// A checkout that skips the cart claims its order with the stored token.
+await storefront.claimOrder({ visitToken, orderId: '5551234', total: '49.99', currency: 'USD' });
+```
+
+The module also exports the shapes of both requests and answers (`StorefrontVisitRequest`,
+`StorefrontVisitResponse`, `StorefrontClaimRequest`, `StorefrontClaimResponse`,
+`StorefrontSettings`), and the values scripts share: `VISIT_STORAGE_KEY`, `VISIT_TOKEN_PATTERN`,
+`SHOPIFY_TRACKING_ATTRIBUTE`, `STRIPE_TRACKING_ATTRIBUTE`, `DEFAULT_ATTRIBUTION_WINDOW_DAYS` and
+`MAX_ATTRIBUTION_WINDOW_DAYS`. `stripeSafeToken` spells a token with an underscore for Stripe,
+which drops a reference that holds a dot. Siren reads both spellings. `attributionWindowDays`
+turns the window Siren returns into a safe number of days.
+
+The module only talks to Siren. Keeping the token in a cookie or localStorage, and writing it to a
+cart or a Stripe link, stay with your script.
 
 ## API key scopes
 
