@@ -305,6 +305,15 @@ describe('apiKeys resource', () => {
     expect(key.rawKey).toBe(`sk_live_${'b'.repeat(64)}`);
   });
 
+  it('creates a key without a label and leaves label out of the request', async () => {
+    const ctx = makeClient([
+      jsonResponse(201, { id: 10, keyPrefix: 'sk_live_c', label: '', rawKey: `sk_live_${'c'.repeat(64)}` }),
+    ]);
+
+    await ctx.client.apiKeys.create({ scopes: ['event:sale'] });
+    expect(ctx.lastCall().body).toEqual({ scopes: ['event:sale'] });
+  });
+
   it('lists keys and revokes by id', async () => {
     const ctx = makeClient([
       jsonResponse(200, [{ id: 9, label: 'Production server' }]),

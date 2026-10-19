@@ -48,6 +48,10 @@ one follows a rule Siren already enforces.
 - `SaleParams.currency` documents what Siren does: the code must be one the organization uses,
   and an omitted currency reads as the organization's default, not USD.
 - `ApiKey.createdAt` and `WebhookSubscription.createdAt` are deprecated. Siren sends `dateCreated`.
+- `CreateApiKeyParams.label` is optional, as it is in Siren, and is left out of the request when
+  not given.
+- `LineItem.name` is optional, because Siren needs only `amount`. `externalId` on a sale, a refund
+  and a line item, and a line item's `name`, take a number too, which Siren stores as text.
 
 ### Fixed
 

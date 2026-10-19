@@ -51,10 +51,10 @@ export interface EventResult {
 
 /** A sale line item. `amount` is the per-unit price in major currency units. */
 export interface LineItem {
-  /** Your id for this line item. */
-  externalId?: string;
-  /** Human-readable product name. */
-  name: string;
+  /** Your id for this line item. Siren stores a number as text. */
+  externalId?: string | number;
+  /** Human-readable product name. Optional, as Siren needs only `amount`. */
+  name?: string | number;
   /**
    * Units sold. Reward pools compute `amount x quantity`, so this must be
    * honest. Defaults to 1 when omitted.
@@ -68,8 +68,8 @@ export interface LineItem {
 export interface SaleParams {
   /** Commerce source identifier, e.g. `"stripe"`, `"woocommerce"`. */
   source: string;
-  /** Your order/transaction id; used later to match refunds. */
-  externalId: string;
+  /** Your order or transaction id, used later to match refunds. Siren stores a number as text. */
+  externalId: string | number;
   /** Order total in major currency units (9.99 = $9.99). */
   total: number;
   /** Opportunity id from the Siren tracking cookie / attribution. */
@@ -87,7 +87,7 @@ export interface SaleParams {
 /** Parameters for `events.refund`. Both fields must match the original sale. */
 export interface RefundParams {
   source: string;
-  externalId: string;
+  externalId: string | number;
 }
 
 /** Parameters for `events.siteVisited`. */
@@ -196,8 +196,8 @@ export interface CreatedApiKey extends ApiKey {
 
 /** Parameters for `apiKeys.create`. */
 export interface CreateApiKeyParams {
-  /** Human-readable label, e.g. `"Production server"`. */
-  label: string;
+  /** Human-readable label, e.g. `"Production server"`. Optional, and left out of the request when not given. */
+  label?: string;
   /**
    * Event scopes to grant. At least one is required. A key sends events and
    * does nothing else, so Siren accepts only `event:*`, `event:{slug}` and

@@ -49,6 +49,19 @@ describe('events.sale', () => {
     ]);
   });
 
+  it('sends a line item with only an amount and a numeric externalId', async () => {
+    const ctx = makeClient([emptyResponse(200, { 'X-Siren-OID': '7' })]);
+    await ctx.client.events.sale({
+      source: 'woocommerce',
+      externalId: 1001,
+      total: 10,
+      trackingId: 99,
+      items: [{ amount: 10 }],
+    });
+
+    expect(ctx.lastCall().body).toMatchObject({ externalId: 1001, items: [{ amount: 10, quantity: 1 }] });
+  });
+
   it('omits items entirely when not provided (total becomes a single line server-side)', async () => {
     const ctx = makeClient([emptyResponse(200, { 'X-Siren-OID': '7' })]);
     await ctx.client.events.sale({
