@@ -52,12 +52,16 @@ describe.skipIf(!existsSync(built))('storefront build', () => {
         'SirenStorefront',
         'VISIT_STORAGE_KEY',
         'VISIT_TOKEN_PATTERN',
+        'applicationFormUrl',
         'attributionWindowDays',
         'canonicalToken',
+        'getApplicationForm',
         'isVisitToken',
         'storefrontUrls',
         'stripeSafeToken',
+        'submitApplication',
         'trackingAttributeFor',
+        'verifyApplication',
       ].sort(),
     );
   });

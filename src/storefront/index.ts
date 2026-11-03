@@ -3,7 +3,8 @@
  *
  * It uses `fetch` and no Node built-ins, and it takes no API key. Siren's
  * storefront routes are public: a merchant's own site calls them from the
- * shopper's browser.
+ * shopper's browser. So are Siren Cloud's application form routes, which
+ * `getApplicationForm`, `submitApplication` and `verifyApplication` call.
  */
 import {
   DEFAULT_ATTRIBUTION_WINDOW_DAYS,
@@ -22,6 +23,7 @@ import type {
 } from './types';
 
 export * from './constants';
+export * from './applications';
 export type * from './types';
 
 /** The two URLs a storefront needs. */
