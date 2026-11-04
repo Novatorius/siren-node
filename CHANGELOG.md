@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `getApplicationForm`, `submitApplication` and `verifyApplication` in `@novatorius/siren/storefront`,
+  for running a Siren Cloud application form on your own site from the visitor's browser. They read
+  the form's field definitions, send an application with the referral the visitor arrived with,
+  return a message per field on a refusal, and confirm the application from your own confirmation
+  page.
+
 ## [0.3.0] - 2026-10-19
 
 ### Added

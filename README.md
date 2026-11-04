@@ -167,7 +167,8 @@ await saveSecretSomewhereSafe(sub.signingSecret);
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
   `transactions`, `obligations`, and `payouts`, with an API key that holds the ledger scopes.
 - **Browser storefront module** — `@novatorius/siren/storefront` records referred visits and claims
-  orders from a shopper's browser, with no API key and no Node built-ins.
+  orders from a shopper's browser, and runs Siren Cloud application forms on your own site, with no
+  API key and no Node built-ins.
 - **Typed errors** — every failure throws a typed subclass of `SirenError` carrying `message`,
   `code`, and `statusCode` (`NotFoundError`, `RateLimitError`, `ValidationError`, and more).
 
@@ -214,6 +215,38 @@ turns the window Siren returns into a safe number of days.
 
 The module only talks to Siren. Keeping the token in a cookie or localStorage, and writing it to a
 cart or a Stripe link, stay with your script.
+
+### Application forms
+
+A Siren Cloud application form can run on your own site. The same module reads the form, sends
+applications, and confirms them, from the visitor's browser. Call these from the browser, not your
+server: Siren limits applications per visitor address.
+
+```ts
+import { getApplicationForm, submitApplication, verifyApplication } from '@novatorius/siren/storefront';
+
+// Null when the form is off or gone.
+const form = await getApplicationForm({ orgSlug: 'acme', formSlug: 'partners' });
+// Render form.builtInFields, then form.fields, then a hidden field named form.honeypot.
+
+const result = await submitApplication({
+  orgSlug: 'acme',
+  formSlug: 'partners',
+  honeypotField: form.honeypot,
+  application: { nickname, fullName, email, answers: { website: 'https://example.com' } },
+  // The visit's opportunity, such as visit.opportunityId from recordVisit, credits the
+  // collaborator who referred the applicant.
+  referral: { opportunityId: storedOpportunityId },
+});
+if (!result.ok) showErrors(result.fieldErrors); // a message per field, for the applicant
+
+// On the confirmation page the form's confirmation email links to, with ?token=.
+const confirmed = await verifyApplication({ token: new URLSearchParams(location.search).get('token')! });
+```
+
+`submitApplication` resolves to a refusal with `status` 400 for a built-in field, 422 for an
+answer, 404 for a form that is off, and 429 over a rate limit, with `retryAfter` in seconds. A
+network failure rejects.
 
 ## API key scopes
 
