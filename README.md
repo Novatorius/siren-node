@@ -78,10 +78,12 @@ await siren.events.sale({
 });
 ```
 
-Refunds and referred visits work the same way:
+Refunds and referred visits work the same way. A refund names the order by `externalId` and the
+refund by `refundId`, your store's own id for it. Siren requires it and records each refund id once
+per order:
 
 ```ts
-await siren.events.refund({ source: 'stripe', externalId: 'cs_test_a1b2c3' });
+await siren.events.refund({ source: 'stripe', externalId: 'cs_test_a1b2c3', refundId: 're_3Nf8a2' });
 await siren.events.siteVisited({ collaboratorId: 88, userId: 12345 });
 await siren.events.ingest('loyalty-points-earned', { userId: 42, points: 100 });
 ```
