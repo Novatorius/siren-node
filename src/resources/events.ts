@@ -34,8 +34,10 @@ export class EventsResource {
   }
 
   /**
-   * Reverse a previously recorded sale, matched by `(externalId, source)`.
-   * Rejects with `NotFoundError` when no matching sale exists.
+   * Record a refund of a previously recorded sale, matched by
+   * `(externalId, source)`, and named by `refundId`, the store's own id for
+   * this refund. Siren records each refund id once per order. Rejects with
+   * `NotFoundError` when no matching sale exists.
    */
   refund(params: RefundParams): Promise<EventResult> {
     return this.send('refund', params);

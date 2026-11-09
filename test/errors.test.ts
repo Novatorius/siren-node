@@ -60,7 +60,7 @@ describe('error mapping by status', () => {
     const ctx = makeClient([jsonResponse(404, stringErr('no such sale'))], { maxRetries: 0 });
 
     const err = await ctx.client.events
-      .refund({ source: 'stripe', externalId: 'nope' })
+      .refund({ source: 'stripe', externalId: 'nope', refundId: 're_1' })
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(NotFoundError);
     expect((err as NotFoundError).message).toBe('no such sale');
