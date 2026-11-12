@@ -27,7 +27,10 @@ export interface HttpRequest {
   readonly headers: Readonly<Record<string, string>>;
   /** The raw request body, or `undefined` for none. */
   readonly body?: string;
-  /** Milliseconds to allow for the whole request, the SDK's `timeout` option. */
+  /**
+   * Milliseconds to allow for this one send, the SDK's `timeout` option. A
+   * retry or the resend after a 401 gets the full timeout again.
+   */
   readonly timeout: number;
 }
 
@@ -278,8 +281,9 @@ export class HttpTransport {
    *    An answer of `null` raises the 401 as it is. Any other answer raises
    *    the 401 with `cause` set to a `SirenError` whose message names
    *    `refreshAccessToken`, control characters and U+00FF, never quoting
-   *    the value, so a broken token source shows behind the 401. A later 401 in the same call, with or without retries in
-   *    between, never refreshes again and raises through
+   *    the value, so a broken token source shows behind the 401. A later
+   *    401 in the same call, with or without retries in between, never
+   *    refreshes again and raises through
    *    `errorFromResponse`, so Siren's revoked-site answer surfaces as
    *    `SiteDisconnectedError`.
    *
@@ -287,8 +291,8 @@ export class HttpTransport {
    *    and does not use up a retry. Siren's routes answer 401 from
    *    middleware, or from a request with no accepted credential, before
    *    they write, so the refused send left nothing to duplicate. That holds
-   *    by route convention in Siren, and each new write route must keep it. A send-once request therefore
-   *    reaches Siren with a usable credential exactly once, and is sent at
+   *    by route convention in Siren, and each new write route must keep it.
+   *    A send-once request therefore reaches Siren with a usable credential exactly once, and is sent at
    *    most twice: the refused send and the resend. After the resend it is
    *    never sent again, whatever the reply.
    * 5. A retriable request with retries left is sent again after a backoff on

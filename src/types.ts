@@ -8,8 +8,9 @@ import type { HttpClient } from './http';
 export interface SirenBaseOptions {
   /**
    * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
-   * Point this at staging or a local dev server as needed. Any value but a
-   * non-empty string throws `SirenError` at construction.
+   * Point this at staging or a local dev server as needed. Any value but an
+   * http or https URL with no user name or password in it throws
+   * `SirenError` at construction.
    */
   baseUrl?: string;
   /**

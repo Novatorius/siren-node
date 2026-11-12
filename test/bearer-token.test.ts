@@ -4,6 +4,7 @@ import { inspect } from 'node:util';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthenticationError,
+  CallbackAccessTokenSource,
   ConnectionError,
   FetchHttpClient,
   RecordsResource,
@@ -21,13 +22,16 @@ import { CloudAnswers, FakeHttpClient, failOnGlobalFetch, reply, spySource } fro
  * above U+00FF.
  * The rule holds at each place a token enters: the getAccessToken answer,
  * the refresh answer, and StaticAccessToken, which `new Siren({ apiKey })`
- * and a string `accessToken` build. The slice 2 transport tests pin the
- * empty, non-string and control-character answers on both token paths.
+ * and a string `accessToken` build. CallbackAccessTokenSource hands every
+ * refresh answer but `null` to the transport unchanged. The slice 2
+ * transport tests pin the empty, non-string and control-character answers on
+ * both token paths.
  *
  * Integration shape (KB 568): the real client, transport and resources, with
- * the network mocked only at the HttpClient seam. Two tests run the real
- * FetchHttpClient over the real fetch against a server on 127.0.0.1, because
- * fetch itself refuses a header value above U+00FF.
+ * the network mocked only at the HttpClient seam. The real-socket tests run
+ * the real FetchHttpClient over the real fetch against a server on
+ * 127.0.0.1, because fetch itself refuses a header value above U+00FF, and
+ * two of them build the default client through `new Siren`.
  */
 
 /** The real fetch, kept before failOnGlobalFetch replaces the global one. */
@@ -60,9 +64,14 @@ function shown(error: unknown): string {
   return [e.message, e.stack, JSON.stringify(e), inspect(e, { depth: 10 }), inspect(e.cause, { depth: 10 })].join(' ');
 }
 
-/** True when `text` holds either half of a test token, the part before or after its bad character. */
+/** Every six-character piece of either half of a test token, the parts before and after its bad character. */
+const TOKEN_PIECES = ['sk_secret_first', 'sk_secret_last'].flatMap((half) =>
+  Array.from({ length: half.length - 5 }, (_, start) => half.slice(start, start + 6)),
+);
+
+/** True when `text` holds any six characters in a row from either half of a test token. */
 function quotesToken(text: string): boolean {
-  return text.includes('sk_secret_first') || text.includes('sk_secret_last');
+  return TOKEN_PIECES.some((piece) => text.includes(piece));
 }
 
 /*
@@ -95,7 +104,7 @@ const NOT_A_TOKEN: Array<[string, unknown]> = [
   ['a number', 42],
 ];
 
-describe('bearer token rule: the token from getAccessToken', () => {
+describe('2b P1: bearer token rule: the token from getAccessToken', () => {
   it.skip.each([...ABOVE_FF, ...CONTROL])(
     'refuses a token that holds %s with SirenError naming the rule, and sends nothing',
     async (_name, token) => {
@@ -125,18 +134,6 @@ describe('bearer token rule: the token from getAccessToken', () => {
     expect(httpClient.requests).toHaveLength(0);
   });
 
-  it.skip('refuses it before fetch sees it, so the real FetchHttpClient raises SirenError, not ConnectionError', async () => {
-    const fetchCalls = vi.fn(realFetch);
-    const tokens = spySource(['sk_secret_first\u010aX-Injected: sk_secret_last']);
-
-    const error = await rejection(records(new FetchHttpClient(fetchCalls), tokens, 1).list());
-
-    expect(error).toBeInstanceOf(SirenError);
-    expect(error).not.toBeInstanceOf(ConnectionError);
-    expect((error as SirenError).message).toMatch(/getAccessToken/);
-    expect(fetchCalls).not.toHaveBeenCalled();
-  });
-
   it('sends a token whose characters run from U+0020 to U+007E or U+00A0 to U+00FF', async () => {
     const client = new FakeHttpClient([reply(200, [])]);
 
@@ -146,7 +143,7 @@ describe('bearer token rule: the token from getAccessToken', () => {
   });
 });
 
-describe('bearer token rule: the token from refreshAccessToken', () => {
+describe('2b P1: bearer token rule: the token from refreshAccessToken', () => {
   it.skip.each([...ABOVE_FF, ...CONTROL, ...NOT_A_TOKEN])(
     'raises the 401 after one send when the refresh answers %s, with a SirenError cause naming refreshAccessToken',
     async (_name, fresh) => {
@@ -206,7 +203,50 @@ describe('bearer token rule: the token from refreshAccessToken', () => {
   });
 });
 
-describe('bearer token rule: StaticAccessToken and the apiKey and accessToken options', () => {
+describe('2b P1: bearer token rule: CallbackAccessTokenSource hands the refresh answer on', () => {
+  it.skip.each(NOT_A_TOKEN)('answers %s unchanged when the refresh function returns it', async (_name, value) => {
+    const source = new CallbackAccessTokenSource(
+      () => 'tok-1',
+      () => value as unknown as string | null,
+    );
+
+    expect(await source.refreshAccessToken('tok-1')).toBe(value);
+  });
+
+  it.skip.each(NOT_A_TOKEN)(
+    'raises the 401 through new Siren with a SirenError cause when the refresh function returns %s',
+    async (_name, value) => {
+      const httpClient = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), reply(200, [])]);
+      const accessToken = new CallbackAccessTokenSource(
+        () => 'tok-1',
+        () => value as unknown as string | null,
+      );
+
+      const error = await rejection(new Siren({ accessToken, httpClient }).payouts.list());
+
+      expect(error).toBeInstanceOf(AuthenticationError);
+      expect((error as Error).cause).toBeInstanceOf(SirenError);
+      expect(((error as Error).cause as SirenError).message).toMatch(/refreshAccessToken/);
+      expect(httpClient.requests).toHaveLength(1);
+    },
+  );
+
+  it('raises the 401 with no cause through new Siren when the refresh function returns null', async () => {
+    const httpClient = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), reply(200, [])]);
+    const accessToken = new CallbackAccessTokenSource(
+      () => 'tok-1',
+      () => null,
+    );
+
+    const error = await rejection(new Siren({ accessToken, httpClient }).payouts.list());
+
+    expect(error).toBeInstanceOf(AuthenticationError);
+    expect((error as Error).cause).toBeUndefined();
+    expect(httpClient.requests).toHaveLength(1);
+  });
+});
+
+describe('2b P1: bearer token rule: StaticAccessToken and the apiKey and accessToken options', () => {
   it.skip.each([...ABOVE_FF, ...CONTROL])(
     'refuses a token that holds %s when it is built, naming the rule and never quoting it',
     (_name, token) => {
@@ -241,7 +281,7 @@ describe('bearer token rule: StaticAccessToken and the apiKey and accessToken op
   });
 });
 
-describe('bearer token rule over a real socket', () => {
+describe('2b P1: bearer token rule over a real socket', () => {
   let server: Server;
   let base: string;
   let received: Array<string | undefined> = [];
@@ -253,9 +293,10 @@ describe('bearer token rule over a real socket', () => {
   beforeAll(async () => {
     server = createServer((req, res) => {
       received.push(req.headers.authorization);
-      const first = received.length === 1;
-      res.writeHead(first ? 401 : 200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(first ? CloudAnswers.authenticationRequired : []));
+      // Only tok-1 is refused, so a test chooses the 401 by the token it starts with.
+      const refused = req.headers.authorization === 'Bearer tok-1';
+      res.writeHead(refused ? 401 : 200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(refused ? CloudAnswers.authenticationRequired : []));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/siren/v1`;
@@ -264,6 +305,40 @@ describe('bearer token rule over a real socket', () => {
   afterAll(async () => {
     server.closeAllConnections?.();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it.skip('refuses a getAccessToken answer before fetch sees it, so the real FetchHttpClient raises SirenError, not ConnectionError', async () => {
+    const fetchCalls = vi.fn(realFetch);
+    const tokens = spySource(['sk_secret_first\u010aX-Injected: sk_secret_last']);
+
+    const error = await rejection(records(new FetchHttpClient(fetchCalls), tokens, 1, base).list());
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect(error).not.toBeInstanceOf(ConnectionError);
+    expect((error as SirenError).message).toMatch(/getAccessToken/);
+    expect(fetchCalls).not.toHaveBeenCalled();
+    expect(received).toEqual([]);
+  });
+
+  it.skip('refuses it through new Siren with the default client, which never reaches the server', async () => {
+    const fetchCalls = vi.fn(realFetch);
+    vi.stubGlobal('fetch', fetchCalls);
+    const tokens = spySource(['sk_secret_first\u010aX-Injected: sk_secret_last']);
+
+    const error = await rejection(new Siren({ accessToken: tokens, baseUrl: base, maxRetries: 1 }).payouts.list());
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect(error).not.toBeInstanceOf(ConnectionError);
+    expect(fetchCalls).not.toHaveBeenCalled();
+    expect(received).toEqual([]);
+  });
+
+  it('delivers a refreshed token through new Siren with the default client byte for byte', async () => {
+    vi.stubGlobal('fetch', realFetch);
+
+    await new Siren({ accessToken: spySource(['tok-1'], 'tok-\u00e9\u00ff'), baseUrl: base }).payouts.list();
+
+    expect(received).toEqual(['Bearer tok-1', 'Bearer tok-\u00e9\u00ff']);
   });
 
   it('delivers a refreshed token with characters up to U+00FF to the server byte for byte', async () => {

@@ -4,7 +4,9 @@ import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src
 /*
  * Slice 2 acceptance tests for packets P1 (StaticAccessToken) and P2
  * (CallbackAccessTokenSource). Each source mirrors its PHP SDK class at
- * 59383e6 (src/Auth).
+ * 59383e6 (src/Auth), except that CallbackAccessTokenSource hands every
+ * refresh answer but `null` to the transport, which test/bearer-token.test.ts
+ * pins.
  */
 
 describe('P1: StaticAccessToken', () => {
@@ -54,15 +56,10 @@ describe('P2: CallbackAccessTokenSource', () => {
     expect(await new CallbackAccessTokenSource(() => 'tok-1').refreshAccessToken('tok-1')).toBeNull();
   });
 
-  it.each([
-    ['null', null],
-    ['an empty string', ''],
-    ['a number', 7],
-    ['undefined', undefined],
-  ])('answers null when the refresh function returns %s', async (_name, value) => {
+  it('answers null when the refresh function returns null', async () => {
     const source = new CallbackAccessTokenSource(
       () => 'tok-1',
-      () => value as unknown as string | null,
+      () => null,
     );
 
     expect(await source.refreshAccessToken('tok-1')).toBeNull();

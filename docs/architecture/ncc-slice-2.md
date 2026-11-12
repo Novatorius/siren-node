@@ -217,7 +217,7 @@ a thrown error:
 | A host client bug | That error, unchanged. Never resent |
 | Bad record id | `SirenError` naming the id. Nothing sent |
 | A record body that is not an object | `UnexpectedResponseError` with the status, path and parsed body |
-| A list body that is neither a list nor a list envelope | An empty page, as before this slice. This slice leaves that reading alone |
+| A list body that is neither a list nor a list envelope | An empty page |
 
 ## Tests
 
@@ -240,7 +240,7 @@ client fails on that and never reaches the network.
 The slice owes no end-to-end test. Per
 [End-to-End Testing Standards (KB 569)](https://navigator.novatori.us/r/kb/569),
 an SDK proves itself against real wire shapes, and the real-socket tests
-cover the one boundary this slice adds. A run against a live Cloud waits for
+cover the `FetchHttpClient` boundary. A run against a live Cloud waits for
 the connector slices.
 
 | File | Packet |
@@ -258,11 +258,11 @@ the connector slices.
 
 ## Hardening (2b)
 
-The slice 2 review in
-[PR audit: siren-node PR 26, slice 2 review (Journal 32275)](https://navigator.novatori.us/r/journal/32275)
-found three gaps in the inputs the transport takes. Slice 2b closes them
-before slice 11 builds on the transport. Each rule below throws `SirenError`
-for a value outside it. The public surface keeps its names and types.
+These rules govern the inputs the transport takes: the bearer token, the
+client options and where the client reads them from. Each rule throws
+`SirenError` for a value outside it. The public surface keeps its names and
+types. The review that set them is
+[PR audit: siren-node PR 26, slice 2 review (Journal 32275)](https://navigator.novatori.us/r/journal/32275).
 
 ### The bearer token rule
 
@@ -291,20 +291,29 @@ The rule applies at each place a bearer token enters the SDK:
 
 The `cause` keeps the 401 a caller already handles, `SiteDisconnectedError`
 included, and still shows that the host's refresh returned something the SDK
-cannot send. `CallbackAccessTokenSource` reads an empty or non-string refresh
-answer as `null` before the transport sees it, and the transport reads every
-other answer through the rule.
+cannot send. `CallbackAccessTokenSource` hands every refresh answer other
+than `null` to the transport unchanged, so a refresh function that forgets
+to return raises the 401 with that `cause`. The PHP SDK reads an empty or
+non-string answer as `null`, but PHP's return type catches a missing
+return, and JavaScript has nothing that does.
 
-The storefront module (`@novatorius/siren/storefront`) sends a visitor's
-tracking token, not a credential, from the browser, and builds its own
-requests. It stays outside this rule and outside the own-property rule below.
+The storefront module (`@novatorius/siren/storefront`) runs in the browser
+and builds its own requests. It sends a visitor's tracking token, and
+`verifyApplication` and `submitApplication` send an email confirmation token
+and an applicant's details. Its functions read `baseUrl` and `fetch` from
+their params through the prototype chain. It stays outside both rules here,
+and a later slice owes it the own-property and token checks.
 
 ### Option checks
 
 `new Siren()` checks three options when it is built. The PHP SDK checks only
 that `maxRetries` is not negative, and its `timeout` is in seconds.
 
-- `baseUrl` is a non-empty string, because it decides where the token goes.
+- `baseUrl` is a string that `new URL` parses, with the http or https
+  scheme and no user name or password, because it decides where the token
+  goes. Fetch refuses a URL with no scheme or with a user name, and the
+  transport would read that refusal as a lost connection, resend it and
+  raise a `ConnectionError` that quotes the URL.
 - `timeout` is a number from 1 to 2147483647 milliseconds, fractions
   allowed, for each send. A Node timer above 2147483647 fires after 1 ms. A
   call can make up to `maxRetries + 2` sends, each with its own timeout,
@@ -316,15 +325,15 @@ that `maxRetries` is not negative, and its `timeout` is in seconds.
 NaN and Infinity are refused. The message names the option, its range and
 what it got: the number, or the type of any other value. It never quotes a
 string, which might be a credential passed in the wrong place. Unknown
-option names are ignored, as every earlier release did.
+option names are ignored.
 
 ### Own properties only
 
 The constructor reads `apiKey`, `accessToken`, `httpClient`, `baseUrl`,
 `timeout` and `maxRetries` only when the options object holds them itself,
 and reads each once, so a getter cannot pass a check with one value and be
-used with another. A value it inherits from any prototype, `Object.prototype` included, counts
-as absent, so prototype pollution elsewhere in a host cannot choose the
+used with another. A value it inherits from any prototype,
+`Object.prototype` included, counts as absent, so prototype pollution elsewhere in a host cannot choose the
 host, the client, the credential or the retry policy. That is a deliberate
 choice: a caller that builds options as a class instance with getters on its
 prototype spreads it into a plain object first. An options object with no
@@ -335,16 +344,29 @@ polluted `Object.prototype.send` or `refreshAccessToken` cannot turn a plain
 object into a client or a token source.
 
 The rule covers what the SDK reads. Fetch reads its own options too, such as
-undici's `dispatcher`, so a host whose `Object.prototype` is polluted can
-still steer the default `FetchHttpClient`. A host that cannot rule out
-pollution passes its own `httpClient`.
+undici's `dispatcher`, so a polluted `Object.prototype` can still change
+where the default `FetchHttpClient` sends. A host that cannot rule out
+pollution passes its own `httpClient`, and that client either sends without
+the global `fetch` or sets its own dispatcher, because a fetch-based client
+inherits the same reads.
 
 ### Tests
 
+Two packets implement these rules. 2b P1 is the bearer token rule and every
+place it applies, with its tests in `test/bearer-token.test.ts`. 2b P2 is the
+option checks and the own-property reads in the `Siren` constructor, with its
+tests in `test/siren-option-checks.test.ts`. Each packet's tests are
+written in full and skipped with `it.skip` or `it.skip.each`, and the
+packet's implementer deletes the `.skip` from its own tests and changes
+nothing else in them. The tests that run now guard against a check that
+refuses too much.
+
 The tests run the real client, transport and resources, mocked only at the
 `HttpClient` seam, and the real `FetchHttpClient` against a real HTTP server
-on 127.0.0.1 for the two paths where fetch itself refuses a header. The
-change adds no surface that needs an end-to-end test under KB 569. The slice
-2 transport tests already pin the empty, non-string and control-character
-cases on both token paths. The slice 2 surface mutations reproduce with
-`node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-2-surface.json`.
+on 127.0.0.1 where fetch itself refuses a header or the default client's
+wiring matters. The change adds no surface that needs an end-to-end test
+under KB 569. The slice 2 transport tests already pin the empty, non-string
+and control-character cases on both token paths. No surface mutation list
+covers the 2b code yet, because the packets write it. A mutation run against
+a scratch implementation of both packets proved the tests, and pull request
+36 records it.

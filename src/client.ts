@@ -66,9 +66,10 @@ export class Siren {
    * prototype, counts as absent, so prototype pollution cannot choose the
    * host, the HTTP client, the credential or the retry policy through these
    * reads. Fetch reads options of its own, so a host that cannot rule out
-   * pollution passes its own `httpClient`. An
-   * object with no prototype works as well. Each option is read once, so a
-   * getter cannot pass a check with one value and be used with another.
+   * pollution passes its own `httpClient`, one that does not send through
+   * the global `fetch` or that sets its own dispatcher. An object with no
+   * prototype works as well. Each option is read once, so a getter cannot
+   * pass a check with one value and be used with another.
    *
    * The values themselves are read as they are, so a token source or client
    * class keeps its methods on its prototype. A method counts only when the
@@ -85,15 +86,17 @@ export class Siren {
    * credential says an apiKey is required and names `accessToken` as the
    * other choice. No message carries a credential.
    *
-   * Also throws `SirenError` when `baseUrl` is not a non-empty string,
+   * Also throws `SirenError` when `baseUrl` is not an http or https URL
+   * with no user name or password in it (a string `new URL` parses),
    * `timeout` is not a number from 1 to 2147483647 (the longest wait a
-   * timer holds), or `maxRetries` is not a whole number of 0 or more. NaN,
-   * Infinity, `null` and any value of the wrong type are refused, and a
-   * fraction of a millisecond is allowed. Each message names the option,
-   * what it takes ("a non-empty string", "from 1 to 2147483647", "a whole
-   * number of 0 or more") and what it got: the number itself, or the type of
-   * any other value, never a string's text. Absent, they default to
-   * `DEFAULT_BASE_URL`, 30000 and 2. Unknown option names are ignored.
+   * timer holds), or `maxRetries` is not a whole number of 0 or more, with
+   * no ceiling. NaN, Infinity, `null` and any value of the wrong type are
+   * refused, and a fraction of a millisecond is allowed. Each message names
+   * the option, what it takes ("an http or https URL", "from 1 to
+   * 2147483647", "a whole number of 0 or more") and what it got: the number
+   * itself, or the type of any other value, never a string's text. Absent,
+   * they default to `DEFAULT_BASE_URL`, 30000 and 2. Unknown option names
+   * are ignored.
    *
    * `apiKey` and a string `accessToken` become a `StaticAccessToken`. An
    * `AccessTokenSource` is used as given. Requests go through `httpClient`,

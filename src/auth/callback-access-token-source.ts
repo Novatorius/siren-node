@@ -17,9 +17,12 @@ export class CallbackAccessTokenSource implements AccessTokenSource {
   /**
    * @param get Returns the current access token, or a promise of it.
    * @param refresh Gets a fresh token after a 401, or `null` when it cannot.
-   *   Without it, a 401 surfaces straight away. An empty string or any value
-   *   that is not a string counts as `null`. The transport reads every other
-   *   answer through the bearer token rule (`usableBearerToken`).
+   *   Without it, a 401 surfaces straight away. Every answer other than
+   *   `null`, an empty string, `undefined` or a number included, goes to the
+   *   transport unchanged, and the transport reads it through the bearer
+   *   token rule (`usableBearerToken`). So a refresh function that forgets to
+   *   return raises the 401 with a `SirenError` cause, not as a source that
+   *   cannot refresh.
    */
   constructor(
     private readonly get: () => string | Promise<string>,

@@ -376,9 +376,10 @@ const siren = new Siren({
 
 Pass `apiKey` or `accessToken`, never both. Both, neither or an empty one throws `SirenError`
 when you build the client. So does a token with a control character or a character above U+00FF,
-which cannot go in an HTTP header. `baseUrl` takes a non-empty string, `timeout` a number of
-milliseconds from 1 to 2147483647 for each send, and `maxRetries` a whole number of 0 or more. Any
-other value, NaN, Infinity and `null` included, throws `SirenError` that names the option. The
+which cannot go in an HTTP header. `baseUrl` takes an http or https URL with no user name or
+password in it. `timeout` takes a number of milliseconds from 1 to 2147483647 for each send, and a
+retry gets the full timeout again. `maxRetries` takes a whole number of 0 or more, with no ceiling.
+Any other value, NaN, Infinity and `null` included, throws `SirenError` that names the option. The
 client reads only the options object's own properties, so a value inherited from a prototype is
 ignored.
 
@@ -425,7 +426,8 @@ refresh, and a send-once request never goes out again after that resend.
 If your app sends events from a durable queue, set `maxRetries: 0`. The queue owns redelivery, and
 an SDK retry inside a queued attempt would multiply the attempts. At 0 a request still goes out a
 second time after a 401 when the `AccessTokenSource` refreshes, because Siren refused the first
-send before it recorded anything.
+send before it recorded anything. A retriable call makes at most `maxRetries + 2` sends: the first,
+its retries and that one resend.
 
 ### Your own HTTP stack
 
