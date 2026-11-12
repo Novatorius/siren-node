@@ -15,6 +15,9 @@ import { StaticAccessToken } from './auth/static-access-token';
 import type { HttpClient } from './http';
 import type { SirenOptions } from './types';
 
+/** The longest wait a Node timer holds. A longer one fires after 1 ms. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 /**
  * The Siren API client.
  *
@@ -105,13 +108,20 @@ export class Siren {
    * or a `FetchHttpClient` when there is none.
    */
   constructor(options: SirenOptions) {
-    const given = (options ?? {}) as unknown as Record<string, unknown>;
+    const given: unknown = options ?? {};
+    const apiKey = ownOption(given, 'apiKey');
+    const accessToken = ownOption(given, 'accessToken');
+    const httpClient = ownOption(given, 'httpClient');
+    const baseUrl = ownOption(given, 'baseUrl');
+    const timeout = ownOption(given, 'timeout');
+    const maxRetries = ownOption(given, 'maxRetries');
+
     const http = new HttpTransport({
-      tokens: resolveTokens(given.apiKey, given.accessToken),
-      client: resolveHttpClient(given.httpClient),
-      baseUrl: options?.baseUrl ?? DEFAULT_BASE_URL,
-      timeout: options?.timeout ?? DEFAULT_TIMEOUT_MS,
-      maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
+      tokens: resolveTokens(apiKey, accessToken),
+      client: resolveHttpClient(httpClient),
+      baseUrl: resolveBaseUrl(baseUrl),
+      timeout: resolveTimeout(timeout),
+      maxRetries: resolveMaxRetries(maxRetries),
     });
 
     this.events = new EventsResource(http);
@@ -148,22 +158,97 @@ function resolveTokens(apiKey: unknown, accessToken: unknown): AccessTokenSource
   );
 }
 
-/** An `AccessTokenSource` is any object with both methods. */
-function isAccessTokenSource(value: unknown): value is AccessTokenSource {
-  if (typeof value !== 'object' || value === null) return false;
-  const source = value as Record<string, unknown>;
-  return typeof source.getAccessToken === 'function' && typeof source.refreshAccessToken === 'function';
+/**
+ * Answers the option `name` when the options object holds it itself, else
+ * `undefined`. It never reads an inherited value, and it reads an own value
+ * once, so a getter runs a single time. It works on an object with no
+ * prototype, since it calls `hasOwnProperty` from `Object.prototype`.
+ */
+function ownOption(options: unknown, name: string): unknown {
+  if (!Object.prototype.hasOwnProperty.call(options, name)) return undefined;
+  return (options as Record<string, unknown>)[name];
 }
 
 /**
- * Answers the given `httpClient`, any object with a `send` function, or a
- * `FetchHttpClient` with no fetch of its own when the option is absent, so
- * it reads the global fetch at each send.
+ * True when `value` is an object whose `name` is a function held by the
+ * object itself or by a prototype other than `Object.prototype`. The walk
+ * stops at the first object that holds `name`, which is the one a call would
+ * use, so a non-function there hides a function further up.
+ */
+function holdsMethod(value: unknown, name: string): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  for (let holder: object | null = value; holder !== null && holder !== Object.prototype; holder = Object.getPrototypeOf(holder)) {
+    if (Object.prototype.hasOwnProperty.call(holder, name)) {
+      return typeof (value as Record<string, unknown>)[name] === 'function';
+    }
+  }
+  return false;
+}
+
+/** An `AccessTokenSource` is any object that holds both methods. */
+function isAccessTokenSource(value: unknown): value is AccessTokenSource {
+  return holdsMethod(value, 'getAccessToken') && holdsMethod(value, 'refreshAccessToken');
+}
+
+/**
+ * Answers the given `httpClient`, any object that holds a `send` function,
+ * or a `FetchHttpClient` with no fetch of its own when the option is absent,
+ * so it reads the global fetch at each send.
  */
 function resolveHttpClient(httpClient: unknown): HttpClient {
   if (httpClient === undefined) return new FetchHttpClient();
-  if (typeof httpClient === 'object' && httpClient !== null && typeof (httpClient as HttpClient).send === 'function') {
-    return httpClient as HttpClient;
-  }
+  if (holdsMethod(httpClient, 'send')) return httpClient as HttpClient;
   throw new SirenError('Siren: httpClient must be an object with a send function.');
+}
+
+/**
+ * Answers `baseUrl`, or `DEFAULT_BASE_URL` when it is absent. Refuses any
+ * value that is not a string with no `?`, `#`, space or control character,
+ * that `new URL` parses with the http or https scheme and no user name or
+ * password. The message never quotes the value.
+ */
+function resolveBaseUrl(baseUrl: unknown): string {
+  if (baseUrl === undefined) return DEFAULT_BASE_URL;
+  if (typeof baseUrl === 'string' && isHttpUrl(baseUrl)) return baseUrl;
+  throw new SirenError(
+    `Siren: baseUrl must be an http or https URL with no user name, password, query, fragment, space or control character. It got ${described(baseUrl)}.`,
+  );
+}
+
+/** True for a string the transport can join paths onto and send a token to. */
+function isHttpUrl(text: string): boolean {
+  if (/[?#\u0000-\u0020\u007f]/.test(text)) return false;
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return false;
+  }
+  return (url.protocol === 'http:' || url.protocol === 'https:') && url.username === '' && url.password === '';
+}
+
+/** Answers `timeout`, or `DEFAULT_TIMEOUT_MS` when it is absent. */
+function resolveTimeout(timeout: unknown): number {
+  if (timeout === undefined) return DEFAULT_TIMEOUT_MS;
+  if (typeof timeout === 'number' && timeout >= 1 && timeout <= MAX_TIMEOUT_MS) return timeout;
+  throw new SirenError(
+    `Siren: timeout must be a number of milliseconds from 1 to ${MAX_TIMEOUT_MS}. It got ${described(timeout)}.`,
+  );
+}
+
+/** Answers `maxRetries`, or `DEFAULT_MAX_RETRIES` when it is absent. It has no ceiling. */
+function resolveMaxRetries(maxRetries: unknown): number {
+  if (maxRetries === undefined) return DEFAULT_MAX_RETRIES;
+  if (typeof maxRetries === 'number' && Number.isInteger(maxRetries) && maxRetries >= 0) return maxRetries;
+  throw new SirenError(`Siren: maxRetries must be a whole number of 0 or more. It got ${described(maxRetries)}.`);
+}
+
+/**
+ * What a refused option got, for its message: a number as `String(value)`,
+ * `null` as "null", and the type of anything else, so a string's text, which
+ * might be a credential, never reaches the message.
+ */
+function described(value: unknown): string {
+  if (typeof value === 'number') return String(value);
+  return value === null ? 'null' : typeof value;
 }
