@@ -134,5 +134,33 @@
     "failing": [
       "P4: custom currencies writes"
     ]
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, params);;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "r1-p4-create-retried",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return this.http.request({ method: 'POST', path: this.path, body: params, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies writes > sends every write once"
+    ]
+  },
+  {
+    "id": "r1-p4-update-retried",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${currencyCode(code)}`, params);",
+    "replace": "    return this.http.request({ method: 'PUT', path: `${this.path}/${currencyCode(code)}`, body: params, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies writes > sends every write once"
+    ]
   }
 ]

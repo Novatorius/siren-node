@@ -225,5 +225,33 @@
     "failing": [
       "P6: mappings writes"
     ]
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/mappings.ts",
+    "find": "    return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));",
+    "replace": "    return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "r1-p6-create-retried",
+    "file": "src/resources/mappings.ts",
+    "find": "    return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));",
+    "replace": "    return plainMapping(await this.http.request({ method: 'POST', path: this.path, body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as Record<string, unknown>));",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes > sends every write once"
+    ]
+  },
+  {
+    "id": "r1-p6-delete-local-type",
+    "file": "src/resources/mappings.ts",
+    "find": "      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,\n      localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),",
+    "replace": "      localType: 'user',\n      localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes > removes a collaborator's links of one type with DELETE /mappings and no body"
+    ]
   }
 ]

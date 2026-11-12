@@ -504,5 +504,113 @@
     "failing": [
       "P5: credits holdReference"
     ]
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/credits.ts",
+    "find": "const ZERO_MESSAGE = 'A credit adjustment amount must not be zero.';",
+    "replace": "const ZERO_MESSAGE = 'A credit adjustment amount must not be zero.';;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "r1-p5-adjust-retried",
+    "file": "src/resources/credits.ts",
+    "find": "    return writeRecord<CreditAdjustment>(this.http, 'POST', '/credits/adjust', body);",
+    "replace": "    return this.http.request({ method: 'POST', path: '/credits/adjust', body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as CreditAdjustment);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust > sends adjust once"
+    ]
+  },
+  {
+    "id": "r1-p5-adjust-path",
+    "file": "src/resources/credits.ts",
+    "find": "    return writeRecord<CreditAdjustment>(this.http, 'POST', '/credits/adjust', body);",
+    "replace": "    return writeRecord<CreditAdjustment>(this.http, 'POST', '/credits/adjustment', body);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust > adjusts with POST /credits/adjust and answers the ledger entry"
+    ]
+  },
+  {
+    "id": "r1-p5-place-hold-retried",
+    "file": "src/resources/credits.ts",
+    "find": "      return await writeRecord<CreditHold>(this.http, 'POST', '/credit-holds', body);",
+    "replace": "      return await this.http.request({ method: 'POST', path: '/credit-holds', body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as CreditHold);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds > sends placeHold and releaseHold once"
+    ]
+  },
+  {
+    "id": "r1-p5-place-hold-path",
+    "file": "src/resources/credits.ts",
+    "find": "      return await writeRecord<CreditHold>(this.http, 'POST', '/credit-holds', body);",
+    "replace": "      return await writeRecord<CreditHold>(this.http, 'POST', '/credit-hold', body);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds > places a hold with POST /credit-holds and answers it"
+    ]
+  },
+  {
+    "id": "r1-p5-release-hold-retried",
+    "file": "src/resources/credits.ts",
+    "find": "    const hold = await deleteRecord<CreditHold>(this.http, path);",
+    "replace": "    const hold = await this.http.request({ method: 'DELETE', path, retriable: true }).then(async (r) => JSON.parse(await r.text()) as CreditHold);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds > sends placeHold and releaseHold once"
+    ]
+  },
+  {
+    "id": "r1-p5-release-hold-path",
+    "file": "src/resources/credits.ts",
+    "find": "    const path = `/credit-holds/${recordId(holdId, 'credits.releaseHold')}`;",
+    "replace": "    const path = `/credit-hold/${recordId(holdId, 'credits.releaseHold')}`;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds > releases a hold with DELETE /credit-holds/{id} and answers it as Siren now stores it"
+    ]
+  },
+  {
+    "id": "r1-p5-entries-path",
+    "file": "src/resources/credits.ts",
+    "find": "      '/credit-entries',",
+    "replace": "      '/credit-entry',",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists > lists GET /credit-entries with the filters and paging"
+    ]
+  },
+  {
+    "id": "r1-p5-holds-path",
+    "file": "src/resources/credits.ts",
+    "find": "return listRecords<CreditHold>(this.http, '/credit-holds', params,",
+    "replace": "return listRecords<CreditHold>(this.http, '/credit-hold', params,",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists > lists GET /credit-holds by reference and status"
+    ]
+  },
+  {
+    "id": "r1-p5-balances-path",
+    "file": "src/resources/credits.ts",
+    "find": "      '/credit-balances',",
+    "replace": "      '/credit-balance',",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances > reads checkout balances from GET /credit-balances"
+    ]
+  },
+  {
+    "id": "r1-p5-checkout-swallow",
+    "file": "src/resources/credits.ts",
+    "find": "    const rows = await this.checkoutBalances(collaboratorId, code, excludeReference);",
+    "replace": "    const rows = await this.checkoutBalances(collaboratorId, code, excludeReference).catch(() => [] as CheckoutBalance[]);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances > checkoutBalance throws UnexpectedResponseError for a 2xx that is not a list"
+    ]
   }
 ]
