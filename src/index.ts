@@ -108,6 +108,7 @@ export { ProgramsResource } from './resources/programs';
 export { ProgramGroupsResource } from './resources/program-groups';
 export { MAX_BULK_IDS } from './resources/record-requests';
 export type * from './record-types';
+// Slice 4 adds these in their own block so it merges cleanly with slice 5.
 export {
   ConversionBulkAction,
   TransactionBulkAction,

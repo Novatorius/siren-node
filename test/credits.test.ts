@@ -34,6 +34,7 @@ const ZERO_MESSAGE = 'A credit adjustment amount must not be zero.';
 const ENTRIES_MESSAGE = 'Send at least one of: collaboratorId, idempotencyKey.';
 const HOLDS_MESSAGE = 'Send at least one of: collaboratorId, reference, idempotencyKey.';
 const EXCLUDE_MESSAGE = 'Send excludeReference as hold:{platform}:{token}. Build it with CreditsResource.holdReference().';
+const CURRENCY_MESSAGE = 'Send a currency code as letters, digits, underscores and hyphens, such as STORE_CREDIT.';
 const REFERENCE_MESSAGE = 'Send reference as hold:{platform}:{token}. Build it with CreditsResource.holdReference().';
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -429,6 +430,25 @@ describe('P5: credits holdReference', () => {
     ['a platform over 60', 'p'.repeat(61), 'cart'],
   ])('refuses %s with SirenError', (_label, platformId, token) => {
     expect(() => CreditsResource.holdReference(platformId, token)).toThrow(SirenError);
+  });
+});
+
+describe('P5: credits currency codes', () => {
+  it.skip.each([
+    ['adjust', (c: CreditsResource) => c.adjust(4, 'STORE:CREDIT', 5)],
+    ['placeHold', (c: CreditsResource) => c.placeHold(4, 'a,b', 250, 'cart-9f2', 'woocommerce')],
+    ['checkoutBalances', (c: CreditsResource) => c.checkoutBalances(4, 'STORE CREDIT')],
+    ['checkoutBalance', (c: CreditsResource) => c.checkoutBalance(4, 'STORE/CREDIT')],
+    ['entries', (c: CreditsResource) => c.entries({ collaboratorId: 4, currency: 'a:b' })],
+    ['holds', (c: CreditsResource) => c.holds({ collaboratorId: 4, currency: '' })],
+  ])('%s refuses a currency that is not a code, with its own message, before sending', async (_name, call) => {
+    const { http, credits } = over([reply(200, page([]))]);
+
+    const error = await call(credits).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toBe(CURRENCY_MESSAGE);
+    expect(http.requests).toHaveLength(0);
   });
 });
 

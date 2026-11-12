@@ -128,14 +128,16 @@ follow-up.
 
 | Write | A second send | Before sending again |
 |---|---|---|
-| `conversions.create`, `distributors.create` | makes a second record | list by `transactionId` or search by name |
+| `conversions.create` | makes a second conversion | list by `transactionId`. Without one, set it aside |
+| `distributors.create` | makes a second distributor | search by name |
 | `transactions.create` with a binding | 409, `ConflictError` | nothing. The 409 means the first worked |
 | `transactions.create` without a binding | makes a second transaction | list the transactions |
 | `transactions.creditCollaborator` | makes a second conversion per transaction | list conversions by `transactionId` |
 | `credits.adjust` | applies the amount again | `entries` by `sourceType: 'adjustment'` and a `description` unique to the attempt. Without one, set it aside |
 | `distributors.creditMetric` | adds the credit again (`MetricTriggerService.php` `upsertMetric`) | no SDK read. Set it aside for a person to check in Siren's dashboard |
 | `customCurrencies.create` | 400 for a code Siren holds | `retrieve` the code |
-| the updates, the status bulk actions, `placeHold`, `releaseHold`, the mapping deletes | the same result, or `affected` may differ | nothing |
+| the updates, the distributor status actions, conversion `delete` and `markPending`, `placeHold`, `releaseHold`, the mapping deletes | the same result, or `affected` may differ | nothing |
+| conversion `approve` and `reject`, transaction `cancel` and `refund` | may run Siren's approval or reversal work again | `retrieve` each record's status |
 | `conversions.delete`, `distributors.delete` | removes for good what the first only marked deleted | `retrieve`: `deleted` means the first worked |
 | `customCurrencies.delete`, the `permanent_delete` and transaction `delete` bulk actions | 404, or skips the ids already gone | nothing |
 | `mappings.create` | 409 `mapping_exists`, `ConflictError` | nothing. The link is the one asked for |
@@ -164,15 +166,22 @@ The Essentials gate on distributor and custom currency writes answers 403
 
 A caller's queue needs to know which errors to try again and which to set
 aside. The SDK throws typed errors and logs nothing, so the caller logs
-them through its own logger.
+them through its own logger. When it sets a write aside, it logs the
+method, the record ids it sent and the error's `statusCode` and `code`.
+The bulk methods hand back Siren's `{ success, affected }` as it is, so
+the caller compares `affected` with the ids it sent and logs a shortfall.
+A logger or retry hook on the client, so a caller can see the transport's
+own read retries, is a follow-up for the client, which slice 5 owns.
 
 | Error | What the caller does |
 |---|---|
 | `SirenError` thrown before sending | Fix the call. Sending it again fails the same way |
 | `BadRequestError`, `ValidationError`, `PermissionError`, `PolicyError`, `NotFoundError`, an `ApiError` with another 4xx status | Set it aside. Siren answers the same until the data or the plan changes |
 | `AuthenticationError` | Set it aside and fix the credential. The transport already sent once more with a refreshed token |
-| `ConflictError`, `HoldConflictError` | Read the record it names. For a create, it often means the first send worked |
-| `RateLimitError`, `ConnectionError`, a 5xx `ApiError` | Try again later, after `RateLimitError.retryAfter` seconds when Siren sent one. For a write, check first whether it landed, as the table above says |
+| `ConflictError` | Read the record it names. For a create, it often means the first send worked |
+| `HoldConflictError` with `reason` `no_credit` | Read `checkoutBalances` again. It clears only when the balance changes |
+| `HoldConflictError` with `reason` `token_in_use` or `null` | Set it aside. Another checkout holds the token, or the currency is not spendable at this store |
+| `RateLimitError`, `ConnectionError`, a 5xx `ApiError`, an `ApiError` with status 408 or 425 | Try again later, after `RateLimitError.retryAfter` seconds when Siren sent one. For a write, check first whether it landed, as the table above says |
 | `UnexpectedResponseError` | Set it aside and report it. Siren answered in a shape the SDK does not know, and for a write with a 2xx status, the write landed |
 
 ## Connected sites

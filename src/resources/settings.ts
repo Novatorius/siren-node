@@ -33,7 +33,9 @@ export class SettingsResource {
   /**
    * The shared collaborator settings, each row `{ type, subtype, configKey,
    * value }`, read with `GET /configs?type=collaborator&number=200` through
-   * `listRecords`. A 2xx that is not a list throws `UnexpectedResponseError`.
+   * `listRecords`. Siren shares one collaborator setting today, far below
+   * the 200 a page holds. A 2xx that is not a list throws
+   * `UnexpectedResponseError`.
    */
   collaborator(): Promise<SharedSetting[]> {
     // Stub: slice 4 packet P7

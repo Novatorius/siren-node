@@ -25,7 +25,11 @@ import type { SirenList } from '../types';
  * after a 401 that every request gets. A write's answer is lost when it
  * throws `ConnectionError` or a 5xx `ApiError`, since Siren may have written
  * first. Each write's doc says how to find out before sending it again.
- * Every id must be a positive whole number, and every check here throws
+ * Every id must be a positive whole number, and every currency, wherever
+ * a method takes one, a code of letters, digits, underscores and hyphens,
+ * or `SirenError` is thrown with exactly `Send a currency code as letters,
+ * digits, underscores and hyphens, such as STORE_CREDIT.` Every check here
+ * throws
  * `SirenError` before anything is sent.
  *
  * Siren sets `idempotencyKey` itself: a hold carries
@@ -41,6 +45,8 @@ import type { SirenList } from '../types';
  * raised as `RateLimitError`.
  */
 export class CreditsResource {
+  // A plain class, not a RecordsResource: its routes are not one
+  // collection, so each read names its own filters below.
   /** The shortest hold, in seconds. */
   static readonly HOLD_MIN_TTL = 60;
   /** The longest hold, in seconds. */
@@ -90,7 +96,7 @@ export class CreditsResource {
    * cannot be checked, so set the adjustment aside instead of resending it.
    *
    * Throws `SirenError` before sending when `collaboratorId` is not a
-   * positive whole number, `currency` is not a non-empty string, `amount` is
+   * positive whole number, `currency` is not a currency code, `amount` is
    * not a safe whole number or is zero (exactly `A credit adjustment amount
    * must not be zero.`), or `description` is given and is not a string.
    * A connected site's token is refused with a 403.
@@ -233,7 +239,7 @@ export class CreditsResource {
    * Siren caps it at the credit available outside this session's own hold.
    *
    * Throws `SirenError` before sending when `collaboratorId` is not a
-   * positive whole number, `currency` is not a non-empty string, `amount` is
+   * positive whole number, `currency` is not a currency code, `amount` is
    * not a safe whole number of 1 or more, `token` or `platformId` fails
    * `PropertyQualifier.assertName` or is longer than
    * {@link HOLD_TOKEN_MAX_LENGTH} or {@link HOLD_PLATFORM_MAX_LENGTH}, or

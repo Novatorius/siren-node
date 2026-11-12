@@ -230,8 +230,9 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * whole number. A connected site's token cannot write conversions.
    *
    * Siren takes a second create as a new conversion. After a lost answer,
-   * list the conversions by `engagementId` or `transactionId` before
-   * sending again.
+   * list the conversions by `transactionId` before sending again. An
+   * engagement holds many conversions, so a create with no `transactionId`
+   * cannot be checked: set it aside instead of resending it.
    */
   create(params: CreateConversionParams): Promise<T> {
     // Stub: slice 4 packet P8
@@ -279,8 +280,11 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * `affected` lower than the number of ids sent means some were skipped.
    * `permanent_delete` takes only deleted conversions, and answers 409,
    * raised as `ConflictError`, with nothing deleted when one is not or an
-   * obligation blocks it. A status action sets the same status again, so a
-   * resend after a lost answer is safe, though `affected` may differ.
+   * obligation blocks it. `delete` and `markPending` set the same status
+   * again, so a resend after a lost answer is safe, though `affected` may
+   * differ. `approve` and `reject` run Siren's approval and rejection, so
+   * read each conversion's status with {@link retrieve} before resending
+   * them.
    */
   bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {
     // Stub: slice 4 packet P8
@@ -385,8 +389,9 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * `cancel` and `refund` set the status, and `delete` removes the
    * transactions at once. Siren answers `{ success, affected }` and skips
    * ids it cannot find, so an `affected` lower than the number of ids sent
-   * means some were skipped. A resend after a lost answer is safe, though
-   * `affected` may differ.
+   * means some were skipped. `delete` skips ids already gone, so its resend
+   * is safe. `cancel` and `refund` may start Siren's reversal work, so read
+   * each transaction's status with {@link retrieve} before resending them.
    */
   bulk(action: TransactionBulkAction, ids: readonly number[]): Promise<BulkResult> {
     // Stub: slice 4 packet P9
