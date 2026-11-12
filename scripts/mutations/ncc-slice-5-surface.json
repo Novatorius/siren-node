@@ -342,5 +342,15 @@
     "failing": [
       "no-network guard"
     ]
+  },
+  {
+    "id": "guard-not-at-load",
+    "file": "test/setup/no-network.ts",
+    "find": "// At load, so module scope and beforeAll in the test file see the guard too.\ninstall();\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "is in place when the test file loads"
+    ]
   }
 ]

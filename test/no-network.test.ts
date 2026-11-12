@@ -7,7 +7,22 @@ import { takeRefusedHosts } from './setup/no-network';
  * The guard test/setup/no-network.ts puts in place of the global fetch for
  * every test file.
  */
+// Sent at load, before any test runs, to prove the guard is in place there too.
+const atLoad = (() => {
+  try {
+    void fetch('https://example.invalid/at-load');
+    return 'sent';
+  } catch {
+    return 'refused';
+  }
+})();
+
 describe('no-network guard', () => {
+  it('is in place when the test file loads, before any test runs', () => {
+    expect(atLoad).toBe('refused');
+    expect(takeRefusedHosts()).toEqual(['example.invalid']);
+  });
+
   it('refuses a host off this machine, and records it so the test fails even when the caller catches the throw', async () => {
     expect(() => fetch('https://api.sirenaffiliates.com/siren/v1/ping')).toThrow(/No test may reach the network/);
 
