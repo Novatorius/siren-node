@@ -50,7 +50,7 @@ function described(value: unknown): string {
 }
 
 describe('2b P2: Siren timeout check', () => {
-  it.skip.each([
+  it.each([
     ['NaN', Number.NaN],
     ['Infinity', Number.POSITIVE_INFINITY],
     ['-Infinity', Number.NEGATIVE_INFINITY],
@@ -115,7 +115,7 @@ describe('2b P2: Siren timeout check', () => {
 });
 
 describe('2b P2: Siren maxRetries check', () => {
-  it.skip.each([
+  it.each([
     ['NaN', Number.NaN],
     ['Infinity', Number.POSITIVE_INFINITY],
     ['negative', -1],
@@ -182,7 +182,7 @@ describe('2b P2: Siren maxRetries check', () => {
 });
 
 describe('2b P2: Siren baseUrl check', () => {
-  it.skip.each([
+  it.each([
     ['an empty string', ''],
     ['null', null],
     ['a number', 42],
@@ -270,7 +270,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(received).toEqual([`Bearer ${KEY}`]);
   });
 
-  it.skip('sends over the real fetch, not through the polluting client, when Object.prototype carries an httpClient', async () => {
+  it('sends over the real fetch, not through the polluting client, when Object.prototype carries an httpClient', async () => {
     const attacker = new FakeHttpClient([reply(200, [])]);
     pollute('httpClient', attacker);
     vi.stubGlobal('fetch', realFetch);
@@ -281,7 +281,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(received).toEqual([`Bearer ${KEY}`]);
   });
 
-  it.skip('sends to the default host when Object.prototype carries a baseUrl', async () => {
+  it('sends to the default host when Object.prototype carries a baseUrl', async () => {
     pollute('baseUrl', 'https://attacker.test/siren/v1');
     const httpClient = new FakeHttpClient([reply(200, [])]);
 
@@ -290,7 +290,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(httpClient.requests[0]!.url).toBe('https://api.sirenaffiliates.com/siren/v1/payouts');
   });
 
-  it.skip('sends through the default client when Object.prototype carries an httpClient', async () => {
+  it('sends through the default client when Object.prototype carries an httpClient', async () => {
     const attacker = new FakeHttpClient([reply(200, [])]);
     pollute('httpClient', attacker);
     const fetchSpy = vi.fn(async () => new Response('[]', { status: 200 }));
@@ -302,7 +302,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it.skip.each([
+  it.each([
     ['an apiKey', 'apiKey', 'sk_live_attacker'],
     ['an accessToken', 'accessToken', 'oauth-attacker'],
   ])('refuses a client with no credential of its own when Object.prototype carries %s', (_name, option, value) => {
@@ -321,7 +321,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(httpClient.requests).toHaveLength(0);
   });
 
-  it.skip.each([
+  it.each([
     ['an apiKey beside the given accessToken', 'apiKey', { accessToken: 'oauth-access-1' }, 'Bearer oauth-access-1'],
     ['an accessToken beside the given apiKey', 'accessToken', { apiKey: KEY }, `Bearer ${KEY}`],
   ])(
@@ -336,7 +336,7 @@ describe('2b P2: Siren reads only its own options', () => {
     },
   );
 
-  it.skip('keeps the default timeout when Object.prototype carries one', async () => {
+  it('keeps the default timeout when Object.prototype carries one', async () => {
     pollute('timeout', 1);
     const httpClient = new FakeHttpClient([reply(200, [])]);
 
@@ -345,7 +345,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(httpClient.requests[0]!.timeout).toBe(30_000);
   });
 
-  it.skip('keeps the default maxRetries when Object.prototype carries one', async () => {
+  it('keeps the default maxRetries when Object.prototype carries one', async () => {
     vi.useFakeTimers();
     pollute('maxRetries', 0);
     const httpClient = new FakeHttpClient([reply(503, undefined), reply(200, [])]);
@@ -374,7 +374,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`]);
   });
 
-  it.skip('ignores every option an options object inherits from a prototype of its own', async () => {
+  it('ignores every option an options object inherits from a prototype of its own', async () => {
     vi.useFakeTimers();
     const attacker = Object.create(null) as Record<string, unknown>;
     Object.assign(attacker, {
@@ -398,7 +398,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`, `Bearer ${KEY}`]);
   });
 
-  it.skip('sends through the default client when the options object inherits an httpClient from its own prototype', async () => {
+  it('sends through the default client when the options object inherits an httpClient from its own prototype', async () => {
     const attacker = new FakeHttpClient([reply(200, [])]);
     const fetchSpy = vi.fn(async () => new Response('[]', { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
@@ -419,7 +419,7 @@ describe('2b P2: Siren reads only its own options', () => {
     expect(httpClient.requests[0]!.url).toBe('https://cloud.test/siren/v1/payouts');
   });
 
-  it.skip('refuses an accessToken whose refreshAccessToken only Object.prototype supplies', () => {
+  it('refuses an accessToken whose refreshAccessToken only Object.prototype supplies', () => {
     pollute('refreshAccessToken', async () => 'attacker-credential');
 
     expect(() => new Siren({ accessToken: { getAccessToken: () => 'oauth-access-1' } } as unknown as SirenOptions)).toThrow(
@@ -427,13 +427,13 @@ describe('2b P2: Siren reads only its own options', () => {
     );
   });
 
-  it.skip('refuses an httpClient whose send only Object.prototype supplies', () => {
+  it('refuses an httpClient whose send only Object.prototype supplies', () => {
     pollute('send', async () => reply(200, []));
 
     expect(() => new Siren({ apiKey: KEY, httpClient: {} } as unknown as SirenOptions)).toThrow(/httpClient/);
   });
 
-  it.skip('refuses a class instance as httpClient when only Object.prototype supplies its send', () => {
+  it('refuses a class instance as httpClient when only Object.prototype supplies its send', () => {
     pollute('send', async () => reply(200, []));
     class NoSend {}
 
@@ -452,7 +452,7 @@ describe('2b P2: Siren reads only its own options', () => {
     }
   }
 
-  it.skip.each([
+  it.each([
     ['refreshAccessToken', OnlyGet],
     ['getAccessToken', OnlyRefresh],
   ])('refuses a class instance as accessToken when only Object.prototype supplies its %s', (method, Source) => {
