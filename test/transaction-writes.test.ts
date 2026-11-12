@@ -22,10 +22,6 @@ import { TransactionAnswers } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P9 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 const DETAILS_MESSAGE = 'transactions.create() needs details: a list of 1 to 500 lines.';
@@ -53,7 +49,7 @@ describe('P9: transaction writes surface', () => {
 });
 
 describe('P9: transactions details', () => {
-  it.skip("reads a transaction's lines from its details field", async () => {
+  it("reads a transaction's lines from its details field", async () => {
     const { http, transactions } = over([reply(200, TransactionAnswers.detailsRecord)]);
 
     expect(await transactions.details(71)).toEqual(TransactionAnswers.detailsRecord.details);
@@ -61,7 +57,7 @@ describe('P9: transactions details', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,details' });
   });
 
-  it.skip.each([
+  it.each([
     ['no details field', { id: 71 }],
     ['a field that is not a list', { id: 71, details: null }],
     ['a line that is not an object', { id: 71, details: [7] }],
@@ -74,7 +70,7 @@ describe('P9: transactions details', () => {
     expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 
-  it.skip('retries, and refuses an id that is not a positive whole number before sending', async () => {
+  it('retries, and refuses an id that is not a positive whole number before sending', async () => {
     await expectRetried((transport) => resource(transport).details(71), reply(200, TransactionAnswers.detailsRecord));
 
     const { http, transactions } = over([reply(200, TransactionAnswers.detailsRecord)]);
@@ -84,7 +80,7 @@ describe('P9: transactions details', () => {
 });
 
 describe('P9: transactions create', () => {
-  it.skip('records a transaction with POST /transactions and answers it', async () => {
+  it('records a transaction with POST /transactions and answers it', async () => {
     const { http, transactions } = over([reply(201, TransactionAnswers.created)]);
 
     expect(await transactions.create(create)).toEqual(TransactionAnswers.created);
@@ -92,13 +88,13 @@ describe('P9: transactions create', () => {
     expect(bodyOf(http.requests[0])).toEqual(create);
   });
 
-  it.skip('raises a second transaction for the same binding as ConflictError', async () => {
+  it('raises a second transaction for the same binding as ConflictError', async () => {
     await expect(over([reply(409, TransactionAnswers.bindingExists)]).transactions.create(create)).rejects.toBeInstanceOf(
       ConflictError,
     );
   });
 
-  it.skip('accepts 500 lines', async () => {
+  it('accepts 500 lines', async () => {
     const { http, transactions } = over([reply(201, TransactionAnswers.created)]);
 
     await transactions.create({ details: Array.from({ length: 500 }, () => ({ name: 'x', value: 1 })) });
@@ -106,7 +102,7 @@ describe('P9: transactions create', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip.each([
+  it.each([
     ['no details', {}],
     ['details that are not a list', { details: { name: 'x', value: 1 } }],
     ['no lines', { details: [] }],
@@ -123,13 +119,13 @@ describe('P9: transactions create', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('throws UnexpectedResponseError when create answers no object', async () => {
+  it('throws UnexpectedResponseError when create answers no object', async () => {
     await expect(over([reply(201)]).transactions.create(create)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 });
 
 describe('P9: transactions bulk, creditCollaborator and sources', () => {
-  it.skip('runs a bulk action with POST /transactions/bulk', async () => {
+  it('runs a bulk action with POST /transactions/bulk', async () => {
     const { http, transactions } = over([reply(200, TransactionAnswers.bulk)]);
 
     expect(await transactions.bulk(TransactionBulkAction.Refund, [71, 72])).toEqual(TransactionAnswers.bulk);
@@ -137,7 +133,7 @@ describe('P9: transactions bulk, creditCollaborator and sources', () => {
     expect(http.requests[0]!.body).toBe('{"action":"refund","ids":[71,72]}');
   });
 
-  it.skip('credits transactions with POST /transactions/credit-collaborator', async () => {
+  it('credits transactions with POST /transactions/credit-collaborator', async () => {
     const { http, transactions } = over([reply(200, TransactionAnswers.credited)]);
 
     expect(await transactions.creditCollaborator([71, 72], 4)).toEqual(TransactionAnswers.credited);
@@ -145,7 +141,7 @@ describe('P9: transactions bulk, creditCollaborator and sources', () => {
     expect(http.requests[0]!.body).toBe('{"transactionIds":[71,72],"collaboratorId":4}');
   });
 
-  it.skip('sends type when it is given', async () => {
+  it('sends type when it is given', async () => {
     const { http, transactions } = over([reply(200, TransactionAnswers.credited)]);
 
     await transactions.creditCollaborator([71], 4, 'lead');
@@ -153,13 +149,13 @@ describe('P9: transactions bulk, creditCollaborator and sources', () => {
     expect(bodyOf(http.requests[0])).toEqual({ transactionIds: [71], collaboratorId: 4, type: 'lead' });
   });
 
-  it.skip('raises an unknown collaborator as NotFoundError', async () => {
+  it('raises an unknown collaborator as NotFoundError', async () => {
     await expect(
       over([reply(404, TransactionAnswers.collaboratorNotFound)]).transactions.creditCollaborator([71], 99),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it.skip('reads the transaction sources from GET /transactions/sources', async () => {
+  it('reads the transaction sources from GET /transactions/sources', async () => {
     const { http, transactions } = over([reply(200, TransactionAnswers.sources)]);
 
     expect(await transactions.sources()).toEqual(TransactionAnswers.sources);
@@ -167,17 +163,17 @@ describe('P9: transactions bulk, creditCollaborator and sources', () => {
     await expectRetried((transport) => resource(transport).sources(), reply(200, TransactionAnswers.sources));
   });
 
-  it.skip('sources throws UnexpectedResponseError for a 2xx that is not an object', async () => {
+  it('sources throws UnexpectedResponseError for a 2xx that is not an object', async () => {
     await expect(over([reply(200, [{ id: 'wc_order' }])]).transactions.sources()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).create(create), reply(201, TransactionAnswers.created));
     await expectSentOnce((transport) => resource(transport).bulk(TransactionBulkAction.Cancel, [71]), reply(200, TransactionAnswers.bulk));
     await expectSentOnce((transport) => resource(transport).creditCollaborator([71], 4), reply(200, TransactionAnswers.credited));
   });
 
-  it.skip.each([
+  it.each([
     ['bulk, no ids', (t: TransactionsResource) => t.bulk(TransactionBulkAction.Cancel, [])],
     ['bulk, a bad id', (t: TransactionsResource) => t.bulk(TransactionBulkAction.Cancel, [0])],
     ['creditCollaborator, no ids', (t: TransactionsResource) => t.creditCollaborator([], 4)],

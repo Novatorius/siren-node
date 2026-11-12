@@ -11,6 +11,7 @@ import type {
 } from '../record-types';
 import type { ConversionBulkAction, TransactionBulkAction } from '../taxonomy';
 import type { ListParams, SirenList } from '../types';
+import { MAX_BULK_IDS, bulkRecords, readObject, recordId, writeRecord } from './record-requests';
 
 /** The largest page Siren serves. Siren lowers a larger `number` to this. */
 export const MAX_PAGE_SIZE = 200;
@@ -349,10 +350,15 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * sent, never an empty answer. The read goes through `readObject` with a
    * `check`.
    */
-  details(id: number): Promise<TransactionDetailRecord[]> {
-    // Stub: slice 4 packet P9
-    void id;
-    return Promise.resolve([]);
+  async details(id: number): Promise<TransactionDetailRecord[]> {
+    const path = `${this.path}/${recordId(id, 'transactions.details')}`;
+    const record = await readObject<{ details: TransactionDetailRecord[] }>(this.http, path, { fields: 'id,details' }, (body) => {
+      const lines = body.details;
+      return !Array.isArray(lines) || lines.some((line) => typeof line !== 'object' || line === null || Array.isArray(line))
+        ? `Siren answered GET ${path} with no details list of objects.`
+        : undefined;
+    });
+    return record.details;
   }
 
   /**
@@ -377,10 +383,17 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * an array, empty or longer than 500, or holds a line that is not an
    * object.
    */
-  create(params: CreateTransactionParams): Promise<T> {
-    // Stub: slice 4 packet P9
-    void params;
-    return Promise.resolve({} as T);
+  async create(params: CreateTransactionParams): Promise<T> {
+    const details: unknown = params?.details;
+    if (
+      !Array.isArray(details) ||
+      details.length === 0 ||
+      details.length > MAX_BULK_IDS ||
+      details.some((line) => typeof line !== 'object' || line === null || Array.isArray(line))
+    ) {
+      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');
+    }
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -393,11 +406,8 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * is safe. `cancel` and `refund` may start Siren's reversal work, so read
    * each transaction's status with {@link retrieve} before resending them.
    */
-  bulk(action: TransactionBulkAction, ids: readonly number[]): Promise<BulkResult> {
-    // Stub: slice 4 packet P9
-    void action;
-    void ids;
-    return Promise.resolve({});
+  async bulk(action: TransactionBulkAction, ids: readonly number[]): Promise<BulkResult> {
+    return bulkRecords<BulkResult>(this.http, this.path, action, ids);
   }
 
   /**
@@ -420,12 +430,21 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * non-empty string. Siren answers 404, raised as `NotFoundError`, when it
    * has no such collaborator.
    */
-  creditCollaborator(transactionIds: readonly number[], collaboratorId: number, type?: string): Promise<BulkResult> {
-    // Stub: slice 4 packet P9
-    void transactionIds;
-    void collaboratorId;
-    void type;
-    return Promise.resolve({});
+  async creditCollaborator(transactionIds: readonly number[], collaboratorId: number, type?: string): Promise<BulkResult> {
+    const method = 'transactions.creditCollaborator';
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS) {
+      throw new SirenError(`${method} needs transactionIds: a list of 1 to ${MAX_BULK_IDS} ids.`);
+    }
+    for (const id of transactionIds) recordId(id, method, 'transactionId');
+    const body: Record<string, unknown> = {
+      transactionIds: [...transactionIds],
+      collaboratorId: recordId(collaboratorId, method, 'collaboratorId'),
+    };
+    if (type !== undefined) {
+      if (typeof type !== 'string' || type === '') throw new SirenError(`${method} needs a type that is a non-empty string.`);
+      body.type = type;
+    }
+    return writeRecord<BulkResult>(this.http, 'POST', `${this.path}/credit-collaborator`, body);
   }
 
   /**
@@ -433,8 +452,7 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * `GET /transactions/sources`, such as `wc_order` and `medusa_order`.
    * Throws `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
-  sources(): Promise<RegistryOptions> {
-    // Stub: slice 4 packet P9
-    return Promise.resolve({ options: [] });
+  async sources(): Promise<RegistryOptions> {
+    return readObject<RegistryOptions>(this.http, `${this.path}/sources`);
   }
 }
