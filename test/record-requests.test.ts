@@ -37,10 +37,6 @@ import {
  * at the HttpClient seam. The list envelope is the one Cloud's
  * ListResponseWrapperInterceptor builds (lib/Core/Service/Interceptors at
  * b6f7140).
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P1 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function caught(run: () => unknown): unknown {
@@ -53,11 +49,11 @@ function caught(run: () => unknown): unknown {
 }
 
 describe('P1: recordId', () => {
-  it.skip.each([1, 7, Number.MAX_SAFE_INTEGER])('returns %j', (id) => {
+  it.each([1, 7, Number.MAX_SAFE_INTEGER])('returns %j', (id) => {
     expect(recordId(id, 'retrieve')).toBe(id);
   });
 
-  it.skip.each([
+  it.each([
     [0, '0'],
     [-1, '-1'],
     [1.5, '1.5'],
@@ -75,7 +71,7 @@ describe('P1: recordId', () => {
     expect((error as SirenError).message).toBe(`delete needs a positive whole number id, and got ${shown}.`);
   });
 
-  it.skip('names the field it checks', () => {
+  it('names the field it checks', () => {
     const error = caught(() => recordId(0, 'enroll', 'programId'));
 
     expect((error as SirenError).message).toBe('enroll needs a positive whole number programId, and got 0.');
@@ -85,30 +81,30 @@ describe('P1: recordId', () => {
 describe('P1: recordListQuery', () => {
   const filters = ['status', 'id', 'programId', 'email', 's', 'active', 'code', 'meta'];
 
-  it.skip('pages with page and perPage the way toListQuery does', () => {
+  it('pages with page and perPage the way toListQuery does', () => {
     expect(recordListQuery({ page: 3, perPage: 50 }, [])).toEqual({ number: 50, offset: 100 });
     expect(recordListQuery({ page: 2 }, [])).toEqual({ number: 10, offset: 10 });
     expect(recordListQuery({ perPage: 500, page: 2 }, [])).toEqual({ number: 200, offset: 200 });
     expect(recordListQuery({ number: 25, offset: 5, page: 9, perPage: 1 }, [])).toEqual({ number: 25, offset: 5 });
   });
 
-  it.skip('sends a list comma-separated, filters and fields alike', () => {
+  it('sends a list comma-separated, filters and fields alike', () => {
     expect(
       recordListQuery({ status: ['active', 'pending'], id: [4, 9], fields: ['id', 'email'], programId: 12 }, filters),
     ).toEqual({ status: 'active,pending', id: '4,9', fields: 'id,email', programId: 12 });
   });
 
-  it.skip('leaves out undefined and an empty fields list, and keeps a boolean, a string and a number as they are', () => {
+  it('leaves out undefined and an empty fields list, and keeps a boolean, a string and a number as they are', () => {
     expect(
       recordListQuery({ fields: [], s: undefined, email: 'a@example.com', programId: 12, active: false }, filters),
     ).toEqual({ email: 'a@example.com', programId: 12, active: false });
   });
 
-  it.skip('allows a comma only in fields and in the search text', () => {
+  it('allows a comma only in fields and in the search text', () => {
     expect(recordListQuery({ fields: 'id,email', s: 'flo, ada' }, filters)).toEqual({ fields: 'id,email', s: 'flo, ada' });
   });
 
-  it.skip('takes the paging, sorting and fields keys whatever the filters', () => {
+  it('takes the paging, sorting and fields keys whatever the filters', () => {
     expect(LIST_CONTROL_KEYS).toEqual(['page', 'perPage', 'number', 'offset', 'orderBy', 'order', 'fields']);
     expect(recordListQuery({ orderBy: 'id', order: 'DESC', fields: ['id'], number: 5, offset: 0 }, [])).toEqual({
       orderBy: 'id',
@@ -119,7 +115,7 @@ describe('P1: recordListQuery', () => {
     });
   });
 
-  it.skip.each([
+  it.each([
     ['an object', { meta: { a: 1 } }],
     ['null', { status: null }],
     ['a list holding an object', { id: [1, { id: 2 }] }],
@@ -142,12 +138,12 @@ describe('P1: recordListQuery', () => {
 
   const ids = { one: ['programId'], many: ['id'] } as const;
 
-  it.skip('takes one id for a key in ids.one, and an id or a list of ids for a key in ids.many', () => {
+  it('takes one id for a key in ids.one, and an id or a list of ids for a key in ids.many', () => {
     expect(recordListQuery({ programId: 3, id: [4, 9] }, filters, ids)).toEqual({ programId: 3, id: '4,9' });
     expect(recordListQuery({ id: 4 }, filters, ids)).toEqual({ id: 4 });
   });
 
-  it.skip.each([
+  it.each([
     ['a list for a single-id filter', { programId: [3, 4] }],
     ['a text id for a single-id filter', { programId: '3' }],
     ['0 for a single-id filter', { programId: 0 }],
@@ -167,7 +163,7 @@ describe('P1: recordListQuery', () => {
 describe('P1: listRecords', () => {
   const envelope = { items: [{ id: 4 }, { id: 9 }], total: 42, page: 1, perPage: 10, totalPages: 5 };
 
-  it.skip('reads GET {path} with the list query and answers the items with estimatedCount', async () => {
+  it('reads GET {path} with the list query and answers the items with estimatedCount', async () => {
     const { http, transport } = transportOver([reply(200, envelope)]);
 
     const list = await listRecords(transport, '/collaborator-programs', { programId: [2, 3], page: 2, perPage: 5 }, [
@@ -183,7 +179,7 @@ describe('P1: listRecords', () => {
     expect(list.estimatedCount).toBe(42);
   });
 
-  it.skip('sends a boolean filter as true or false', async () => {
+  it('sends a boolean filter as true or false', async () => {
     const { http, transport } = transportOver([reply(200, envelope)]);
 
     await listRecords(transport, '/programs', { test: true, live: false }, ['test', 'live']);
@@ -191,7 +187,7 @@ describe('P1: listRecords', () => {
     expect(queryOf(http.requests[0])).toEqual({ test: 'true', live: 'false' });
   });
 
-  it.skip('reads a bare array with the count header', async () => {
+  it('reads a bare array with the count header', async () => {
     const { transport } = transportOver([reply(200, [{ id: 1 }], { 'x-siren-estimated-count': '7' })]);
 
     const list = await listRecords(transport, '/programs', {}, []);
@@ -200,11 +196,11 @@ describe('P1: listRecords', () => {
     expect(list.estimatedCount).toBe(7);
   });
 
-  it.skip('retries like a read', async () => {
+  it('retries like a read', async () => {
     await expectRetried((transport) => listRecords(transport, '/programs', {}, []), reply(200, envelope));
   });
 
-  it.skip.each([
+  it.each([
     ['a value it refuses', { id: [1, { id: 2 }] }],
     ['a key the route does not read', { propertyId: 5 }],
   ])('sends nothing for %s', async (_label, params) => {
@@ -214,7 +210,7 @@ describe('P1: listRecords', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('sends nothing for an id filter it refuses', async () => {
+  it('sends nothing for an id filter it refuses', async () => {
     const { http, transport } = transportOver([reply(200, envelope)]);
 
     await expect(
@@ -223,7 +219,7 @@ describe('P1: listRecords', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each([
+  it.each([
     ['an error object', reply(200, malformedSuccess)],
     ['items that are not a list', reply(200, { items: { id: 1 }, total: 1 })],
     ['a JSON null', reply(200, null)],
@@ -243,7 +239,7 @@ describe('P1: listRecords', () => {
 });
 
 describe('P1: readObject', () => {
-  it.skip('reads GET {path} with the query and answers the object', async () => {
+  it('reads GET {path} with the query and answers the object', async () => {
     const answer = { options: { active: 'Active' }, tones: { active: 'positive' } };
     const { http, transport } = transportOver([reply(200, answer)]);
 
@@ -253,11 +249,11 @@ describe('P1: readObject', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,aliases' });
   });
 
-  it.skip('retries like a read', async () => {
+  it('retries like a read', async () => {
     await expectRetried((transport) => readObject(transport, '/programs/status-types'), reply(200, { options: {} }));
   });
 
-  it.skip.each([
+  it.each([
     ['an array', reply(200, [{ id: 1 }])],
     ['an empty body', reply(200)],
     ['a string', reply(200, 'ok')],
@@ -274,7 +270,7 @@ describe('P1: readObject', () => {
   const aliasesAreAList = (body: Record<string, unknown>) =>
     Array.isArray(body.aliases) ? undefined : 'Siren answered collaborator 4 without an aliases list.';
 
-  it.skip('answers the object when the check passes, and hands the check the body', async () => {
+  it('answers the object when the check passes, and hands the check the body', async () => {
     const answer = { id: 4, aliases: [] };
     const seen: unknown[] = [];
     const { transport } = transportOver([reply(200, answer)]);
@@ -288,7 +284,7 @@ describe('P1: readObject', () => {
     expect(seen).toEqual([answer]);
   });
 
-  it.skip('throws UnexpectedResponseError with the check\'s message, the status and the body when the check fails', async () => {
+  it('throws UnexpectedResponseError with the check\'s message, the status and the body when the check fails', async () => {
     const { http, transport } = transportOver([reply(200, { id: 4 }), reply(200, { id: 4, aliases: [] })]);
 
     const error = await readObject(transport, '/collaborators/4', {}, aliasesAreAList).catch((thrown: unknown) => thrown);
@@ -300,7 +296,7 @@ describe('P1: readObject', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip('throws for a body that is not an object before running the check', async () => {
+  it('throws for a body that is not an object before running the check', async () => {
     let ran = false;
     const { transport } = transportOver([reply(200, [{ id: 4 }])]);
 
@@ -315,7 +311,7 @@ describe('P1: readObject', () => {
 });
 
 describe('P1: readList', () => {
-  it.skip('reads GET {path} and answers the bare array', async () => {
+  it('reads GET {path} and answers the bare array', async () => {
     const answer = [{ id: 'USD', symbol: '$' }, { id: 'PTS', symbol: 'pts' }];
     const { http, transport } = transportOver([reply(200, answer)]);
 
@@ -324,11 +320,11 @@ describe('P1: readList', () => {
     expect(pathOf(http.requests[0])).toBe('/programs/currency-types');
   });
 
-  it.skip('retries like a read', async () => {
+  it('retries like a read', async () => {
     await expectRetried((transport) => readList(transport, '/programs/currency-types'), reply(200, []));
   });
 
-  it.skip.each([
+  it.each([
     ['an object', reply(200, { items: [] })],
     ['an empty body', reply(200)],
     ['null', reply(200, null)],
@@ -340,7 +336,7 @@ describe('P1: readList', () => {
 });
 
 describe('P1: writeList', () => {
-  it.skip.each(['POST', 'PUT'] as const)('sends %s with a JSON body and answers the bare array', async (method) => {
+  it.each(['POST', 'PUT'] as const)('sends %s with a JSON body and answers the bare array', async (method) => {
     const answer = [{ id: 1, groupId: 5, collaboratorId: 42, metadata: {} }];
     const { http, transport } = transportOver([reply(200, answer)]);
 
@@ -351,11 +347,11 @@ describe('P1: writeList', () => {
     expect(http.requests[0]!.body).toBe('{"members":[{"collaboratorId":42}]}');
   });
 
-  it.skip.each(['POST', 'PUT'] as const)('sends %s once on a 503 or a network failure', async (method) => {
+  it.each(['POST', 'PUT'] as const)('sends %s once on a 503 or a network failure', async (method) => {
     await expectSentOnce((transport) => writeList(transport, method, '/collaborator-groups/5/members', {}), reply(200, []));
   });
 
-  it.skip.each([
+  it.each([
     ['an object', reply(200, { id: 1 })],
     ['an empty body', reply(200)],
   ])('throws UnexpectedResponseError with the 2xx status for %s', async (_label, answer) => {
@@ -369,7 +365,7 @@ describe('P1: writeList', () => {
 });
 
 describe('P1: writeRecord', () => {
-  it.skip.each(['POST', 'PUT'] as const)('sends %s with a JSON body and answers the object', async (method) => {
+  it.each(['POST', 'PUT'] as const)('sends %s with a JSON body and answers the object', async (method) => {
     const answer = { id: 12, status: 'pending', dateCreated: '2026-10-16 12:00:00' };
     const { http, transport } = transportOver([reply(201, answer)]);
 
@@ -381,11 +377,11 @@ describe('P1: writeRecord', () => {
     expect(http.requests[0]!.headers['Content-Type']).toBe('application/json');
   });
 
-  it.skip.each(['POST', 'PUT'] as const)('sends %s once on a 503 or a network failure', async (method) => {
+  it.each(['POST', 'PUT'] as const)('sends %s once on a 503 or a network failure', async (method) => {
     await expectSentOnce((transport) => writeRecord(transport, method, '/programs', { name: 'P' }), reply(201, { id: 1 }));
   });
 
-  it.skip('sends once on a 429', async () => {
+  it('sends once on a 429', async () => {
     const { http, transport } = transportOver([
       reply(429, rateLimited, { 'Retry-After': '0' }),
       reply(201, { id: 1 }),
@@ -395,7 +391,7 @@ describe('P1: writeRecord', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip.each([
+  it.each([
     ['an array', reply(201, [{ id: 1 }])],
     ['an empty body', reply(201)],
     ['null', reply(201, null)],
@@ -411,7 +407,7 @@ describe('P1: writeRecord', () => {
 });
 
 describe('P1: deleteRecord', () => {
-  it.skip('sends DELETE with the query and no body, and answers the object', async () => {
+  it('sends DELETE with the query and no body, and answers the object', async () => {
     const { http, transport } = transportOver([reply(200, { deleted: true })]);
 
     expect(await deleteRecord(transport, '/collaborator-aliases', { code: 'SAVE10', type: 'coupon' })).toEqual({
@@ -423,13 +419,13 @@ describe('P1: deleteRecord', () => {
     expect(http.requests[0]!.body).toBeUndefined();
   });
 
-  it.skip('answers null for a 204', async () => {
+  it('answers null for a 204', async () => {
     const { transport } = transportOver([reply(204)]);
 
     expect(await deleteRecord(transport, '/collaborators/9')).toBeNull();
   });
 
-  it.skip('throws UnexpectedResponseError with the status for a 200 with no body, never null', async () => {
+  it('throws UnexpectedResponseError with the status for a 200 with no body, never null', async () => {
     const { transport } = transportOver([reply(200)]);
 
     const error = await deleteRecord(transport, '/collaborators/9').catch((thrown: unknown) => thrown);
@@ -438,7 +434,7 @@ describe('P1: deleteRecord', () => {
     expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 
-  it.skip.each([
+  it.each([
     ['an array', reply(200, [1])],
     ['a string', reply(200, 'gone')],
     ['a JSON null', reply(200, null)],
@@ -449,7 +445,7 @@ describe('P1: deleteRecord', () => {
     await expect(deleteRecord(transport, '/collaborators/9')).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('sends once on a 503 or a network failure', async () => {
+  it('sends once on a 503 or a network failure', async () => {
     await expectSentOnce((transport) => deleteRecord(transport, '/collaborators/9'), reply(204));
   });
 });
@@ -457,7 +453,7 @@ describe('P1: deleteRecord', () => {
 describe('P1: bulkRecords', () => {
   const done = { success: true, affected: 2 };
 
-  it.skip('posts {action, ids, ...extra} to {collection}/bulk and answers the object', async () => {
+  it('posts {action, ids, ...extra} to {collection}/bulk and answers the object', async () => {
     const { http, transport } = transportOver([reply(200, done)]);
 
     expect(await bulkRecords(transport, '/collaborators', 'addToProgram', [1, 2], { programId: 5 })).toEqual(done);
@@ -466,7 +462,7 @@ describe('P1: bulkRecords', () => {
     expect(http.requests[0]!.body).toBe('{"action":"addToProgram","ids":[1,2],"programId":5}');
   });
 
-  it.skip('takes MAX_BULK_IDS ids', async () => {
+  it('takes MAX_BULK_IDS ids', async () => {
     const ids = Array.from({ length: MAX_BULK_IDS }, (_, index) => index + 1);
     const { http, transport } = transportOver([reply(200, done)]);
 
@@ -476,7 +472,7 @@ describe('P1: bulkRecords', () => {
     expect((bodyOf(http.requests[0]) as { ids: number[] }).ids).toHaveLength(500);
   });
 
-  it.skip.each([
+  it.each([
     ['an empty action', '', [1], {}],
     ['no ids', 'delete', [], {}],
     ['ids that are not an array', 'delete', 4, {}],
@@ -495,11 +491,11 @@ describe('P1: bulkRecords', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('sends once on a 503 or a network failure', async () => {
+  it('sends once on a 503 or a network failure', async () => {
     await expectSentOnce((transport) => bulkRecords(transport, '/programs', 'delete', [1]), reply(200, done));
   });
 
-  it.skip.each([
+  it.each([
     ['an array', reply(200, [done])],
     ['an empty body', reply(200)],
   ])('throws UnexpectedResponseError for %s, after one send', async (_label, answer) => {
@@ -511,7 +507,7 @@ describe('P1: bulkRecords', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip('raises the error Siren answers with, after one send', async () => {
+  it('raises the error Siren answers with, after one send', async () => {
     const { http, transport } = transportOver([reply(500, unexpectedFailure), reply(200, done)]);
 
     const error = await bulkRecords(transport, '/programs', 'delete', [1]).catch((thrown: unknown) => thrown);
