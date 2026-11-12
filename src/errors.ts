@@ -151,15 +151,15 @@ export const POLICY_ERROR_CODES: readonly ErrorCode[] = [
   ErrorCode.NotPermitted,
 ];
 
+const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<string>(Object.values(ErrorCode));
+
 /**
  * Whether `code` is one of the {@link ErrorCode} values. A known code decides
  * the error class on its own. A missing or unknown one leaves the choice to
  * Siren's wording.
  */
 export function isKnownErrorCode(code: string | null | undefined): code is ErrorCode {
-  // Stub: slice 1 packet P1 implements this.
-  void code;
-  return false;
+  return typeof code === 'string' && KNOWN_ERROR_CODES.has(code);
 }
 
 /** Base class for every error thrown by this SDK. */
@@ -244,9 +244,8 @@ export class ApiKeyNotAcceptedError extends AuthenticationError {
    * not accept API keys".
    */
   static matches(message: string, code?: string): boolean {
-    // Stub: slice 1 packet P1 adds the known-code rule and the wording fallback.
-    void message;
-    return code === ErrorCode.ApiKeyNotAccepted;
+    if (isKnownErrorCode(code)) return code === ErrorCode.ApiKeyNotAccepted;
+    return message.toLowerCase().includes('does not accept api keys');
   }
 }
 
@@ -315,6 +314,10 @@ export class MissingScopeError extends PermissionError {
     this.anyOf = Array.isArray(context.anyOf)
       ? context.anyOf.filter((scope): scope is string => typeof scope === 'string' && scope !== '')
       : [];
+    if (this.scope === undefined) {
+      const named = MissingScopeError.MESSAGE_PATTERN.exec(message)?.[1]?.replace(/:+$/, '');
+      if (named) this.scope = named;
+    }
   }
 
   /**
@@ -331,10 +334,8 @@ export class MissingScopeError extends PermissionError {
    * any trailing `:` removed.
    */
   static matches(message: string, code?: string): boolean {
-    // Stub: slice 1 packet P1 adds the known-code rule, the wording fallback
-    // and the scope fallback.
-    void message;
-    return code === ErrorCode.MissingScope;
+    if (isKnownErrorCode(code)) return code === ErrorCode.MissingScope;
+    return MissingScopeError.MESSAGE_PATTERN.test(message);
   }
 }
 
@@ -361,9 +362,8 @@ export class StoreKeyNotAllowedError extends PermissionError {
    * in any case.
    */
   static matches(message: string, code?: string): boolean {
-    // Stub: slice 1 packet P1 adds the known-code rule and the wording fallback.
-    void message;
-    return code === ErrorCode.StoreKeyNotAllowed;
+    if (isKnownErrorCode(code)) return code === ErrorCode.StoreKeyNotAllowed;
+    return message.toLowerCase().includes('bound to one store');
   }
 }
 
