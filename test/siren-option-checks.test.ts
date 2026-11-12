@@ -234,12 +234,13 @@ function shown(error: SirenError): string {
 /**
  * The parts of a URL a leak would show: each run of letters and digits that
  * holds a letter and is four or more long, other than the scheme, and each
- * character outside U+0021 to U+007E. The test URLs use made-up words, such
- * as `qhostq` and `QSECRETQ`, that no stack frame or message holds.
+ * UTF-16 code unit outside U+0021 to U+007E, so half of an emoji counts. The
+ * test URLs use made-up words, such as `qhostq` and `QSECRETQ`, that no
+ * stack frame or message holds.
  */
 function urlParts(url: string): string[] {
   const words = url.split(/[^A-Za-z0-9]+/).filter((part) => part.length >= 4 && /[A-Za-z]/.test(part) && !/^https?$/i.test(part));
-  const unprintable = [...url].filter((character) => character < '!' || character > '~');
+  const unprintable = url.split('').filter((character) => character < '\u0021' || character > '\u007e');
   return [...words, ...unprintable];
 }
 

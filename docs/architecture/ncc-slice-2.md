@@ -397,9 +397,10 @@ in the `2c P1` describe of `test/siren-option-checks.test.ts`. Each refused
 row checks that the message names the range and only the type, that the
 error has no `cause`, and that no message, stack, field or `inspect` output
 holds a word of the URL or its bad character. Its rows that accept a URL,
-the two ends of the range and a percent-encoded path included, run now. The
-rows that refuse one are skipped until 2c P1 lands.
+the two ends of the range and a percent-encoded path included, run now.
 `scripts/mutations/ncc-slice-2c.json` breaks each part of the rule and each
 leak check, with the same controls, and
 `node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-2c.json`
-reproduces it.
+reproduces it. Until 2c P1 lands, the rows that refuse a URL are skipped and
+the list's entries find the scratch build it was proven on, not the code on
+this branch.
