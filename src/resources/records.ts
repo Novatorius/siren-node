@@ -15,6 +15,7 @@ import type { ConversionBulkAction, TransactionBulkAction } from '../taxonomy';
 import type { ListParams, SirenList } from '../types';
 import { MAX_BULK_IDS, bulkRecords, deleteRecord, listRecords, readObject, recordId, writeRecord } from './record-requests';
 import { writeRecordOrNothing } from './record-writes';
+import { pickFields } from './create-fields';
 
 /** The largest page Siren serves. Siren lowers a larger `number` to this. */
 export const MAX_PAGE_SIZE = 200;
@@ -269,8 +270,13 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
     recordId(params?.engagementId, 'conversions.create', 'engagementId');
     if (params?.transactionId !== undefined) recordId(params.transactionId, 'conversions.create', 'transactionId');
     if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');
-    // Stub: slice 4 fix packet F3 (the create allow lists).
-    return writeRecord<T>(this.http, 'POST', this.path, params);
+    const body = pickFields(
+      params,
+      ConversionsResource.CREATE_FIELDS,
+      (key) =>
+        `conversions.create() cannot send "${key}". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,
+    );
+    return writeRecord<T>(this.http, 'POST', this.path, body);
   }
 
   /**
@@ -535,7 +541,19 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
     ) {
       throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');
     }
-    // Stub: slice 4 fix packet F3 (the create allow lists).
+    const body = pickFields(
+      params,
+      TransactionsResource.CREATE_FIELDS,
+      (key) => `transactions.create() cannot send "${key}". Siren's create route reads only details, bindingId and bindingDataType.`,
+    );
+    body.details = (details as object[]).map((line, index) =>
+      pickFields(
+        line,
+        TransactionsResource.DETAIL_FIELDS,
+        (key) =>
+          `transactions.create() cannot send "${key}" on line ${index + 1}. A line holds only name, description, type, value, quantity, units and attributes.`,
+      ),
+    );
     const bindingId: unknown = params.bindingId;
     const bindingDataType: unknown = params.bindingDataType;
     const given = (value: unknown) => value !== undefined && value !== null;
@@ -552,7 +570,7 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
         throw new SirenError(`transactions.create() cannot send ${key} ${JSON.stringify(value)}, which Siren reads as no binding.`);
       }
     }
-    return writeRecord<T>(this.http, 'POST', this.path, params);
+    return writeRecord<T>(this.http, 'POST', this.path, body);
   }
 
   /**

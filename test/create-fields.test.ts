@@ -37,13 +37,6 @@ import { ConversionAnswers, CustomCurrencyAnswers, DistributorAnswers, Transacti
  * Integration shape (KB 568): the real resources over the real
  * HttpTransport, with a FakeHttpClient at the HttpClient seam, aimed at
  * example.invalid.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * packet F3, named in its describe block. The F3 implementer deletes the
- * `.skip` from each of them, so `it.skip(` becomes `it(` and `it.skip.each(`
- * becomes `it.each(`, and deletes the one-line comment above each, and this
- * paragraph. Nothing else here changes. The tests with no `.skip` pass now
- * and guard against a list that refuses a field Cloud reads.
  */
 
 interface Case {
@@ -193,8 +186,7 @@ describe('4 fix F3: creates send only the fields Siren reads', () => {
     expect(bodyOf(http.requests[0])).toEqual(c.full);
   });
 
-  // Skipped until fix packet F3 (the create allow lists) lands.
-  it.skip.each(ROWS)('%s refuses "%s" (%j) before sending, naming it', async (_name, key, value, c) => {
+  it.each(ROWS)('%s refuses "%s" (%j) before sending, naming it', async (_name, key, value, c) => {
     const { http, transport } = transportOver([reply(201, c.answer)]);
 
     const error = await c.send(transport, { ...c.full, [key]: value }).catch((thrown: unknown) => thrown);
@@ -204,8 +196,7 @@ describe('4 fix F3: creates send only the fields Siren reads', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  // Skipped until fix packet F3 (the create allow lists) lands.
-  it.skip.each(CASES)('%s sends a new object, so a toJSON the caller inherits cannot change the body', async (_name, c) => {
+  it.each(CASES)('%s sends a new object, so a toJSON the caller inherits cannot change the body', async (_name, c) => {
     const { http, transport } = transportOver([reply(201, c.answer)]);
     const params = Object.assign(Object.create({ toJSON: () => ({ id: 9 }) }) as object, c.full);
 
@@ -216,8 +207,7 @@ describe('4 fix F3: creates send only the fields Siren reads', () => {
 });
 
 describe('4 fix F3: transactions.create lines', () => {
-  // Skipped until fix packet F3 (the create allow lists) lands.
-  it.skip.each([
+  it.each([
     ['quanity', 2, 2],
     ['price', 1200, 1],
     ['id', 81, 2],
@@ -236,8 +226,7 @@ describe('4 fix F3: transactions.create lines', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  // Skipped until fix packet F3 (the create allow lists) lands.
-  it.skip('sends each line as a new object, so a toJSON a line inherits cannot change it', async () => {
+  it('sends each line as a new object, so a toJSON a line inherits cannot change it', async () => {
     const { http, transport } = transportOver([reply(201, TransactionAnswers.created)]);
     const inherited = Object.assign(Object.create({ toJSON: () => ({ name: 'Mug', value: 1 }) }) as object, line);
 

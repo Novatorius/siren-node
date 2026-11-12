@@ -11,6 +11,7 @@ import type {
 } from '../record-types';
 import type { SirenList } from '../types';
 import { deleteRecord, listRecords, writeRecord } from './record-requests';
+import { pickFields } from './create-fields';
 import { RecordsResource } from './records';
 
 /** The one message every refused currency code throws. */
@@ -118,8 +119,13 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    */
   async create(params: CreateCustomCurrencyParams): Promise<T> {
     currencyCode(params.code);
-    // Stub: slice 4 fix packet F3 (the create allow lists).
-    return writeRecord<T>(this.http, 'POST', this.path, params);
+    const body = pickFields(
+      params,
+      CustomCurrenciesResource.CREATE_FIELDS,
+      (key) =>
+        `customCurrencies.create() cannot send "${key}". Siren's create route reads only code, name, symbol, symbolPosition, type, exchangeRate, scale and propertyIds.`,
+    );
+    return writeRecord<T>(this.http, 'POST', this.path, body);
   }
 
   /**
