@@ -8,7 +8,8 @@ import type {
 } from '../record-types';
 import type { SirenList } from '../types';
 import { ProgramGroupBulkAction } from '../taxonomy';
-import { RecordsResource } from './records';
+import { bulkRecords, deleteRecord, listRecords, recordId, writeRecord } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
 
 /**
@@ -40,9 +41,7 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
    * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: ProgramGroupListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 3 packet P9
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+    return listRecords<T>(this.http, this.path, params, ProgramGroupsResource.LIST_FILTERS);
   }
 
   /**
@@ -51,10 +50,7 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
    * unknown id.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 3 packet P9
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 
   /**
@@ -64,9 +60,7 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
    * second create as a new record.
    */
   create(params: CreateProgramGroupParams): Promise<T> {
-    // Stub: slice 3 packet P9
-    void params;
-    return Promise.resolve({} as T);
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -74,11 +68,9 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
    * `programs`, when sent, replaces the group's programs. Sending it again
    * after a lost answer sets the same values, so it is safe.
    */
-  update(id: number, params: UpdateProgramGroupParams): Promise<T> {
-    // Stub: slice 3 packet P9
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async update(id: number, params: UpdateProgramGroupParams): Promise<T> {
+    const group = recordId(id, 'update');
+    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params);
   }
 
   /**
@@ -88,10 +80,9 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
    * removed it, so treat that as done and `retrieve` first if the cause
    * matters.
    */
-  delete(id: number): Promise<T | null> {
-    // Stub: slice 3 packet P9
-    void id;
-    return Promise.resolve(null);
+  async delete(id: number): Promise<T | null> {
+    const group = recordId(id, 'delete');
+    return deleteRecord<T>(this.http, `${this.path}/${group}`);
   }
 
   /**
@@ -100,9 +91,6 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
    * answer is safe, though `affected` may differ.
    */
   bulk(action: ProgramGroupBulkAction, ids: readonly number[]): Promise<BulkResult> {
-    // Stub: slice 3 packet P9
-    void action;
-    void ids;
-    return Promise.resolve({});
+    return bulkRecords<BulkResult>(this.http, this.path, action, ids);
   }
 }

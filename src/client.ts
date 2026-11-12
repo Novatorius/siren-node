@@ -111,21 +111,7 @@ export class Siren {
    * or a `FetchHttpClient` when there is none.
    */
   constructor(options: SirenOptions) {
-    const given: unknown = options ?? {};
-    const apiKey = ownOption(given, 'apiKey');
-    const accessToken = ownOption(given, 'accessToken');
-    const httpClient = ownOption(given, 'httpClient');
-    const baseUrl = ownOption(given, 'baseUrl');
-    const timeout = ownOption(given, 'timeout');
-    const maxRetries = ownOption(given, 'maxRetries');
-
-    const http = new HttpTransport({
-      tokens: resolveTokens(apiKey, accessToken),
-      client: resolveHttpClient(httpClient),
-      baseUrl: resolveBaseUrl(baseUrl),
-      timeout: resolveTimeout(timeout),
-      maxRetries: resolveMaxRetries(maxRetries),
-    });
+    const http = createHttpTransport(options);
 
     this.events = new EventsResource(http);
     this.webhooks = new WebhooksResource(http);
@@ -135,6 +121,31 @@ export class Siren {
     this.obligations = new RecordsResource(http, '/obligations');
     this.payouts = new RecordsResource(http, '/payouts');
   }
+}
+
+/**
+ * Builds the transport a client sends through, from the options `new Siren()`
+ * takes, by the rules its constructor documents. `Siren` and `SirenConnect`
+ * both call it, so the two clients never disagree about an option.
+ *
+ * @internal
+ */
+export function createHttpTransport(options: SirenOptions): HttpTransport {
+  const given: unknown = options ?? {};
+  const apiKey = ownOption(given, 'apiKey');
+  const accessToken = ownOption(given, 'accessToken');
+  const httpClient = ownOption(given, 'httpClient');
+  const baseUrl = ownOption(given, 'baseUrl');
+  const timeout = ownOption(given, 'timeout');
+  const maxRetries = ownOption(given, 'maxRetries');
+
+  return new HttpTransport({
+    tokens: resolveTokens(apiKey, accessToken),
+    client: resolveHttpClient(httpClient),
+    baseUrl: resolveBaseUrl(baseUrl),
+    timeout: resolveTimeout(timeout),
+    maxRetries: resolveMaxRetries(maxRetries),
+  });
 }
 
 /**
@@ -166,8 +177,10 @@ function resolveTokens(apiKey: unknown, accessToken: unknown): AccessTokenSource
  * `undefined`. It never reads an inherited value, and it reads an own value
  * once, so a getter runs a single time. It works on an object with no
  * prototype, since it calls `hasOwnProperty` from `Object.prototype`.
+ *
+ * @internal
  */
-function ownOption(options: unknown, name: string): unknown {
+export function ownOption(options: unknown, name: string): unknown {
   if (!Object.prototype.hasOwnProperty.call(options, name)) return undefined;
   return (options as Record<string, unknown>)[name];
 }
@@ -197,8 +210,10 @@ function isAccessTokenSource(value: unknown): value is AccessTokenSource {
  * Answers the given `httpClient`, any object that holds a `send` function,
  * or a `FetchHttpClient` with no fetch of its own when the option is absent,
  * so it reads the global fetch at each send.
+ *
+ * @internal
  */
-function resolveHttpClient(httpClient: unknown): HttpClient {
+export function resolveHttpClient(httpClient: unknown): HttpClient {
   if (httpClient === undefined) return new FetchHttpClient();
   if (holdsMethod(httpClient, 'send')) return httpClient as HttpClient;
   throw new SirenError('Siren: httpClient must be an object with a send function.');
@@ -211,13 +226,17 @@ function resolveHttpClient(httpClient: unknown): HttpClient {
  * with `http://` or `https://` and a host with no `%`, or that `new URL`
  * does not parse with the http or https scheme and an empty user name and
  * password. The message names that range, the backslash and the `@`, and
- * never quotes the value, and the error carries no `cause`.
+ * never quotes the value, and the error carries no `cause`. `name` is the
+ * option the message names, `baseUrl` unless another option takes the same
+ * rule.
+ *
+ * @internal
  */
-function resolveBaseUrl(baseUrl: unknown): string {
+export function resolveBaseUrl(baseUrl: unknown, name = 'baseUrl'): string {
   if (baseUrl === undefined) return DEFAULT_BASE_URL;
   if (typeof baseUrl === 'string' && isHttpUrl(baseUrl)) return baseUrl;
   throw new SirenError(
-    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,
+    `Siren: ${name} must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,
   );
 }
 
@@ -234,9 +253,14 @@ function isHttpUrl(text: string): boolean {
   return (url.protocol === 'http:' || url.protocol === 'https:') && url.username === '' && url.password === '';
 }
 
-/** Answers `timeout`, or `DEFAULT_TIMEOUT_MS` when it is absent. */
-function resolveTimeout(timeout: unknown): number {
-  if (timeout === undefined) return DEFAULT_TIMEOUT_MS;
+/**
+ * Answers `timeout`, or `fallback` when it is absent, `DEFAULT_TIMEOUT_MS`
+ * unless the caller has another default.
+ *
+ * @internal
+ */
+export function resolveTimeout(timeout: unknown, fallback: number = DEFAULT_TIMEOUT_MS): number {
+  if (timeout === undefined) return fallback;
   if (typeof timeout === 'number' && timeout >= 1 && timeout <= MAX_TIMEOUT_MS) return timeout;
   throw new SirenError(
     `Siren: timeout must be a number of milliseconds from 1 to ${MAX_TIMEOUT_MS}. It got ${described(timeout)}.`,

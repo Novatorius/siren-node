@@ -30,10 +30,6 @@ import {
  * Integration shape, per "Integration Testing Standards — Introduction"
  * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P8 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -54,7 +50,7 @@ const create = {
 };
 
 describe('P8: programs reads', () => {
-  it.skip('lists GET /programs with filters, the group filter and paging', async () => {
+  it('lists GET /programs with filters, the group filter and paging', async () => {
     const { http, programs } = over([reply(200, page([ProgramAnswers.listed], 1, 50))]);
 
     const list = await programs.list({
@@ -77,7 +73,7 @@ describe('P8: programs reads', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retrieves GET /programs/{id} with fields', async () => {
+  it('retrieves GET /programs/{id} with fields', async () => {
     const { http, programs } = over([reply(200, ProgramAnswers.listed)]);
 
     expect(await programs.retrieve(1, { fields: 'id,name' })).toEqual(ProgramAnswers.listed);
@@ -85,11 +81,11 @@ describe('P8: programs reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,name' });
   });
 
-  it.skip('raises NotFoundError for an unknown program', async () => {
+  it('raises NotFoundError for an unknown program', async () => {
     await expect(over([reply(404, ProgramAnswers.notFound)]).programs.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it.skip('reads the status types, incentive types and currency types from their routes', async () => {
+  it('reads the status types, incentive types and currency types from their routes', async () => {
     const { http, programs } = over([
       reply(200, ProgramAnswers.statusTypes),
       reply(200, ProgramAnswers.incentiveTypes),
@@ -106,13 +102,13 @@ describe('P8: programs reads', () => {
     ]);
   });
 
-  it.skip('refuses a currency answer that is not a list', async () => {
+  it('refuses a currency answer that is not a list', async () => {
     await expect(over([reply(200, { USD: 'US Dollar' })]).programs.currencyTypes()).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
     await expectRetried((transport) => resource(transport).retrieve(1), reply(200, ProgramAnswers.listed));
     await expectRetried((transport) => resource(transport).statusTypes(), reply(200, ProgramAnswers.statusTypes));
@@ -122,7 +118,7 @@ describe('P8: programs reads', () => {
 });
 
 describe('P8: programs writes', () => {
-  it.skip('creates with POST /programs and answers the program', async () => {
+  it('creates with POST /programs and answers the program', async () => {
     const { http, programs } = over([reply(201, ProgramAnswers.created)]);
 
     expect(await programs.create(create)).toEqual(ProgramAnswers.created);
@@ -130,7 +126,7 @@ describe('P8: programs writes', () => {
     expect(bodyOf(http.requests[0])).toEqual(create);
   });
 
-  it.skip('updates with PUT /programs/{id}, sending only the given fields', async () => {
+  it('updates with PUT /programs/{id}, sending only the given fields', async () => {
     const { http, programs } = over([reply(200, ProgramAnswers.updated)]);
 
     expect(await programs.update(1, { status: ProgramStatus.Inactive })).toEqual(ProgramAnswers.updated);
@@ -138,7 +134,7 @@ describe('P8: programs writes', () => {
     expect(bodyOf(http.requests[0])).toEqual({ status: 'inactive' });
   });
 
-  it.skip('deletes in two stages: the program marked deleted, then null', async () => {
+  it('deletes in two stages: the program marked deleted, then null', async () => {
     const { http, programs } = over([reply(200, ProgramAnswers.softDeleted), reply(204)]);
 
     expect(await programs.delete(1)).toEqual(ProgramAnswers.softDeleted);
@@ -149,11 +145,11 @@ describe('P8: programs writes', () => {
     ]);
   });
 
-  it.skip('raises a blocked permanent delete as ConflictError', async () => {
+  it('raises a blocked permanent delete as ConflictError', async () => {
     await expect(over([reply(409, ProgramAnswers.deleteBlocked)]).programs.delete(1)).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it.skip('runs a bulk action with POST /programs/bulk', async () => {
+  it('runs a bulk action with POST /programs/bulk', async () => {
     const { http, programs } = over([reply(200, ProgramAnswers.bulk)]);
 
     expect(await programs.bulk(ProgramBulkAction.Deactivate, [1, 2])).toEqual(ProgramAnswers.bulk);
@@ -161,14 +157,14 @@ describe('P8: programs writes', () => {
     expect(http.requests[0]!.body).toBe('{"action":"deactivate","ids":[1,2]}');
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).create(create), reply(201, ProgramAnswers.created));
     await expectSentOnce((transport) => resource(transport).update(1, { name: 'x' }), reply(200, ProgramAnswers.updated));
     await expectSentOnce((transport) => resource(transport).delete(1), reply(204));
     await expectSentOnce((transport) => resource(transport).bulk(ProgramBulkAction.Delete, [1]), reply(200, ProgramAnswers.bulk));
   });
 
-  it.skip.each([
+  it.each([
     ['retrieve', (p: ProgramsResource) => p.retrieve(0)],
     ['update', (p: ProgramsResource) => p.update(-1, { name: 'x' })],
     ['delete', (p: ProgramsResource) => p.delete(Number.NaN)],
@@ -196,7 +192,7 @@ describe('P8: programs list and retrieve rules', () => {
     expect(ProgramsResource.ID_FILTERS).toEqual({ one: ['programGroupId'] });
   });
 
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
     ['a list of program groups, which Cloud reads as one', { programGroupId: [1, 2] }],
@@ -212,13 +208,13 @@ describe('P8: programs list and retrieve rules', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
+  it('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
     const { programs } = over([reply(200, malformedSuccess)]);
 
     await expect(programs.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('retrieve sends include and propertyId the way every retrieve does', async () => {
+  it('retrieve sends include and propertyId the way every retrieve does', async () => {
     const { http, programs } = over([reply(200, ProgramAnswers.listed)]);
 
     await programs.retrieve(1, { fields: 'id', include: 'extended', propertyId: 3 });
@@ -226,7 +222,7 @@ describe('P8: programs list and retrieve rules', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id', include: 'extended', propertyId: '3' });
   });
 
-  it.skip('retrieve throws UnexpectedResponseError for a 2xx that is not an object', async () => {
+  it('retrieve throws UnexpectedResponseError for a 2xx that is not an object', async () => {
     const { programs } = over([reply(200, [ProgramAnswers.listed])]);
 
     await expect(programs.retrieve(1)).rejects.toBeInstanceOf(UnexpectedResponseError);

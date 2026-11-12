@@ -1,0 +1,386 @@
+[
+ {
+  "id": "control-break",
+  "file": "README.md",
+  "find": "\n## Connected sites\n",
+  "replace": "\n## Connected stores\n",
+  "expect": "caught",
+  "failing": [
+   "has a Connected sites section"
+  ]
+ },
+ {
+  "id": "control-harmless",
+  "file": "README.md",
+  "find": "such as a Medusa store, takes its tools",
+  "replace": "such as a Medusa shop, takes its tools",
+  "expect": "survives",
+  "failing": []
+ },
+ {
+  "id": "control-malformed-absent",
+  "file": "README.md",
+  "find": "this text is not in the file",
+  "replace": "x",
+  "expect": "refused",
+  "failing": []
+ },
+ {
+  "id": "control-malformed-syntax",
+  "file": "src/connect/scopes.ts",
+  "find": "export const ConnectScope = {",
+  "replace": "export const ConnectScope = = {",
+  "expect": "refused",
+  "failing": []
+ },
+ {
+  "id": "readme-no-oauth-client",
+  "file": "README.md",
+  "find": "  OAuthClient,\n  codeChallengeS256,\n  createCodeVerifier,\n  createState,\n} from '@novatorius/siren/connect';\n\nconst oauth = new OAuthClient();\nconst redirectUri = 'https://store.example/siren/callback';\n\n// Once per store. Keep client_id.\nconst registration = await oauth.register({\n  clientName: 'Example Store',\n  redirectUris: [redirectUri],\n  softwareId: ConnectorSoftware.Medusa,\n});\n\n// Each time the merchant connects.\nconst verifier = createCodeVerifier();\nconst state = createState();\nawait store.saveConnectAttempt({ verifier, state });\nconst consentUrl = oauth.authorizeUrl({\n  clientId: registration.client_id,\n  redirectUri,\n  state,\n  codeChallenge: codeChallengeS256(verifier),\n});\n```\n\n`new OAuthClient()` takes",
+  "replace": "  codeChallengeS256,\n  createCodeVerifier,\n  createState,\n} from '@novatorius/siren/connect';\n\nconst oauth = connectClient();\nconst redirectUri = 'https://store.example/siren/callback';\n\n// Once per store. Keep client_id.\nconst registration = await oauth.register({\n  clientName: 'Example Store',\n  redirectUris: [redirectUri],\n  softwareId: ConnectorSoftware.Medusa,\n});\n\n// Each time the merchant connects.\nconst verifier = createCodeVerifier();\nconst state = createState();\nawait store.saveConnectAttempt({ verifier, state });\nconst consentUrl = oauth.authorizeUrl({\n  clientId: registration.client_id,\n  redirectUri,\n  state,\n  codeChallenge: codeChallengeS256(verifier),\n});\n```\n\n`connectClient()` takes",
+  "expect": "caught",
+  "failing": [
+   "has a Connected sites section that names the entry, the OAuth helpers, the client and events.forward"
+  ]
+ },
+ {
+  "id": "readme-refresh-retried",
+  "file": "README.md",
+  "find": "A refresh is sent exactly once and never retried by the SDK, whatever the answer.",
+  "replace": "The SDK retries a refresh after a network error.",
+  "expect": "caught",
+  "failing": [
+   "says the SDK sends a refresh once and never retries it"
+  ]
+ },
+ {
+  "id": "readme-attemptid-not-same",
+  "file": "README.md",
+  "find": "the store may resend that\nrefresh once, with the same `attemptId`, and it sends",
+  "replace": "the store may resend that\nrefresh once, and it sends",
+  "expect": "caught",
+  "failing": [
+   "the README Refresh section states the 30-second window and that the one resend carries the same attemptId"
+  ]
+ },
+ {
+  "id": "readme-sdk-keeps-tokens",
+  "file": "README.md",
+  "find": "The SDK keeps nothing, so the store keeps",
+  "replace": "The store keeps",
+  "expect": "caught",
+  "failing": [
+   "and that the store keeps the tokens"
+  ]
+ },
+ {
+  "id": "readme-no-lock",
+  "file": "README.md",
+  "find": "The store takes its own lock around each refresh, so two refreshes of one token never race.",
+  "replace": "Two refreshes of one token never race.",
+  "expect": "caught",
+  "failing": [
+   "says the store locks its refresh"
+  ]
+ },
+ {
+  "id": "readme-lock-optional",
+  "file": "README.md",
+  "find": "The store takes its own lock around each refresh, so two refreshes of one token never race.",
+  "replace": "The store takes its own lock around each refresh, so two refreshes of one token never race. A store with one worker may skip the lock on refresh.",
+  "expect": "caught",
+  "failing": [
+   "says the store locks its refresh"
+  ]
+ },
+ {
+  "id": "readme-no-window",
+  "file": "README.md",
+  "find": "Any repeat after 30 seconds makes Cloud revoke the\nwhole token family.",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "resends only within 30 seconds"
+  ]
+ },
+ {
+  "id": "readme-window-safe",
+  "file": "README.md",
+  "find": "whole token family.",
+  "replace": "whole token family. A resend after 30 seconds is fine when the first try timed out.",
+  "expect": "caught",
+  "failing": [
+   "resends only within 30 seconds"
+  ]
+ },
+ {
+  "id": "readme-attemptid-not-random",
+  "file": "README.md",
+  "find": "Give\neach refresh a random `attemptId` on its first try, such as one from `createState()`, because a\nresend cannot add one later.",
+  "replace": "Give\neach refresh an `attemptId` on its first try, because a\nresend cannot add one later.",
+  "expect": "caught",
+  "failing": [
+   "picks a random attemptId"
+  ]
+ },
+ {
+  "id": "readme-attemptid-counter",
+  "file": "README.md",
+  "find": "resend cannot add one later.",
+  "replace": "resend cannot add one later. The `attemptId` may be a counter.",
+  "expect": "caught",
+  "failing": [
+   "picks a random attemptId"
+  ]
+ },
+ {
+  "id": "readme-no-state-check",
+  "file": "README.md",
+  "find": "The store compares the callback's `state` with the one it kept, refuses a mismatch, and\nuses each `state` once.",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "says the store checks the callback's state against the one it kept, once"
+  ]
+ },
+ {
+  "id": "readme-state-optional",
+  "file": "README.md",
+  "find": "uses each `state` once.",
+  "replace": "uses each `state` once. Checking `state` is optional on a trusted network.",
+  "expect": "caught",
+  "failing": [
+   "says the store checks the callback's state against the one it kept, once"
+  ]
+ },
+ {
+  "id": "readme-no-reconnect",
+  "file": "README.md",
+  "find": "`invalid_grant` or `invalid_client` means the grant is\ngone, and the site connects again.",
+  "replace": "`invalid_grant` or `invalid_client` means the grant is\ngone.",
+  "expect": "caught",
+  "failing": [
+   "says what a site does on each failure the SDK leaves to it"
+  ]
+ },
+ {
+  "id": "readme-no-disconnect-401",
+  "file": "README.md",
+  "find": "so a 401 after\na `disconnect` means the site is disconnected.",
+  "replace": "so its answer\nmatters.",
+  "expect": "caught",
+  "failing": [
+   "says what a site does on each failure the SDK leaves to it"
+  ]
+ },
+ {
+  "id": "readme-no-replace-again",
+  "file": "README.md",
+  "find": "After a\n`ConnectionError` from `replace`, the site cannot know whether the secret rotated, so it calls\n`replace` again before it trusts the stored secret.",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "says what a site does on each failure the SDK leaves to it"
+  ]
+ },
+ {
+  "id": "readme-no-exchange-over",
+  "file": "README.md",
+  "find": "After a `ConnectionError` from `exchangeCode`, the store cannot know whether\nCloud spent the code, so it starts the connection over with a new verifier and state.",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "says what a site does on each failure the SDK leaves to it"
+  ]
+ },
+ {
+  "id": "readme-no-verify",
+  "file": "README.md",
+  "find": "The site verifies every delivery with\n`constructEvent` and the signing secret, as in\n[Quickstart: verify a webhook](#quickstart-verify-a-webhook), and drops any delivery that fails.",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "says to verify every webhook delivery with constructEvent"
+  ]
+ },
+ {
+  "id": "readme-verify-optional",
+  "file": "README.md",
+  "find": "and drops any delivery that fails.",
+  "replace": "and drops any delivery that fails. Verification is optional for deliveries from Cloud.",
+  "expect": "caught",
+  "failing": [
+   "says to verify every webhook delivery with constructEvent"
+  ]
+ },
+ {
+  "id": "readme-no-log-advice",
+  "file": "README.md",
+  "find": "Never log the customer email key or the signing secret, and keep both out of error reports.",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "says never to log the customer email key or the signing secret"
+  ]
+ },
+ {
+  "id": "readme-tokens-loggable",
+  "file": "README.md",
+  "find": "and keep both out of error reports.",
+  "replace": "and keep both out of error reports. The token pair is safe to log at debug level.",
+  "expect": "caught",
+  "failing": [
+   "says never to log the customer email key or the signing secret"
+  ]
+ },
+ {
+  "id": "readme-forward-retried",
+  "file": "README.md",
+  "find": "`events.forward` is sent once, whatever `maxRetries` says,\nbecause",
+  "replace": "`events.forward` retries up to `maxRetries`,\nbecause",
+  "expect": "caught",
+  "failing": [
+   "says events.forward is sent once"
+  ]
+ },
+ {
+  "id": "readme-no-same-eventid",
+  "file": "README.md",
+  "find": "The outbox resends a failed event with that same `eventId` and the same token, and Cloud answers",
+  "replace": "The outbox resends a failed event later, and Cloud answers",
+  "expect": "caught",
+  "failing": [
+   "says events.forward is sent once and the outbox resends with the same eventId"
+  ]
+ },
+ {
+  "id": "openapi-connect-scope-wrong",
+  "file": "openapi.yaml",
+  "find": "        - connectorToken: [connect:migrate]",
+  "replace": "        - connectorToken: [connect:read]",
+  "expect": "caught",
+  "failing": [
+   "documents /connect/migration-window get for a connected site holding connect:migrate"
+  ]
+ },
+ {
+  "id": "openapi-connect-takes-apikey",
+  "file": "openapi.yaml",
+  "find": "      operationId: getConnectorWebhook\n      summary: Read the site's webhook subscription\n      security:\n",
+  "replace": "      operationId: getConnectorWebhook\n      summary: Read the site's webhook subscription\n      security:\n        - apiKey: []\n",
+  "expect": "caught",
+  "failing": [
+   "documents /connect/webhook get for a connected site holding connect:webhooks"
+  ]
+ },
+ {
+  "id": "openapi-connect-no-403",
+  "file": "openapi.yaml",
+  "find": "              schema: { $ref: '#/components/schemas/ConnectPlan' }\n        '401': { $ref: '#/components/responses/Unauthorized' }\n        '403': { $ref: '#/components/responses/Forbidden' }\n",
+  "replace": "              schema: { $ref: '#/components/schemas/ConnectPlan' }\n        '401': { $ref: '#/components/responses/Unauthorized' }\n",
+  "expect": "caught",
+  "failing": [
+   "documents /connect/plan get for a connected site holding connect:read"
+  ]
+ },
+ {
+  "id": "openapi-connect-no-operationid",
+  "file": "openapi.yaml",
+  "find": "      operationId: syncConnectedStoreProducts\n",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "documents /connect/products put for a connected site holding connect:records:write"
+  ]
+ },
+ {
+  "id": "openapi-register-not-public",
+  "file": "openapi.yaml",
+  "find": "        `error_description`, such as `invalid_redirect_uri`.\n      security: []",
+  "replace": "        `error_description`, such as `invalid_redirect_uri`.\n      security:\n        - dashboardSession: []",
+  "expect": "caught",
+  "failing": [
+   "documents POST /oauth/register as public"
+  ]
+ },
+ {
+  "id": "openapi-token-no-attempt-id",
+  "file": "openapi.yaml",
+  "find": "                attempt_id: { type: string, description: A random id for one refresh, sent again unchanged on each try of it. }\n",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "documents POST /oauth/token as public"
+  ]
+ },
+ {
+  "id": "openapi-token-no-error-envelope",
+  "file": "openapi.yaml",
+  "find": "        A refusal is a 400 or 401 with the RFC 6749 error envelope, `error`\n        and `error_description`.",
+  "replace": "        A refusal is a 400 or 401 with the RFC 6749 error envelope.",
+  "expect": "caught",
+  "failing": [
+   "documents POST /oauth/token as public"
+  ]
+ },
+ {
+  "id": "openapi-envelope-required",
+  "file": "openapi.yaml",
+  "find": "      required: [version, eventId, origin, occurredAt, data]",
+  "replace": "      required: [version, eventId, origin, data]",
+  "expect": "caught",
+  "failing": [
+   "documents the forwarded event envelope as a schema"
+  ]
+ },
+ {
+  "id": "openapi-event-any-connector",
+  "file": "openapi.yaml",
+  "find": "        - connectorToken: [connect:ingest]",
+  "replace": "        - connectorToken: []",
+  "expect": "caught",
+  "failing": [
+   "documents the forwarded event envelope as a schema"
+  ]
+ },
+ {
+  "id": "openapi-event-no-header",
+  "file": "openapi.yaml",
+  "find": "        - name: X-Siren-Final-Attempt\n          in: header\n          required: false\n          description: |\n            `1` on the last try a connected site's outbox makes of a\n            forwarded event, so Cloud logs an event it will never record.\n            Left out on every other send.\n          schema: { type: string, enum: ['1'] }\n",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "documents the forwarded event envelope as a schema"
+  ]
+ },
+ {
+  "id": "openapi-event-no-envelope",
+  "file": "openapi.yaml",
+  "find": "                - $ref: '#/components/schemas/ForwardedEventEnvelope'\n",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "documents the forwarded event envelope as a schema"
+  ]
+ },
+ {
+  "id": "changelog-no-forward",
+  "file": "CHANGELOG.md",
+  "find": "- `events.forward` sends a connected site's event",
+  "replace": "- Forwarding sends a connected site's event",
+  "expect": "caught",
+  "failing": [
+   "names every new entry, class, method and type under Unreleased"
+  ]
+ },
+ {
+  "id": "changelog-no-webhook-resource",
+  "file": "CHANGELOG.md",
+  "find": "`ConnectWebhookResource`, at `connect.webhook`",
+  "replace": "The webhook resource, at `connect.webhook`",
+  "expect": "caught",
+  "failing": [
+   "names every new entry, class, method and type under Unreleased"
+  ]
+ }
+]
