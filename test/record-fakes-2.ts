@@ -4,6 +4,11 @@
  * request helpers stay in test/record-fakes.ts, which slice 3 owns. This
  * file holds only answers, so slice 3 and slice 4 never edit the same file.
  *
+ * None of these is captured from a live answer, since nothing in this build
+ * calls a running Siren. Each cites the Cloud file and line it follows.
+ * When Cloud's branch moves past b6f7140, whoever merges it into this work
+ * checks the cited lines again.
+ *
  * Paths are under lib/ unless they start with saas/. Reads write dates as
  * ISO 8601 (ResponseNormalizerInterceptor), and the adapters behind a
  * write's answer write `Y-m-d H:i:s`. Three error shapes reach the SDK: a
@@ -253,7 +258,10 @@ export const CreditAnswers = {
     idempotencyKey: null,
     createdDate: '2026-10-16 12:00:00',
   },
-  /** Credits/Core/Models/Adapters/CreditHoldAdapter.php, a site's hold as Siren stores it. */
+  /**
+   * Credits/Core/Models/Adapters/CreditHoldAdapter.php, a site's hold as Siren
+   * stores it. HoldService.php line 550 builds the placement key.
+   */
   hold: {
     id: 51,
     collaboratorId: 4,
@@ -261,7 +269,7 @@ export const CreditAnswers = {
     amount: 250,
     status: 'active',
     reference: 'hold:woocommerce@property:5:cart-9f2',
-    idempotencyKey: null,
+    idempotencyKey: 'place:4:STORE_CREDIT:cart-9f2',
     expiresAt: '2026-10-16 12:30:00',
     createdDate: '2026-10-16 12:00:00',
   },
@@ -273,7 +281,7 @@ export const CreditAnswers = {
     amount: 250,
     status: 'released',
     reference: 'hold:woocommerce@property:5:cart-9f2',
-    idempotencyKey: null,
+    idempotencyKey: 'place:4:STORE_CREDIT:cart-9f2',
     expiresAt: '2026-10-16 12:30:00',
     createdDate: '2026-10-16 12:00:00',
   },

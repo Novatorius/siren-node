@@ -66,8 +66,10 @@ answers 200 with no body (`UpdateConversion.php` line 140), which
 `null` for no body, and `UnexpectedResponseError` with the 2xx status for
 anything else, so a later Siren that sends the record still works.
 
-Each list names its filters in a static `LIST_FILTERS` (`ENTRY_FILTERS`,
-`HOLD_FILTERS` and `BALANCE_FILTERS` on credits, `FILTERS` on settings).
+Each list names its filters in a static `LIST_FILTERS`. A class whose
+routes are not one collection names each read's filters after that read
+instead: `ENTRY_FILTERS`, `HOLD_FILTERS` and `BALANCE_FILTERS` on credits,
+and `FILTERS` for `settings.list`.
 `listRecords` refuses any other key, any comma outside `fields` and `s`,
 and an empty filter list, and it checks every row is an object, as slice 3
 set out. The id filters sit in a static `ID_FILTERS`, by how Cloud reads
@@ -81,22 +83,55 @@ them:
 | `CreditsResource` | `collaboratorId` | none | GetCreditBalances.php line 55 reads one. A ledger or hold query names one collaborator |
 
 The two field reads, `credits.balances` and `transactions.details`, go
-through `readObject` with a `check`, so a broken field raises
-`UnexpectedResponseError` with the status Siren sent. Conversions and transactions keep slice 2's
-`RecordsResource.list`, which sends any key, since changing a shipped
-method is out of this slice's scope.
+through `readObject` with a `check`. A broken field raises
+`UnexpectedResponseError` with the status Siren sent.
+
+Conversions and transactions keep slice 2's `RecordsResource.list`, which
+sends any key, so a misspelt filter there widens the query. Slice 2's
+methods stay as shipped in this slice. Giving those two lists a
+`LIST_FILTERS` check is a follow-up for a later slice, recorded with this
+slice's assumptions.
+
+The three new `bulk` methods take no `extra`, since Cloud's conversion,
+transaction and distributor bulk routes read only `action` and `ids`.
+Siren answers `{ success, affected }`. It skips an id it cannot find or
+change and still answers 200, so an `affected` lower than the number of
+ids sent is the only sign of a skipped id. An action outside Cloud's list
+is a 400, raised as `BadRequestError`.
 
 ## Send-once and retries
 
-Every write goes out once: the creates, updates, deletes and bulk actions,
-`creditMetric`, `creditCollaborator`, `adjust`, `placeHold`, `releaseHold`
-and the mapping create and deletes. Every read retries on a lost connection,
-429 and 5xx. `adjust` and `creditMetric` would apply twice if sent twice,
-and Siren takes no idempotency key for either. `placeHold` and
-`releaseHold` are safe for the caller to repeat (a repeat placement for the
-same token and currency replaces the hold, and a hold that already ended
-comes back unchanged), but the caller's queue decides that, not the
-transport.
+Every write goes out once, apart from the one resend after a 401 that slice
+2 makes for every request. Every read retries on a lost connection, 429 and
+5xx, inside the client's `maxRetries`. That retry comes from slice 1's
+transport. A caller that runs SDK calls from its own durable queue builds
+the client with `maxRetries: 0`, so the queue's attempts are not multiplied
+([Retry Unification — The Durable Queue Owns Retries (KB 591)](https://navigator.novatori.us/r/kb/591)).
+
+A write's answer is lost when it throws `ConnectionError` or a 5xx
+`ApiError`, since Siren may have written first. The caller's queue decides
+whether to send it again, and each write's doc says how to find out first.
+The table sums up what a second send does, from Cloud's source at
+`b6f7140`.
+
+| Write | A second send | Before sending again |
+|---|---|---|
+| `conversions.create`, `distributors.create` | makes a second record | list by `transactionId` or search by name |
+| `transactions.create` with a binding | 409, `ConflictError` | nothing. The 409 means the first worked |
+| `transactions.create` without a binding | makes a second transaction | list the transactions |
+| `transactions.creditCollaborator` | makes a second conversion per transaction | list conversions by `transactionId` |
+| `credits.adjust` | applies the amount again | `entries` by `sourceType: 'adjustment'` and the adjustment's own `description` |
+| `distributors.creditMetric` | adds the credit again (`MetricTriggerService.php` `upsertMetric`) | the distributor's metrics in Siren's dashboard |
+| `customCurrencies.create` | 400 for a code Siren holds | `retrieve` the code |
+| the updates, the status bulk actions, `placeHold`, `releaseHold`, the mapping deletes | the same result, or `affected` may differ | nothing |
+| `conversions.delete`, `distributors.delete` | removes for good what the first only marked deleted | `retrieve`: `deleted` means the first worked |
+| `customCurrencies.delete`, the `permanent_delete` and transaction `delete` bulk actions | 404, or skips the ids already gone | nothing |
+| `mappings.create` | 409 `mapping_exists`, `ConflictError` | nothing. The link is the one asked for |
+
+Siren sets every `idempotencyKey` itself: `place:{collaborator}:{currency}:{token}`
+on a hold (`HoldService.php` line 550), and a `redeem:` key on the entries it
+writes when it settles or reverses a redemption. A caller cannot send one,
+and `adjust` writes none (`AdjustCreditBalance.php` line 81).
 
 ## Errors
 
@@ -105,8 +140,8 @@ The transport maps every status, as slice 1 set out. Two resources narrow a
 
 - `placeHold` turns every 409 into `HoldConflictError.fromConflict`, whose
   `reason` reads `hold_no_credit` and `hold_token_in_use`, and is `null` for
-  `hold_currency_not_at_store`. Siren retired the hold cap, so a 429 is the
-  request rate limit and stays `RateLimitError`.
+  `hold_currency_not_at_store`. A 429 is the request rate limit and stays
+  `RateLimitError`.
 - `mappings.create` leaves `mapping_exists` as `ConflictError`. The link it
   names is the one the call asked for.
 
@@ -114,6 +149,18 @@ Siren answers `site_filter_required`, `user_type_not_allowed` and
 `field_not_allowed` as 403s with those codes, raised as `PolicyError`.
 The Essentials gate on distributor and custom currency writes answers 403
 `plan_required`, raised as `PermissionError`.
+
+A caller's queue needs to know which errors to try again and which to set
+aside. The SDK throws typed errors and logs nothing, so the caller logs
+them through its own logger.
+
+| Error | What the caller does |
+|---|---|
+| `SirenError` thrown before sending | Fix the call. Sending it again fails the same way |
+| `BadRequestError`, `ValidationError`, `PermissionError`, `PolicyError`, `NotFoundError` | Set it aside. Siren answers the same until the data or the plan changes |
+| `ConflictError`, `HoldConflictError` | Read the record it names. For a create, it often means the first send worked |
+| `RateLimitError`, `ConnectionError`, a 5xx `ApiError` | Try again later. For a write, check first whether it landed, as the table above says |
+| `UnexpectedResponseError` | Set it aside and report it. Siren answered in a shape the SDK does not know, and for a write with a 2xx status, the write landed |
 
 ## Connected sites
 
@@ -140,14 +187,14 @@ the wrong shape, and the list key and comma checks. These are new.
 | `credits->checkoutBalances()` drops rows that are not arrays and documents a `held` field | `UnexpectedResponseError` for a body that is not a list, and no `held` | Cloud's `GetCreditBalances.php` sends no `held` |
 | `transactions->create()` checks only that `details` is a non-empty array | 1 to 500 lines, each an object, one message | Cloud refuses more than 500 with a 400 after parsing |
 | `transactions->creditCollaborator()` checks only that the ids are not empty | 1 to 500 positive whole numbers, a positive collaborator id, a non-empty `type` | Cloud reads the ids as `BulkIds` |
-| `credits->placeHold()` raises `HoldLimitException` for a 429 with `hold_limit` | `RateLimitError` | Siren retired the cap, and PHP keeps the class only for older deployments |
+| `credits->placeHold()` raises `HoldLimitException` for a 429 with `hold_limit` | `RateLimitError` | Siren Cloud has no hold cap, so a 429 is the rate limit |
 | `credits->releaseHold()` retries | sent once | Every record write is sent once. A release is safe to repeat, so the caller's queue repeats it ([Retry Unification — The Durable Queue Owns Retries (KB 591)](https://navigator.novatori.us/r/kb/591)) |
 | `customCurrencies->retrieve()` takes any list key and checks only for an empty code | takes only `fields`, and every code must be letters, digits, underscores and hyphens | The code is a path segment on update and delete. Cloud's route reads `[\w-]+` |
 | `distributors->creditMetric()` sends only `collaboratorId` | also takes `points` | Cloud reads `points` (`CreditMetric.php`), and a distributor with no point value needs it |
 | `opportunities->list()` sends `id` and `s` | refuses both | Cloud ignores them for an organization's token and answers every opportunity. A site reads one by id with `retrieve` |
 | `engagements->list()` names four filters | also `from` and `to` | Cloud's list reads both as days |
 | `settings->value()` refuses only an empty name | also a comma, with one message | Cloud reads a comma as "any of" |
-| `credits->entries()` and `holds()` accept a `collaboratorId` of 0 as sent | a `collaboratorId` that is not a positive whole number counts as not sent | Id 0 names no collaborator, so it must not satisfy the check that a query names one |
+| `credits->entries()` and `holds()` accept a `collaboratorId` of 0 as sent | a `collaboratorId` that is not a positive whole number does not satisfy the check that a query names one, and `listRecords` then refuses it | Id 0 names no collaborator |
 | Cloud's `POST /conversions/reject` | not added | PHP has no method for it, and `bulk` with `reject` covers it |
 
 Method names, parameters and answers otherwise follow PHP one for one. The
@@ -180,8 +227,16 @@ One acceptance file per packet, in the integration shape ([Integration Testing S
 the real resource over the real `HttpTransport`, with `FakeHttpClient` at
 the `HttpClient` seam, built with slice 3's helpers in
 `test/record-fakes.ts`. Cloud's answers are in `test/record-fakes-2.ts`,
-each with the Cloud file and line it came from. The base URL is the
-reserved host `example.invalid`. P10's test builds `Siren` with a fake
+each with the Cloud file and line it came from. They are written from
+Cloud's source at `b6f7140`, not captured from a live answer, since no test
+or probe in this build calls a running Siren. When Cloud's branch moves,
+whoever merges it into this work checks the cited lines again. The SDK's
+proof against a real Siren is the ship pipeline's integration phase on UAT,
+after the packets land. The base URL is the reserved host `example.invalid`.
+
+KB 568's database, state reset and logger parts do not apply here. The SDK
+has no database, keeps no state between calls and has no logger, so the
+fake `HttpClient` is the one seam, and each test builds its own. P10's test builds `Siren` with a fake
 `httpClient` and that base URL, and stubs the global fetch to fail.
 
 | Packet | Test file |

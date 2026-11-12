@@ -18,21 +18,27 @@ import type { SirenList } from '../types';
  * A connected site's token may read {@link entries}, {@link checkoutBalances}
  * and {@link holds} with `connect:records:read`, and place and release holds
  * with `connect:records:write`. Only Siren writes the ledger, through its
- * engine and the dashboard's {@link adjust}. No plan gate sits on these
- * routes.
+ * engine and the dashboard's {@link adjust}. These routes need no plan.
  *
  * Reads retry. {@link adjust}, {@link placeHold} and {@link releaseHold} are
- * sent once, whatever the client's `maxRetries`. Every id must be a positive
- * whole number, and every check here throws `SirenError` before anything is
- * sent.
+ * sent once, whatever the client's `maxRetries`, apart from the one resend
+ * after a 401 that every request gets. A write's answer is lost when it
+ * throws `ConnectionError` or a 5xx `ApiError`, since Siren may have written
+ * first. Each write's doc says how to find out before sending it again.
+ * Every id must be a positive whole number, and every check here throws
+ * `SirenError` before anything is sent.
  *
- * A hold ends when its `ttl` runs out (Siren sweeps expired holds every five
- * minutes, and an expired hold reserves nothing), when the same checkout
- * places again and replaces it, when the site releases it early with
- * {@link releaseHold}, or when Siren settles it from the order's redemption.
- * Siren no longer caps how many checkouts may hold credit at once, so a 429
- * from {@link placeHold} is always the request rate limit, raised as
- * `RateLimitError`.
+ * Siren sets `idempotencyKey` itself: a hold carries
+ * `place:{collaborator}:{currency}:{token}`, and the ledger entries Siren
+ * writes when it settles or reverses a redemption carry a `redeem:` key. A
+ * caller cannot send one, and {@link adjust} writes its entry with none.
+ *
+ * A hold ends when its `ttl` runs out (Siren removes expired holds every
+ * five minutes, and an expired hold reserves nothing), when the same
+ * checkout places again and replaces it, when the site releases it early
+ * with {@link releaseHold}, or when Siren settles it from the order's
+ * redemption. A 429 from {@link placeHold} is the request rate limit,
+ * raised as `RateLimitError`.
  */
 export class CreditsResource {
   /** The shortest hold, in seconds. */
@@ -42,9 +48,11 @@ export class CreditsResource {
   /** The hold Siren places when no `ttl` is sent, in seconds. */
   static readonly HOLD_DEFAULT_TTL = 1800;
   /**
-   * The longest platform id Siren accepts on a hold. Siren adds the site's
-   * Property (`@property:5`) before it checks the length, so a site's own
-   * limit is this less the length of that suffix.
+   * The longest platform id Siren accepts on a hold. The SDK checks only
+   * this ceiling. Siren adds the site's Property (`@property:5`) before it
+   * checks the length, and the SDK does not know the Property, so for a
+   * site's token Siren's 400 is the final word on a platform id close to
+   * the limit.
    */
   static readonly HOLD_PLATFORM_MAX_LENGTH = 60;
   /** The longest checkout token Siren accepts on a hold. */
@@ -72,6 +80,10 @@ export class CreditsResource {
    * plus `description` when one is given, sent once: a second send would
    * apply the adjustment twice, and Siren takes no idempotency key for it.
    * Answers `{ success, entry }`, the ledger entry with its signed amount.
+   * Siren writes the entry with `sourceType` `adjustment`. After a lost
+   * answer, give each adjustment its own `description` and look for it with
+   * {@link entries}, `{ collaboratorId, sourceType: 'adjustment', description }`,
+   * before sending it again.
    *
    * Throws `SirenError` before sending when `collaboratorId` is not a
    * positive whole number, `currency` is not a non-empty string, `amount` is
@@ -159,9 +171,11 @@ export class CreditsResource {
    * `idempotencyKey` (a string that is not blank), so it never lists a whole
    * organization's ledger. Otherwise `SirenError` is thrown before sending,
    * with exactly `Send at least one of: collaboratorId, idempotencyKey.`
-   * A `collaboratorId` that is not a positive whole number, or a blank
-   * `idempotencyKey`, counts as not sent. Other filters, each an exact
-   * match: `currency`, `sourceType`, `sourceId`
+   * That check comes first, and a `collaboratorId` that is not a positive
+   * whole number, or a blank `idempotencyKey`, does not satisfy it. A
+   * `collaboratorId` given beside a good `idempotencyKey` must still be a
+   * positive whole number, or `listRecords` refuses it, naming the key.
+   * Other filters, each an exact match: `currency`, `sourceType`, `sourceId`
    * and `description`. Sort with `orderBy` (`id`, `dateCreated`, `amount`)
    * and `order`. Sent through `listRecords` with {@link ENTRY_FILTERS} and
    * {@link ID_FILTERS}, so any other key throws `SirenError`.
@@ -181,7 +195,9 @@ export class CreditsResource {
    * `reference` or `idempotencyKey` (strings that are not blank), or
    * `SirenError` is thrown before sending, with exactly `Send at least one
    * of: collaboratorId, reference, idempotencyKey.` That check comes first,
-   * so a blank `reference` counts as not sent. Send `reference` as
+   * so a blank `reference` does not satisfy it, and a `collaboratorId`
+   * given beside another key must still be a positive whole number. Send
+   * `reference` as
    * {@link holdReference} builds it, or `SirenError` is thrown with exactly
    * `Send reference as hold:{platform}:{token}. Build it with
    * CreditsResource.holdReference().` Other filters: `currency` and `status`
@@ -206,8 +222,8 @@ export class CreditsResource {
    * `token` names the checkout session and `platformId` the commerce
    * platform, such as `woocommerce`. Send the plain platform: Siren adds the
    * site's Property. Placing again for the same token and currency replaces
-   * that session's hold, so a send after a lost answer is safe for the
-   * caller to repeat. The hold's `amount` may be lower than asked, because
+   * that session's hold, so after a lost answer the caller may send it
+   * again, or find the hold with {@link holds} by {@link holdReference}. The hold's `amount` may be lower than asked, because
    * Siren caps it at the credit available outside this session's own hold.
    *
    * Throws `SirenError` before sending when `collaboratorId` is not a

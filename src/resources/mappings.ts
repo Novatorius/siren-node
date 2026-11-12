@@ -27,9 +27,16 @@ import { RecordsResource } from './records';
  * Every type, `localType` included, must pass `PropertyQualifier.assertName`,
  * or `SirenError` is thrown before sending. Every external id is trimmed and
  * refused when nothing is left. Every local id must be a positive whole
- * number. Reads retry, and {@link create}, {@link deleteForCollaborator} and
- * {@link deleteForExternal} are sent once. Only collaborator links can be
- * written. Siren makes the order, transaction and opportunity links as it
+ * number. {@link create}, {@link deleteForCollaborator} and
+ * {@link deleteForExternal} are sent once, apart from the one resend after
+ * a 401 that every request gets.
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * A write's answer is lost when it throws `ConnectionError` or a 5xx
+ * `ApiError`. Siren may have written before the answer failed, so each
+ * write says how to find out before sending it again.
+ *
+ * Only collaborator links can be written. Siren makes the order, transaction and opportunity links as it
  * processes events.
  */
 export class MappingsResource extends RecordsResource<Mapping> {
@@ -120,9 +127,9 @@ export class MappingsResource extends RecordsResource<Mapping> {
   /**
    * Removes a collaborator's links of one external type with
    * `DELETE /mappings?localType=collaborator&localId=&externalType=`, sent
-   * once, no body. Removing nothing is not an error. Answers
-   * `{ deleted: true }`, and throws `UnexpectedResponseError` when a 2xx
-   * carries no object.
+   * once, no body. Removing nothing is not an error, so a resend after a
+   * lost answer is safe. Answers `{ deleted: true }`, and throws
+   * `UnexpectedResponseError` when a 2xx carries no object.
    */
   deleteForCollaborator(collaboratorId: number, externalType: string): Promise<DeletedResult> {
     // Stub: slice 4 packet P6
@@ -135,7 +142,7 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * Removes every collaborator link of one outside record with
    * `DELETE /mappings?localType=collaborator&externalId=&externalType=`, the
    * external id trimmed, sent once, no body. Removing nothing is not an
-   * error. Answers `{ deleted: true }`, and throws `UnexpectedResponseError`
+   * error, so a resend after a lost answer is safe. Answers `{ deleted: true }`, and throws `UnexpectedResponseError`
    * when a 2xx carries no object.
    */
   deleteForExternal(externalId: string, externalType: string): Promise<DeletedResult> {

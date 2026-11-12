@@ -7,7 +7,10 @@ import type { RetrieveParams } from './records';
 /**
  * Engagements (`/engagements`): a collaborator's claim on an opportunity in
  * one program. Siren creates them while it processes events, so this
- * resource only reads, and every read retries.
+ * resource only reads.
+ *
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
  *
  * A connected site's token reads {@link list} and {@link retrieve} with
  * `connect:records:read`, limited to its own store. It cannot read

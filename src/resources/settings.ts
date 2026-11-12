@@ -11,7 +11,9 @@ import type { SharedSetting } from '../record-types';
  * referral links. Any other type answers 400, raised as `BadRequestError`,
  * and a setting Siren does not share is never in the answer.
  *
- * Every read retries. A connected site's token reads with
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * A connected site's token reads with
  * `connect:records:read`. Every name must be a non-empty string with no
  * comma, or `SirenError` is thrown before sending.
  */

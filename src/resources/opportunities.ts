@@ -11,8 +11,12 @@ import type { RetrieveParams } from './records';
  * so there is no create or delete call. The event's `EventResult` carries
  * the new opportunity's id.
  *
- * Reads retry. {@link update} is sent once. Every id must be a positive
- * whole number, or `SirenError` is thrown before sending. A connected site's
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * {@link update} is sent once, apart from the one resend after a 401 that
+ * every request gets, and setting the same fields again is safe. Every id
+ * must be a positive whole number, or `SirenError` is thrown before
+ * sending. A connected site's
  * token reads with `connect:records:read` and must name the opportunity: by
  * id through {@link retrieve}, or by `collaboratorId` through {@link list}.
  * Without one Siren answers 403 `site_filter_required`. It cannot update.

@@ -16,8 +16,15 @@ import type { RetrieveParams } from './records';
  * Distributors (`/distributors`): pools that share revenue among the
  * collaborators they cover, on a schedule.
  *
- * Reads retry. Every write is sent once. Every id must be a positive whole
- * number, or `SirenError` is thrown before sending. Writes need the
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * Every write is sent once, apart from the one resend after a 401 that
+ * every request gets. Every id must be a positive whole number, or
+ * `SirenError` is thrown before sending.
+ * A write's answer is lost when it throws `ConnectionError` or a 5xx
+ * `ApiError`. Siren may have written before the answer failed, so each
+ * write says how to find out before sending it again.
+ * Writes need the
  * Essentials plan: without it Siren answers 403 `plan_required`, raised as
  * `PermissionError`. A connected site's token may read with
  * `connect:records:read` and cannot write.
@@ -36,7 +43,9 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * description) and `metricType`. Deleted distributors are listed too, so
    * filter by `status` to leave them out. Sort with `orderBy` (`id`, `name`,
    * `status`, `dateCreated`) and `order`. Sends through `listRecords` with
-   * {@link LIST_FILTERS}.
+   * {@link LIST_FILTERS}: any other key and an empty filter list throw
+   * `SirenError` before sending, and a 2xx that is not a list throws
+   * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: DistributorListParams = {}): Promise<SirenList<T>> {
     // Stub: slice 4 packet P3
@@ -57,14 +66,25 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
     return Promise.resolve({} as T);
   }
 
-  /** Creates a distributor with `POST /distributors`, sent once, and answers it, status 201. */
+  /**
+   * Creates a distributor with `POST /distributors`, sent once, and answers
+   * it, status 201. Siren answers 400, raised as `BadRequestError`, for a
+   * field it refuses. Siren takes a second create as a new distributor, so
+   * after a lost answer, search with `list({ s })` for the name before
+   * sending again.
+   */
   create(params: CreateDistributorParams): Promise<T> {
     // Stub: slice 4 packet P3
     void params;
     return Promise.resolve({} as T);
   }
 
-  /** Updates a distributor with `PUT /distributors/{id}`, sent once. Send only the fields to change. */
+  /**
+   * Updates a distributor with `PUT /distributors/{id}`, sent once. Send
+   * only the fields to change. Throws `NotFoundError` for an unknown id.
+   * Sending it again after a lost answer sets the same values, so it is
+   * safe.
+   */
   update(id: number, params: UpdateDistributorParams): Promise<T> {
     // Stub: slice 4 packet P3
     void id;
@@ -75,7 +95,11 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
   /**
    * Deletes a distributor with `DELETE /distributors/{id}`, sent once. The
    * first call marks it `deleted` and answers it, and a second call removes
-   * it and answers `null`.
+   * it and answers `null`. Throws `NotFoundError` for an unknown id. Do not
+   * resend a lost first delete blindly, since a second call removes the
+   * distributor for good. Read it with {@link retrieve} first: status
+   * `deleted` means the first call worked, and `NotFoundError` means it is
+   * gone.
    */
   delete(id: number): Promise<T | null> {
     // Stub: slice 4 packet P3
@@ -85,9 +109,13 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
 
   /**
    * Runs a bulk action with `POST /distributors/bulk`, sent once. Takes 1 to
-   * 500 ids. `permanent_delete` deletes nothing unless every distributor is
-   * already `deleted`, and answers 409, raised as `ConflictError`, when one
-   * is not.
+   * 500 ids and no extra, since Siren reads only the action and ids.
+   * `permanent_delete` deletes nothing unless every distributor is already
+   * `deleted`, and answers 409, raised as `ConflictError`, when one is not.
+   * Siren answers `{ success, affected }` and skips ids it cannot find, so
+   * an `affected` lower than the number of ids sent means some were
+   * skipped. A status action sets the same status again, so a resend after
+   * a lost answer is safe, though `affected` may differ.
    */
   bulk(action: DistributorBulkAction, ids: readonly number[]): Promise<BulkResult> {
     // Stub: slice 4 packet P3
@@ -100,7 +128,10 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * Credits a manual metric to a collaborator on every active distributor
    * that counts manual metrics, with `POST /distributors/credit-metric`,
    * body `{ collaboratorId }` plus `points` when given, sent once: a second
-   * send would credit twice. `points` (a whole number from 1 to
+   * send would credit twice, since Siren adds each credit to the
+   * collaborator's metric, and Siren takes no idempotency key for it. Treat
+   * a lost answer as unknown, and check the distributor's metrics in
+   * Siren's dashboard before sending it again. `points` (a whole number from 1 to
    * 1,000,000,000,000) is needed for a distributor with no point value of
    * its own. Answers `{ success, credited, notCredited }`.
    *

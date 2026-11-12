@@ -281,6 +281,8 @@ describe('P5: credits ledger and hold lists', () => {
   it.skip.each([
     ['entries', (c: CreditsResource) => c.entries({ collaboratorId: 4, sourceID: 'x' } as never), 'sourceID'],
     ['entries, a list of collaborators', (c: CreditsResource) => c.entries({ idempotencyKey: 'order-91', collaboratorId: [4, 5] } as never), 'collaboratorId'],
+    ['entries, a zero collaborator beside a key', (c: CreditsResource) => c.entries({ idempotencyKey: 'order-91', collaboratorId: 0 }), 'collaboratorId'],
+    ['holds, a zero collaborator beside a reference', (c: CreditsResource) => c.holds({ reference: 'hold:woocommerce:cart-9f2', collaboratorId: 0 }), 'collaboratorId'],
     ['holds, an empty status list', (c: CreditsResource) => c.holds({ collaboratorId: 4, status: [] }), 'status'],
     ['holds', (c: CreditsResource) => c.holds({ collaboratorId: 4, propertyId: 5 } as never), 'propertyId'],
   ])('%s refuses a key it does not send, naming it', async (_name, call, key) => {
@@ -421,5 +423,31 @@ describe('P5: credits holdReference', () => {
     ['a platform over 60', 'p'.repeat(61), 'cart'],
   ])('refuses %s with SirenError', (_label, platformId, token) => {
     expect(() => CreditsResource.holdReference(platformId, token)).toThrow(SirenError);
+  });
+});
+
+describe('P5: a checkout through one transport', () => {
+  it.skip("reads the balance, places a hold, finds it by reference and releases it, in Siren's order", async () => {
+    const { http, credits } = over([
+      reply(200, CreditAnswers.checkoutBalances),
+      reply(201, CreditAnswers.hold),
+      reply(200, page([CreditAnswers.hold])),
+      reply(200, CreditAnswers.released),
+    ]);
+    const reference = CreditsResource.holdReference('woocommerce', 'cart-9f2');
+
+    expect(await credits.checkoutBalance(4, 'STORE_CREDIT', reference)).not.toBeNull();
+    const placed = await credits.placeHold(4, 'STORE_CREDIT', 250, 'cart-9f2', 'woocommerce');
+    const [found] = [...(await credits.holds({ reference }))];
+    const released = await credits.releaseHold(found!.id);
+
+    expect(placed.id).toBe(found!.id);
+    expect(released.status).toBe(CreditHoldStatus.Released);
+    expect(http.requests.map((request) => [request.method, pathOf(request), queryOf(request)])).toEqual([
+      ['GET', '/credit-balances', { collaboratorId: '4', currency: 'STORE_CREDIT', excludeReference: 'hold:woocommerce:cart-9f2' }],
+      ['POST', '/credit-holds', {}],
+      ['GET', '/credit-holds', { reference: 'hold:woocommerce:cart-9f2' }],
+      ['DELETE', `/credit-holds/${CreditAnswers.hold.id}`, {}],
+    ]);
   });
 });

@@ -191,6 +191,12 @@ export async function retrieveRecord<T>(
  * `list()` reads one page, and `retrieve(id)` reads one conversion. Both take
  * an API key that holds `ledger:conversions:read`, a dashboard session's
  * token, or a connected site's token with `connect:records:read`.
+ *
+ * The writes are sent once, apart from the one resend after a 401 that
+ * every request gets. A write's answer is lost when it throws
+ * `ConnectionError` or a 5xx `ApiError`. Siren may have written before the
+ * answer failed, so each write says how to find out before sending it
+ * again.
  */
 export class ConversionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
   constructor(http: HttpTransport) {
@@ -222,6 +228,10 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * Throws `SirenError` before sending when `engagementId`, or a
    * `transactionId` or `obligationId` that is present, is not a positive
    * whole number. A connected site's token cannot write conversions.
+   *
+   * Siren takes a second create as a new conversion. After a lost answer,
+   * list the conversions by `engagementId` or `transactionId` before
+   * sending again.
    */
   create(params: CreateConversionParams): Promise<T> {
     // Stub: slice 4 packet P8
@@ -236,7 +246,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * to see the result: setting `approved` runs Siren's approval, which
    * stores the conversion as `complete`. Throws `NotFoundError` for an
    * unknown id, and `UnexpectedResponseError` for a 2xx body that is
-   * neither empty nor a JSON object.
+   * neither empty nor a JSON object. Sending it again after a lost answer
+   * sets the same values, so it is safe.
    */
   update(id: number, params: UpdateConversionParams): Promise<T | null> {
     // Stub: slice 4 packet P8
@@ -249,7 +260,10 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * Deletes a conversion with `DELETE /conversions/{id}`, sent once. The
    * first call marks it `deleted` and answers it, and a second call removes
    * it and answers `null`. Siren answers 409, raised as `ConflictError`, when
-   * an obligation it issued still blocks the removal.
+   * an obligation it issued still blocks the removal. Do not resend a lost
+   * first delete blindly, since a second call removes the conversion for
+   * good. Read it with {@link retrieve} first: status `deleted` means the
+   * first call worked, and `NotFoundError` means it is gone.
    */
   delete(id: number): Promise<T | null> {
     // Stub: slice 4 packet P8
@@ -259,7 +273,14 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
 
   /**
    * Runs a bulk action with `POST /conversions/bulk`, sent once. Takes 1 to
-   * 500 ids. `approve` stores each conversion as `complete`.
+   * 500 ids and no extra, since Siren reads only the action and ids.
+   * `approve` stores each conversion as `complete`. Siren answers
+   * `{ success, affected }` and skips ids it cannot find or change, so an
+   * `affected` lower than the number of ids sent means some were skipped.
+   * `permanent_delete` takes only deleted conversions, and answers 409,
+   * raised as `ConflictError`, with nothing deleted when one is not or an
+   * obligation blocks it. A status action sets the same status again, so a
+   * resend after a lost answer is safe, though `affected` may differ.
    */
   bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {
     // Stub: slice 4 packet P8
@@ -287,6 +308,12 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
  * `list()` reads one page, and `retrieve(id)` reads one transaction. Both take
  * an API key that holds `ledger:transactions:read`, a dashboard session's
  * token, or a connected site's token with `connect:records:read`.
+ *
+ * The writes are sent once, apart from the one resend after a 401 that
+ * every request gets. A write's answer is lost when it throws
+ * `ConnectionError` or a 5xx `ApiError`. Siren may have written before the
+ * answer failed, so each write says how to find out before sending it
+ * again.
  */
 export class TransactionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
   constructor(http: HttpTransport) {
@@ -336,6 +363,11 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * Commerce sales go through `events.sale()` instead, which runs
    * attribution. This call records a transaction directly.
    *
+   * Send a binding whenever the outside record has an id. Then a resend
+   * after a lost answer is safe, since its 409 means the first send worked.
+   * Without a binding, Siren takes a resend as a second transaction, so
+   * check with `list` before sending again.
+   *
    * Throws `SirenError` before sending, with exactly `transactions.create()
    * needs details: a list of 1 to 500 lines.`, when `details` is missing, not
    * an array, empty or longer than 500, or holds a line that is not an
@@ -349,8 +381,12 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
 
   /**
    * Runs a bulk action with `POST /transactions/bulk`, sent once. Takes 1 to
-   * 500 ids. `cancel` and `refund` set the status, and `delete` removes the
-   * transactions at once.
+   * 500 ids and no extra, since Siren reads only the action and ids.
+   * `cancel` and `refund` set the status, and `delete` removes the
+   * transactions at once. Siren answers `{ success, affected }` and skips
+   * ids it cannot find, so an `affected` lower than the number of ids sent
+   * means some were skipped. A resend after a lost answer is safe, though
+   * `affected` may differ.
    */
   bulk(action: TransactionBulkAction, ids: readonly number[]): Promise<BulkResult> {
     // Stub: slice 4 packet P9
@@ -364,7 +400,14 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * `POST /transactions/credit-collaborator`, body `{ transactionIds,
    * collaboratorId }` plus `type` when given, sent once, which makes a
    * conversion for each. `type` sets the conversion type, `sale` when it is
-   * left out. Answers `{ success, affected }`.
+   * left out. Answers `{ success, affected }`. Siren drops ids it cannot
+   * find, so an `affected` lower than the number of ids sent means some were
+   * not credited.
+   *
+   * A second send makes a second conversion for each transaction, and Siren
+   * takes no idempotency key for it. After a lost answer, list the
+   * conversions by `transactionId` and credit only the transactions that
+   * have none.
    *
    * Throws `SirenError` before sending when `transactionIds` is not a
    * non-empty array of at most 500 positive whole numbers, `collaboratorId`

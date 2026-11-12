@@ -125,9 +125,16 @@ describe('P8: conversions update', () => {
     );
   });
 
-  it.skip('raises NotFoundError for an unknown conversion, and UnexpectedResponseError for a body that is not an object', async () => {
+  it.skip('raises NotFoundError for an unknown conversion, and UnexpectedResponseError with the status for a body that is not an object', async () => {
     await expect(over([reply(404, notFoundById)]).conversions.update(99, { type: 'lead' })).rejects.toBeInstanceOf(NotFoundError);
     await expect(over([textReply]).conversions.update(61, { type: 'lead' })).rejects.toBeInstanceOf(UnexpectedResponseError);
+    for (const body of [[ConversionAnswers.created], 'ok', 7]) {
+      const error = await over([reply(200, body)])
+        .conversions.update(61, { type: 'lead' })
+        .catch((thrown: unknown) => thrown);
+      expect(error, JSON.stringify(body)).toBeInstanceOf(UnexpectedResponseError);
+      expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    }
   });
 });
 
