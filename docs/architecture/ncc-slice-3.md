@@ -164,7 +164,7 @@ Method names, parameters and answers otherwise follow PHP one for one.
 | P7 | `CollaboratorGroupMembersResource` | P1 | no |
 | P8 | `ProgramsResource` | P1 | yes |
 | P9 | `ProgramGroupsResource` | P1 | yes |
-| P10 | four client fields | P3, P6, P8, P9, slice 5 merged | yes |
+| P10 | four client fields | P1 to P9, slice 5 merged | yes |
 | P11 | README, CHANGELOG, openapi | P10 | no |
 
 ## Tests
