@@ -69,7 +69,7 @@
     "id": "p4-newest-order-by",
     "file": "src/resources/collaborator-aliases.ts",
     "find": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'DESC' } as const;",
-    "replace": "const NEWEST = { number: 1, orderBy: 'id', order: 'DESC' } as const;",
+    "replace": "const NEWEST = { number: 1, orderBy: 'code', order: 'DESC' } as const;",
     "expect": "caught",
     "failing": [
       "asks for the newest holder"
