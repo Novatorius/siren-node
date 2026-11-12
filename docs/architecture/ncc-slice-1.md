@@ -91,9 +91,9 @@ records it.
   500 ms, doubling each time up to 8 s, and a `Retry-After` header sets the
   wait instead, also capped at 8 s. The two catalog reads, `events.sale` and
   `events.refund` are marked `retriable`, and tests pin each one.
-  `events.siteVisited` is not, as packet P9 makes it, because Siren records
-  every visit it receives. `events.ingest` is not, whatever its slug, and
-  neither is a sale with no `externalId`, as packet P10 makes them. A sale
+  `events.siteVisited` is not, because Siren records every visit it
+  receives. `events.ingest` is not, whatever its slug, and neither is a sale
+  with no `externalId`. A sale
   that carries an `externalId`, test or real, keeps its retry, and a test
   pins that. A caller with a durable queue sets
   `maxRetries: 0`, because the queue owns redelivery, and an SDK retry inside
@@ -120,8 +120,8 @@ records it.
   attempt. A `duplicate` status in the result is a success. Siren records
   every visit it receives (`SiteVisitedFactory`), so a visit is sent once.
   Siren matches no key on a custom event either, so `events.ingest` is sent
-  once. That rule holds for every slug, which keeps
-  `ingest('site-visited', ...)` from retrying a visit around P9. A test sale
+  once. That rule holds for every slug, so
+  `ingest('site-visited', ...)` is sent once, the same as `siteVisited`. A test sale
   with no `externalId`, or a `null` one, gets a random id from
   `SaleEventFactory` (`first-call-` and 8 hex digits). A resent one records a
   second test transaction, so the organization's test history shows two

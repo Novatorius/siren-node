@@ -139,7 +139,7 @@ describe('P10: CHANGELOG and README', () => {
     return retries.test(sentence) && !/\b(never|not|no longer)\b/i.test(sentence);
   }
 
-  it.skip('say events.ingest and a sale with no externalId are sent once, and never that custom events retry', () => {
+  it('say events.ingest and a sale with no externalId are sent once, and never that custom events retry', () => {
     for (const [name, text] of [
       ['README.md', read('README.md')],
       ['CHANGELOG Unreleased', unreleased()],

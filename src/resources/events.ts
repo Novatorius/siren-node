@@ -20,9 +20,6 @@ import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '.
  * which Siren records every time it arrives, a custom event sent through
  * `ingest`, whatever its slug, and a sale with no `externalId`, which Siren
  * gives a random id when it is a test and refuses when it is not.
- *
- * Stub: slice 1 packet P10 makes `ingest` and a sale with no `externalId`
- * go out once. Until then both are marked retriable.
  */
 export class EventsResource {
   constructor(private readonly http: HttpClient) {}
@@ -46,7 +43,7 @@ export class EventsResource {
     if (items !== undefined) {
       payload.items = items.map((item) => ({ ...item, quantity: item.quantity ?? 1 }));
     }
-    return this.send(EventSlug.Sale, payload, true);
+    return this.send(EventSlug.Sale, payload, params.externalId != null);
   }
 
   /**
@@ -77,7 +74,7 @@ export class EventsResource {
    * `siteVisited`.
    */
   ingest(slug: string, payload: Record<string, unknown>): Promise<EventResult> {
-    return this.send(slug, payload, true);
+    return this.send(slug, payload, false);
   }
 
   /**
