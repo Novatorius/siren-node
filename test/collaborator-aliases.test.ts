@@ -36,10 +36,6 @@ import {
  * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource, reached through a real
  * CollaboratorsResource, over the real HttpTransport, with a FakeHttpClient
  * at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P4 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -58,7 +54,7 @@ describe('P4: aliases surface', () => {
 });
 
 describe('P4: aliases.query', () => {
-  it.skip('reads GET /collaborator-aliases with filters, sorting and paging, and answers plain records', async () => {
+  it('reads GET /collaborator-aliases with filters, sorting and paging, and answers plain records', async () => {
     const { http, aliases } = over([
       reply(200, page([CollaboratorAnswers.alias, CollaboratorAnswers.dashboardAlias], 2, 20, 20)),
     ]);
@@ -91,7 +87,7 @@ describe('P4: aliases.query', () => {
     expect(list.estimatedCount).toBe(2);
   });
 
-  it.skip('trims each code it sends', async () => {
+  it('trims each code it sends', async () => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     await aliases.query({ code: [' SAVE10 ', 'VIP '] });
@@ -99,11 +95,11 @@ describe('P4: aliases.query', () => {
     expect(queryOf(http.requests[0])).toEqual({ code: 'SAVE10,VIP' });
   });
 
-  it.skip('retries like a read', async () => {
+  it('retries like a read', async () => {
     await expectRetried((transport) => resource(transport).query(), reply(200, page([CollaboratorAnswers.alias])));
   });
 
-  it.skip('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+  it('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
     const { aliases } = over([reply(200, malformedSuccess)]);
 
     await expect(aliases.query()).rejects.toBeInstanceOf(UnexpectedResponseError);
@@ -111,7 +107,7 @@ describe('P4: aliases.query', () => {
 });
 
 describe('P4: aliases.findByCode and forCollaborator', () => {
-  it.skip('asks for the newest holder of the code under the plain type', async () => {
+  it('asks for the newest holder of the code under the plain type', async () => {
     const { http, aliases } = over([reply(200, page([CollaboratorAnswers.alias], 1, 1))]);
 
     expect(await aliases.findByCode(' SAVE10 ', 'coupon')).toEqual({
@@ -131,7 +127,7 @@ describe('P4: aliases.findByCode and forCollaborator', () => {
     });
   });
 
-  it.skip('asks for a collaborator newest code of one type', async () => {
+  it('asks for a collaborator newest code of one type', async () => {
     const { http, aliases } = over([reply(200, page([CollaboratorAnswers.dashboardAlias], 1, 1))]);
 
     expect(await aliases.forCollaborator(4, CollaboratorAliasType.Tracking)).toEqual({
@@ -150,27 +146,27 @@ describe('P4: aliases.findByCode and forCollaborator', () => {
     });
   });
 
-  it.skip('answers null when nobody holds the code', async () => {
+  it('answers null when nobody holds the code', async () => {
     const { aliases } = over([reply(200, page([]))]);
 
     expect(await aliases.findByCode('NOPE', 'coupon')).toBeNull();
     expect(await aliases.forCollaborator(4, 'coupon')).toBeNull();
   });
 
-  it.skip('reads an integration coupon type as given', async () => {
+  it('reads an integration coupon type as given', async () => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     expect(await aliases.findByCode('SAVE10', 'coupon@source:wc')).toBeNull();
     expect(queryOf(http.requests[0])).toMatchObject({ code: 'SAVE10', type: 'coupon@source:wc' });
   });
 
-  it.skip('throws UnexpectedResponseError for a list answer of the wrong shape, never null', async () => {
+  it('throws UnexpectedResponseError for a list answer of the wrong shape, never null', async () => {
     const { aliases } = over([reply(200, { items: { code: 'SAVE10' } })]);
 
     await expect(aliases.findByCode('SAVE10', 'coupon')).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip.each([
+  it.each([
     ['no type', { code: 'SAVE10', collaboratorId: 4, dateIssued: '2026-10-16 12:00:00' }],
     ['a numeric type', { code: 'SAVE10', type: 5, collaboratorId: 4, dateIssued: '2026-10-16 12:00:00' }],
   ])('findByCode and query throw UnexpectedResponseError for a code row with %s', async (_label, row) => {
@@ -180,14 +176,14 @@ describe('P4: aliases.findByCode and forCollaborator', () => {
     await expect(aliases.query()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('retries both like reads', async () => {
+  it('retries both like reads', async () => {
     await expectRetried((transport) => resource(transport).findByCode('SAVE10', 'coupon'), reply(200, page([])));
     await expectRetried((transport) => resource(transport).forCollaborator(4, 'coupon'), reply(200, page([])));
   });
 });
 
 describe('P4: aliases.create', () => {
-  it.skip('posts the trimmed code and the plain type, and answers the plain record', async () => {
+  it('posts the trimmed code and the plain type, and answers the plain record', async () => {
     const { http, aliases } = over([reply(201, CollaboratorAnswers.alias)]);
 
     expect(await aliases.create(' SAVE10 ', 'coupon', 4)).toEqual({
@@ -202,7 +198,7 @@ describe('P4: aliases.create', () => {
     expect(bodyOf(http.requests[0])).toEqual({ code: 'SAVE10', type: 'coupon', collaboratorId: 4 });
   });
 
-  it.skip('raises CodeConflictError from the 409 Siren answers for a held code, after one send', async () => {
+  it('raises CodeConflictError from the 409 Siren answers for a held code, after one send', async () => {
     const { http, aliases } = over([reply(409, CollaboratorAnswers.codeHeld), reply(201, CollaboratorAnswers.alias)]);
 
     const error = await aliases.create(' SAVE10 ', 'coupon', 4).catch((thrown: unknown) => thrown);
@@ -220,7 +216,7 @@ describe('P4: aliases.create', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip('passes a refusal that is not a conflict through unchanged', async () => {
+  it('passes a refusal that is not a conflict through unchanged', async () => {
     const { aliases } = over([reply(403, CollaboratorAnswers.programNotOnSite)]);
 
     const error = await aliases.create('SAVE10', 'coupon', 4).catch((thrown: unknown) => thrown);
@@ -229,13 +225,13 @@ describe('P4: aliases.create', () => {
     expect(error).not.toBeInstanceOf(CodeConflictError);
   });
 
-  it.skip('is sent once', async () => {
+  it('is sent once', async () => {
     await expectSentOnce((transport) => resource(transport).create('SAVE10', 'coupon', 4), reply(201, CollaboratorAnswers.alias));
   });
 });
 
 describe('P4: aliases.free', () => {
-  it.skip('deletes one code of one type by query, with no body', async () => {
+  it('deletes one code of one type by query, with no body', async () => {
     const { http, aliases } = over([reply(200, CollaboratorAnswers.freed)]);
 
     expect(await aliases.free(' SAVE10 ', 'coupon')).toEqual({ deleted: true });
@@ -245,7 +241,7 @@ describe('P4: aliases.free', () => {
     expect(http.requests[0]!.body).toBeUndefined();
   });
 
-  it.skip('raises a site refusal as PolicyError', async () => {
+  it('raises a site refusal as PolicyError', async () => {
     const { aliases } = over([reply(403, CollaboratorAnswers.userTypeNotAllowed)]);
 
     const error = await aliases.free('SAVE10', 'user').catch((thrown: unknown) => thrown);
@@ -254,13 +250,13 @@ describe('P4: aliases.free', () => {
     expect((error as PolicyError).param).toBe('type');
   });
 
-  it.skip('is sent once', async () => {
+  it('is sent once', async () => {
     await expectSentOnce((transport) => resource(transport).free('SAVE10', 'coupon'), reply(200, CollaboratorAnswers.freed));
   });
 });
 
 describe('P4: aliases on the collaborator record', () => {
-  it.skip('lists the record aliases field', async () => {
+  it('lists the record aliases field', async () => {
     const entries = [
       { code: 'FLO', type: 'tracking', issuedDate: '2026-01-15T10:30:00+00:00' },
       { code: 'SAVE10', type: 'coupon', issuedDate: '2026-10-16T12:00:00+00:00' },
@@ -273,13 +269,13 @@ describe('P4: aliases on the collaborator record', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,aliases' });
   });
 
-  it.skip('answers an empty list when the record has an empty aliases field', async () => {
+  it('answers an empty list when the record has an empty aliases field', async () => {
     const { aliases } = over([reply(200, { id: 4, aliases: [] })]);
 
     expect(await aliases.list(4)).toEqual([]);
   });
 
-  it.skip.each([
+  it.each([
     ['no aliases field', { id: 4 }],
     ['an aliases field that is not a list', { id: 4, aliases: { code: 'FLO' } }],
     ['an entry that is a string', { id: 4, aliases: [{ code: 'FLO', type: 'tracking' }, 'junk'] }],
@@ -295,7 +291,7 @@ describe('P4: aliases on the collaborator record', () => {
     expect((error as UnexpectedResponseError).message).toContain('4');
   });
 
-  it.skip('reads the referral code, or null when it is null or empty', async () => {
+  it('reads the referral code, or null when it is null or empty', async () => {
     const { http, aliases } = over([
       reply(200, { id: 4, referralCode: 'FLO' }),
       reply(200, { id: 4, referralCode: null }),
@@ -309,7 +305,7 @@ describe('P4: aliases on the collaborator record', () => {
     expect(pathOf(http.requests[0])).toBe('/collaborators/4');
   });
 
-  it.skip.each([
+  it.each([
     ['no referralCode field', { id: 4 }],
     ['a numeric referralCode', { id: 4, referralCode: 5 }],
     ['a referralCode list', { id: 4, referralCode: ['FLO'] }],
@@ -324,7 +320,7 @@ describe('P4: aliases on the collaborator record', () => {
     expect((error as UnexpectedResponseError).message).toContain('4');
   });
 
-  it.skip('puts the trimmed tracking code as trackingId and answers the collaborator', async () => {
+  it('puts the trimmed tracking code as trackingId and answers the collaborator', async () => {
     const { http, aliases } = over([reply(200, CollaboratorAnswers.updated)]);
 
     expect(await aliases.setTrackingCode(4, ' ADA2 ')).toEqual(CollaboratorAnswers.updated);
@@ -333,7 +329,7 @@ describe('P4: aliases on the collaborator record', () => {
     expect(bodyOf(http.requests[0])).toEqual({ trackingId: 'ADA2' });
   });
 
-  it.skip('raises the 400 for a code another collaborator holds as BadRequestError', async () => {
+  it('raises the 400 for a code another collaborator holds as BadRequestError', async () => {
     const { aliases } = over([reply(400, CollaboratorAnswers.trackingTaken)]);
 
     const error = await aliases.setTrackingCode(4, 'TAKEN').catch((thrown: unknown) => thrown);
@@ -342,7 +338,7 @@ describe('P4: aliases on the collaborator record', () => {
     expect((error as BadRequestError).fieldErrors[0]?.field).toBe('trackingId');
   });
 
-  it.skip('retries the reads and sends setTrackingCode once', async () => {
+  it('retries the reads and sends setTrackingCode once', async () => {
     await expectRetried((transport) => resource(transport).list(4), reply(200, { id: 4, aliases: [] }));
     await expectRetried((transport) => resource(transport).trackingCode(4), reply(200, { id: 4, referralCode: 'FLO' }));
     await expectSentOnce((transport) => resource(transport).setTrackingCode(4, 'ADA2'), reply(200, CollaboratorAnswers.updated));
@@ -352,7 +348,7 @@ describe('P4: aliases on the collaborator record', () => {
 describe('P4: aliases refuse bad input before sending', () => {
   const malformed = ['', 'coupon@property:5', 'coupon,tracking', 'coupon ', 'coupon\n', 'cupón'];
 
-  it.skip.each(malformed)('every method that takes a type refuses %j', async (type) => {
+  it.each(malformed)('every method that takes a type refuses %j', async (type) => {
     const { http, aliases } = over([reply(200, page([]))]);
     const calls: Array<() => Promise<unknown>> = [
       () => aliases.findByCode('SAVE10', type),
@@ -370,7 +366,7 @@ describe('P4: aliases refuse bad input before sending', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('every method that takes a type accepts an integration coupon type', async () => {
+  it('every method that takes a type accepts an integration coupon type', async () => {
     const { http, aliases } = over([reply(200, page([])), reply(200, page([])), reply(200, page([])), reply(201, CollaboratorAnswers.alias), reply(200, CollaboratorAnswers.freed)]);
 
     await aliases.findByCode('SAVE10', 'coupon@source:wc');
@@ -384,7 +380,7 @@ describe('P4: aliases refuse bad input before sending', () => {
     expect(queryOf(http.requests[4])).toEqual({ code: 'SAVE10', type: 'coupon@source:wc' });
   });
 
-  it.skip('refuses an empty type or code list and a type that is not a string', async () => {
+  it('refuses an empty type or code list and a type that is not a string', async () => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     await expect(aliases.query({ type: [] })).rejects.toBeInstanceOf(SirenError);
@@ -393,7 +389,7 @@ describe('P4: aliases refuse bad input before sending', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { collaboratorID: 4 }],
     ['an empty collaborator list', { collaboratorId: [] }],
@@ -408,7 +404,7 @@ describe('P4: aliases refuse bad input before sending', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('every method that takes a code refuses one with a comma', async () => {
+  it('every method that takes a code refuses one with a comma', async () => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     await expect(aliases.findByCode('SAVE10,VIP', 'coupon')).rejects.toBeInstanceOf(SirenError);
@@ -420,14 +416,14 @@ describe('P4: aliases refuse bad input before sending', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each([[0], [[4, 0]], [['4']], [[1.5]]])('query refuses collaboratorId %j', async (collaboratorId) => {
+  it.each([[0], [[4, 0]], [['4']], [[1.5]]])('query refuses collaboratorId %j', async (collaboratorId) => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     await expect(aliases.query({ collaboratorId } as never)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each(['', '   '])('every method that takes a code refuses %j', async (code) => {
+  it.each(['', '   '])('every method that takes a code refuses %j', async (code) => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     await expect(aliases.findByCode(code, 'coupon')).rejects.toBeInstanceOf(SirenError);
@@ -437,7 +433,7 @@ describe('P4: aliases refuse bad input before sending', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('every method that takes a collaborator id refuses one below 1', async () => {
+  it('every method that takes a collaborator id refuses one below 1', async () => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     await expect(aliases.list(0)).rejects.toBeInstanceOf(SirenError);
