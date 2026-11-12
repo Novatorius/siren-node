@@ -11,10 +11,12 @@ import type {
   UpdateCollaboratorParams,
 } from '../record-types';
 import type { SirenList } from '../types';
+import { SirenError } from '../errors';
 import { CollaboratorBulkAction } from '../taxonomy';
 import { CollaboratorAliasesResource } from './collaborator-aliases';
 import { ProgramEnrollmentsResource } from './program-enrollments';
-import { RecordsResource } from './records';
+import { bulkRecords, deleteRecord, listRecords, readObject, recordId, writeRecord } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
 
 /**
@@ -31,6 +33,20 @@ export const COLLABORATOR_BINDING_FIELDS = ['programs', 'distributors', 'groups'
  * SDK leaves it out of the site path.
  */
 export const SITE_UPDATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname'] as const;
+
+/** The keys `createPending()` refuses: the bindings and `status`, which Siren sets. */
+const PENDING_REFUSED_FIELDS: readonly string[] = [...COLLABORATOR_BINDING_FIELDS, 'status'];
+
+/**
+ * The one extra each bulk action takes, by action. An action missing here
+ * takes none.
+ */
+const BULK_EXTRA: Readonly<Partial<Record<CollaboratorBulkAction, 'programId' | 'distributorId'>>> = {
+  [CollaboratorBulkAction.AddToProgram]: 'programId',
+  [CollaboratorBulkAction.RemoveFromProgram]: 'programId',
+  [CollaboratorBulkAction.AddToDistributor]: 'distributorId',
+  [CollaboratorBulkAction.RemoveFromDistributor]: 'distributorId',
+};
 
 /**
  * Collaborators (`/collaborators`): the affiliates, partners and referrers a
@@ -85,10 +101,14 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * array with Siren's `total` as `estimatedCount`. A 2xx that is not a list
    * throws `UnexpectedResponseError`, never an empty page.
    */
-  override list(params: CollaboratorListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 3 packet P3
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+  override async list(params: CollaboratorListParams = {}): Promise<SirenList<T>> {
+    return listRecords<T>(
+      this.http,
+      this.path,
+      params,
+      CollaboratorsResource.LIST_FILTERS,
+      CollaboratorsResource.ID_FILTERS,
+    );
   }
 
   /**
@@ -103,11 +123,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * when Siren has no such collaborator, and `UnexpectedResponseError` when
    * a 2xx body is not a JSON object.
    */
-  retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 3 packet P3
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 
   /**
@@ -119,10 +136,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * collaborator with the same email. List with `{ email }` to find the one
    * the first send made.
    */
-  create(params: CreateCollaboratorParams): Promise<T> {
-    // Stub: slice 3 packet P3
-    void params;
-    return Promise.resolve({} as T);
+  async create(params: CreateCollaboratorParams): Promise<T> {
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -151,10 +166,15 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * person to confirm. Once they confirm, Siren merges it into their
    * collaborator and deletes it, so look them up again by email after that.
    */
-  createPending(params: CreatePendingCollaboratorParams): Promise<T> {
-    // Stub: slice 3 packet P3
-    void params;
-    return Promise.resolve({} as T);
+  async createPending(params: CreatePendingCollaboratorParams): Promise<T> {
+    for (const key of Object.keys(params)) {
+      if (PENDING_REFUSED_FIELDS.includes(key)) {
+        throw new SirenError(
+          `createPending cannot send "${key}". Siren sets a pending collaborator's status, and a site enrolls them with enrollments.add() afterwards.`,
+        );
+      }
+    }
+    return writeRecord<T>(this.http, 'POST', this.path, { ...params, status: 'pending' });
   }
 
   /**
@@ -164,11 +184,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * `fields` is the custom-field map, and the answer carries it back when it
    * is sent. Sending it again after a lost answer sets the same values, so it is safe.
    */
-  update(id: number, params: UpdateCollaboratorParams): Promise<T> {
-    // Stub: slice 3 packet P3
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async update(id: number, params: UpdateCollaboratorParams): Promise<T> {
+    return writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'update')}`, params);
   }
 
   /**
@@ -187,11 +204,14 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * The message is exactly `updateDetails cannot send "{key}". A connected
    * site changes only fullName and nickname.` Sending it again after a lost answer sets the same values, so it is safe.
    */
-  updateDetails(id: number, params: UpdateCollaboratorDetailsParams): Promise<T> {
-    // Stub: slice 3 packet P3
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async updateDetails(id: number, params: UpdateCollaboratorDetailsParams): Promise<T> {
+    const allowed: readonly string[] = SITE_UPDATABLE_COLLABORATOR_FIELDS;
+    for (const key of Object.keys(params)) {
+      if (!allowed.includes(key)) {
+        throw new SirenError(`updateDetails cannot send "${key}". A connected site changes only fullName and nickname.`);
+      }
+    }
+    return writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'updateDetails')}`, params);
   }
 
   /**
@@ -206,10 +226,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * good. A record with status `deleted` means the first send worked, and
    * `NotFoundError` means the record is gone.
    */
-  delete(id: number): Promise<T | null> {
-    // Stub: slice 3 packet P3
-    void id;
-    return Promise.resolve(null);
+  async delete(id: number): Promise<T | null> {
+    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'delete')}`);
   }
 
   /**
@@ -233,16 +251,20 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * an id already in that status and send no second decision email, so a
    * resend of one is safe.
    */
-  bulk(
+  async bulk(
     action: CollaboratorBulkAction,
     ids: readonly number[],
     extra: Record<string, unknown> = {},
   ): Promise<BulkResult> {
-    // Stub: slice 3 packet P3
-    void action;
-    void ids;
-    void extra;
-    return Promise.resolve({});
+    const needs = BULK_EXTRA[action];
+    for (const key of Object.keys(extra)) {
+      if (key !== needs) {
+        throw new SirenError(`bulk ${action} cannot send "${key}". It takes ${needs === undefined ? 'no extra' : `only ${needs}`}.`);
+      }
+    }
+    // A missing extra reaches recordId as undefined, which refuses it by name.
+    if (needs !== undefined) recordId(extra[needs], 'bulk', needs);
+    return bulkRecords<BulkResult>(this.http, this.path, action, ids, extra);
   }
 
   /**
@@ -250,9 +272,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * /collaborators/status-types`. Throws `UnexpectedResponseError` when a
    * 2xx body is not a JSON object.
    */
-  statusTypes(): Promise<StatusTypes> {
-    // Stub: slice 3 packet P3
-    return Promise.resolve({ options: {} });
+  async statusTypes(): Promise<StatusTypes> {
+    return readObject<StatusTypes>(this.http, `${this.path}/status-types`);
   }
 
   /**
@@ -260,8 +281,7 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * `GET /collaborators/generate-referral-code`. Throws
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
-  generateReferralCode(): Promise<GeneratedReferralCode> {
-    // Stub: slice 3 packet P3
-    return Promise.resolve({ code: '' });
+  async generateReferralCode(): Promise<GeneratedReferralCode> {
+    return readObject<GeneratedReferralCode>(this.http, `${this.path}/generate-referral-code`);
   }
 }
