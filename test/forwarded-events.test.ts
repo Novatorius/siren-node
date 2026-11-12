@@ -33,12 +33,6 @@ import { FakeHttpClient, reply } from './http-fakes';
  *
  * The vocabulary tests at the top hold now: ForwardedEventSlug and the
  * version are written in full in the architecture commit.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`. The packet that removes the last
- * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 const BASE = 'https://api.sirenaffiliates.com/siren/v1';
@@ -151,7 +145,7 @@ describe('forwarded event vocabulary', () => {
 });
 
 describe('P6: events.forward', () => {
-  it.skip('sends one POST to /event/{slug} whose body is the envelope as given, and reads the answer as every event is read', async () => {
+  it('sends one POST to /event/{slug} whose body is the envelope as given, and reads the answer as every event is read', async () => {
     const { http, client } = siren([reply(200, Answers.accepted)]);
 
     const result = await client.events.forward(ForwardedEventSlug.ProductDeleted, productDeleted);
@@ -166,7 +160,7 @@ describe('P6: events.forward', () => {
     expect(header(http.requests[0]!, 'content-type')).toBe('application/json');
   });
 
-  it.skip('sends a sale and reads the sale status', async () => {
+  it('sends a sale and reads the sale status', async () => {
     const { http, client } = siren([reply(200, Answers.saleCreated)]);
 
     const result = await client.events.forward('sale-triggered', sale);
@@ -176,7 +170,7 @@ describe('P6: events.forward', () => {
     expect(JSON.parse(http.requests[0]!.body!)).toEqual(sale);
   });
 
-  it.skip('sends a refund with its optional refundKind beside data', async () => {
+  it('sends a refund with its optional refundKind beside data', async () => {
     const { http, client } = siren([reply(200, Answers.accepted)]);
     const refund: ForwardedEventEnvelope<'refund-triggered'> = {
       ...productDeleted,
@@ -190,7 +184,7 @@ describe('P6: events.forward', () => {
     expect(JSON.parse(http.requests[0]!.body!)).toEqual(refund);
   });
 
-  it.skip.each(CLOUD_SLUGS)('sends %s to its own path', async (slug) => {
+  it.each(CLOUD_SLUGS)('sends %s to its own path', async (slug) => {
     const { http, client } = siren([reply(200, Answers.accepted)]);
 
     await client.events.forward(slug as ForwardedEventSlug, { ...productDeleted, data: {} } as never);
@@ -199,7 +193,7 @@ describe('P6: events.forward', () => {
     expect(http.requests[0]!.url).toBe(`${BASE}/event/${slug}`);
   });
 
-  it.skip("answers Cloud's duplicate as a result, not an error", async () => {
+  it("answers Cloud's duplicate as a result, not an error", async () => {
     const { client } = siren([reply(200, Answers.duplicate)]);
 
     await expect(client.events.forward('product-deleted', productDeleted)).resolves.toMatchObject({ status: 'duplicate' });
@@ -207,7 +201,7 @@ describe('P6: events.forward', () => {
 });
 
 describe('P6: events.forward final attempt header', () => {
-  it.skip('sends X-Siren-Final-Attempt: 1 when finalAttempt is true, beside the SDK headers', async () => {
+  it('sends X-Siren-Final-Attempt: 1 when finalAttempt is true, beside the SDK headers', async () => {
     const { http, client } = siren([reply(200, Answers.accepted)]);
 
     await client.events.forward('product-deleted', productDeleted, { finalAttempt: true });
@@ -221,7 +215,7 @@ describe('P6: events.forward final attempt header', () => {
     expect(header(request, 'user-agent')).toMatch(/^siren-sdk-typescript\//);
   });
 
-  it.skip.each([
+  it.each([
     ['no options', undefined],
     ['finalAttempt false', { finalAttempt: false }],
   ])('sends no X-Siren-Final-Attempt header with %s', async (_name, options) => {
@@ -233,7 +227,7 @@ describe('P6: events.forward final attempt header', () => {
     expect(header(http.requests[0]!, 'x-siren-final-attempt')).toBeUndefined();
   });
 
-  it.skip('sends the header on the one send of a final attempt, and on no other call afterwards', async () => {
+  it('sends the header on the one send of a final attempt, and on no other call afterwards', async () => {
     const { http, client } = siren([reply(503, Answers.unavailable, { 'Retry-After': '0' }), reply(200, Answers.accepted), reply(200, Answers.accepted)]);
 
     await expect(client.events.forward('product-deleted', productDeleted, { finalAttempt: true })).rejects.toBeInstanceOf(ApiError);
@@ -245,7 +239,7 @@ describe('P6: events.forward final attempt header', () => {
 });
 
 describe('P6: events.forward is sent once', () => {
-  it.skip.each([
+  it.each([
     ['a 503', reply(503, Answers.unavailable, { 'Retry-After': '0' }), ApiError],
     ['a 500 with no body', reply(500), ApiError],
     ['a 429', reply(429, Answers.unavailable, { 'Retry-After': '0' }), RateLimitError],
@@ -257,7 +251,7 @@ describe('P6: events.forward is sent once', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip("raises Cloud's 500 waiting_for_record as ApiError with the reason in data, sent once", async () => {
+  it("raises Cloud's 500 waiting_for_record as ApiError with the reason in data, sent once", async () => {
     const { http, client } = siren([reply(500, Answers.waitingForRecord), reply(200, Answers.accepted)], 3);
 
     let caught: unknown;
@@ -273,7 +267,7 @@ describe('P6: events.forward is sent once', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip.each([
+  it.each([
     ['409 cloud_origin', reply(409, Answers.cloudOrigin), ConflictError, 'cloud_origin'],
     ['404 reference_not_found', reply(404, Answers.notFound), NotFoundError, 'reference_not_found'],
     ['422 reference_belongs_to_another_property', reply(422, Answers.otherProperty), ValidationError, 'reference_belongs_to_another_property'],
@@ -292,7 +286,7 @@ describe('P6: events.forward is sent once', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip('resends once with a refreshed token after a 401, keeping the final-attempt header', async () => {
+  it('resends once with a refreshed token after a 401, keeping the final-attempt header', async () => {
     const http = new FakeHttpClient([reply(401, { error: { message: 'Invalid access token.', context: [] } }), reply(200, Answers.accepted)]);
     const refreshed = vi.fn(async () => 'tok-2');
     const client = new Siren({ accessToken: new CallbackAccessTokenSource(() => 'tok-1', refreshed), httpClient: http, maxRetries: 3 });
@@ -305,7 +299,7 @@ describe('P6: events.forward is sent once', () => {
     expect(http.requests[1]!.body).toBe(http.requests[0]!.body);
   });
 
-  it.skip('raises AuthenticationError after a second 401, with two sends in all', async () => {
+  it('raises AuthenticationError after a second 401, with two sends in all', async () => {
     const refused = reply(401, { error: { message: 'Invalid access token.', context: [] } });
     const http = new FakeHttpClient([refused, refused, reply(200, Answers.accepted)]);
     const refreshed = vi.fn(async () => 'tok-2');
@@ -328,7 +322,7 @@ describe('P6: events.forward refusals', () => {
   const secret = 'CUSTOMER-SECRET-VALUE';
   const leaky = { ...productDeleted, data: { integration: 'medusa', platformId: secret } };
 
-  it.skip.each([
+  it.each([
     ['a slug Siren does not forward', 'sale', leaky],
     ['an unknown slug', 'product-deletd', leaky],
     ['an empty slug', '', leaky],
@@ -363,7 +357,7 @@ describe('P6: events.forward refusals', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('refuses an EventSlug that is not a forwarded slug, so a typo never becomes a custom event', async () => {
+  it('refuses an EventSlug that is not a forwarded slug, so a typo never becomes a custom event', async () => {
     const { http, client } = siren([reply(200, Answers.accepted)]);
 
     for (const slug of Object.values(EventSlug).filter((value) => !CLOUD_SLUGS.includes(value))) {
@@ -372,7 +366,7 @@ describe('P6: events.forward refusals', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each([
+  it.each([
     ['an upper-case UUID', { eventId: EVENT_ID.toUpperCase() }],
     ['a version 7 UUID', { eventId: '01932c07-a2b4-7c3d-8e9f-0a1b2c3d4e5f' }],
     ['an occurredAt in UTC with Z', { occurredAt: '2026-11-12T09:30:00Z' }],
