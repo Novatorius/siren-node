@@ -223,6 +223,16 @@
     ]
   },
   {
+    "id": "f1-credit-repeated-row-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "        if (seen.has(row.id)) {",
+    "replace": "        if (seen.has(-1)) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a row an earlier page held"
+    ]
+  },
+  {
     "id": "f1-credit-sends-third-time",
     "file": "src/resources/records.ts",
     "find": "    const result = await this.creditCollaborator(rest, collaboratorId, type);",
