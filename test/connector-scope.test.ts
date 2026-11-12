@@ -32,7 +32,7 @@ describe('ConnectorScope vocabulary', () => {
 });
 
 describe('P6: ConnectorScope.forConnectedSite', () => {
-  it.skip('answers the four scopes in the order of CONNECTED_SITE', () => {
+  it('answers the four scopes in the order of CONNECTED_SITE', () => {
     expect(ConnectorScope.forConnectedSite()).toEqual([
       'connect:*',
       'connect:webhooks',
@@ -42,7 +42,7 @@ describe('P6: ConnectorScope.forConnectedSite', () => {
     expect(ConnectorScope.forConnectedSite().join(' ')).toBe(ConnectorScope.CONNECTED_SITE);
   });
 
-  it.skip('answers a new list each call, so a caller that changes one cannot change the next', () => {
+  it('answers a new list each call, so a caller that changes one cannot change the next', () => {
     const first = ConnectorScope.forConnectedSite();
     first.pop();
 
