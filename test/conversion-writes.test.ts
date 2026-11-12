@@ -24,10 +24,6 @@ import { ConversionAnswers, notFoundById } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P8 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -55,7 +51,7 @@ describe('P8: conversion writes surface', () => {
 });
 
 describe('P8: writeRecordOrNothing', () => {
-  it.skip('sends the body once and answers the JSON object', async () => {
+  it('sends the body once and answers the JSON object', async () => {
     const { http, transport } = transportOver([reply(200, { id: 1 })]);
 
     expect(await writeRecordOrNothing(transport, 'PUT', '/conversions/1', { status: 'approved' })).toEqual({ id: 1 });
@@ -63,12 +59,12 @@ describe('P8: writeRecordOrNothing', () => {
     expect(bodyOf(http.requests[0])).toEqual({ status: 'approved' });
   });
 
-  it.skip('answers null for a 204 and for a 200 with an empty body', async () => {
+  it('answers null for a 204 and for a 200 with an empty body', async () => {
     expect(await writeRecordOrNothing(transportOver([reply(204)]).transport, 'PUT', '/x', {})).toBeNull();
     expect(await writeRecordOrNothing(transportOver([reply(200)]).transport, 'PUT', '/x', {})).toBeNull();
   });
 
-  it.skip.each([
+  it.each([
     ['a JSON array', reply(200, [{ id: 1 }])],
     ['a JSON string', reply(200, 'done')],
     ['a body that is not JSON', textReply],
@@ -79,13 +75,13 @@ describe('P8: writeRecordOrNothing', () => {
     expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 
-  it.skip('is sent once', async () => {
+  it('is sent once', async () => {
     await expectSentOnce((transport) => writeRecordOrNothing(transport, 'PUT', '/x', {}), reply(200));
   });
 });
 
 describe('P8: conversions create', () => {
-  it.skip('creates with POST /conversions and answers the conversion', async () => {
+  it('creates with POST /conversions and answers the conversion', async () => {
     const { http, conversions } = over([reply(201, ConversionAnswers.created)]);
 
     expect(await conversions.create(create)).toEqual(ConversionAnswers.created);
@@ -93,11 +89,11 @@ describe('P8: conversions create', () => {
     expect(bodyOf(http.requests[0])).toEqual(create);
   });
 
-  it.skip('throws UnexpectedResponseError when create answers no object', async () => {
+  it('throws UnexpectedResponseError when create answers no object', async () => {
     await expect(over([reply(201)]).conversions.create(create)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip.each([
+  it.each([
     ['a zero engagementId', { ...create, engagementId: 0 }],
     ['a missing engagementId', { type: 'sale', status: ConversionStatus.Pending }],
     ['a zero transactionId', { ...create, transactionId: 0 }],
@@ -111,7 +107,7 @@ describe('P8: conversions create', () => {
 });
 
 describe('P8: conversions update', () => {
-  it.skip("updates with PUT /conversions/{id} and answers null for Siren's empty 200", async () => {
+  it("updates with PUT /conversions/{id} and answers null for Siren's empty 200", async () => {
     const { http, conversions } = over([reply(200)]);
 
     expect(await conversions.update(61, { status: ConversionStatus.Approved })).toBeNull();
@@ -119,13 +115,13 @@ describe('P8: conversions update', () => {
     expect(bodyOf(http.requests[0])).toEqual({ status: 'approved' });
   });
 
-  it.skip('answers the record when a later Siren sends one', async () => {
+  it('answers the record when a later Siren sends one', async () => {
     expect(await over([reply(200, ConversionAnswers.created)]).conversions.update(61, { type: 'lead' })).toEqual(
       ConversionAnswers.created,
     );
   });
 
-  it.skip('raises NotFoundError for an unknown conversion, and UnexpectedResponseError with the status for a body that is not an object', async () => {
+  it('raises NotFoundError for an unknown conversion, and UnexpectedResponseError with the status for a body that is not an object', async () => {
     await expect(over([reply(404, notFoundById)]).conversions.update(99, { type: 'lead' })).rejects.toBeInstanceOf(NotFoundError);
     await expect(over([textReply]).conversions.update(61, { type: 'lead' })).rejects.toBeInstanceOf(UnexpectedResponseError);
     for (const body of [[ConversionAnswers.created], 'ok', 7]) {
@@ -139,7 +135,7 @@ describe('P8: conversions update', () => {
 });
 
 describe('P8: conversions delete, bulk and types', () => {
-  it.skip('deletes in two stages: the conversion marked deleted, then null', async () => {
+  it('deletes in two stages: the conversion marked deleted, then null', async () => {
     const { http, conversions } = over([reply(200, ConversionAnswers.softDeleted), reply(204)]);
 
     expect(await conversions.delete(61)).toEqual(ConversionAnswers.softDeleted);
@@ -150,11 +146,11 @@ describe('P8: conversions delete, bulk and types', () => {
     ]);
   });
 
-  it.skip('raises a blocked delete as ConflictError', async () => {
+  it('raises a blocked delete as ConflictError', async () => {
     await expect(over([reply(409, ConversionAnswers.deleteBlocked)]).conversions.delete(61)).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it.skip('runs a bulk action with POST /conversions/bulk', async () => {
+  it('runs a bulk action with POST /conversions/bulk', async () => {
     const { http, conversions } = over([reply(200, ConversionAnswers.bulk)]);
 
     expect(await conversions.bulk(ConversionBulkAction.MarkPending, [61, 62])).toEqual(ConversionAnswers.bulk);
@@ -162,7 +158,7 @@ describe('P8: conversions delete, bulk and types', () => {
     expect(http.requests[0]!.body).toBe('{"action":"markPending","ids":[61,62]}');
   });
 
-  it.skip('reads the conversion types from GET /conversions/types, and retries', async () => {
+  it('reads the conversion types from GET /conversions/types, and retries', async () => {
     const { http, conversions } = over([reply(200, ConversionAnswers.types)]);
 
     expect(await conversions.types()).toEqual(ConversionAnswers.types);
@@ -170,18 +166,18 @@ describe('P8: conversions delete, bulk and types', () => {
     await expectRetried((transport) => resource(transport).types(), reply(200, ConversionAnswers.types));
   });
 
-  it.skip('types throws UnexpectedResponseError for a 2xx that is not an object', async () => {
+  it('types throws UnexpectedResponseError for a 2xx that is not an object', async () => {
     await expect(over([reply(200, [{ id: 'sale' }])]).conversions.types()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).create(create), reply(201, ConversionAnswers.created));
     await expectSentOnce((transport) => resource(transport).update(61, { type: 'lead' }), reply(200));
     await expectSentOnce((transport) => resource(transport).delete(61), reply(204));
     await expectSentOnce((transport) => resource(transport).bulk(ConversionBulkAction.Approve, [61]), reply(200, ConversionAnswers.bulk));
   });
 
-  it.skip.each([
+  it.each([
     ['update', (c: ConversionsResource) => c.update(0, { type: 'lead' })],
     ['delete', (c: ConversionsResource) => c.delete(-1)],
     ['bulk, no ids', (c: ConversionsResource) => c.bulk(ConversionBulkAction.Approve, [])],

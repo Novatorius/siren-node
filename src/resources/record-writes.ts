@@ -1,4 +1,6 @@
+import { UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
+import { isJsonObject } from './record-requests';
 import type { RecordWriteMethod } from './record-requests';
 
 /*
@@ -27,10 +29,23 @@ export async function writeRecordOrNothing<T>(
   path: string,
   body: unknown,
 ): Promise<T | null> {
-  // Stub: slice 4 packet P8
-  void http;
-  void method;
-  void path;
-  void body;
-  return null;
+  const response = await http.request({ method, path, body, retriable: false });
+  const text = await response.text();
+  if (text === '') return null;
+  let answer: unknown;
+  try {
+    answer = JSON.parse(text) as unknown;
+  } catch {
+    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not JSON.`, {
+      statusCode: response.status,
+      data: text,
+    });
+  }
+  if (!isJsonObject(answer)) {
+    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`, {
+      statusCode: response.status,
+      data: answer,
+    });
+  }
+  return answer as T;
 }

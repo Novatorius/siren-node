@@ -11,7 +11,8 @@ import type {
 } from '../record-types';
 import type { ConversionBulkAction, TransactionBulkAction } from '../taxonomy';
 import type { ListParams, SirenList } from '../types';
-import { MAX_BULK_IDS, bulkRecords, readObject, recordId, writeRecord } from './record-requests';
+import { MAX_BULK_IDS, bulkRecords, deleteRecord, readObject, recordId, writeRecord } from './record-requests';
+import { writeRecordOrNothing } from './record-writes';
 
 /** The largest page Siren serves. Siren lowers a larger `number` to this. */
 export const MAX_PAGE_SIZE = 200;
@@ -235,10 +236,11 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * engagement holds many conversions, so a create with no `transactionId`
    * cannot be checked: set it aside instead of resending it.
    */
-  create(params: CreateConversionParams): Promise<T> {
-    // Stub: slice 4 packet P8
-    void params;
-    return Promise.resolve({} as T);
+  async create(params: CreateConversionParams): Promise<T> {
+    recordId(params?.engagementId, 'conversions.create', 'engagementId');
+    if (params?.transactionId !== undefined) recordId(params.transactionId, 'conversions.create', 'transactionId');
+    if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -251,11 +253,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * neither empty nor a JSON object. Sending it again after a lost answer
    * sets the same values, so it is safe.
    */
-  update(id: number, params: UpdateConversionParams): Promise<T | null> {
-    // Stub: slice 4 packet P8
-    void id;
-    void params;
-    return Promise.resolve(null);
+  async update(id: number, params: UpdateConversionParams): Promise<T | null> {
+    return writeRecordOrNothing<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'conversions.update')}`, params);
   }
 
   /**
@@ -267,10 +266,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * good. Read it with {@link retrieve} first: status `deleted` means the
    * first call worked, and `NotFoundError` means it is gone.
    */
-  delete(id: number): Promise<T | null> {
-    // Stub: slice 4 packet P8
-    void id;
-    return Promise.resolve(null);
+  async delete(id: number): Promise<T | null> {
+    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'conversions.delete')}`);
   }
 
   /**
@@ -288,10 +285,7 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * them.
    */
   bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {
-    // Stub: slice 4 packet P8
-    void action;
-    void ids;
-    return Promise.resolve({});
+    return bulkRecords<BulkResult>(this.http, this.path, action, ids);
   }
 
   /**
@@ -301,8 +295,7 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * JSON object.
    */
   types(): Promise<RegistryOptions> {
-    // Stub: slice 4 packet P8
-    return Promise.resolve({ options: [] });
+    return readObject<RegistryOptions>(this.http, `${this.path}/types`);
   }
 }
 
