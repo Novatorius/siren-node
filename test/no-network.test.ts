@@ -22,6 +22,8 @@ describe('no-network guard', () => {
       const response = await fetch(`http://127.0.0.1:${port}/`);
       expect(await response.text()).toBe('here');
     } finally {
+      // Node 18 keeps the fetch's idle connection open, so close it first.
+      server.closeAllConnections?.();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
     expect(takeRefusedHosts()).toEqual([]);
