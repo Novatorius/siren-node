@@ -1,6 +1,12 @@
 export { Siren } from './client';
 export { WebhookEventType } from './event-types';
 export { ApiKeyScope, LEDGER_READ_SCOPES, eventScope } from './api-key-scopes';
+export { ConnectorScope } from './auth/connector-scope';
+export type { AccessTokenSource } from './auth/access-token-source';
+export { StaticAccessToken } from './auth/static-access-token';
+export { CallbackAccessTokenSource } from './auth/callback-access-token-source';
+export { FetchHttpClient, HttpClientError } from './http';
+export type { HttpClient, HttpRequest, HttpResponse, HttpMethod } from './http';
 export {
   EventSlug,
   RefundKind,
@@ -47,6 +53,9 @@ export {
 export type { SirenErrorDetails, FailedValidation } from './errors';
 export type {
   SirenOptions,
+  SirenBaseOptions,
+  SirenApiKeyOptions,
+  SirenAccessTokenOptions,
   EventResult,
   LineItem,
   SaleFields,
@@ -74,6 +83,7 @@ export type {
 export { EventsResource } from './resources/events';
 export { WebhooksResource, WebhookSubscriptionsResource } from './resources/webhooks';
 export { ApiKeysResource } from './resources/api-keys';
-export { RecordsResource } from './resources/records';
+export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';
+export type { RetrieveParams } from './resources/records';
 
 export { Siren as default } from './client';

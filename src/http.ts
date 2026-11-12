@@ -1,3 +1,4 @@
+import type { AccessTokenSource } from './auth/access-token-source';
 import { ConnectionError, errorFromResponse } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.sirenaffiliates.com/siren/v1';
@@ -7,15 +8,121 @@ export const DEFAULT_MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 8_000;
 
-export interface HttpClientOptions {
-  apiKey: string;
-  baseUrl: string;
-  timeout: number;
-  maxRetries: number;
+/** An HTTP method the SDK sends. */
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/**
+ * One outgoing request, fully built by the SDK. The URL already carries the
+ * query string, and the headers already carry `Authorization`, `Accept`,
+ * `User-Agent`, and `Content-Type` when there is a body. An
+ * {@link HttpClient} sends it as it is.
+ */
+export interface HttpRequest {
+  /** The HTTP method in upper case. */
+  readonly method: HttpMethod;
+  /** The absolute URL, including any query string. */
+  readonly url: string;
+  /** Header name to value. */
+  readonly headers: Readonly<Record<string, string>>;
+  /** The raw request body, or `undefined` for none. */
+  readonly body?: string;
+  /** Milliseconds to allow for the whole request, the SDK's `timeout` option. */
+  readonly timeout: number;
+}
+
+/** The HTTP response an {@link HttpClient} hands back to the SDK. */
+export interface HttpResponse {
+  /** The HTTP status code. */
+  readonly status: number;
+  /** The status line's reason text, when the client has one. */
+  readonly statusText?: string;
+  /** Header name to value. The SDK looks names up in any case. */
+  readonly headers: Readonly<Record<string, string>>;
+  /** The raw response body, or an empty string when there is none. */
+  readonly body: string;
+}
+
+/**
+ * The SDK's HTTP seam. A host that brings its own HTTP stack implements this
+ * one method and passes the instance as the `httpClient` option:
+ *
+ * ```ts
+ * const siren = new Siren({ apiKey, httpClient: new MyHostHttpClient() });
+ * ```
+ *
+ * The contract is small:
+ *
+ * - Send the request exactly as given: method, URL, headers and body. Honor
+ *   `timeout` where the host can.
+ * - Resolve with an {@link HttpResponse} for every HTTP status, 4xx and 5xx
+ *   included. The SDK maps error statuses to its own errors and decides what
+ *   to resend.
+ * - Reject with {@link HttpClientError} only when no HTTP response arrived:
+ *   DNS failure, refused connection, TLS error, timeout. The SDK may resend
+ *   these when the request allows it, and raises `ConnectionError` after
+ *   that. Any other error the client throws reaches the caller unchanged and
+ *   is never resent, because the SDK cannot tell whether the request left.
+ *
+ * The SDK uses {@link FetchHttpClient} when no `httpClient` is given.
+ */
+export interface HttpClient {
+  send(request: HttpRequest): Promise<HttpResponse>;
+}
+
+/**
+ * Thrown by an {@link HttpClient} when a request produced no HTTP response.
+ * Pass the host's own error as `cause` so it stays inspectable. The SDK
+ * resends where the request allows it, then raises `ConnectionError` with
+ * this error as its `cause`.
+ */
+export class HttpClientError extends Error {
+  constructor(message: string, options: { cause?: unknown } = {}) {
+    super(message, options);
+    this.name = 'HttpClientError';
+  }
+}
+
+/**
+ * The default {@link HttpClient}, over the Fetch API that Node 18 and later
+ * provide.
+ *
+ * It sends the request's method, URL, headers (as the same plain object) and
+ * body, and aborts the request when `timeout` runs out. It resolves with the
+ * status, the status text, every header under its lower-case name, and the
+ * body as text, for every status. It rejects with {@link HttpClientError},
+ * carrying fetch's error as `cause`, when fetch rejects or the timeout
+ * aborts the request.
+ */
+export class FetchHttpClient implements HttpClient {
+  /**
+   * @param fetchFn The fetch to call. Without one, the global `fetch` is read
+   *   at each send, so a fetch replaced after the client was built is used.
+   */
+  constructor(private readonly fetchFn?: typeof fetch) {}
+
+  async send(_request: HttpRequest): Promise<HttpResponse> {
+    // Stub: slice 2 packet P2.
+    return { status: 200, headers: {}, body: '' };
+  }
+}
+
+/**
+ * What the transport hands a resource: a 2xx reply. Its shape is the part of
+ * the Fetch `Response` the resources read, so a resource reads headers with
+ * `headers.get(name)`, in any case, and the body with `text()` or
+ * {@link parseJsonBody}.
+ *
+ * @internal
+ */
+export interface ApiResponse {
+  readonly status: number;
+  readonly statusText: string;
+  readonly headers: { get(name: string): string | null };
+  text(): Promise<string>;
 }
 
 export interface SirenRequest {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: HttpMethod;
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
@@ -23,6 +130,10 @@ export interface SirenRequest {
    * Whether this request may be auto-retried on network errors and 429/5xx.
    * Idempotent reads, sales and refunds retry. A site visit, a custom event,
    * a sale with no `externalId` and management writes are sent once.
+   *
+   * A 401 is not a retry. Every request, retriable or not, is sent once more
+   * with a refreshed token after Siren's first 401, because Siren refused
+   * the credential before doing any work. See {@link HttpTransport.request}.
    */
   retriable: boolean;
 }
@@ -31,7 +142,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function parseJsonBody(response: Response): Promise<unknown> {
+export async function parseJsonBody(response: Pick<ApiResponse, 'text'>): Promise<unknown> {
   let text: string;
   try {
     text = await response.text();
@@ -46,29 +157,78 @@ export async function parseJsonBody(response: Response): Promise<unknown> {
   }
 }
 
+export interface HttpTransportOptions {
+  /** Supplies the bearer token, and a fresh one after a 401. */
+  tokens: AccessTokenSource;
+  /** Sends each built request. */
+  client: HttpClient;
+  baseUrl: string;
+  /** Milliseconds, passed to the client as `HttpRequest.timeout`. */
+  timeout: number;
+  maxRetries: number;
+}
 
 /**
- * Internal transport. Builds URLs, attaches auth, enforces the timeout, maps
- * failures to typed errors, and retries retriable requests with exponential
- * backoff (honoring `Retry-After` on 429).
+ * Internal transport. Builds URLs, attaches the bearer token, sends through
+ * the {@link HttpClient}, maps failures to typed errors, refreshes the token
+ * once after a 401, and retries retriable requests with exponential backoff
+ * (honoring `Retry-After` on 429). It mirrors the PHP SDK's `HttpTransport`.
+ *
+ * @internal
  */
-export class HttpClient {
-  private readonly apiKey: string;
+export class HttpTransport {
+  private readonly tokens: AccessTokenSource;
+  private readonly client: HttpClient;
   private readonly baseUrl: string;
   private readonly timeout: number;
   private readonly maxRetries: number;
 
-  constructor(options: HttpClientOptions) {
-    this.apiKey = options.apiKey;
+  constructor(options: HttpTransportOptions) {
+    this.tokens = options.tokens;
+    this.client = options.client;
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.timeout = options.timeout;
     this.maxRetries = options.maxRetries;
   }
 
-  /** Perform a request and return the raw `Response` (guaranteed 2xx). */
-  async request(req: SirenRequest): Promise<Response> {
+  /**
+   * Perform a request and return the reply (guaranteed 2xx).
+   *
+   * 1. Reads the token once, from `tokens.getAccessToken()`, before the first
+   *    send. Every send of this call carries it until a refresh replaces it.
+   * 2. Sends through `client.send()`.
+   * 3. A 2xx reply is returned.
+   * 4. The first 401 of the call asks `tokens.refreshAccessToken(sent)` for a
+   *    new token, passing the token that was refused. A non-empty string is
+   *    sent at once in a new request, with no wait. `null` or an empty string
+   *    raises the 401. A second 401 in the same call never refreshes again
+   *    and raises through `errorFromResponse`, so Siren's revoked-site answer
+   *    surfaces as `SiteDisconnectedError`.
+   *
+   *    The resend after a 401 applies to every request, retriable or not,
+   *    and does not use up a retry. Siren answers 401 from its
+   *    authentication layer, before the route records anything, so the
+   *    refused send left nothing to duplicate. A send-once request therefore
+   *    reaches Siren with a usable credential exactly once, and is sent at
+   *    most twice: the refused send and the resend. After the resend it is
+   *    never sent again, whatever the reply.
+   * 5. A retriable request with retries left is sent again after a backoff on
+   *    429, 5xx or an `HttpClientError`. A retriable request is sent at most
+   *    `maxRetries + 2` times: its first send, `maxRetries` retries and one
+   *    resend after a 401.
+   * 6. With no resend left, an `HttpClientError` raises `ConnectionError`
+   *    with the client's error as `cause`, and an error reply raises the
+   *    `SirenError` that `errorFromResponse` builds. Any other error from the
+   *    client, or from either token method, reaches the caller unchanged and
+   *    nothing more is sent.
+   */
+  async request(req: SirenRequest): Promise<ApiResponse> {
+    // Stub: slice 2 packet P3. Until P3 lands, the transport sends through
+    // the global fetch as 0.3.0 did, reads the token once, ignores `client`
+    // and never refreshes.
     const url = this.buildUrl(req);
-    const init = this.buildInit(req);
+    const token = await this.tokens.getAccessToken();
+    const init = this.buildInit(req, token);
     const maxAttempts = req.retriable ? this.maxRetries + 1 : 1;
 
     let lastCause: unknown;
@@ -135,9 +295,9 @@ export class HttpClient {
     return url;
   }
 
-  private buildInit(req: SirenRequest): RequestInit {
+  private buildInit(req: SirenRequest, token: string): RequestInit {
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${token}`,
       Accept: 'application/json',
       'User-Agent': 'siren-sdk-typescript/0.3.0',
     };

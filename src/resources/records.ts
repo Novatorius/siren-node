@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import type { ListParams, SirenList } from '../types';
 
@@ -50,8 +50,8 @@ export function toListQuery(params: ListParams): Query {
  */
 export class RecordsResource<T = Record<string, unknown>> {
   constructor(
-    private readonly http: HttpClient,
-    private readonly path: string,
+    protected readonly http: HttpTransport,
+    protected readonly path: string,
   ) {}
 
   /**
@@ -108,5 +108,82 @@ export class RecordsResource<T = Record<string, unknown>> {
     }
 
     return list;
+  }
+}
+
+/**
+ * Query parameters for reading one record by id. Siren answers with its
+ * default fields when none are named.
+ */
+export interface RetrieveParams {
+  /**
+   * The fields to return, as a list or a comma-separated string. A list is
+   * sent comma-separated, as Siren reads it.
+   */
+  fields?: string[] | string;
+  /** `extended` returns every field Siren can resolve for the record. */
+  include?: string;
+  /** Narrows an organization-wide read to one store. */
+  propertyId?: number;
+}
+
+/**
+ * Conversions (`/conversions`): an engagement that turned into a reward.
+ *
+ * `list()` reads one page, and `retrieve(id)` reads one conversion. Both take
+ * an API key that holds `ledger:conversions:read`, a dashboard session's
+ * token, or a connected site's token with `connect:records:read`.
+ */
+export class ConversionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
+  constructor(http: HttpTransport) {
+    super(http, '/conversions');
+  }
+
+  /**
+   * Read one conversion with `GET /conversions/{id}`.
+   *
+   * Siren's default fields are `id`, `engagementId`, `transactionId`,
+   * `obligationId`, `status`, `type`, `dateCreated` and `dateModified`.
+   * `fields` and `include` choose others.
+   *
+   * Retried on a network error, 429 or 5xx like any read. Throws `SirenError`
+   * before sending when `id` is not a positive whole number, `NotFoundError`
+   * when Siren has no such conversion or the credential cannot see it (a key
+   * bound to one store gets this for another store's conversion), and
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   */
+  async retrieve(_id: number, _params: RetrieveParams = {}): Promise<T> {
+    // Stub: slice 2 packet P6.
+    return {} as T;
+  }
+}
+
+/**
+ * Transactions (`/transactions`): a sale or other value event a store
+ * recorded.
+ *
+ * `list()` reads one page, and `retrieve(id)` reads one transaction. Both take
+ * an API key that holds `ledger:transactions:read`, a dashboard session's
+ * token, or a connected site's token with `connect:records:read`.
+ */
+export class TransactionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
+  constructor(http: HttpTransport) {
+    super(http, '/transactions');
+  }
+
+  /**
+   * Read one transaction with `GET /transactions/{id}`.
+   *
+   * Siren's default fields are `id`, `status` and `dateCreated`. `fields` and
+   * `include` choose others, such as `details`, `totalValue` and `currency`.
+   *
+   * Retried on a network error, 429 or 5xx like any read. Throws `SirenError`
+   * before sending when `id` is not a positive whole number, `NotFoundError`
+   * when Siren has no such transaction or the credential cannot see it, and
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   */
+  async retrieve(_id: number, _params: RetrieveParams = {}): Promise<T> {
+    // Stub: slice 2 packet P6.
+    return {} as T;
   }
 }

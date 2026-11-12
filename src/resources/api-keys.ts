@@ -1,5 +1,5 @@
 import { UnexpectedResponseError } from '../errors';
-import { parseJsonBody, type HttpClient } from '../http';
+import { parseJsonBody, type HttpTransport } from '../http';
 import type { ApiKey, ApiKeyScopeGroups, CreateApiKeyParams, CreatedApiKey } from '../types';
 
 /**
@@ -10,7 +10,7 @@ import type { ApiKey, ApiKeyScopeGroups, CreateApiKeyParams, CreatedApiKey } fro
  * 401 that the SDK throws as `ApiKeyNotAcceptedError`.
  */
 export class ApiKeysResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(private readonly http: HttpTransport) {}
 
   /**
    * Create a new API key.
