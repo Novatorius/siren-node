@@ -830,7 +830,8 @@ paths:
         repeat that carries the same `attempt_id` gets the pair Cloud already
         issued. A repeat after 30 seconds makes Cloud revoke the whole token
         family. The SDK sends each call once, and the store locks its own
-        refresh.
+        refresh. After a lost answer, a 429 or a 5xx the store may resend a
+        refresh once, at once, with the same `attempt_id`.
 
         A refusal is a 400 or 401 with the RFC 6749 error envelope, `error`
         and `error_description`. A refresh refused with `invalid_grant` or
@@ -1160,7 +1161,10 @@ paths:
       tags: [Connected sites]
       operationId: deleteConnectorWebhook
       summary: Delete the site's webhook subscription
-      description: A repeat removes nothing more.
+      description: |
+        A repeat removes nothing more. `deleted: false` means the site had no
+        webhook left to remove, which is also what a retry after a lost answer
+        meets, so it counts as success.
       security:
         - connectorToken: [connect:webhooks]
       responses:

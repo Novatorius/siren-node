@@ -6,9 +6,8 @@ import * as connectSource from '../src/connect/index';
 import * as mainSource from '../src/index';
 
 /*
- * Slice 5 tests for the `@novatorius/siren/connect` entry. The entry, its
- * export map and the shared build chunk are written in the architecture
- * commit, so these tests hold now and belong to no packet.
+ * Slice 5 tests for the `@novatorius/siren/connect` entry: what it exports,
+ * its export map, and the shared build chunk.
  *
  * The build tests need `npm run build` first, as CI runs it. They check that
  * the two entries share one copy of every class: an error the connect entry

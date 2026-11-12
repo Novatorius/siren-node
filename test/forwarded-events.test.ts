@@ -31,8 +31,12 @@ import { FakeHttpClient, reply } from './http-fakes';
  * EventWireFormat.php. The header is ForwardedEventSender::FINAL_ATTEMPT_HEADER
  * in lib/Connect/Service/Services/ForwardedEventSender.php.
  *
- * The vocabulary tests at the top hold now: ForwardedEventSlug and the
- * version are written in full in the architecture commit.
+ * Hand-read from the cited source, not captured from a running Cloud.
+ * Slice 20 runs the connector golden path against a local Cloud and
+ * replaces these bodies.
+ *
+ * The vocabulary tests at the top check ForwardedEventSlug and the version
+ * against Siren's slug enum.
  */
 
 const BASE = 'https://api.sirenaffiliates.com/siren/v1';

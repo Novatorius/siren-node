@@ -14,6 +14,10 @@ import { FakeHttpClient, spySource } from './http-fakes';
  * The scope refusals come from
  * lib/OAuth/Service/Middleware/OAuthScopeMiddleware.php, rendered by
  * saas/Strategies/RestStrategy.php as `{ error: { message, context } }`.
+ *
+ * Hand-read from the cited source, not captured from a running Cloud.
+ * Slice 20 runs the connector golden path against a local Cloud and
+ * replaces these bodies.
  */
 
 export const BASE = 'https://api.sirenaffiliates.com/siren/v1';

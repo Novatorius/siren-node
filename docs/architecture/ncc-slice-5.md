@@ -7,8 +7,10 @@ routes, and `events.forward` with typed envelopes. The connector core in
 later slices calls all of it. Design: sections 3 and 4 of
 [Design: Siren Node commerce connectors (Source 16182)](https://navigator.novatori.us/r/source/16182).
 
-This note records the architecture commit. Its Stubs, Tests and packet
-sections describe the branch before the seven packets land.
+Seven packets built it, and a contract fix after the slice review
+([PR audit: siren-node PR 37, slice 5 review (Journal 32315)](https://navigator.novatori.us/r/journal/32315))
+tightened `OAuthClient`'s options, the refresh advice and the no-network
+guard. The section "After the review" says what that fix changed.
 
 It reads Siren at `b6f7140d0`, the tip of `feat/node-commerce-connectors`,
 which holds `main` and slice 14's `software_id` and site customer types.
@@ -51,6 +53,13 @@ store saves the registration and the token pair as the RFCs name them and
 an answer read field for field could drop a field Cloud adds later. The store keeps the client id,
 the state, the verifier and the token pair, and locks its own refresh.
 
+The method names follow what each route does, not design gap 14's short
+names: `reportSiteState`, `reportIntegrations` and `syncProducts` for the
+site-state, integrations and products routes, and `webhook.replace` for the
+webhook `PUT`. A report is a write the site sends from its task queue, and
+`replace` rotates the signing secret, so a name like `siteState()` would
+read as a harmless getter.
+
 `ConnectResource` and `ConnectWebhookResource` are ordinary resources over
 `HttpTransport`, so they follow the slice 2 rules without new code: one
 resend with a refreshed token after the first 401, retries for retriable
@@ -63,15 +72,20 @@ an exact `event:{slug}` scope may forward too.
 
 ## Wire rules
 
-- Every OAuth call is sent exactly once. Cloud revokes a refresh token's whole
-  family when it sees the token again more than 30 seconds after rotation,
-  and a code is single use. The store locks its own refresh. It may resend a
-  refresh once within 30 seconds with the same random `attemptId`, which
-  Cloud answers with the pair it already issued, and recovers further
-  through its queue. That one resend is the only exception to
+- Every OAuth call is sent exactly once. Cloud keeps a 30-second reuse
+  window from the rotation: a repeat inside it that carries the same
+  `attemptId` gets the pair Cloud already issued, and any repeat after it
+  makes Cloud revoke the refresh token's whole family. A code is single
+  use. The store locks its own refresh and gives each refresh a random
+  `attemptId` from its first try. After a lost answer, a 429 or a 5xx it
+  may resend that refresh once, with the same `attemptId`, and it sends
+  that resend at once, as Siren's `OAuthConnectService` does. A request
+  that cannot wait hands it to a background task that runs straight away,
+  as Siren's `RetryLostRefresh` does. Nothing resends the refresh after
+  that. The one resend is the only exception to
   [Retry Unification (KB 591)](https://navigator.novatori.us/r/kb/591)
-  in this slice. A queue waits minutes between tries, and Cloud's window
-  closes after 30 seconds, so the queue cannot make that try itself.
+  in this slice, because a queue waits minutes between tries and Cloud's
+  window closes after 30 seconds.
 - 400 or 401 with a text `error` raises `OAuthError`. A refresh refused with
   `invalid_grant` or `invalid_client` means the grant is gone, as Siren's
   `OAuthConnectService::grantIsGone` reads it. 429 and 5xx raise the usual
@@ -90,15 +104,18 @@ an exact `event:{slug}` scope may forward too.
   `PUT`, which rotates the secret, webhook test, which Cloud limits to ten a
   site an hour, and `disconnect`, because Cloud cuts the client off as it
   commits and answers a resend with 401.
-- `events.forward` is sent once, never retried, except for the transport's
-  one resend with a refreshed token after a 401, which Cloud refused before
-  it logged the event. A forwarded event is queue
-  work, and the site's outbox owns redelivery, as
+- `events.forward` is sent once. After a 401 it sends again with a
+  refreshed token, and only then, because Cloud refused the first send
+  before it logged the event. The site's outbox, not the SDK, sends a
+  failed event again, as
   [Retry Unification (KB 591)](https://navigator.novatori.us/r/kb/591)
   asks. Siren's own `ForwardedEventSender` sends once per outbox try and
-  waits minutes between tries. The outbox resends with the same `eventId`
-  and the same credential, which Cloud claims once per Property and answers
-  `duplicate`. `finalAttempt` adds
+  waits minutes between tries. The site mints `eventId` once, when it
+  records the event, and the outbox resends with that `eventId` and the
+  same credential. Cloud records an event once for each site (its
+  Property), recognised by the event's natural key or by `eventId`, and
+  answers a repeat `duplicate`, which the outbox counts as delivered.
+  `finalAttempt` adds
   `X-Siren-Final-Attempt: 1` to the outbox's last try, so Cloud's log of an
   event it will never record matches one logged send.
 - `forward` refuses, before sending, a slug outside the 28 (or it would
@@ -130,20 +147,21 @@ The SDK has no logger. Each failure reaches the caller as a thrown error.
 | `forward` 401 | One resend with a refreshed token. A second 401 raises `AuthenticationError` |
 | `forward` 400, 403, 409 or 422 | `BadRequestError`, `PermissionError`, `ConflictError` or `ValidationError`, with Cloud's reason in `data`. The outbox stops trying and keeps the event as failed |
 
-## Edits to files slice 2b also touches
+## Edits to the transport and the client
 
-Slice 2b hardens the transport and has not merged. It edits `src/http.ts`
-and `src/client.ts`, and the architecture commit touches neither. Two
-packets must, and each keeps the change small:
+Slice 2b hardened `src/http.ts` and `src/client.ts` before two packets
+edited them, each with a small change:
 
-- P6 adds an optional `headers` field to `SirenRequest` and merges it into
-  `buildRequest` below the SDK's own headers, so a caller header never
+- P6 added an optional `headers` field to `SirenRequest`. `buildRequest`
+  merges it beneath the SDK's own headers, so a caller header never
   replaces `Authorization`, `Accept`, `User-Agent` or `Content-Type`.
-- P5 moves the body of `Siren`'s constructor into an `@internal`
-  `createHttpTransport(options)` in `client.ts`, and `SirenConnect` calls it.
-  P5 starts after slice 2b merges, so it moves the hardened code.
+- P5 moved the body of `Siren`'s constructor into an `@internal`
+  `createHttpTransport(options)` in `client.ts`, unchanged, and exported
+  `ownOption` as internal. `Siren` and `SirenConnect` both call it.
 
-P2 may export `scrubTokens` from `http.ts` instead of copying it.
+`OAuthClient` keeps its own copy of the token scrub (`redact`) rather than
+importing `scrubTokens`, and the contract fix's packet F1 makes it read and
+check its options through the same functions in `client.ts`.
 
 ## The build
 
@@ -155,16 +173,14 @@ The storefront entry imports no chunk, and its build test still passes.
 
 ## Tests
 
-The envelope types are vocabulary, written in full now, and
-`test/types/forwarded-events.ts` checks them at compile time against
-`test/fixtures/forwarded-event-fields.ts`, the codec key lists copied from
-Siren with file and line. That file is the done condition for the 16 slugs:
-the keys each type can carry equal the codec's accepted keys, and the keys
-every form requires equal the codec's required keys, nested objects
-included. The entry and build tests run now too.
+The envelope types are vocabulary, and `test/types/forwarded-events.ts`
+checks them at compile time against `test/fixtures/forwarded-event-fields.ts`,
+the codec key lists copied from Siren with file and line. For each of the 16
+typed slugs, the keys the type can carry equal the codec's accepted keys,
+and the keys every form requires equal the codec's required keys, nested
+objects included.
 
-Everything else is skipped with `it.skip` or `it.skip.each`, one packet per
-describe block. Integration shape per
+The acceptance tests take the integration shape per
 [Integration Testing Standards (KB 568)](https://navigator.novatori.us/r/kb/568):
 real resources, the real transport, and a fake at the `HttpClient` seam,
 answered with bodies read from the cited Cloud controllers, each with its
@@ -179,13 +195,6 @@ The hand-read bodies are the connect answers (`ConnectAnswers` in
 (`test/fixtures/forwarded-event-fields.ts`). The Siren fixture script
 (`scripts/siren-fixtures.mjs`) does not check them for drift.
 
-No test reaches the network. The Vitest config runs the no-network setup
-file (`test/setup/no-network.ts`) before every test file. It replaces the
-global fetch with a guard that lets a request to this machine through and
-fails any test that sends one anywhere else, even when the code under test
-caught the error. It covers only the global fetch, the one way the SDK
-sends today.
-
 | File | Packet |
 |---|---|
 | `test/pkce.test.ts` | P1 |
@@ -193,22 +202,59 @@ sends today.
 | `test/connect-resource.test.ts` | P3 |
 | `test/connect-webhook-resource.test.ts` | P4 |
 | `test/siren-connect.test.ts` | P5 |
-| `test/forwarded-events.test.ts` | P6, plus the slug vocabulary, which runs now |
+| `test/forwarded-events.test.ts` | P6, plus the slug vocabulary |
 | `test/docs-connect.test.ts` | P7 |
-| `test/types/forwarded-events.ts`, `test/connect-vocabulary.test.ts`, `test/connect-build.test.ts` | none, they run now |
+| `test/oauth-client-options.test.ts` | F1, the contract fix |
+| `test/types/forwarded-events.ts`, `test/connect-vocabulary.test.ts`, `test/connect-build.test.ts`, `test/no-network.test.ts`, `test/no-network-check.test.ts`, `test/docs-refresh.test.ts` | none |
 
-## Stubs
+Each packet committed its own mutation list,
+`scripts/mutations/ncc-slice-5-pN.json`, against its real code. The surface
+list (`scripts/mutations/ncc-slice-5-surface.json`) changes the vocabulary
+and the no-network guard, and `scripts/mutations/ncc-slice-5-fix.json`
+proves the contract fix's tests that run now.
 
-Each stub returns a fixed value of its type and never throws. The PKCE stubs
-answer zeros, the OAuth calls send nothing, the connect methods send nothing,
-`forward` resolves `{}`, and `SirenConnect` builds a placeholder transport
-whose client answers every send itself.
+## No test reaches the network
 
-## Proof
+The Vitest config runs the no-network setup file (`test/setup/no-network.ts`)
+before every test file. It replaces the global fetch with a guard that lets
+a request to this machine through and fails any test that sends one
+anywhere else, even when the code under test caught the error. It covers
+only the global fetch, the one way the SDK sends today.
+`test/no-network.test.ts` proves the guard refuses and records a host, and
+`test/no-network-check.test.ts` runs a fixture in a child Vitest process to
+prove the afterEach check fails a test that reached the network.
 
-Against the stubs, every skipped test fails on its assertion except ten,
-each a guard the stubs already meet. A throwaway implementation of all
-seven packets passes all 781 tests. Each of 169 mutations against it, one
-per rule, scores as the harness's controls predict. The surface mutation
-list (`scripts/mutations/ncc-slice-5-surface.json`) changes the branch's
-own vocabulary and the no-network guard, and runs here.
+Every host those tests send to off this machine is under `.invalid`, a name
+reserved never to resolve. A mutation that weakens the guard carries
+`"offline": true` in its list, and the mutation harness refuses to score it
+unless the process has no network interface but loopback:
+
+```sh
+unshare -rn sh -c 'ip link set lo up && node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-5-surface.json'
+```
+
+## After the review
+
+The slice review found five contract defects, K1 to K5, and asked for a
+ruling on a sixth question.
+
+- K1: the guard test sent its refused request to a Siren Cloud host, so a
+  mutation that opened the guard sent one unauthenticated GET to
+  production. Every guard test now aims at `.invalid`, and the harness
+  runs guard mutations only without a route out.
+- K2: `OAuthClient` took `baseUrl`, `consentScreenUrl`, `timeout` and
+  `httpClient` without the checks `new Siren()` makes, so
+  `https://api.sirenaffiliates.com@evil.invalid/siren/v1` sent a refresh
+  grant to evil.invalid. Packet F1 makes it read only its own options, once
+  each, and check them with `client.ts`'s functions and Siren's messages.
+  `consentScreenUrl` takes the `baseUrl` rule, `?` and `#` included, because
+  the SDK writes the link's only query.
+- K3: the refresh advice now says the one resend runs at once and nothing
+  resends after it.
+- K4: `test/no-network-check.test.ts` proves the guard's afterEach check.
+- K5: this note and the slice PR describe the slice as built.
+- K6: the transport keeps the client error as `ConnectionError`'s cause
+  when it carries none, while `OAuthClient` drops it. The transport's
+  secret is the bearer token in a header, which the `HttpClient` contract
+  forbids a client to quote. The OAuth secrets sit in the body, which the
+  contract does not cover. The ruling keeps both as they are.

@@ -9,9 +9,9 @@ import {
 } from '../src/connect/index';
 
 /*
- * Slice 5 vocabulary tests. These values are written in full in the
- * architecture commit, so the tests run now and belong to no packet. Each
- * list is copied from Siren at b6f7140d0.
+ * Slice 5 vocabulary tests: the connect scopes, connector software ids,
+ * OAuth error codes and OAuth defaults. Each list is copied from Siren at
+ * b6f7140d0.
  */
 
 describe('connect vocabulary', () => {

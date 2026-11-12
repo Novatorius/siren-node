@@ -6,6 +6,11 @@ import { guardInPlace, takeRefusedHosts } from './setup/no-network';
 /*
  * The guard test/setup/no-network.ts puts in place of the global fetch for
  * every test file.
+ *
+ * Every host these tests send to off this machine is under `.invalid`, a
+ * name reserved never to resolve (RFC 6761), so a mutation that weakens the
+ * guard sends nothing that could reach Siren Cloud. Run such a mutation
+ * inside a network namespace with no route out (`unshare -rn`) anyway.
  */
 // Sent at load, before any test runs, to prove the guard is in place there too.
 const atLoad = (() => {
@@ -24,9 +29,9 @@ describe('no-network guard', () => {
   });
 
   it('refuses a host off this machine, and records it so the test fails even when the caller catches the throw', async () => {
-    expect(() => fetch('https://api.sirenaffiliates.com/siren/v1/ping')).toThrow(/No test may reach the network/);
+    expect(() => fetch('https://api.example.invalid/siren/v1/ping')).toThrow(/No test may reach the network/);
 
-    expect(takeRefusedHosts()).toEqual(['api.sirenaffiliates.com']);
+    expect(takeRefusedHosts()).toEqual(['api.example.invalid']);
   });
 
   it('lets a request to 127.0.0.1 through to the real fetch', async () => {

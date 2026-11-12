@@ -138,10 +138,10 @@ export class OAuthClient {
    *
    * Throws `SirenError` when `clientId`, `redirectUri` or `state` is empty,
    * or when `codeChallenge` is not 43 characters of `A-Z`, `a-z`, `0-9`, `-`
-   * and `_`, the only shape an S256 challenge has, so a verifier passed by
-   * mistake never lands in a browser's address bar, when the verifier came
-   * from `createCodeVerifier`, whose 64 hex digits never pass. No message
-   * quotes the value it refused.
+   * and `_`, the only shape an S256 challenge has. A verifier from
+   * `createCodeVerifier` is 64 hex digits and never passes, so it cannot
+   * reach a browser's address bar by mistake. No message quotes the value
+   * it refused.
    */
   authorizeUrl(params: OAuthAuthorizeParams): string {
     const { clientId, redirectUri, state, codeChallenge, scope } = params ?? ({} as OAuthAuthorizeParams);
@@ -198,14 +198,20 @@ export class OAuthClient {
    * store the answer's `refresh_token` before anything else reads the pair.
    *
    * The store takes its own lock around a refresh, so two refreshes of one
-   * token never race. After a `ConnectionError`, a 429 or a 5xx it may send
-   * the same refresh again once, with the same `attemptId`, within 30
-   * seconds of the first try. Any further recovery goes through its queue
-   * with that `attemptId`. Later than 30 seconds, Cloud reads the repeat as
-   * a stolen token and revokes the whole family.
-   * That one resend is the only exception to the rule that the site's
-   * queue owns retries. A queue waits minutes between tries, and Cloud's
-   * window closes after 30 seconds. The SDK itself never resends a refresh.
+   * token never race, and gives each refresh a fresh random `attemptId`
+   * from the first try. Cloud's reuse window is 30 seconds from the
+   * rotation: inside it, a repeat that carries the same `attemptId` gets the
+   * pair Cloud already issued, and after it any repeat makes Cloud revoke
+   * the whole token family. So after a `ConnectionError`, a 429 or a 5xx the
+   * store may resend that refresh once, with the same `attemptId`, and it
+   * sends that resend at once, as Siren's `OAuthConnectService` does. A
+   * request that cannot wait hands the resend to a background task that
+   * runs straight away, as Siren's `RetryLostRefresh` does, never to a
+   * queue that waits. If the resend fails too, the store sends nothing more
+   * for this refresh. The SDK itself never resends a refresh.
+   * That one resend is the only exception to the rule that the site's queue
+   * owns retries, because a queue waits minutes between tries and Cloud's
+   * window closes after 30 seconds.
    *
    * Throws `SirenError` before sending when `clientId` or `refreshToken` is
    * empty, or `attemptId` is given and empty.

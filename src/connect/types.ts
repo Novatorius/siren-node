@@ -36,10 +36,7 @@ export interface OAuthClientOptions {
   consentScreenUrl?: string;
   /** The HTTP stack to send through. Defaults to `FetchHttpClient` over the global `fetch`. */
   httpClient?: HttpClient;
-  /**
-   * Milliseconds to allow for each call. Defaults to 15000, the wait Siren
-   * Cloud's 30 second refresh grace window is built around.
-   */
+  /** Milliseconds to allow for each call. Defaults to 15000, half Cloud's 30-second refresh window. */
   timeout?: number;
 }
 
@@ -96,12 +93,13 @@ export interface OAuthRefreshParams {
   refreshToken: string;
   /**
    * A fresh random id for each refresh, such as `createState()` makes, sent
-   * again unchanged on every try of that one refresh. Within 30 seconds of
-   * the rotation, Cloud answers a try that carries it with the pair it
-   * already issued, as often as it comes. A repeat without it is answered
-   * once, and any repeat after 30 seconds makes Cloud revoke the whole token
-   * family. A guessable id would let whoever holds a stolen refresh token
-   * repeat it unnoticed inside the window.
+   * on the first try and again unchanged on the one resend. Within 30
+   * seconds of the rotation, Cloud answers a try that carries it with the
+   * pair it already issued, as often as it comes. A repeat without it is
+   * answered once, and any repeat after 30 seconds makes Cloud revoke the
+   * whole token family. A store that may resend passes it on the first try,
+   * since a resend cannot add it later. A guessable id would let whoever
+   * holds a stolen refresh token repeat it unnoticed inside the window.
    */
   attemptId?: string;
 }
@@ -168,9 +166,9 @@ export interface ConnectUpdateGrant {
 /** What `connect.reportSiteState` sends. Siren's `ReportConnectedSiteState`. */
 export interface SiteStateParams {
   forwarding: boolean;
-  /** Unix time, 2020 or later, or `null`. */
+  /** Unix time, 2020 or later. `null` or leaving it out keeps the time Cloud already holds. */
   cutOverAt?: number | null;
-  /** Unix time, 2020 or later, or `null`. */
+  /** Unix time, 2020 or later. `null` or leaving it out keeps the time Cloud already holds. */
   localDataDeletedAt?: number | null;
   /** Sent once the migration the cutover runs finished. Closes the site's migration window. */
   migrationComplete?: boolean;
