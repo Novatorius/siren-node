@@ -1,0 +1,421 @@
+[
+ {
+  "id": "control-break",
+  "file": "src/resources/events.ts",
+  "find": "{ 'X-Siren-Final-Attempt': '1' }",
+  "replace": "{ 'X-Siren-Final-Attempt': '0' }",
+  "expect": "caught",
+  "failing": [
+   "sends X-Siren-Final-Attempt: 1 when finalAttempt is true"
+  ]
+ },
+ {
+  "id": "control-harmless",
+  "file": "src/resources/events.ts",
+  "find": "const EVENT_ID = /",
+  "replace": "const EVENT_ID: RegExp = /",
+  "expect": "survives",
+  "failing": []
+ },
+ {
+  "id": "control-malformed-absent",
+  "file": "src/resources/events.ts",
+  "find": "this text is not in the file",
+  "replace": "x",
+  "expect": "refused",
+  "failing": []
+ },
+ {
+  "id": "control-malformed-syntax",
+  "file": "src/resources/events.ts",
+  "find": "const EVENT_ID = /",
+  "replace": "const EVENT_ID = = /",
+  "expect": "refused",
+  "failing": []
+ },
+ {
+  "id": "forward-retried",
+  "file": "src/resources/events.ts",
+  "find": "this.send(slug, envelope, false, headers)",
+  "replace": "this.send(slug, envelope, true, headers)",
+  "expect": "caught",
+  "failing": [
+   "sends once on a 503, with the client allowing retries"
+  ]
+ },
+ {
+  "id": "forward-body-rewritten",
+  "file": "src/resources/events.ts",
+  "find": "this.send(slug, envelope, false, headers)",
+  "replace": "this.send(slug, { ...envelope, sentBy: 'sdk' }, false, headers)",
+  "expect": "caught",
+  "failing": [
+   "whose body is the envelope as given"
+  ]
+ },
+ {
+  "id": "final-attempt-truthy",
+  "file": "src/resources/events.ts",
+  "find": "options?.finalAttempt === true ?",
+  "replace": "options?.finalAttempt !== undefined ?",
+  "expect": "caught",
+  "failing": [
+   "sends no X-Siren-Final-Attempt header with finalAttempt false"
+  ]
+ },
+ {
+  "id": "final-attempt-always",
+  "file": "src/resources/events.ts",
+  "find": "options?.finalAttempt === true ?",
+  "replace": "options !== undefined ?",
+  "expect": "caught",
+  "failing": [
+   "sends no X-Siren-Final-Attempt header with no options"
+  ]
+ },
+ {
+  "id": "send-drops-headers",
+  "file": "src/resources/events.ts",
+  "find": "      ...(headers !== undefined ? { headers } : {}),\n",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "sends X-Siren-Final-Attempt: 1 when finalAttempt is true"
+  ]
+ },
+ {
+  "id": "slug-check-dropped",
+  "file": "src/resources/events.ts",
+  "find": "typeof slug !== 'string' || !FORWARDED_SLUGS.has(slug)",
+  "replace": "typeof slug !== 'string'",
+  "expect": "caught",
+  "failing": [
+   "refuses a slug Siren does not forward",
+   "refuses an unknown slug"
+  ]
+ },
+ {
+  "id": "slug-set-takes-event-slugs",
+  "file": "src/resources/events.ts",
+  "find": "new Set(Object.values(ForwardedSlugs))",
+  "replace": "new Set([...Object.values(ForwardedSlugs), ...Object.values(EventSlug)])",
+  "expect": "caught",
+  "failing": [
+   "refuses an EventSlug that is not a forwarded slug"
+  ]
+ },
+ {
+  "id": "slug-allows-empty",
+  "file": "src/resources/events.ts",
+  "find": "typeof slug !== 'string' || !FORWARDED_SLUGS.has(slug)",
+  "replace": "typeof slug !== 'string' || ((slug as string) !== '' && !FORWARDED_SLUGS.has(slug))",
+  "expect": "caught",
+  "failing": [
+   "refuses an empty slug"
+  ]
+ },
+ {
+  "id": "envelope-check-sends",
+  "file": "src/resources/events.ts",
+  "find": "      throw new SirenError('Siren: events.forward takes the envelope as an object.');",
+  "replace": "      return this.send(slug, envelope, false);",
+  "expect": "caught",
+  "failing": [
+   "refuses an envelope that is null with SirenError and sends nothing"
+  ]
+ },
+ {
+  "id": "version-check-dropped",
+  "file": "src/resources/events.ts",
+  "find": "if (given.version !== 1) {",
+  "replace": "if (false) {",
+  "expect": "caught",
+  "failing": [
+   "refuses a version other than 1"
+  ]
+ },
+ {
+  "id": "version-loose",
+  "file": "src/resources/events.ts",
+  "find": "if (given.version !== 1) {",
+  "replace": "if (given.version != 1) {",
+  "expect": "caught",
+  "failing": [
+   "refuses a version given as text"
+  ]
+ },
+ {
+  "id": "version-error-quotes-data",
+  "file": "src/resources/events.ts",
+  "find": "throw new SirenError('Siren: a forwarded event envelope has version 1.');",
+  "replace": "throw new SirenError('Siren: a forwarded event envelope has version 1.', { data: given.data });",
+  "expect": "caught",
+  "failing": [
+   "refuses a version other than 1 with SirenError, sends nothing and quotes nothing from data"
+  ]
+ },
+ {
+  "id": "eventid-check-dropped",
+  "file": "src/resources/events.ts",
+  "find": "typeof given.eventId !== 'string' || !EVENT_ID.test(given.eventId)",
+  "replace": "typeof given.eventId !== 'string'",
+  "expect": "caught",
+  "failing": [
+   "refuses an eventId that is not a UUID"
+  ]
+ },
+ {
+  "id": "eventid-absent-allowed",
+  "file": "src/resources/events.ts",
+  "find": "typeof given.eventId !== 'string' || !EVENT_ID.test(given.eventId)",
+  "replace": "typeof given.eventId === 'string' && !EVENT_ID.test(given.eventId)",
+  "expect": "caught",
+  "failing": [
+   "refuses no eventId"
+  ]
+ },
+ {
+  "id": "eventid-case-sensitive",
+  "file": "src/resources/events.ts",
+  "find": "[0-9a-f]{12}$/i;",
+  "replace": "[0-9a-f]{12}$/;",
+  "expect": "caught",
+  "failing": [
+   "sends an envelope with an upper-case UUID"
+  ]
+ },
+ {
+  "id": "eventid-loose-shape",
+  "file": "src/resources/events.ts",
+  "find": "const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
+  "replace": "const EVENT_ID = /^[0-9a-f-]{36}$/i;",
+  "expect": "caught",
+  "failing": [
+   "refuses an eventId of 36 characters with its dashes out of place"
+  ]
+ },
+ {
+  "id": "eventid-no-start-anchor",
+  "file": "src/resources/events.ts",
+  "find": "const EVENT_ID = /^[0-9a-f]{8}",
+  "replace": "const EVENT_ID = /[0-9a-f]{8}",
+  "expect": "caught",
+  "failing": [
+   "refuses an eventId with text before it"
+  ]
+ },
+ {
+  "id": "eventid-no-end-anchor",
+  "file": "src/resources/events.ts",
+  "find": "[0-9a-f]{12}$/i;",
+  "replace": "[0-9a-f]{12}/i;",
+  "expect": "caught",
+  "failing": [
+   "refuses an eventId with text after it"
+  ]
+ },
+ {
+  "id": "eventid-version-4-only",
+  "file": "src/resources/events.ts",
+  "find": "[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
+  "replace": "4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
+  "expect": "caught",
+  "failing": [
+   "sends an envelope with a version 7 UUID"
+  ]
+ },
+ {
+  "id": "origin-check-dropped",
+  "file": "src/resources/events.ts",
+  "find": "if (given.origin !== 'site') {",
+  "replace": "if (false) {",
+  "expect": "caught",
+  "failing": [
+   "refuses an origin of cloud"
+  ]
+ },
+ {
+  "id": "origin-case-insensitive",
+  "file": "src/resources/events.ts",
+  "find": "if (given.origin !== 'site') {",
+  "replace": "if (String(given.origin).toLowerCase() !== 'site') {",
+  "expect": "caught",
+  "failing": [
+   "refuses an origin of Site"
+  ]
+ },
+ {
+  "id": "origin-only-cloud",
+  "file": "src/resources/events.ts",
+  "find": "if (given.origin !== 'site') {",
+  "replace": "if (given.origin === 'cloud') {",
+  "expect": "caught",
+  "failing": [
+   "refuses an origin of Site",
+   "refuses no origin"
+  ]
+ },
+ {
+  "id": "occurred-null-refused",
+  "file": "src/resources/events.ts",
+  "find": "given.occurredAt !== null && (typeof",
+  "replace": "(typeof",
+  "expect": "caught",
+  "failing": [
+   "sends an envelope with an occurredAt of null"
+  ]
+ },
+ {
+  "id": "occurred-absent-allowed",
+  "file": "src/resources/events.ts",
+  "find": "given.occurredAt !== null && (typeof",
+  "replace": "given.occurredAt != null && (typeof",
+  "expect": "caught",
+  "failing": [
+   "refuses no occurredAt"
+  ]
+ },
+ {
+  "id": "occurred-offset-optional",
+  "file": "src/resources/events.ts",
+  "find": "(Z|[+-]\\d{2}:\\d{2})$/;",
+  "replace": "(Z|[+-]\\d{2}:\\d{2})?$/;",
+  "expect": "caught",
+  "failing": [
+   "refuses an occurredAt without an offset"
+  ]
+ },
+ {
+  "id": "occurred-space-allowed",
+  "file": "src/resources/events.ts",
+  "find": "\\d{2}T\\d{2}",
+  "replace": "\\d{2}[T ]\\d{2}",
+  "expect": "caught",
+  "failing": [
+   "refuses an occurredAt with a space for the T"
+  ]
+ },
+ {
+  "id": "occurred-millis-only",
+  "file": "src/resources/events.ts",
+  "find": "(\\.\\d{1,6})?",
+  "replace": "(\\.\\d{1,3})?",
+  "expect": "caught",
+  "failing": [
+   "sends an envelope with an occurredAt with microseconds and an offset"
+  ]
+ },
+ {
+  "id": "occurred-no-z",
+  "file": "src/resources/events.ts",
+  "find": "(Z|[+-]",
+  "replace": "([+-]",
+  "expect": "caught",
+  "failing": [
+   "sends an envelope with an occurredAt in UTC with Z"
+  ]
+ },
+ {
+  "id": "data-check-dropped",
+  "file": "src/resources/events.ts",
+  "find": "if (!isPlainObject(given.data)) {",
+  "replace": "if (given.data === undefined) {",
+  "expect": "caught",
+  "failing": [
+   "refuses data that is a list",
+   "refuses data that is null",
+   "refuses data that is text"
+  ]
+ },
+ {
+  "id": "data-allows-null",
+  "file": "src/resources/events.ts",
+  "find": "if (!isPlainObject(given.data)) {",
+  "replace": "if (given.data !== null && !isPlainObject(given.data)) {",
+  "expect": "caught",
+  "failing": [
+   "refuses data that is null"
+  ]
+ },
+ {
+  "id": "plain-object-allows-array",
+  "file": "src/resources/events.ts",
+  "find": "return typeof value === 'object' && value !== null && !Array.isArray(value);",
+  "replace": "return typeof value === 'object' && value !== null;",
+  "expect": "caught",
+  "failing": [
+   "refuses data that is a list"
+  ]
+ },
+ {
+  "id": "data-requires-keys",
+  "file": "src/resources/events.ts",
+  "find": "if (!isPlainObject(given.data)) {",
+  "replace": "if (!isPlainObject(given.data) || Object.keys(given.data).length === 0) {",
+  "expect": "caught",
+  "failing": [
+   "sends an envelope whose data is an empty object",
+   "sends product-created to its own path"
+  ]
+ },
+ {
+  "id": "headers-unfiltered",
+  "file": "src/http.ts",
+  "find": "if (!SDK_HEADERS.has(name.toLowerCase())) headers[name] = value;",
+  "replace": "headers[name] = value;",
+  "expect": "caught",
+  "failing": [
+   "never lets a request header in lower case replace or sit beside the SDK headers"
+  ]
+ },
+ {
+  "id": "headers-filter-case-sensitive",
+  "file": "src/http.ts",
+  "find": "if (!SDK_HEADERS.has(name.toLowerCase())) headers[name] = value;",
+  "replace": "if (!SDK_HEADERS.has(name)) headers[name] = value;",
+  "expect": "caught",
+  "failing": [
+   "never lets a request header in upper case replace or sit beside the SDK headers"
+  ]
+ },
+ {
+  "id": "headers-filter-keeps-content-type",
+  "file": "src/http.ts",
+  "find": "'user-agent', 'content-type']",
+  "replace": "'user-agent']",
+  "expect": "caught",
+  "failing": [
+   "drops a Content-Type header from a request without a body"
+  ]
+ },
+ {
+  "id": "headers-not-passed",
+  "file": "src/http.ts",
+  "find": "this.buildRequest(req.method, url, token, body, req.headers)",
+  "replace": "this.buildRequest(req.method, url, token, body)",
+  "expect": "caught",
+  "failing": [
+   "sends X-Siren-Final-Attempt: 1 when finalAttempt is true"
+  ]
+ },
+ {
+  "id": "headers-lost-on-resend",
+  "file": "src/http.ts",
+  "find": "this.buildRequest(req.method, url, token, body, req.headers)",
+  "replace": "this.buildRequest(req.method, url, token, body, refreshed ? undefined : req.headers)",
+  "expect": "caught",
+  "failing": [
+   "resends once with a refreshed token after a 401, keeping the final-attempt header"
+  ]
+ },
+ {
+  "id": "headers-above-sdk",
+  "file": "src/http.ts",
+  "find": "    headers['User-Agent'] = 'siren-sdk-typescript/0.3.0';\n",
+  "replace": "    headers['User-Agent'] = 'siren-sdk-typescript/0.3.0';\n    Object.assign(headers, extra);\n",
+  "expect": "caught",
+  "failing": [
+   "never lets a request header in their own case replace or sit beside the SDK headers"
+  ]
+ }
+]

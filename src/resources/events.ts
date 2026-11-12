@@ -1,7 +1,19 @@
+import { SirenError } from '../errors';
 import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import { EventSlug } from '../taxonomy';
 import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '../types';
+import { ForwardedEventSlug as ForwardedSlugs } from '../connect/forwarded-events';
+import type { ForwardOptions, ForwardedEventEnvelope, ForwardedEventSlug } from '../connect/forwarded-events';
+
+/** The 28 slugs `forward` sends. Any other slug would become a custom event. */
+const FORWARDED_SLUGS: ReadonlySet<string> = new Set(Object.values(ForwardedSlugs));
+
+/** A UUID as `EventWireFormat` reads one, any version, either case. */
+const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** ISO 8601 to the second, up to microseconds, with `Z` or a `+hh:mm` offset. */
+const OCCURRED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
  * Event ingestion — the primary integration point. Wraps `POST /event/{slug}`.
@@ -78,15 +90,88 @@ export class EventsResource {
   }
 
   /**
-   * POST `payload` to `/event/{slug}`. `retriable` says whether the transport
-   * may resend it on a network error, 429 or 5xx.
+   * Forward an event a connected site recorded, in Siren's versioned
+   * envelope, to `POST /event/{slug}`. The token needs `connect:ingest`, or
+   * an API key the exact `event:{slug}` scope.
+   *
+   * The body is the envelope as given, and the answer is read as every
+   * event's is, so a 2xx whose body has no readable `status` resolves
+   * without one. Cloud counts any 2xx as delivered.
+   *
+   * Sent once, whatever the answer and whatever the client's `maxRetries`.
+   * After a 401 with an `AccessTokenSource` it sends again with a refreshed
+   * token, carrying the same headers, `X-Siren-Final-Attempt` included, and
+   * only then, as the transport does for every call.
+   *
+   * A forwarded event is queue work, and the site's outbox owns redelivery.
+   * The site mints `eventId` once, when it records the event, and keeps it
+   * with the event, because a slug with no natural key is claimed on
+   * `eventId` alone and a fresh id on each try records the event twice. The
+   * outbox resends with that same `eventId`, which Cloud claims once, on
+   * the event's natural key or on `eventId`, and answers as `duplicate`,
+   * which the outbox counts as delivered. The claim is scoped to the credential's Property, so every try of one event
+   * must use the same credential. A 500 whose `error.context.reason` is
+   * `waiting_for_record` raises `ApiError`, and a 404 `reference_not_found`
+   * raises `NotFoundError`, each with that reason in `data`, and the outbox
+   * tries the event again later. `finalAttempt: true` adds the header
+   * `X-Siren-Final-Attempt: 1` to that one send, and no other call sends it.
+   *
+   * Throws `SirenError`, and sends nothing, when `slug` is not a
+   * `ForwardedEventSlug` value, so a typo never becomes a custom event, or
+   * when the envelope breaks a rule Cloud checks before it reads `data`:
+   * `version` other than 1, `eventId` not a UUID, `origin` other than
+   * `site`, `occurredAt` neither `null` nor ISO 8601 with a `Z` or
+   * `+hh:mm` offset, or `data` not a plain object. No message quotes a value
+   * from `data`.
    */
-  private async send(slug: string, payload: unknown, retriable: boolean): Promise<EventResult> {
+  async forward<S extends ForwardedEventSlug>(
+    slug: S,
+    envelope: ForwardedEventEnvelope<S>,
+    options: ForwardOptions = {},
+  ): Promise<EventResult> {
+    if (typeof slug !== 'string' || !FORWARDED_SLUGS.has(slug)) {
+      throw new SirenError('Siren: events.forward takes a ForwardedEventSlug value. Send a custom event with events.ingest.');
+    }
+    const given: unknown = envelope;
+    if (!isPlainObject(given)) {
+      throw new SirenError('Siren: events.forward takes the envelope as an object.');
+    }
+    if (given.version !== 1) {
+      throw new SirenError('Siren: a forwarded event envelope has version 1.');
+    }
+    if (typeof given.eventId !== 'string' || !EVENT_ID.test(given.eventId)) {
+      throw new SirenError('Siren: a forwarded event envelope needs an eventId that is a UUID.');
+    }
+    if (given.origin !== 'site') {
+      throw new SirenError("Siren: a forwarded event envelope has origin 'site'.");
+    }
+    if (given.occurredAt !== null && (typeof given.occurredAt !== 'string' || !OCCURRED_AT.test(given.occurredAt))) {
+      throw new SirenError('Siren: a forwarded event envelope needs occurredAt as null or ISO 8601 with a Z or +hh:mm offset.');
+    }
+    if (!isPlainObject(given.data)) {
+      throw new SirenError('Siren: a forwarded event envelope needs data as a plain object.');
+    }
+    const headers = options?.finalAttempt === true ? { 'X-Siren-Final-Attempt': '1' } : undefined;
+    return this.send(slug, envelope, false, headers);
+  }
+
+  /**
+   * POST `payload` to `/event/{slug}`. `retriable` says whether the transport
+   * may resend it on a network error, 429 or 5xx. `headers` go out beneath
+   * the SDK's own on every send of this call.
+   */
+  private async send(
+    slug: string,
+    payload: unknown,
+    retriable: boolean,
+    headers?: Record<string, string>,
+  ): Promise<EventResult> {
     const response = await this.http.request({
       method: 'POST',
       path: `/event/${encodeURIComponent(slug)}`,
       body: payload,
       retriable,
+      ...(headers !== undefined ? { headers } : {}),
     });
     const result: EventResult = {};
 
@@ -115,4 +200,9 @@ export class EventsResource {
 
     return result;
   }
+}
+
+/** Whether `value` is an object that is not an array, as a JSON object decodes. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
