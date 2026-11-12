@@ -47,49 +47,49 @@ function err(message: string, code?: string, context?: Record<string, unknown>) 
 }
 
 describe('P1: the known-code rule (isKnownErrorCode and the existing 401 and 403 classes)', () => {
-  it.skip('isKnownErrorCode knows every ErrorCode value', () => {
+  it('isKnownErrorCode knows every ErrorCode value', () => {
     for (const code of Object.values(ErrorCode)) {
       expect(isKnownErrorCode(code)).toBe(true);
     }
   });
 
-  it.skip('isKnownErrorCode refuses a missing, empty or unknown code', () => {
+  it('isKnownErrorCode refuses a missing, empty or unknown code', () => {
     for (const code of [undefined, null, '', 'not_a_code', 'VALIDATION_FAILED', 'code_403', 'MISSING_SCOPE']) {
       expect(isKnownErrorCode(code)).toBe(false);
     }
   });
 
-  it.skip('a 401 with no code that says the route does not accept API keys is an ApiKeyNotAcceptedError', async () => {
+  it('a 401 with no code that says the route does not accept API keys is an ApiKeyNotAcceptedError', async () => {
     const error = await thrownBy(401, err('This route Does Not Accept API Keys. Sign in instead.'));
     expect(error).toBeInstanceOf(ApiKeyNotAcceptedError);
     expect((error as SirenError).code).toBe('api_key_not_accepted');
   });
 
-  it.skip('a 401 with an unknown code falls back to the wording', async () => {
+  it('a 401 with an unknown code falls back to the wording', async () => {
     const error = await thrownBy(401, err('This route does not accept API keys.', 'legacy_refusal'));
     expect(error).toBeInstanceOf(ApiKeyNotAcceptedError);
     expect((error as SirenError).code).toBe('legacy_refusal');
   });
 
-  it.skip('a 401 with a known code that is not api_key_not_accepted ignores the wording', async () => {
+  it('a 401 with a known code that is not api_key_not_accepted ignores the wording', async () => {
     const error = await thrownBy(401, err('This route does not accept API keys.', 'plan_required'));
     expect(error).toBeInstanceOf(AuthenticationError);
     expect(error).not.toBeInstanceOf(ApiKeyNotAcceptedError);
   });
 
-  it.skip('a 403 with no code that says the token is not authorized for a scope is a MissingScopeError with that scope', async () => {
+  it('a 403 with no code that says the token is not authorized for a scope is a MissingScopeError with that scope', async () => {
     const error = await thrownBy(403, err('This token is not authorized for records:programs:read.'));
     expect(error).toBeInstanceOf(MissingScopeError);
     expect((error as MissingScopeError).scope).toBe('records:programs:read');
     expect((error as MissingScopeError).anyOf).toEqual([]);
   });
 
-  it.skip('reads the scope from the message without a trailing colon', async () => {
+  it('reads the scope from the message without a trailing colon', async () => {
     const error = await thrownBy(403, err('This token is not authorized for event:'));
     expect((error as MissingScopeError).scope).toBe('event');
   });
 
-  it.skip('prefers the context scope over the message', async () => {
+  it('prefers the context scope over the message', async () => {
     const error = await thrownBy(
       403,
       err('This token is not authorized for event:sale.', 'missing_scope', { scope: 'event:refund' }),
@@ -97,18 +97,18 @@ describe('P1: the known-code rule (isKnownErrorCode and the existing 401 and 403
     expect((error as MissingScopeError).scope).toBe('event:refund');
   });
 
-  it.skip('a 403 with a known code that is not missing_scope ignores the scope wording', async () => {
+  it('a 403 with a known code that is not missing_scope ignores the scope wording', async () => {
     const error = await thrownBy(403, err('This token is not authorized for event:sale.', 'plan_required'));
     expect(error).toBeInstanceOf(PermissionError);
     expect(error).not.toBeInstanceOf(MissingScopeError);
   });
 
-  it.skip('a 403 with no code that says the key is bound to one store is a StoreKeyNotAllowedError', async () => {
+  it('a 403 with no code that says the key is bound to one store is a StoreKeyNotAllowedError', async () => {
     const error = await thrownBy(403, err('This API key is BOUND TO ONE STORE, so it cannot read payouts.'));
     expect(error).toBeInstanceOf(StoreKeyNotAllowedError);
   });
 
-  it.skip('a 403 with a known code that is not store_key_not_allowed ignores the store wording', async () => {
+  it('a 403 with a known code that is not store_key_not_allowed ignores the store wording', async () => {
     const error = await thrownBy(403, err('This API key is bound to one store.', 'admin_required'));
     expect(error).not.toBeInstanceOf(StoreKeyNotAllowedError);
     expect(error).toBeInstanceOf(PermissionError);

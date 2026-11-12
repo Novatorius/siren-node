@@ -1,0 +1,168 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/errors.ts",
+    "find": "return typeof code === 'string' && KNOWN_ERROR_CODES.has(code);",
+    "replace": "return false;",
+    "expect": "caught",
+    "failing": [
+      "isKnownErrorCode knows every ErrorCode value"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/errors.ts",
+    "find": "/** Union of the {@link ErrorCode} strings. */",
+    "replace": "/** Union of the {@link ErrorCode} strings, unchanged. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/errors.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/errors.ts",
+    "find": "export function isKnownErrorCode(",
+    "replace": "export function isKnownErrorCode((",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "known-code-from-keys",
+    "file": "src/errors.ts",
+    "find": "new Set<string>(Object.values(ErrorCode))",
+    "replace": "new Set<string>(Object.keys(ErrorCode))",
+    "expect": "caught",
+    "failing": [
+      "isKnownErrorCode knows every ErrorCode value"
+    ]
+  },
+  {
+    "id": "known-code-any-case",
+    "file": "src/errors.ts",
+    "find": "return typeof code === 'string' && KNOWN_ERROR_CODES.has(code);",
+    "replace": "return typeof code === 'string' && KNOWN_ERROR_CODES.has(code.toLowerCase());",
+    "expect": "caught",
+    "failing": [
+      "isKnownErrorCode refuses a missing, empty or unknown code"
+    ]
+  },
+  {
+    "id": "api-key-drop-known-code-rule",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return code === ErrorCode.ApiKeyNotAccepted;",
+    "replace": "if (code === ErrorCode.ApiKeyNotAccepted) return true;",
+    "expect": "caught",
+    "failing": [
+      "a 401 with a known code that is not api_key_not_accepted ignores the wording"
+    ]
+  },
+  {
+    "id": "api-key-drop-wording",
+    "file": "src/errors.ts",
+    "find": "return message.toLowerCase().includes('does not accept api keys');",
+    "replace": "return false;",
+    "expect": "caught",
+    "failing": [
+      "a 401 with no code that says the route does not accept API keys is an ApiKeyNotAcceptedError",
+      "a 401 with an unknown code falls back to the wording"
+    ]
+  },
+  {
+    "id": "api-key-wording-case-sensitive",
+    "file": "src/errors.ts",
+    "find": "return message.toLowerCase().includes('does not accept api keys');",
+    "replace": "return message.includes('does not accept API keys');",
+    "expect": "caught",
+    "failing": [
+      "a 401 with no code that says the route does not accept API keys is an ApiKeyNotAcceptedError"
+    ]
+  },
+  {
+    "id": "scope-drop-known-code-rule",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return code === ErrorCode.MissingScope;",
+    "replace": "if (code === ErrorCode.MissingScope) return true;",
+    "expect": "caught",
+    "failing": [
+      "a 403 with a known code that is not missing_scope ignores the scope wording"
+    ]
+  },
+  {
+    "id": "scope-drop-wording",
+    "file": "src/errors.ts",
+    "find": "return MissingScopeError.MESSAGE_PATTERN.test(message);",
+    "replace": "return false;",
+    "expect": "caught",
+    "failing": [
+      "a 403 with no code that says the token is not authorized for a scope is a MissingScopeError with that scope"
+    ]
+  },
+  {
+    "id": "scope-drop-message-fallback",
+    "file": "src/errors.ts",
+    "find": "if (named) this.scope = named;",
+    "replace": "void named;",
+    "expect": "caught",
+    "failing": [
+      "a 403 with no code that says the token is not authorized for a scope is a MissingScopeError with that scope",
+      "reads the scope from the message without a trailing colon"
+    ]
+  },
+  {
+    "id": "scope-keep-trailing-colon",
+    "file": "src/errors.ts",
+    "find": "?.[1]?.replace(/:+$/, '');",
+    "replace": "?.[1];",
+    "expect": "caught",
+    "failing": [
+      "reads the scope from the message without a trailing colon"
+    ]
+  },
+  {
+    "id": "scope-message-over-context",
+    "file": "src/errors.ts",
+    "find": "if (this.scope === undefined) {",
+    "replace": "if (this.scope === undefined || this.scope !== undefined) {",
+    "expect": "caught",
+    "failing": [
+      "prefers the context scope over the message"
+    ]
+  },
+  {
+    "id": "store-drop-known-code-rule",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return code === ErrorCode.StoreKeyNotAllowed;",
+    "replace": "if (code === ErrorCode.StoreKeyNotAllowed) return true;",
+    "expect": "caught",
+    "failing": [
+      "a 403 with a known code that is not store_key_not_allowed ignores the store wording"
+    ]
+  },
+  {
+    "id": "store-drop-wording",
+    "file": "src/errors.ts",
+    "find": "return message.toLowerCase().includes('bound to one store');",
+    "replace": "return false;",
+    "expect": "caught",
+    "failing": [
+      "a 403 with no code that says the key is bound to one store is a StoreKeyNotAllowedError"
+    ]
+  },
+  {
+    "id": "store-wording-case-sensitive",
+    "file": "src/errors.ts",
+    "find": "return message.toLowerCase().includes('bound to one store');",
+    "replace": "return message.includes('bound to one store');",
+    "expect": "caught",
+    "failing": [
+      "a 403 with no code that says the key is bound to one store is a StoreKeyNotAllowedError"
+    ]
+  }
+]
