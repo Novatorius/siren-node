@@ -526,7 +526,10 @@ export interface DistributorListParams extends RecordListParams {
   orderBy?: 'id' | 'name' | 'status' | 'dateCreated';
 }
 
-/** The fields `distributors.create()` sends. */
+/**
+ * The fields `distributors.create()` sends, the fifteen Siren's create route
+ * and its listeners read. `create` refuses any other key before sending.
+ */
 export interface CreateDistributorParams {
   name: string;
   description: string;
@@ -539,14 +542,15 @@ export interface CreateDistributorParams {
   revenuePercentage?: number;
   /** Date modifiers such as `first day of next month`. */
   schedule?: string[];
-  engagementTypes?: Record<string, unknown>;
+  /** The metric types the distributor counts, each `{ type, calculationType, calculationArgs? }`. */
+  engagementTypes?: Array<Record<string, unknown>>;
   collaboratorIds?: number[];
   collaboratorGroupId?: number;
   transactionCompilers?: unknown[];
-  lineItemFilters?: unknown[];
+  /** A map of line item filters, as Siren reads it. */
+  lineItemFilters?: Record<string, unknown>;
   postAllocationActions?: unknown[];
   metricFilters?: unknown[];
-  [field: string]: unknown;
 }
 
 /** The fields `distributors.update()` sends. Send only the fields to change. */
@@ -587,7 +591,10 @@ export interface CustomCurrencyListParams extends RecordListParams {
   orderBy?: 'code' | 'name' | 'symbol' | 'symbolPosition' | 'type' | 'exchangeRate' | 'dateCreated' | 'dateModified';
 }
 
-/** The fields `customCurrencies.create()` sends. */
+/**
+ * The fields `customCurrencies.create()` sends, the eight Siren's create route
+ * reads. `create` refuses any other key before sending.
+ */
 export interface CreateCustomCurrencyParams {
   /** Upper case letters, digits and underscores, at most 50, unique, and not a built-in currency's code. */
   code: string;
@@ -750,14 +757,16 @@ export interface SharedSetting {
   [field: string]: unknown;
 }
 
-/** The fields `conversions.create()` sends. */
+/**
+ * The fields `conversions.create()` sends, the five Siren's create route
+ * reads. `create` refuses any other key before sending.
+ */
 export interface CreateConversionParams {
   engagementId: number;
   type: string;
   status: ConversionStatus;
   transactionId?: number;
   obligationId?: number;
-  [field: string]: unknown;
 }
 
 /** The fields `conversions.update()` sends. Send only the fields to change. */
@@ -776,7 +785,10 @@ export interface TransactionDetailRecord {
   [field: string]: unknown;
 }
 
-/** One line `transactions.create()` sends, value in minor units per unit. */
+/**
+ * One line `transactions.create()` sends, value in minor units per unit. These
+ * are the seven keys Siren reads on a line, and `create` refuses any other.
+ */
 export interface TransactionDetail {
   name: string;
   value: number;
@@ -785,15 +797,41 @@ export interface TransactionDetail {
   description?: string;
   units?: string;
   attributes?: Record<string, unknown>;
-  [field: string]: unknown;
 }
 
-/** The fields `transactions.create()` sends. */
+/** The fields `transactions.create()` sends. `create` refuses any other key. */
 export interface CreateTransactionParams {
   /** One to 500 lines. */
   details: TransactionDetail[];
-  /** An outside reference Siren stores as a mapping, so the transaction can be found again. */
-  bindingId?: string;
+  /**
+   * The outside record's id, such as an order number. Siren stores it with
+   * `bindingDataType` as a mapping, and finds a resent transaction only by
+   * the two together, so `create` refuses one without the other.
+   */
+  bindingId?: string | number;
+  /** The kind of outside record `bindingId` names, such as `crm_order`. */
   bindingDataType?: string;
-  [field: string]: unknown;
+}
+
+/**
+ * What `conversions.recoverCreate()` answers: the conversion Siren already
+ * holds for the create, as its list reads it, with `created: false`, or the
+ * one it made when it found none, with `created: true`.
+ */
+export interface RecoveredConversion<T = Record<string, unknown>> {
+  conversion: T;
+  created: boolean;
+}
+
+/**
+ * What `transactions.recoverCreditCollaborator()` answers. `alreadyCredited`
+ * holds the asked transactions that already have a conversion of that type
+ * for the collaborator, and `credited` the ones it sent, in the order asked.
+ * `result` is Siren's answer to that send, or `null` when every transaction
+ * was already credited and nothing was sent.
+ */
+export interface RecoveredCredit {
+  alreadyCredited: number[];
+  credited: number[];
+  result: BulkResult | null;
 }

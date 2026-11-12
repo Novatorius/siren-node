@@ -5,6 +5,8 @@ import type {
   BulkResult,
   CreateConversionParams,
   CreateTransactionParams,
+  RecoveredConversion,
+  RecoveredCredit,
   RegistryOptions,
   TransactionDetailRecord,
   UpdateConversionParams,
@@ -201,6 +203,26 @@ export async function retrieveRecord<T>(
  * again.
  */
 export class ConversionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
+  /**
+   * The fields {@link create} sends: the five Siren's create route reads
+   * (`CreateNewConversion.php`), which are the five the PHP SDK documents.
+   * `create` refuses any other key before sending.
+   */
+  static readonly CREATE_FIELDS = ['engagementId', 'type', 'status', 'transactionId', 'obligationId'] as const;
+
+  /**
+   * The filters {@link recoverCreate} and `transactions.recoverCreditCollaborator()`
+   * send to `GET /conversions`. `listRecords` refuses any other key.
+   */
+  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId', 'type'] as const;
+
+  /**
+   * The id filters among {@link RECOVERY_FILTERS}, by how Siren reads them.
+   * `GetConversions.php` casts `collaboratorId` to one number and matches
+   * `transactionId` and `engagementId` as columns, where a list means "any of".
+   */
+  static readonly RECOVERY_ID_FILTERS = { one: ['collaboratorId'], many: ['transactionId', 'engagementId'] } as const;
+
   constructor(http: HttpTransport) {
     super(http, '/conversions');
   }
@@ -227,20 +249,67 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * status 201. Required: `engagementId`, `type` and `status` (`pending`,
    * `approved`, `rejected` or `expired`). Optional: `transactionId` and
    * `obligationId`. Siren writes the status as sent and runs no approval.
-   * Throws `SirenError` before sending when `engagementId`, or a
-   * `transactionId` or `obligationId` that is present, is not a positive
-   * whole number. A connected site's token cannot write conversions.
+   * A connected site's token cannot write conversions.
+   *
+   * Sends a new object holding only the {@link CREATE_FIELDS} that `params`
+   * gives. Throws `SirenError` before sending when `params` holds any other
+   * key, whatever its value, `undefined` included, with exactly
+   * `conversions.create() cannot send "{key}". Siren's create route reads
+   * only engagementId, type, status, transactionId and obligationId.`, and
+   * when `engagementId`, or a `transactionId` or `obligationId` that is
+   * present, is not a positive whole number.
    *
    * Siren takes a second create as a new conversion. After a lost answer,
-   * list the conversions by `transactionId` before sending again. An
-   * engagement holds many conversions, so a create with no `transactionId`
-   * cannot be checked: set it aside instead of resending it.
+   * send it again through {@link recoverCreate}, which sends it only when
+   * Siren holds no such conversion. An engagement holds many conversions,
+   * so a create with no `transactionId` cannot be checked: set it aside
+   * instead of resending it.
    */
   async create(params: CreateConversionParams): Promise<T> {
     recordId(params?.engagementId, 'conversions.create', 'engagementId');
     if (params?.transactionId !== undefined) recordId(params.transactionId, 'conversions.create', 'transactionId');
     if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');
+    // Stub: slice 4 fix packet F3 (the create allow lists).
     return writeRecord<T>(this.http, 'POST', this.path, params);
+  }
+
+  /**
+   * Sends a conversion create whose first send lost its answer, only when
+   * Siren holds no such conversion, for a caller's queue to run in place of
+   * a blind resend of {@link create}.
+   *
+   * Reads `GET /conversions` through `listRecords` with
+   * {@link RECOVERY_FILTERS} and {@link RECOVERY_ID_FILTERS}, with the
+   * create's `transactionId`, `engagementId` and `type`, `fields`
+   * `id,engagementId,transactionId,type,status`, `number: 1`, `orderBy: 'id'`
+   * and `order: 'ASC'`. When Siren answers a well-formed list holding that
+   * conversion, it answers the row with `created: false` and sends nothing.
+   * Only a well-formed empty list, a JSON array or an `items` list with no
+   * rows, sends {@link create}, once, and answers the new conversion with
+   * `created: true`.
+   *
+   * It never sends the create after an answer it cannot read. A 2xx body
+   * that is not a record list (not JSON, no `items` key, an `items` that is
+   * not a list), a row that is not an object, and a row whose
+   * `transactionId`, `engagementId` or `type` is not the create's all throw
+   * `UnexpectedResponseError` with the status Siren sent, and every error
+   * from the read reaches the caller as it is, with the create unsent.
+   *
+   * Throws `SirenError` before anything is sent when `params` has no
+   * `transactionId`, with exactly `conversions.recoverCreate() needs a
+   * transactionId to find the first send. Without one, set the create
+   * aside.`, and when `engagementId` or `transactionId` is not a positive
+   * whole number. Throws `SirenError` before sending the create for every
+   * other reason {@link create} gives.
+   *
+   * The read and the create are two requests, so two workers that recover
+   * the same create at once can both find nothing. Run one recovery per
+   * conversion at a time.
+   */
+  async recoverCreate(params: CreateConversionParams): Promise<RecoveredConversion<T>> {
+    // Stub: slice 4 fix packet F1 (the lost-answer check).
+    void params;
+    return { conversion: {} as T, created: false };
   }
 
   /**
@@ -314,6 +383,20 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
  * again.
  */
 export class TransactionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
+  /**
+   * The fields {@link create} sends: the three Siren's create route reads
+   * (`CreateTransaction.php`), which are the three the PHP SDK documents.
+   * `create` refuses any other key before sending.
+   */
+  static readonly CREATE_FIELDS = ['details', 'bindingId', 'bindingDataType'] as const;
+
+  /**
+   * The keys of one line {@link create} sends: the seven Siren reads on a
+   * line (`TransactionDetailChecks.php`), which are the seven the PHP SDK
+   * documents. `create` refuses any other key on a line before sending.
+   */
+  static readonly DETAIL_FIELDS = ['name', 'description', 'type', 'value', 'quantity', 'units', 'attributes'] as const;
+
   constructor(http: HttpTransport) {
     super(http, '/transactions');
   }
@@ -358,10 +441,10 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * Records a transaction with its lines with `POST /transactions`, sent
    * once, and answers it, status 201. `details` holds one to 500 lines, each
    * `{ name, value, quantity?, type?, description?, units?, attributes? }`
-   * with `value` in minor units. `bindingId` and `bindingDataType` name an
-   * outside record Siren stores as a mapping, so the transaction can be
-   * found again, and a second transaction for the same binding answers 409,
-   * raised as `ConflictError`.
+   * with `value` in minor units. `bindingId` and `bindingDataType` together
+   * name an outside record, such as an order, which Siren stores as a
+   * mapping, so the transaction can be found again. A second transaction
+   * for the same binding answers 409, raised as `ConflictError`.
    *
    * Commerce sales go through `events.sale()` instead, which runs
    * attribution. This call records a transaction directly.
@@ -371,10 +454,32 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * Without a binding, Siren takes a resend as a second transaction, so
    * check with `list` before sending again.
    *
+   * Siren finds a resent transaction only by both binding fields, and reads
+   * `""`, `"0"` and `0` as no binding at all, so this throws `SirenError`
+   * before sending, with exactly `transactions.create() needs bindingId and
+   * bindingDataType together, or neither. Siren finds a resent transaction
+   * only by both.`, when one is given without the other, and with exactly
+   * `transactions.create() cannot send {key} {value}, which Siren reads as
+   * no binding.` for a binding field of `""`, `"0"` or `0`. `{value}` is the
+   * value in JSON. A field that is `undefined` or `null` counts as not
+   * given.
+   *
+   * Sends a new object holding only `details`, `bindingId` and
+   * `bindingDataType` ({@link CREATE_FIELDS}), each line a new object
+   * holding only the {@link DETAIL_FIELDS} it gives. Throws `SirenError`
+   * before sending for any other key, whatever its value, `undefined`
+   * included, with exactly `transactions.create() cannot send "{key}".
+   * Siren's create route reads only details, bindingId and
+   * bindingDataType.`, and for any other key on a line, with exactly
+   * `transactions.create() cannot send "{key}" on line {n}. A line holds
+   * only name, description, type, value, quantity, units and attributes.`,
+   * where `{n}` counts from 1. Siren ignores a key it does not read, so a
+   * misspelt `quantity` would record one unit.
+   *
    * Throws `SirenError` before sending, with exactly `transactions.create()
    * needs details: a list of 1 to 500 lines.`, when `details` is missing, not
    * an array, empty or longer than 500, or holds a line that is not an
-   * object.
+   * object. That check runs first.
    */
   async create(params: CreateTransactionParams): Promise<T> {
     const details: unknown = params?.details;
@@ -386,6 +491,8 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
     ) {
       throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');
     }
+    // Stub: slice 4 fix packet F2 (the binding pair).
+    // Stub: slice 4 fix packet F3 (the create allow lists).
     return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
@@ -413,9 +520,9 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * not credited.
    *
    * A second send makes a second conversion for each transaction, and Siren
-   * takes no idempotency key for it. After a lost answer, list the
-   * conversions by `transactionId` and credit only the transactions that
-   * have none.
+   * takes no idempotency key for it. After a lost answer, send it again
+   * through {@link recoverCreditCollaborator}, which credits only the
+   * transactions that hold no conversion for this collaborator.
    *
    * Throws `SirenError` before sending when `transactionIds` is not a
    * non-empty array of at most 500 positive whole numbers, `collaboratorId`
@@ -438,6 +545,48 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
       body.type = type;
     }
     return writeRecord<BulkResult>(this.http, 'POST', `${this.path}/credit-collaborator`, body);
+  }
+
+  /**
+   * Credits transactions to a collaborator after {@link creditCollaborator}
+   * lost its answer, sending only the transactions not yet credited, for a
+   * caller's queue to run in place of a blind resend.
+   *
+   * Reads `GET /conversions` through `listRecords` with
+   * `ConversionsResource.RECOVERY_FILTERS` and `RECOVERY_ID_FILTERS`:
+   * `transactionId` the asked ids, `collaboratorId`, `type` (`sale` when
+   * left out, as Siren defaults it), `fields`
+   * `id,transactionId,collaboratorId,type`, `number: 200`, `offset` from 0,
+   * `orderBy: 'id'` and `order: 'ASC'`, page after page, until a page holds
+   * fewer than 200 rows. A transaction counts as credited when a row names
+   * it. Siren filters by the collaborator, so another collaborator's
+   * conversion on the same transaction does not count. It then sends
+   * {@link creditCollaborator} once with the rest, in the order asked, or
+   * nothing when none is left.
+   *
+   * It never sends after an answer it cannot read. A 2xx body that is not a
+   * record list (not JSON, no `items` key, an `items` that is not a list), a
+   * row that is not an object, and a row whose `transactionId` is not one
+   * asked, whose `collaboratorId` is not the collaborator or whose `type` is
+   * not the type all throw `UnexpectedResponseError` with the status Siren
+   * sent, and every error from a read reaches the caller as it is, with
+   * nothing sent.
+   *
+   * Throws `SirenError` before anything is sent for every reason
+   * {@link creditCollaborator} gives. The reads and the send are separate
+   * requests, so run one recovery per collaborator and transaction at a
+   * time.
+   */
+  async recoverCreditCollaborator(
+    transactionIds: readonly number[],
+    collaboratorId: number,
+    type?: string,
+  ): Promise<RecoveredCredit> {
+    // Stub: slice 4 fix packet F1 (the lost-answer check).
+    void transactionIds;
+    void collaboratorId;
+    void type;
+    return { alreadyCredited: [], credited: [], result: null };
   }
 
   /**

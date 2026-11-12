@@ -39,6 +39,30 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
   /** The filters `GET /distributors` reads. {@link list} refuses any other key, `propertyId` included. No filter takes an id, so there is no `ID_FILTERS`. */
   static readonly LIST_FILTERS = ['status', 's', 'metricType'] as const;
 
+  /**
+   * The fields {@link create} sends: the fifteen Siren's create route and the
+   * listeners of its action event read (`CreateNewDistributor.php`,
+   * `ValidatesDistributorFields.php`), which are the fifteen the PHP SDK
+   * documents. `create` refuses any other key before sending.
+   */
+  static readonly CREATE_FIELDS = [
+    'name',
+    'description',
+    'distributionResolver',
+    'distributionPoolResolver',
+    'status',
+    'units',
+    'revenuePercentage',
+    'schedule',
+    'engagementTypes',
+    'collaboratorIds',
+    'collaboratorGroupId',
+    'transactionCompilers',
+    'lineItemFilters',
+    'postAllocationActions',
+    'metricFilters',
+  ] as const;
+
   constructor(http: HttpTransport) {
     super(http, '/distributors');
   }
@@ -74,8 +98,15 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * field it refuses. Siren takes a second create as a new distributor, so
    * after a lost answer, search with `list({ s })` for the name before
    * sending again.
+   *
+   * Sends a new object holding only the {@link CREATE_FIELDS} that `params`
+   * gives. Throws `SirenError` before sending when `params` holds any other
+   * key, whatever its value, `undefined` included, with exactly
+   * `distributors.create() cannot send "{key}". Siren's create route reads
+   * only the fifteen fields in DistributorsResource.CREATE_FIELDS.`
    */
-  create(params: CreateDistributorParams): Promise<T> {
+  async create(params: CreateDistributorParams): Promise<T> {
+    // Stub: slice 4 fix packet F3 (the create allow lists).
     return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 

@@ -33,12 +33,23 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * Lists one page of engagements with `GET /engagements`, newest first by
    * default. Filters: `status`, `collaboratorId`, `programId` and
    * `opportunityId` (exact match, a list means "any of"), and `from` and `to`
-   * (days, `YYYY-MM-DD`, by `dateCreated`). Sort with `orderBy` (`id`,
-   * `opportunityId`, `programId`, `collaboratorId`, `score`, `status`,
-   * `source`, `dateCreated`, `dateModified`) and `order`. Sends through
-   * `listRecords` with {@link LIST_FILTERS} and {@link ID_FILTERS}.
+   * (days, `YYYY-MM-DD`, by `dateCreated`, both days included). Sort with
+   * `orderBy` (`id`, `opportunityId`, `programId`, `collaboratorId`, `score`,
+   * `status`, `source`, `dateCreated`, `dateModified`) and `order`. Sends
+   * through `listRecords` with {@link LIST_FILTERS} and {@link ID_FILTERS}.
+   *
+   * Siren leaves out a `from` or `to` that is not a day it can read, and
+   * answers every engagement as if no bound were sent
+   * (`DayRangeFilterMiddleware.php`). So a `from` or `to` that is given and
+   * is not a string of exactly four digits, a hyphen, two digits, a hyphen
+   * and two digits naming a real calendar day, such as `2026-11-12` or
+   * `2024-02-29`, throws `SirenError` before sending, with exactly
+   * `engagements.list() needs {key} as a day, YYYY-MM-DD, and got {value}.`
+   * `{value}` is a string in JSON quotes and anything else through
+   * `String()`. `undefined` counts as not given.
    */
-  override list(params: EngagementListParams = {}): Promise<SirenList<T>> {
+  override async list(params: EngagementListParams = {}): Promise<SirenList<T>> {
+    // Stub: slice 4 fix packet F4 (the day filters).
     return listRecords<T>(this.http, this.path, params, EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS);
   }
 
