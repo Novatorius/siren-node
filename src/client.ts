@@ -10,6 +10,9 @@ import { ApiKeysResource } from './resources/api-keys';
 import { EventsResource } from './resources/events';
 import { ConversionsResource, RecordsResource, TransactionsResource } from './resources/records';
 import { WebhooksResource } from './resources/webhooks';
+import type { AccessTokenSource } from './auth/access-token-source';
+import { StaticAccessToken } from './auth/static-access-token';
+import type { HttpClient } from './http';
 import type { SirenOptions } from './types';
 
 /**
@@ -71,21 +74,13 @@ export class Siren {
    * or a `FetchHttpClient` when there is none.
    */
   constructor(options: SirenOptions) {
-    // Stub: slice 2 packet P5. Until P5 lands, the client takes an apiKey
-    // only and sends it through FetchHttpClient. P5 replaces this block.
-    if (!options || typeof options.apiKey !== 'string' || options.apiKey.length === 0) {
-      throw new SirenError(
-        'Siren: an apiKey is required. Mint one in the Siren dashboard (Settings > API Keys).',
-      );
-    }
-    const apiKey = options.apiKey;
-
+    const given = (options ?? {}) as unknown as Record<string, unknown>;
     const http = new HttpTransport({
-      tokens: { getAccessToken: () => apiKey, refreshAccessToken: () => null },
-      client: new FetchHttpClient(),
-      baseUrl: options.baseUrl ?? DEFAULT_BASE_URL,
-      timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
-      maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
+      tokens: resolveTokens(given.apiKey, given.accessToken),
+      client: resolveHttpClient(given.httpClient),
+      baseUrl: options?.baseUrl ?? DEFAULT_BASE_URL,
+      timeout: options?.timeout ?? DEFAULT_TIMEOUT_MS,
+      maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
     });
 
     this.events = new EventsResource(http);
@@ -96,4 +91,48 @@ export class Siren {
     this.obligations = new RecordsResource(http, '/obligations');
     this.payouts = new RecordsResource(http, '/payouts');
   }
+}
+
+/**
+ * Turns the `apiKey` and `accessToken` options into the transport's token
+ * source. An option given as `undefined` is absent. Exactly one must be
+ * given, and no message quotes either value.
+ */
+function resolveTokens(apiKey: unknown, accessToken: unknown): AccessTokenSource {
+  const hasKey = apiKey !== undefined;
+  const hasToken = accessToken !== undefined;
+  if (hasKey && hasToken) {
+    throw new SirenError('Siren: pass either apiKey or accessToken, not both.');
+  }
+  if (hasToken) {
+    if (typeof accessToken === 'string' && accessToken.length > 0) return new StaticAccessToken(accessToken);
+    if (isAccessTokenSource(accessToken)) return accessToken;
+    throw new SirenError(
+      'Siren: accessToken must be a non-empty string or an AccessTokenSource with getAccessToken and refreshAccessToken.',
+    );
+  }
+  if (typeof apiKey === 'string' && apiKey.length > 0) return new StaticAccessToken(apiKey);
+  throw new SirenError(
+    'Siren: an apiKey is required. Mint one in the Siren dashboard (Settings > API Keys), or pass an accessToken.',
+  );
+}
+
+/** An `AccessTokenSource` is any object with both methods. */
+function isAccessTokenSource(value: unknown): value is AccessTokenSource {
+  if (typeof value !== 'object' || value === null) return false;
+  const source = value as Record<string, unknown>;
+  return typeof source.getAccessToken === 'function' && typeof source.refreshAccessToken === 'function';
+}
+
+/**
+ * Answers the given `httpClient`, any object with a `send` function, or a
+ * `FetchHttpClient` with no fetch of its own when the option is absent, so
+ * it reads the global fetch at each send.
+ */
+function resolveHttpClient(httpClient: unknown): HttpClient {
+  if (httpClient === undefined) return new FetchHttpClient();
+  if (typeof httpClient === 'object' && httpClient !== null && typeof (httpClient as HttpClient).send === 'function') {
+    return httpClient as HttpClient;
+  }
+  throw new SirenError('Siren: httpClient must be an object with a send function.');
 }

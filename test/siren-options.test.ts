@@ -53,7 +53,7 @@ afterEach(() => {
 const KEY = `sk_live_${'b'.repeat(64)}`;
 
 describe('P5: Siren credentials', () => {
-  it.skip('sends an apiKey as a fixed bearer token and surfaces a 401 without refreshing', async () => {
+  it('sends an apiKey as a fixed bearer token and surfaces a 401 without refreshing', async () => {
     const httpClient = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired)]);
     const siren = new Siren({ apiKey: KEY, httpClient, maxRetries: 2 });
 
@@ -61,7 +61,7 @@ describe('P5: Siren credentials', () => {
     expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`]);
   });
 
-  it.skip('sends a string accessToken as a fixed bearer token and surfaces a 401 without refreshing', async () => {
+  it('sends a string accessToken as a fixed bearer token and surfaces a 401 without refreshing', async () => {
     const httpClient = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired)]);
     const siren = new Siren({ accessToken: 'oauth-access-1', httpClient });
 
@@ -69,7 +69,7 @@ describe('P5: Siren credentials', () => {
     expect(httpClient.bearers()).toEqual(['Bearer oauth-access-1']);
   });
 
-  it.skip('uses an AccessTokenSource as given', async () => {
+  it('uses an AccessTokenSource as given', async () => {
     const tokens = spySource(['from-source']);
     const httpClient = new FakeHttpClient([reply(200, [])]);
     const siren = new Siren({ accessToken: tokens, httpClient });
@@ -80,14 +80,14 @@ describe('P5: Siren credentials', () => {
     expect(httpClient.bearers()).toEqual(['Bearer from-source']);
   });
 
-  it.skip('refuses both apiKey and accessToken', () => {
+  it('refuses both apiKey and accessToken', () => {
     const both = { apiKey: KEY, accessToken: 'oauth-access-1' } as unknown as SirenOptions;
 
     expect(() => new Siren(both)).toThrow(SirenError);
     expect(() => new Siren(both)).toThrow(/either apiKey or accessToken/i);
   });
 
-  it.skip('refuses neither, naming both choices', () => {
+  it('refuses neither, naming both choices', () => {
     const neither = {} as unknown as SirenOptions;
 
     expect(() => new Siren(neither)).toThrow(SirenError);
@@ -95,7 +95,7 @@ describe('P5: Siren credentials', () => {
     expect(() => new Siren(neither)).toThrow(/accessToken/);
   });
 
-  it.skip.each([
+  it.each([
     ['an empty string', ''],
     ['a number', 42],
     ['an object with no methods', {}],
@@ -104,14 +104,14 @@ describe('P5: Siren credentials', () => {
     expect(() => new Siren({ accessToken } as unknown as SirenOptions)).toThrow(SirenError);
   });
 
-  it.skip.each([
+  it.each([
     ['an empty apiKey beside an accessToken', { apiKey: '', accessToken: 'oauth-access-1' }],
     ['an apiKey beside an empty accessToken', { apiKey: KEY, accessToken: '' }],
   ])('refuses %s as both', (_name, options) => {
     expect(() => new Siren(options as unknown as SirenOptions)).toThrow(/either apiKey or accessToken/i);
   });
 
-  it.skip('reads an option given as undefined as absent', async () => {
+  it('reads an option given as undefined as absent', async () => {
     const httpClient = new FakeHttpClient([reply(200, [])]);
     const withKey = new Siren({ apiKey: KEY, accessToken: undefined, httpClient } as unknown as SirenOptions);
     const withToken = new Siren({ apiKey: undefined, accessToken: 'oauth-access-1', httpClient } as unknown as SirenOptions);
@@ -123,7 +123,7 @@ describe('P5: Siren credentials', () => {
     expect(() => new Siren({ apiKey: KEY, httpClient: undefined })).not.toThrow();
   });
 
-  it.skip('keeps the credentials out of the error it raises', () => {
+  it('keeps the credentials out of the error it raises', () => {
     const secret = `sk_live_${'s'.repeat(64)}`;
     const errors = [
       { apiKey: secret, accessToken: 'oauth-secret-1' },
@@ -144,13 +144,13 @@ describe('P5: Siren credentials', () => {
     }
   });
 
-  it.skip('still refuses an empty apiKey', () => {
+  it('still refuses an empty apiKey', () => {
     expect(() => new Siren({ apiKey: '' })).toThrow(/apiKey is required/);
   });
 });
 
 describe('P5: Siren httpClient', () => {
-  it.skip('sends every request through the given client and never through the global fetch', async () => {
+  it('sends every request through the given client and never through the global fetch', async () => {
     const fetchSpy = vi.fn(async () => new Response('[]', { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
     const httpClient = new FakeHttpClient([reply(200, [])]);
@@ -164,7 +164,7 @@ describe('P5: Siren httpClient', () => {
     expect(httpClient.requests[0]!.timeout).toBe(2500);
   });
 
-  it.skip('passes maxRetries 0 through, so a retriable read gets one send on a 503', async () => {
+  it('passes maxRetries 0 through, so a retriable read gets one send on a 503', async () => {
     const httpClient = new FakeHttpClient([reply(503, undefined), reply(200, [])]);
     const siren = new Siren({ apiKey: KEY, httpClient, maxRetries: 0 });
 
@@ -172,7 +172,7 @@ describe('P5: Siren httpClient', () => {
     expect(httpClient.requests).toHaveLength(1);
   });
 
-  it.skip.each([
+  it.each([
     ['an object with no send', {}],
     ['a function', () => undefined],
     ['a string', 'fetch'],
@@ -181,7 +181,7 @@ describe('P5: Siren httpClient', () => {
     expect(() => new Siren({ apiKey: KEY, httpClient } as unknown as SirenOptions)).toThrow(SirenError);
   });
 
-  it.skip('defaults to the global fetch when no client is given', async () => {
+  it('defaults to the global fetch when no client is given', async () => {
     const siren = new Siren({ accessToken: 'oauth-access-1' });
     const fetchSpy = vi.fn(async () => new Response('[]', { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
@@ -196,7 +196,7 @@ describe('P5: Siren httpClient', () => {
 });
 
 describe('P5: done condition at the HttpClient seam', () => {
-  it.skip('refreshes once and resends a send-once write, then answers', async () => {
+  it('refreshes once and resends a send-once write, then answers', async () => {
     const refresh = vi.fn(async (_rejected: string) => 'oauth-access-2');
     const httpClient = new FakeHttpClient([
       reply(401, CloudAnswers.eventTokenRefused),
@@ -217,7 +217,7 @@ describe('P5: done condition at the HttpClient seam', () => {
     expect(httpClient.requests[1]!.body).toBe(httpClient.requests[0]!.body);
   });
 
-  it.skip('surfaces SiteDisconnectedError when the resend gets a second 401, after one refresh and two sends', async () => {
+  it('surfaces SiteDisconnectedError when the resend gets a second 401, after one refresh and two sends', async () => {
     const refresh = vi.fn(async (_rejected: string) => 'oauth-access-2');
     const httpClient = new FakeHttpClient([
       reply(401, CloudAnswers.eventTokenRefused),
@@ -271,7 +271,7 @@ describe('P5: done condition over a real socket', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  it.skip('refreshes once and resends a send-once write with the same body through FetchHttpClient', async () => {
+  it('refreshes once and resends a send-once write with the same body through FetchHttpClient', async () => {
     const refresh = vi.fn(async (_rejected: string) => 'oauth-access-2');
     const siren = new Siren({
       accessToken: new CallbackAccessTokenSource(() => 'oauth-access-1', refresh),
