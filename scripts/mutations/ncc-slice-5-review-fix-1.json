@@ -1,0 +1,118 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/oauth.ts",
+    "find": "    const shown = scrub(answer, secrets);",
+    "replace": "    const shown = answer;",
+    "expect": "caught",
+    "failing": ["removes the refresh token and attemptId from an OAuth error_description"]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/oauth.ts",
+    "find": "const TOKEN_FIELDS: ReadonlySet<string> = new Set(['access_token', 'refresh_token', 'id_token']);",
+    "replace": "const TOKEN_FIELDS: ReadonlySet<string> = new Set(['id_token', 'refresh_token', 'access_token']);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/oauth.ts",
+    "find": "this text is not in the file",
+    "replace": "anything",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/oauth.ts",
+    "find": "    const shown = scrub(answer, secrets);",
+    "replace": "    const shown = scrub(answer, secrets;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/connect/oauth.ts",
+    "find": "  if (typeof value === 'string') return redact(value, secrets);",
+    "replace": "  if (typeof value === 'string') return value;",
+    "expect": "wrong-reason",
+    "failing": ["leaves an answer that quotes no secret as Cloud sent it"]
+  },
+  {
+    "id": "strings-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "  if (typeof value === 'string') return redact(value, secrets);",
+    "replace": "  if (typeof value === 'string') return value;",
+    "expect": "caught",
+    "failing": [
+      "removes the refresh token and attemptId from an OAuth error_description",
+      "removes the authorization code from an OAuth error code",
+      "removes the verifier from the app's error envelope"
+    ]
+  },
+  {
+    "id": "lists-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "  if (Array.isArray(value)) return value.map((item) => scrub(item, secrets));",
+    "replace": "  if (Array.isArray(value)) return value;",
+    "expect": "caught",
+    "failing": ["removes the attemptId from a list in a 429"]
+  },
+  {
+    "id": "nested-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "TOKEN_FIELDS.has(key) ? '[redacted]' : scrub(item, secrets);",
+    "replace": "TOKEN_FIELDS.has(key) ? '[redacted]' : item;",
+    "expect": "caught",
+    "failing": ["removes the verifier from the app's error envelope"]
+  },
+  {
+    "id": "token-fields-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "TOKEN_FIELDS.has(key) ? '[redacted]' : scrub(item, secrets);",
+    "replace": "scrub(item, secrets);",
+    "expect": "caught",
+    "failing": ["replaces the value of each token field"]
+  },
+  {
+    "id": "id-token-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "new Set(['access_token', 'refresh_token', 'id_token'])",
+    "replace": "new Set(['access_token', 'refresh_token'])",
+    "expect": "caught",
+    "failing": ["replaces the value of each token field"]
+  },
+  {
+    "id": "status-text-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "redact(reply.statusText ?? '', secrets)",
+    "replace": "(reply.statusText ?? '')",
+    "expect": "caught",
+    "failing": ["removes the refresh token from the status text"]
+  },
+  {
+    "id": "oauth-error-reads-raw-answer",
+    "file": "src/connect/oauth.ts",
+    "find": "      const description = isFilled(shown.error_description) ? shown.error_description : shown.error;\n      throw new OAuthError(description, { code: shown.error, statusCode: status });",
+    "replace": "      const description = isFilled((answer as Record<string, unknown>).error_description) ? ((answer as Record<string, unknown>).error_description as string) : shown.error;\n      throw new OAuthError(description, { code: (answer as Record<string, string>).error, statusCode: status });",
+    "expect": "caught",
+    "failing": ["removes the refresh token and attemptId from an OAuth error_description", "removes the authorization code from an OAuth error code"]
+  },
+  {
+    "id": "error-mapper-reads-raw-answer",
+    "file": "src/connect/oauth.ts",
+    "find": "redact(reply.statusText ?? '', secrets), shown, headerOf",
+    "replace": "redact(reply.statusText ?? '', secrets), answer, headerOf",
+    "expect": "caught",
+    "failing": ["removes the verifier from the app's error envelope", "removes the attemptId from a list in a 429", "replaces the value of each token field"]
+  },
+  {
+    "id": "two-xx-returns-scrubbed",
+    "file": "src/connect/oauth.ts",
+    "find": "needs.every((field) => isFilled(answer[field]))) return answer as T;",
+    "replace": "needs.every((field) => isFilled(answer[field]))) return scrub(answer, needs as string[]) as T;",
+    "expect": "caught",
+    "failing": []
+  }
+]
