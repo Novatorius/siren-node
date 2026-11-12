@@ -253,9 +253,9 @@ the connector slices.
 | `test/records-retrieve.test.ts` | P7 |
 | `test/docs-slice-2.test.ts` | P8 |
 | `test/bearer-token.test.ts` | 2b P1 |
-| `test/siren-option-checks.test.ts` | 2b P2 |
+| `test/siren-option-checks.test.ts` | 2b P2, and 2c P1 for the baseUrl character rule |
 | `test/siren-option-resolvers.test.ts` | 2b P2, unit tests for the constructor's resolvers |
-| `test/docs-hardening.test.ts` | The 2b README and CHANGELOG lines |
+| `test/docs-hardening.test.ts` | The 2b and 2c README and CHANGELOG lines |
 
 ## Hardening (2b)
 
@@ -318,17 +318,29 @@ that `maxRetries` is not negative, and its `timeout` is in seconds.
   goes. Fetch refuses a URL with no scheme or with a user name, and the
   transport would read that refusal as a lost connection, resend it and
   raise a `ConnectionError` that quotes the URL. Every character is
-  printable ASCII, U+0021 to U+007E, and none is a `?`, `#`, backslash or
+  visible ASCII, U+0021 to U+007E, and none is a `?`, `#`, backslash or
   `@`. The transport joins each path onto the string as given, so a query
-  or fragment would swallow every path. `new URL` drops spaces and line
-  breaks and percent-encodes any other character outside that range, so a
-  host client would receive a string other than the one checked, and one
-  that writes Latin-1 sends U+010A as a line feed. `new URL` also reads a
-  backslash as a slash, so `http://localhost:1\:SECRET@127.0.0.1` has no
-  user name to the check, while a client that parses by RFC 3986 reads
-  `localhost:1\:SECRET` as one and sends to 127.0.0.1. A base URL has no
-  other use for an `@`. An international host goes in its punycode form,
-  and a path character outside the range goes percent-encoded.
+  or fragment would swallow every path. `new URL` drops a tab or line break
+  anywhere and a space at either end, percent-encodes any other space or
+  non-ASCII character in the path, and turns a non-ASCII host into
+  punycode. The check would then pass a string other than the one a host
+  client receives, and a client that writes Latin-1 sends U+010A as a line
+  feed. `new URL` also reads a backslash as a slash, so it reads
+  `http://localhost:1\:SECRET@127.0.0.1` as host localhost, port 1, with no
+  user name. A lenient parser reads `localhost` as the user name and
+  `1\:SECRET` as the password: Python's `urlsplit` does, and curl sends
+  such a URL to 127.0.0.1. A base URL has no other use for an `@`.
+- `baseUrl` starts with `http://` or `https://` and a host that holds no
+  `%`. `new URL` repairs `https:host`, `http:/host` and `http:///host` into
+  a host, while a client that follows RFC 3986 sees no host at all, and one
+  such as axios joins the string onto a base URL of its own and sends the
+  token there. `new URL` also decodes a `%` in the host, so
+  `b%C3%BCcher.example` becomes a non-ASCII host and `evil%E3%80%82com`
+  becomes `evil.com`. An international host goes in its punycode form, and
+  a non-ASCII path character must be percent-encoded. Inside the range,
+  `new URL` still percent-encodes a few path characters, such as `"`, `<`
+  and `{`, so the path fetch sends can differ from the string, though the
+  host stays the same.
 - `timeout` is a number from 1 to 2147483647 milliseconds, fractions
   allowed, for each send. A Node timer above 2147483647 fires after 1 ms. A
   call can make up to `maxRetries + 2` sends, each with its own timeout,
@@ -368,11 +380,11 @@ inherits the same reads.
 
 ### Tests
 
-Two packets implement these rules. 2b P1 is the bearer token rule and every
+Three packets implement these rules. 2b P1 is the bearer token rule and every
 place it applies, with its tests in `test/bearer-token.test.ts`. 2b P2 is the
 option checks and the own-property reads in the `Siren` constructor, with its
-tests in `test/siren-option-checks.test.ts`. Both files run in full. Some
-of their rows pin values each rule must accept, such as U+00FF in a token or
+tests in `test/siren-option-checks.test.ts`. 2c P1 is the baseUrl character
+rule, described below. Some of their rows pin values each rule must accept, such as U+00FF in a token or
 a timeout of 1 ms, so a check that refuses too much fails as surely as one
 that refuses too little. `test/siren-option-resolvers.test.ts` adds unit
 tests for the constructor's resolvers, driven through the public
@@ -392,15 +404,20 @@ To reproduce, run
 `node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-2b-p1.json` and
 the same for the P2 list.
 
-Slice 2c's one packet, 2c P1, is the baseUrl character rule, with its tests
-in the `2c P1` describe of `test/siren-option-checks.test.ts`. Each refused
-row checks that the message names the range and only the type, that the
-error has no `cause`, and that no message, stack, field or `inspect` output
-holds a word of the URL or its bad character. Its rows that accept a URL,
-the two ends of the range and a percent-encoded path included, run now.
-`scripts/mutations/ncc-slice-2c.json` breaks each part of the rule and each
-leak check, with the same controls, and
-`node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-2c.json`
-reproduces it. Until 2c P1 lands, the rows that refuse a URL are skipped and
-the list's entries find the scratch build it was proven on, not the code on
-this branch.
+2c P1's tests are the `2c P1` describe of the option checks file. Each
+refused row checks that the message names the range, the backslash, the `@`
+and only the type, that the error has no `cause`, and that no message,
+stack, field, getter or `inspect` output holds a word of the URL or a
+character outside the range, raw or escaped. Its rows that accept a URL,
+`localhost`, an IPv6 loopback, the two ends of the range and a
+percent-encoded path among them, pin what the rule must let through, and one
+of them pins that the client sends the string as given, not as `new URL`
+would rewrite it.
+
+The 2c mutation list (`scripts/mutations/ncc-slice-2c.json`) breaks each
+part of the rule, refuses each edge the rule must accept, drops each part of
+the message and the docs, and leaks the URL in each way the rows look for,
+with the same controls. `node scripts/mutation-proof.mjs
+scripts/mutations/ncc-slice-2c.json` reruns it. Until 2c P1 lands, the rows
+that refuse a URL are skipped and the list's entries find the scratch build
+it was proven on, not the code on this branch.
