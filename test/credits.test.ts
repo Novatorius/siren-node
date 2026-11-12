@@ -24,10 +24,6 @@ import { CreditAnswers } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P5 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 const ZERO_MESSAGE = 'A credit adjustment amount must not be zero.';
@@ -68,7 +64,7 @@ describe('P5: credits surface', () => {
 });
 
 describe('P5: credits adjust', () => {
-  it.skip('adjusts with POST /credits/adjust and answers the ledger entry', async () => {
+  it('adjusts with POST /credits/adjust and answers the ledger entry', async () => {
     const { http, credits } = over([reply(200, CreditAnswers.adjusted)]);
 
     expect(await credits.adjust(4, 'STORE_CREDIT', -250, 'Goodwill')).toEqual(CreditAnswers.adjusted);
@@ -76,7 +72,7 @@ describe('P5: credits adjust', () => {
     expect(http.requests[0]!.body).toBe('{"collaboratorId":4,"currency":"STORE_CREDIT","amount":-250,"description":"Goodwill"}');
   });
 
-  it.skip('leaves description out when none is given', async () => {
+  it('leaves description out when none is given', async () => {
     const { http, credits } = over([reply(200, CreditAnswers.adjusted)]);
 
     await credits.adjust(4, 'STORE_CREDIT', 500);
@@ -84,7 +80,7 @@ describe('P5: credits adjust', () => {
     expect(bodyOf(http.requests[0])).toEqual({ collaboratorId: 4, currency: 'STORE_CREDIT', amount: 500 });
   });
 
-  it.skip('refuses a zero amount with its own message before sending', async () => {
+  it('refuses a zero amount with its own message before sending', async () => {
     const { http, credits } = over([reply(200, CreditAnswers.adjusted)]);
 
     const error = await credits.adjust(4, 'STORE_CREDIT', 0).catch((thrown: unknown) => thrown);
@@ -94,7 +90,7 @@ describe('P5: credits adjust', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each([
+  it.each([
     ['a zero collaborator', (c: CreditsResource) => c.adjust(0, 'STORE_CREDIT', 5)],
     ['an empty currency', (c: CreditsResource) => c.adjust(4, '', 5)],
     ['a fractional amount', (c: CreditsResource) => c.adjust(4, 'STORE_CREDIT', 2.5)],
@@ -107,13 +103,13 @@ describe('P5: credits adjust', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('sends adjust once', async () => {
+  it('sends adjust once', async () => {
     await expectSentOnce((transport) => resource(transport).adjust(4, 'STORE_CREDIT', 5), reply(200, CreditAnswers.adjusted));
   });
 });
 
 describe('P5: credits balances', () => {
-  it.skip("reads a collaborator's creditBalances field", async () => {
+  it("reads a collaborator's creditBalances field", async () => {
     const { http, credits } = over([reply(200, CreditAnswers.balancesRecord)]);
 
     expect(await credits.balances(4)).toEqual(CreditAnswers.balancesRecord.creditBalances);
@@ -121,7 +117,7 @@ describe('P5: credits balances', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,creditBalances' });
   });
 
-  it.skip.each([
+  it.each([
     ['no creditBalances field', { id: 4 }],
     ['a field that is not a list', { id: 4, creditBalances: {} }],
     ['an entry that is not an object', { id: 4, creditBalances: ['STORE_CREDIT'] }],
@@ -134,11 +130,11 @@ describe('P5: credits balances', () => {
     expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 
-  it.skip("raises a connected site's refused field as PolicyError", async () => {
+  it("raises a connected site's refused field as PolicyError", async () => {
     await expect(over([reply(403, CreditAnswers.fieldNotAllowed)]).credits.balances(4)).rejects.toBeInstanceOf(PolicyError);
   });
 
-  it.skip('reads checkout balances from GET /credit-balances', async () => {
+  it('reads checkout balances from GET /credit-balances', async () => {
     const { http, credits } = over([reply(200, CreditAnswers.checkoutBalances)]);
 
     const rows = await credits.checkoutBalances(4);
@@ -148,7 +144,7 @@ describe('P5: credits balances', () => {
     expect([...rows]).toEqual(CreditAnswers.checkoutBalances.items);
   });
 
-  it.skip('sends currency and a built excludeReference when they are given', async () => {
+  it('sends currency and a built excludeReference when they are given', async () => {
     const { http, credits } = over([reply(200, CreditAnswers.checkoutBalances)]);
 
     await credits.checkoutBalances(4, 'STORE_CREDIT', CreditsResource.holdReference('woocommerce', 'cart-9f2'));
@@ -160,7 +156,7 @@ describe('P5: credits balances', () => {
     });
   });
 
-  it.skip.each([
+  it.each([
     ['a reference with no prefix', 'woocommerce:cart-9f2'],
     ['a reference with the Property Siren adds', 'hold:woocommerce@property:5:cart-9f2'],
     ['a reference with a third part', 'hold:woocommerce:cart:9f2'],
@@ -176,14 +172,14 @@ describe('P5: credits balances', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('checkoutBalances throws UnexpectedResponseError for a 2xx that is not a list, or a row that is not an object', async () => {
+  it('checkoutBalances throws UnexpectedResponseError for a 2xx that is not a list, or a row that is not an object', async () => {
     await expect(over([reply(200, { error: 'x' })]).credits.checkoutBalances(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
     await expect(over([reply(200, { items: ['STORE_CREDIT'] })]).credits.checkoutBalances(4)).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
   });
 
-  it.skip("answers one currency's checkout row, or null when Siren sends none", async () => {
+  it("answers one currency's checkout row, or null when Siren sends none", async () => {
     const { http, credits } = over([reply(200, CreditAnswers.checkoutBalances), reply(200, { items: [] })]);
 
     expect(await credits.checkoutBalance(4, 'POINTS')).toEqual(CreditAnswers.checkoutBalances.items[1]);
@@ -191,19 +187,19 @@ describe('P5: credits balances', () => {
     expect(await credits.checkoutBalance(4, 'GIFT')).toBeNull();
   });
 
-  it.skip('checkoutBalance throws UnexpectedResponseError for a 2xx that is not a list, never null', async () => {
+  it('checkoutBalance throws UnexpectedResponseError for a 2xx that is not a list, never null', async () => {
     await expect(over([reply(200, { error: 'x' })]).credits.checkoutBalance(4, 'POINTS')).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
   });
 
-  it.skip('retries every balance read', async () => {
+  it('retries every balance read', async () => {
     await expectRetried((transport) => resource(transport).balances(4), reply(200, CreditAnswers.balancesRecord));
     await expectRetried((transport) => resource(transport).checkoutBalances(4), reply(200, CreditAnswers.checkoutBalances));
     await expectRetried((transport) => resource(transport).checkoutBalance(4, 'POINTS'), reply(200, CreditAnswers.checkoutBalances));
   });
 
-  it.skip.each([
+  it.each([
     ['balances', (c: CreditsResource) => c.balances(0)],
     ['checkoutBalances', (c: CreditsResource) => c.checkoutBalances(-4)],
     ['checkoutBalance', (c: CreditsResource) => c.checkoutBalance(1.5, 'POINTS')],
@@ -216,7 +212,7 @@ describe('P5: credits balances', () => {
 });
 
 describe('P5: credits ledger and hold lists', () => {
-  it.skip('lists GET /credit-entries with the filters and paging', async () => {
+  it('lists GET /credit-entries with the filters and paging', async () => {
     const { http, credits } = over([reply(200, page([CreditAnswers.entry], 1, 50))]);
 
     const list = await credits.entries({ collaboratorId: 4, currency: 'STORE_CREDIT', number: 50, orderBy: 'amount' });
@@ -227,7 +223,7 @@ describe('P5: credits ledger and hold lists', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('lists entries by idempotencyKey alone', async () => {
+  it('lists entries by idempotencyKey alone', async () => {
     const { http, credits } = over([reply(200, page([CreditAnswers.entry]))]);
 
     await credits.entries({ idempotencyKey: 'order-91' });
@@ -235,7 +231,7 @@ describe('P5: credits ledger and hold lists', () => {
     expect(queryOf(http.requests[0])).toEqual({ idempotencyKey: 'order-91' });
   });
 
-  it.skip.each([
+  it.each([
     ['no filter', {}],
     ['only a currency', { currency: 'STORE_CREDIT' }],
     ['a blank idempotencyKey', { idempotencyKey: '  ' }],
@@ -250,7 +246,7 @@ describe('P5: credits ledger and hold lists', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('lists GET /credit-holds by reference and status', async () => {
+  it('lists GET /credit-holds by reference and status', async () => {
     const { http, credits } = over([reply(200, page([CreditAnswers.hold]))]);
 
     const list = await credits.holds({ reference: CreditsResource.holdReference('woocommerce', 'cart-9f2'), status: CreditHoldStatus.Active });
@@ -260,7 +256,7 @@ describe('P5: credits ledger and hold lists', () => {
     expect([...list]).toEqual([CreditAnswers.hold]);
   });
 
-  it.skip.each([
+  it.each([
     ['no filter', {}],
     ['only a status', { status: CreditHoldStatus.Active }],
     ['a blank reference', { reference: '' }],
@@ -275,7 +271,7 @@ describe('P5: credits ledger and hold lists', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('holds refuses a reference that holdReference would not build', async () => {
+  it('holds refuses a reference that holdReference would not build', async () => {
     const { http, credits } = over([reply(200, page([]))]);
 
     const error = await credits.holds({ reference: 'hold:woocommerce@property:5:cart-9f2' }).catch((thrown: unknown) => thrown);
@@ -285,7 +281,7 @@ describe('P5: credits ledger and hold lists', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each([
+  it.each([
     ['entries', (c: CreditsResource) => c.entries({ collaboratorId: 4, sourceID: 'x' } as never), 'sourceID'],
     ['entries, a list of collaborators', (c: CreditsResource) => c.entries({ idempotencyKey: 'order-91', collaboratorId: [4, 5] } as never), 'collaboratorId'],
     ['entries, a zero collaborator beside a key', (c: CreditsResource) => c.entries({ idempotencyKey: 'order-91', collaboratorId: 0 }), 'collaboratorId'],
@@ -302,14 +298,14 @@ describe('P5: credits ledger and hold lists', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('retries both lists', async () => {
+  it('retries both lists', async () => {
     await expectRetried((transport) => resource(transport).entries({ collaboratorId: 4 }), reply(200, page([])));
     await expectRetried((transport) => resource(transport).holds({ collaboratorId: 4 }), reply(200, page([])));
   });
 });
 
 describe('P5: credits holds', () => {
-  it.skip('places a hold with POST /credit-holds and answers it', async () => {
+  it('places a hold with POST /credit-holds and answers it', async () => {
     const { http, credits } = over([reply(201, CreditAnswers.hold)]);
 
     expect(await credits.placeHold(4, 'STORE_CREDIT', 250, 'cart-9f2', 'woocommerce')).toEqual(CreditAnswers.hold);
@@ -319,7 +315,7 @@ describe('P5: credits holds', () => {
     );
   });
 
-  it.skip('sends ttl when it is given', async () => {
+  it('sends ttl when it is given', async () => {
     const { http, credits } = over([reply(201, CreditAnswers.hold)]);
 
     await credits.placeHold(4, 'STORE_CREDIT', 250, 'cart-9f2', 'woocommerce', 900);
@@ -327,7 +323,7 @@ describe('P5: credits holds', () => {
     expect(bodyOf(http.requests[0])).toMatchObject({ ttl: 900 });
   });
 
-  it.skip.each([
+  it.each([
     ['hold_no_credit', CreditAnswers.holdNoCredit, HoldConflictReason.NoCredit],
     ['hold_token_in_use', CreditAnswers.holdTokenInUse, HoldConflictReason.TokenInUse],
     ['hold_currency_not_at_store', CreditAnswers.holdCurrencyNotAtStore, null],
@@ -342,7 +338,7 @@ describe('P5: credits holds', () => {
     expect((error as HoldConflictError).message).toBe(body.error.message);
   });
 
-  it.skip('raises a 409 with no code as HoldConflictError, reading the reason from the wording', async () => {
+  it('raises a 409 with no code as HoldConflictError, reading the reason from the wording', async () => {
     const error = await over([reply(409, { error: 'Another checkout already holds credit under that token.' })])
       .credits.placeHold(4, 'STORE_CREDIT', 250, 'cart-9f2', 'woocommerce')
       .catch((thrown: unknown) => thrown);
@@ -351,14 +347,14 @@ describe('P5: credits holds', () => {
     expect((error as HoldConflictError).reason).toBe(HoldConflictReason.TokenInUse);
   });
 
-  it.skip('leaves a 429 as RateLimitError, sent once', async () => {
+  it('leaves a 429 as RateLimitError, sent once', async () => {
     const { http, credits } = over([reply(429, rateLimited, { 'Retry-After': '0' }), reply(201, CreditAnswers.hold)]);
 
     await expect(credits.placeHold(4, 'STORE_CREDIT', 250, 'cart-9f2', 'woocommerce')).rejects.toBeInstanceOf(RateLimitError);
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip('accepts a token and a platform at their longest, and both ttl limits', async () => {
+  it('accepts a token and a platform at their longest, and both ttl limits', async () => {
     const { http, credits } = over([reply(201, CreditAnswers.hold)]);
 
     await credits.placeHold(4, 'STORE_CREDIT', 1, 't'.repeat(120), 'p'.repeat(60), 60);
@@ -367,7 +363,7 @@ describe('P5: credits holds', () => {
     expect(http.requests).toHaveLength(2);
   });
 
-  it.skip.each([
+  it.each([
     ['a zero collaborator', (c: CreditsResource) => c.placeHold(0, 'STORE_CREDIT', 250, 'cart', 'woocommerce')],
     ['an empty currency', (c: CreditsResource) => c.placeHold(4, '', 250, 'cart', 'woocommerce')],
     ['a zero amount', (c: CreditsResource) => c.placeHold(4, 'STORE_CREDIT', 0, 'cart', 'woocommerce')],
@@ -388,7 +384,7 @@ describe('P5: credits holds', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('releases a hold with DELETE /credit-holds/{id} and answers it as Siren now stores it', async () => {
+  it('releases a hold with DELETE /credit-holds/{id} and answers it as Siren now stores it', async () => {
     const { http, credits } = over([reply(200, CreditAnswers.released)]);
 
     expect(await credits.releaseHold(51)).toEqual(CreditAnswers.released);
@@ -396,19 +392,19 @@ describe('P5: credits holds', () => {
     expect(http.requests[0]!.body).toBeUndefined();
   });
 
-  it.skip('raises an unknown hold as NotFoundError, and a 2xx with no hold as UnexpectedResponseError', async () => {
+  it('raises an unknown hold as NotFoundError, and a 2xx with no hold as UnexpectedResponseError', async () => {
     await expect(over([reply(404, CreditAnswers.holdNotFound)]).credits.releaseHold(99)).rejects.toBeInstanceOf(NotFoundError);
     await expect(over([reply(204)]).credits.releaseHold(51)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('releaseHold refuses an id that is not a positive whole number before sending', async () => {
+  it('releaseHold refuses an id that is not a positive whole number before sending', async () => {
     const { http, credits } = over([reply(200, CreditAnswers.released)]);
 
     await expect(credits.releaseHold(0)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('sends placeHold and releaseHold once', async () => {
+  it('sends placeHold and releaseHold once', async () => {
     await expectSentOnce(
       (transport) => resource(transport).placeHold(4, 'STORE_CREDIT', 250, 'cart-9f2', 'woocommerce'),
       reply(201, CreditAnswers.hold),
@@ -418,11 +414,11 @@ describe('P5: credits holds', () => {
 });
 
 describe('P5: credits holdReference', () => {
-  it.skip('builds hold:{platform}:{token}', () => {
+  it('builds hold:{platform}:{token}', () => {
     expect(CreditsResource.holdReference('woocommerce', 'cart-9f2')).toBe('hold:woocommerce:cart-9f2');
   });
 
-  it.skip.each([
+  it.each([
     ['a platform with a colon', 'woo:commerce', 'cart'],
     ['a qualified platform', 'woocommerce@property:5', 'cart'],
     ['an empty token', 'woocommerce', ''],
@@ -434,7 +430,7 @@ describe('P5: credits holdReference', () => {
 });
 
 describe('P5: credits currency codes', () => {
-  it.skip.each([
+  it.each([
     ['adjust', (c: CreditsResource) => c.adjust(4, 'STORE:CREDIT', 5)],
     ['placeHold', (c: CreditsResource) => c.placeHold(4, 'a,b', 250, 'cart-9f2', 'woocommerce')],
     ['checkoutBalances', (c: CreditsResource) => c.checkoutBalances(4, 'STORE CREDIT')],
@@ -453,7 +449,7 @@ describe('P5: credits currency codes', () => {
 });
 
 describe('P5: a checkout through one transport', () => {
-  it.skip("reads the balance, places a hold, finds it by reference and releases it, in Siren's order", async () => {
+  it("reads the balance, places a hold, finds it by reference and releases it, in Siren's order", async () => {
     const { http, credits } = over([
       reply(200, CreditAnswers.checkoutBalances),
       reply(201, CreditAnswers.hold),

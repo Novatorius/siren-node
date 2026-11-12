@@ -1,4 +1,6 @@
+import { ConflictError, HoldConflictError, SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
+import { PropertyQualifier } from '../property-qualifier';
 import type {
   CheckoutBalance,
   CreditAdjustment,
@@ -9,6 +11,60 @@ import type {
   CreditHoldListParams,
 } from '../record-types';
 import type { SirenList } from '../types';
+import { deleteRecord, listRecords, readObject, recordId, writeRecord } from './record-requests';
+
+const CURRENCY_MESSAGE = 'Send a currency code as letters, digits, underscores and hyphens, such as STORE_CREDIT.';
+const ZERO_MESSAGE = 'A credit adjustment amount must not be zero.';
+const ENTRIES_MESSAGE = 'Send at least one of: collaboratorId, idempotencyKey.';
+const HOLDS_MESSAGE = 'Send at least one of: collaboratorId, reference, idempotencyKey.';
+
+/** The message a malformed hold reference throws, naming the parameter it came in. */
+function referenceMessage(field: 'reference' | 'excludeReference'): string {
+  return `Send ${field} as hold:{platform}:{token}. Build it with CreditsResource.holdReference().`;
+}
+
+/** Returns `value` when it is a currency code. Otherwise throws `SirenError` before sending. */
+function currencyCode(value: unknown): string {
+  if (!PropertyQualifier.isValidName(value)) throw new SirenError(CURRENCY_MESSAGE);
+  return value;
+}
+
+/** Whether `value` is a positive safe integer, so it names one record. */
+function isRecordId(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+}
+
+/** Whether `value` is a string with something in it besides white space. */
+function filled(value: unknown): boolean {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+/**
+ * Returns `name` when it passes `PropertyQualifier.assertName` and is at most
+ * `max` characters long. Otherwise throws `SirenError` naming `field`.
+ */
+function holdName(name: unknown, field: string, max: number): string {
+  const checked = PropertyQualifier.assertName(name, field);
+  if (checked.length > max) throw new SirenError(`Send ${field} of at most ${max} characters.`);
+  return checked;
+}
+
+/** Whether `name` is a plain name of at most `max` characters, as a hold's platform id and token must be. */
+function isHoldName(name: unknown, max: number): boolean {
+  return PropertyQualifier.isValidName(name) && name.length <= max;
+}
+
+/** Whether `value` is `hold:{platform}:{token}` with two plain names within their limits, as `holdReference` builds it. */
+function isReference(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const parts = value.split(':');
+  return (
+    parts.length === 3 &&
+    parts[0] === 'hold' &&
+    isHoldName(parts[1], CreditsResource.HOLD_PLATFORM_MAX_LENGTH) &&
+    isHoldName(parts[2], CreditsResource.HOLD_TOKEN_MAX_LENGTH)
+  );
+}
 
 /**
  * Store credit: a collaborator's balances in the organization's internal
@@ -101,14 +157,21 @@ export class CreditsResource {
    * must not be zero.`), or `description` is given and is not a string.
    * A connected site's token is refused with a 403.
    */
-  adjust(collaboratorId: number, currency: string, amount: number, description?: string): Promise<CreditAdjustment> {
-    // Stub: slice 4 packet P5
-    void collaboratorId;
-    void currency;
-    void amount;
-    void description;
-    void this.http;
-    return Promise.resolve({});
+  async adjust(collaboratorId: number, currency: string, amount: number, description?: string): Promise<CreditAdjustment> {
+    const body: Record<string, unknown> = {
+      collaboratorId: recordId(collaboratorId, 'credits.adjust', 'collaboratorId'),
+      currency: currencyCode(currency),
+      amount,
+    };
+    if (typeof amount !== 'number' || !Number.isSafeInteger(amount)) {
+      throw new SirenError(`credits.adjust needs a whole number amount, and got ${String(amount)}.`);
+    }
+    if (amount === 0) throw new SirenError(ZERO_MESSAGE);
+    if (description !== undefined) {
+      if (typeof description !== 'string') throw new SirenError('credits.adjust needs a description that is a string.');
+      body.description = description;
+    }
+    return writeRecord<CreditAdjustment>(this.http, 'POST', '/credits/adjust', body);
   }
 
   /**
@@ -126,10 +189,15 @@ export class CreditsResource {
    * token cannot read this field (403 `field_not_allowed`), so a checkout
    * uses {@link checkoutBalances}.
    */
-  balances(collaboratorId: number): Promise<CreditBalance[]> {
-    // Stub: slice 4 packet P5
-    void collaboratorId;
-    return Promise.resolve([]);
+  async balances(collaboratorId: number): Promise<CreditBalance[]> {
+    const path = `/collaborators/${recordId(collaboratorId, 'credits.balances', 'collaboratorId')}`;
+    const record = await readObject<{ creditBalances: CreditBalance[] }>(this.http, path, { fields: 'id,creditBalances' }, (body) => {
+      const entries = body.creditBalances;
+      return !Array.isArray(entries) || entries.some((entry) => typeof entry !== 'object' || entry === null || Array.isArray(entry))
+        ? `Siren answered GET ${path} with no creditBalances list of objects.`
+        : undefined;
+    });
+    return record.creditBalances;
   }
 
   /**
@@ -151,12 +219,22 @@ export class CreditsResource {
    * not a list, or a row that is not an object, throws
    * `UnexpectedResponseError`.
    */
-  checkoutBalances(collaboratorId: number, currency?: string, excludeReference?: string): Promise<CheckoutBalance[]> {
-    // Stub: slice 4 packet P5
-    void collaboratorId;
-    void currency;
-    void excludeReference;
-    return Promise.resolve([]);
+  async checkoutBalances(collaboratorId: number, currency?: string, excludeReference?: string): Promise<CheckoutBalance[]> {
+    const query = {
+      collaboratorId,
+      currency: currency === undefined ? undefined : currencyCode(currency),
+      excludeReference,
+    };
+    if (excludeReference !== undefined && !isReference(excludeReference)) {
+      throw new SirenError(referenceMessage('excludeReference'));
+    }
+    return listRecords<CheckoutBalance>(
+      this.http,
+      '/credit-balances',
+      query,
+      CreditsResource.BALANCE_FILTERS,
+      CreditsResource.ID_FILTERS,
+    );
   }
 
   /**
@@ -166,12 +244,10 @@ export class CreditsResource {
    * list throws `UnexpectedResponseError`, as {@link checkoutBalances} does,
    * never `null`.
    */
-  checkoutBalance(collaboratorId: number, currency: string, excludeReference?: string): Promise<CheckoutBalance | null> {
-    // Stub: slice 4 packet P5
-    void collaboratorId;
-    void currency;
-    void excludeReference;
-    return Promise.resolve(null);
+  async checkoutBalance(collaboratorId: number, currency: string, excludeReference?: string): Promise<CheckoutBalance | null> {
+    const code = currencyCode(currency);
+    const rows = await this.checkoutBalances(collaboratorId, code, excludeReference);
+    return rows.find((row) => row.currency === code) ?? null;
   }
 
   /**
@@ -192,10 +268,16 @@ export class CreditsResource {
    * and `order`. Sent through `listRecords` with {@link ENTRY_FILTERS} and
    * {@link ID_FILTERS}, so any other key throws `SirenError`.
    */
-  entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {
-    // Stub: slice 4 packet P5
-    void params;
-    return Promise.resolve([] as unknown as SirenList<CreditEntry>);
+  async entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {
+    if (!isRecordId(params.collaboratorId) && !filled(params.idempotencyKey)) throw new SirenError(ENTRIES_MESSAGE);
+    if (params.currency !== undefined) currencyCode(params.currency);
+    return listRecords<CreditEntry>(
+      this.http,
+      '/credit-entries',
+      params,
+      CreditsResource.ENTRY_FILTERS,
+      CreditsResource.ID_FILTERS,
+    );
   }
 
   /**
@@ -219,10 +301,13 @@ export class CreditsResource {
    * site's Property (`hold:woocommerce@property:5:{token}`). Sent through
    * `listRecords` with {@link HOLD_FILTERS} and {@link ID_FILTERS}.
    */
-  holds(params: CreditHoldListParams): Promise<SirenList<CreditHold>> {
-    // Stub: slice 4 packet P5
-    void params;
-    return Promise.resolve([] as unknown as SirenList<CreditHold>);
+  async holds(params: CreditHoldListParams): Promise<SirenList<CreditHold>> {
+    if (!isRecordId(params.collaboratorId) && !filled(params.reference) && !filled(params.idempotencyKey)) {
+      throw new SirenError(HOLDS_MESSAGE);
+    }
+    if (params.currency !== undefined) currencyCode(params.currency);
+    if (params.reference !== undefined && !isReference(params.reference)) throw new SirenError(referenceMessage('reference'));
+    return listRecords<CreditHold>(this.http, '/credit-holds', params, CreditsResource.HOLD_FILTERS, CreditsResource.ID_FILTERS);
   }
 
   /**
@@ -252,7 +337,7 @@ export class CreditsResource {
    * (such as `hold_currency_not_at_store`). Every other error passes through
    * unchanged.
    */
-  placeHold(
+  async placeHold(
     collaboratorId: number,
     currency: string,
     amount: number,
@@ -260,14 +345,35 @@ export class CreditsResource {
     platformId: string,
     ttl?: number,
   ): Promise<CreditHold> {
-    // Stub: slice 4 packet P5
-    void collaboratorId;
-    void currency;
-    void amount;
-    void token;
-    void platformId;
-    void ttl;
-    return Promise.resolve({ id: 1 });
+    const body: Record<string, unknown> = {
+      collaboratorId: recordId(collaboratorId, 'credits.placeHold', 'collaboratorId'),
+      currency: currencyCode(currency),
+      amount,
+      token: holdName(token, 'token', CreditsResource.HOLD_TOKEN_MAX_LENGTH),
+      platformId: holdName(platformId, 'platformId', CreditsResource.HOLD_PLATFORM_MAX_LENGTH),
+    };
+    if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 1) {
+      throw new SirenError(`credits.placeHold needs a whole number amount of 1 or more, and got ${String(amount)}.`);
+    }
+    if (ttl !== undefined) {
+      if (
+        typeof ttl !== 'number' ||
+        !Number.isSafeInteger(ttl) ||
+        ttl < CreditsResource.HOLD_MIN_TTL ||
+        ttl > CreditsResource.HOLD_MAX_TTL
+      ) {
+        throw new SirenError(
+          `credits.placeHold needs a ttl of ${CreditsResource.HOLD_MIN_TTL} to ${CreditsResource.HOLD_MAX_TTL} whole seconds, and got ${String(ttl)}.`,
+        );
+      }
+      body.ttl = ttl;
+    }
+    try {
+      return await writeRecord<CreditHold>(this.http, 'POST', '/credit-holds', body);
+    } catch (error) {
+      if (error instanceof ConflictError) throw HoldConflictError.fromConflict(error);
+      throw error;
+    }
   }
 
   /**
@@ -285,10 +391,11 @@ export class CreditsResource {
    * id that is not a positive whole number, and `UnexpectedResponseError`
    * when a 2xx carries no hold object.
    */
-  releaseHold(holdId: number): Promise<CreditHold> {
-    // Stub: slice 4 packet P5
-    void holdId;
-    return Promise.resolve({ id: 1 });
+  async releaseHold(holdId: number): Promise<CreditHold> {
+    const path = `/credit-holds/${recordId(holdId, 'credits.releaseHold')}`;
+    const hold = await deleteRecord<CreditHold>(this.http, path);
+    if (hold === null) throw new UnexpectedResponseError(`Siren answered DELETE ${path} with no hold.`, { statusCode: 204 });
+    return hold;
   }
 
   /**
@@ -299,9 +406,8 @@ export class CreditsResource {
    * limit.
    */
   static holdReference(platformId: string, token: string): string {
-    // Stub: slice 4 packet P5
-    void platformId;
-    void token;
-    return '';
+    const platform = holdName(platformId, 'platformId', CreditsResource.HOLD_PLATFORM_MAX_LENGTH);
+    const checkout = holdName(token, 'token', CreditsResource.HOLD_TOKEN_MAX_LENGTH);
+    return `hold:${platform}:${checkout}`;
   }
 }
