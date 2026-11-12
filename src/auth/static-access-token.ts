@@ -1,3 +1,4 @@
+import { SirenError } from '../errors';
 import type { AccessTokenSource } from './access-token-source';
 
 /**
@@ -13,18 +14,17 @@ export class StaticAccessToken implements AccessTokenSource {
    *   not a string.
    */
   constructor(private readonly token: string) {
-    // Stub: slice 2 packet P1. Refuse an empty or non-string token.
+    if (typeof token !== 'string' || token === '') {
+      throw new SirenError('StaticAccessToken needs a non-empty string token.');
+    }
   }
 
   getAccessToken(): string {
-    // Stub: slice 2 packet P1.
-    return '';
+    return this.token;
   }
 
   /** Always `null`: a fixed token has nothing to refresh to. */
   refreshAccessToken(_rejectedToken: string): string | null {
-    // Stub: slice 2 packet P1. It answers an empty string, not the documented
-    // null, so the null tests fail against the stub.
-    return '';
+    return null;
   }
 }

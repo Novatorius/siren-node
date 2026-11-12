@@ -14,18 +14,18 @@ import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src
  */
 
 describe('P1: StaticAccessToken', () => {
-  it.skip('answers the token it was given', async () => {
+  it('answers the token it was given', async () => {
     expect(await new StaticAccessToken('sk_live_abc').getAccessToken()).toBe('sk_live_abc');
   });
 
-  it.skip('cannot refresh, so it answers null for any refused token', async () => {
+  it('cannot refresh, so it answers null for any refused token', async () => {
     const source = new StaticAccessToken('sk_live_abc');
 
     expect(await source.refreshAccessToken('sk_live_abc')).toBeNull();
     expect(await source.refreshAccessToken('something-else')).toBeNull();
   });
 
-  it.skip.each([
+  it.each([
     ['an empty string', ''],
     ['a number', 42],
     ['undefined', undefined],
