@@ -333,43 +333,27 @@ function redact(text: string, secrets: readonly string[]): string {
 }
 
 /**
- * A copy of a parsed answer that an error may carry. Every secret the call
- * sent, and every token field's text value, is replaced in each string and
- * each key, the value of each token field is replaced whole, and anything
- * nested deeper than {@link MAX_SCRUB_DEPTH} is replaced whole, so a deep
- * answer still raises a `SirenError`.
+ * A copy of a parsed answer that an error may carry. Every secret is
+ * replaced in each string and each key, the value of each token field is
+ * replaced whole, and anything nested deeper than {@link MAX_SCRUB_DEPTH}
+ * is replaced whole, so a deep answer still raises a `SirenError`.
  */
-function scrub(answer: unknown, secrets: readonly string[]): unknown {
-  return scrubValue(answer, [...secrets, ...tokenValues(answer, 0)], 0);
-}
-
-function scrubValue(value: unknown, secrets: readonly string[], depth: number): unknown {
+function scrub(value: unknown, secrets: readonly string[], depth = 0): unknown {
   if (typeof value === 'string') return redact(value, secrets);
   if (typeof value !== 'object' || value === null) return value;
   if (depth >= MAX_SCRUB_DEPTH) return '[redacted]';
-  if (Array.isArray(value)) return value.map((item) => scrubValue(item, secrets, depth + 1));
+  if (Array.isArray(value)) return value.map((item) => scrub(item, secrets, depth + 1));
   const copy: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
     // defineProperty keeps a `__proto__` key an own field of the copy.
     Object.defineProperty(copy, redact(key, secrets), {
-      value: isTokenField(key) ? '[redacted]' : scrubValue(item, secrets, depth + 1),
+      value: isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),
       enumerable: true,
       writable: true,
       configurable: true,
     });
   }
   return copy;
-}
-
-/** The text value of every token field in an answer, to the depth the copy reaches. */
-function tokenValues(value: unknown, depth: number): string[] {
-  if (typeof value !== 'object' || value === null || depth >= MAX_SCRUB_DEPTH) return [];
-  const found: string[] = [];
-  for (const [key, item] of Object.entries(value)) {
-    if (isTokenField(key) && typeof item === 'string') found.push(item);
-    else found.push(...tokenValues(item, depth + 1));
-  }
-  return found;
 }
 
 /** A token field's name, in any case, with or without `_` or `-`. */

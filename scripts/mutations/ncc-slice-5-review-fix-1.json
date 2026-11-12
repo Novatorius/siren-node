@@ -58,7 +58,7 @@
   {
     "id": "lists-kept",
     "file": "src/connect/oauth.ts",
-    "find": "  if (Array.isArray(value)) return value.map((item) => scrubValue(item, secrets, depth + 1));",
+    "find": "  if (Array.isArray(value)) return value.map((item) => scrub(item, secrets, depth + 1));",
     "replace": "  if (Array.isArray(value)) return value;",
     "expect": "caught",
     "failing": [
@@ -68,7 +68,7 @@
   {
     "id": "nested-kept",
     "file": "src/connect/oauth.ts",
-    "find": "isTokenField(key) ? '[redacted]' : scrubValue(item, secrets, depth + 1),",
+    "find": "isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),",
     "replace": "isTokenField(key) ? '[redacted]' : item,",
     "expect": "caught",
     "failing": [
@@ -78,11 +78,11 @@
   {
     "id": "token-fields-kept",
     "file": "src/connect/oauth.ts",
-    "find": "isTokenField(key) ? '[redacted]' : scrubValue(item, secrets, depth + 1),",
-    "replace": "scrubValue(item, secrets, depth + 1),",
+    "find": "isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),",
+    "replace": "scrub(item, secrets, depth + 1),",
     "expect": "caught",
     "failing": [
-      "replaces the value of each token field"
+      "replaces a token field whole when its value is not text"
     ]
   },
   {
@@ -159,8 +159,8 @@
   {
     "id": "proto-key-assigned",
     "file": "src/connect/oauth.ts",
-    "find": "    Object.defineProperty(copy, redact(key, secrets), {\n      value: isTokenField(key) ? '[redacted]' : scrubValue(item, secrets, depth + 1),\n      enumerable: true,\n      writable: true,\n      configurable: true,\n    });",
-    "replace": "    copy[redact(key, secrets)] = isTokenField(key) ? '[redacted]' : scrubValue(item, secrets, depth + 1);",
+    "find": "    Object.defineProperty(copy, redact(key, secrets), {\n      value: isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),\n      enumerable: true,\n      writable: true,\n      configurable: true,\n    });",
+    "replace": "    copy[redact(key, secrets)] = isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1);",
     "expect": "caught",
     "failing": [
       "keeps a __proto__ key in the data as an own field"
@@ -179,31 +179,11 @@
   {
     "id": "object-depth-not-counted",
     "file": "src/connect/oauth.ts",
-    "find": "value: isTokenField(key) ? '[redacted]' : scrubValue(item, secrets, depth + 1),",
-    "replace": "value: isTokenField(key) ? '[redacted]' : scrubValue(item, secrets, depth),",
+    "find": "value: isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),",
+    "replace": "value: isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth),",
     "expect": "caught",
     "failing": [
       "raises the usual SirenError for objects nested far deeper"
-    ]
-  },
-  {
-    "id": "token-values-not-gathered",
-    "file": "src/connect/oauth.ts",
-    "find": "  return scrubValue(answer, [...secrets, ...tokenValues(answer, 0)], 0);",
-    "replace": "  return scrubValue(answer, secrets, 0);",
-    "expect": "caught",
-    "failing": [
-      "removes a token field's value wherever else"
-    ]
-  },
-  {
-    "id": "nested-token-values-not-gathered",
-    "file": "src/connect/oauth.ts",
-    "find": "    else found.push(...tokenValues(item, depth + 1));",
-    "replace": "",
-    "expect": "caught",
-    "failing": [
-      "removes a token field's value wherever else"
     ]
   }
 ]

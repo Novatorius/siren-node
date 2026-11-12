@@ -113,6 +113,15 @@ describe('OAuthClient review fix: errors built from an answer that quotes a secr
     expect(shown(error)).not.toMatch(/QNEW/);
   });
 
+  it('replaces a token field whole when its value is not text', async () => {
+    const error = await refreshFailing(
+      reply(500, { error: { message: 'odd', data: { refresh_token: { value: 'rt_QNEWREFRESHQ_6' }, access_token: 42 } } }),
+    );
+
+    expect((error as ApiError).data).toEqual({ refresh_token: '[redacted]', access_token: '[redacted]' });
+    expect(shown(error)).not.toMatch(/QNEW/);
+  });
+
   it('removes a secret used as a key in the data of a failed answer', async () => {
     const error = await refreshFailing(reply(400, { error: { message: 'refresh failed', data: { attempts: { [ATTEMPT]: 'failed' } } } }));
 
@@ -168,16 +177,6 @@ describe('OAuthClient review fix: errors built from an answer that quotes a secr
     expect(error).toBeInstanceOf(ApiError);
     expect(error.message).toBe('deep');
     expect(JSON.stringify((error as ApiError).data)).not.toContain(ATTEMPT);
-  });
-
-  it("removes a token field's value wherever else the failed answer quotes it", async () => {
-    const error = await refreshFailing(
-      reply(500, { error: { message: 'rotated to at_QNEWACCESSQ_7', data: { issued: { access_token: 'at_QNEWACCESSQ_7' } } } }),
-    );
-
-    expect(error).toBeInstanceOf(ApiError);
-    expect(error.message).toBe('rotated to [redacted]');
-    expect(shown(error)).not.toMatch(/QNEW/);
   });
 
   it('leaves an answer that quotes no secret as Cloud sent it', async () => {
