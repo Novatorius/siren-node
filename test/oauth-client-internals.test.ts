@@ -9,9 +9,9 @@ import { FakeHttpClient, reply } from './http-fakes';
  * Unit tests for the OAuthClient internals the P2 acceptance tests do not
  * pin: the secret scrub on secrets that hold regex characters or each
  * other, the scrub on a call that sent no secret, the reading of an OAuth
- * envelope whose fields are empty, the token fields a 2xx must fill, the
- * consent screen URL that already carries a query, and the Retry-After
- * lookup in any case.
+ * envelope whose fields are empty, the token fields a 2xx must fill, and
+ * the Retry-After lookup in any case. A consent screen URL with a query of
+ * its own is refused once fix packet F1 lands (A96), so no test builds one.
  */
 
 const REDIRECT = 'https://store.example/siren/callback';
@@ -110,30 +110,5 @@ describe('OAuthClient internals: reading the answer', () => {
 
     expect(error).toBeInstanceOf(RateLimitError);
     expect((error as RateLimitError).retryAfter).toBe(7);
-  });
-});
-
-describe('OAuthClient internals: the consent screen URL', () => {
-  it('adds its query after one the consentScreenUrl already carries', () => {
-    const { oauth } = oauthAnswering(reply(200, TOKENS), { consentScreenUrl: 'http://localhost:5173/connect-site?lang=en' });
-
-    const url = new URL(
-      oauth.authorizeUrl({
-        clientId: 'sc_1',
-        redirectUri: REDIRECT,
-        state: 'state-1',
-        codeChallenge: 'qK5ubukpq-o6_PxSWMjM1vhSc-DUYm0mxyefMlD3fI4',
-      }),
-    );
-
-    expect([...url.searchParams.keys()]).toEqual([
-      'lang',
-      'client_id',
-      'redirect_uri',
-      'code_challenge',
-      'code_challenge_method',
-      'state',
-      'scope',
-    ]);
   });
 });

@@ -92,6 +92,19 @@ function urlParts(url: string): string[] {
   return [...words, ...forms].map((part) => part.toLowerCase());
 }
 
+/**
+ * The parts of `url` that `error` shows and Siren's own refusal of the same
+ * value does not. Siren's refusal is proven to quote none of the URL (the
+ * 2b and 2c tests), so a part it shows too, such as `siren` from its
+ * message, `file` from a stack frame or a space, is the text around the
+ * error, not a leak.
+ */
+function leaked(error: SirenError, siren: SirenError, url: string): string[] {
+  const text = shown(error).toLowerCase();
+  const around = shown(siren).toLowerCase();
+  return urlParts(url).filter((part) => text.includes(part) && !around.includes(part));
+}
+
 /** Values Siren refuses as a `baseUrl`: the slice 2b and 2c rows, and the review's probe. */
 const REFUSED_URLS: Array<[string, unknown]> = [
   ['an empty string', ''],
@@ -153,10 +166,7 @@ describe('5 fix F1: OAuthClient baseUrl check', () => {
 
     expect(error.message).toBe(expected.message);
     expect(error.cause).toBeUndefined();
-    if (typeof baseUrl === 'string') {
-      const text = shown(error).toLowerCase();
-      expect(urlParts(baseUrl).filter((part) => text.includes(part))).toEqual([]);
-    }
+    if (typeof baseUrl === 'string') expect(leaked(error, expected, baseUrl)).toEqual([]);
   });
 
   // Skipped until fix packet F1 (OAuthClient option checks) lands.
@@ -205,10 +215,7 @@ describe('5 fix F1: OAuthClient consentScreenUrl check', () => {
       expect(error.message).toBe(expected.message.replace(/\bbaseUrl\b/g, 'consentScreenUrl'));
       expect(error.message).not.toMatch(/\bbaseUrl\b/);
       expect(error.cause).toBeUndefined();
-      if (typeof consentScreenUrl === 'string') {
-        const text = shown(error).toLowerCase();
-        expect(urlParts(consentScreenUrl).filter((part) => text.includes(part))).toEqual([]);
-      }
+      if (typeof consentScreenUrl === 'string') expect(leaked(error, expected, consentScreenUrl)).toEqual([]);
     },
   );
 
