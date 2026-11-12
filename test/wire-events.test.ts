@@ -160,7 +160,7 @@ describe('event sends on a 503', () => {
 });
 
 describe('P9: events.siteVisited is sent once', () => {
-  it.skip('sends a visit once on a 503, even with retries on, because Siren records every visit it receives', async () => {
+  it('sends a visit once on a 503, even with retries on, because Siren records every visit it receives', async () => {
     const ctx = makeClient(
       [
         jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' }),
@@ -174,7 +174,7 @@ describe('P9: events.siteVisited is sent once', () => {
     expect(ctx.calls()).toHaveLength(1);
   });
 
-  it.skip('sends a visit once when the connection fails, even with retries on', async () => {
+  it('sends a visit once when the connection fails, even with retries on', async () => {
     const ctx = makeClient(
       [new TypeError('fetch failed'), jsonResponse(200, { status: 'recorded', attributed: false, opportunityId: 5 })],
       { maxRetries: 2 },
