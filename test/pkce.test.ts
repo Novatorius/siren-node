@@ -1,6 +1,13 @@
+import { randomBytes } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SirenError } from '../src/index';
 import { codeChallengeS256, createCodeVerifier, createState } from '../src/connect/index';
+
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  return { ...actual, randomBytes: vi.fn(actual.randomBytes) };
+});
 
 /*
  * Slice 5 acceptance tests for packet P1: PKCE and state helpers.
@@ -11,6 +18,10 @@ import { codeChallengeS256, createCodeVerifier, createState } from '../src/conne
  * `openssl dgst -sha256 -binary | base64url` and PHP's
  * `rtrim(strtr(base64_encode(hash('sha256', $v, true)), '+/', '-_'), '=')`
  * all gave as written here.
+ *
+ * The randomness tests replace `node:crypto`'s `randomBytes` with a spy over
+ * the real one, so they can check that each value is exactly the bytes the
+ * secure source gave, in hex.
  *
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
@@ -74,6 +85,14 @@ describe('P1: createCodeVerifier', () => {
     expect(codeChallengeS256(verifier)).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
+  it.skip("is exactly the 32 bytes node:crypto's randomBytes gives, in hex", () => {
+    const bytes = Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 37 + 11) % 256));
+    vi.mocked(randomBytes).mockReturnValueOnce(bytes as never);
+
+    expect(createCodeVerifier()).toBe(bytes.toString('hex'));
+    expect(vi.mocked(randomBytes)).toHaveBeenCalledWith(32);
+  });
+
   it.skip('answers a new value every call, from every hex digit, never from Math.random', () => {
     const random = vi.spyOn(Math, 'random');
     const verifiers = Array.from({ length: 200 }, () => createCodeVerifier());
@@ -87,6 +106,14 @@ describe('P1: createCodeVerifier', () => {
 describe('P1: createState', () => {
   it.skip('answers 32 lower-case hex digits, 16 random bytes', () => {
     expect(createState()).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it.skip("is exactly the 16 bytes node:crypto's randomBytes gives, in hex", () => {
+    const bytes = Buffer.from(Array.from({ length: 16 }, (_, i) => (i * 53 + 7) % 256));
+    vi.mocked(randomBytes).mockReturnValueOnce(bytes as never);
+
+    expect(createState()).toBe(bytes.toString('hex'));
+    expect(vi.mocked(randomBytes)).toHaveBeenCalledWith(16);
   });
 
   it.skip('answers a new value every call, from every hex digit, never from Math.random', () => {

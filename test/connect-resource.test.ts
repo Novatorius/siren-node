@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { ApiError, ConnectionError, HttpClientError, MissingScopeError, PermissionError, UnexpectedResponseError } from '../src/index';
 import { ConnectScope, ConnectWebhookResource } from '../src/connect/index';
@@ -153,7 +154,9 @@ describe('P3: ConnectResource transport rules', () => {
     ['reportIntegrations', (c) => c.reportIntegrations(integrations), reply(204)],
   ];
 
-  it.skip.each(calls.filter(([name]) => name !== 'disconnect'))('%s is retried after a 503', async (_name, call, success) => {
+  const sentOnce = ['disconnect', 'reportSiteState', 'reportIntegrations', 'syncProducts'];
+
+  it.skip.each(calls.filter(([name]) => !sentOnce.includes(name)))('%s is retried after a 503', async (_name, call, success) => {
     const { http, connect } = connectOver([reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }), success]);
 
     await call(connect);
@@ -170,6 +173,18 @@ describe('P3: ConnectResource transport rules', () => {
     await expect(connect.disconnect()).rejects.toBeInstanceOf(type);
     expect(http.requests).toHaveLength(1);
   });
+
+  it.skip.each(calls.filter(([name]) => sentOnce.includes(name) && name !== 'disconnect'))(
+    '%s is sent once on a 503 and on a network error, since the site queue reports again',
+    async (_name, call, success) => {
+      for (const first of [reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }), new HttpClientError('socket hang up')]) {
+        const { http, connect } = connectOver([first, success], 3);
+
+        await expect(call(connect)).rejects.toBeInstanceOf(first instanceof Error ? ConnectionError : ApiError);
+        expect(http.requests).toHaveLength(1);
+      }
+    },
+  );
 
   it.skip.each(calls)('%s is resent once with a refreshed token after a 401', async (_name, call, success) => {
     const { http, tokens, connect } = connectOver([reply(401, ConnectAnswers.invalidToken), success]);
@@ -226,6 +241,21 @@ describe('P3: ConnectResource transport rules', () => {
   });
 
   it.skip.each([
+    ['customerEmailKey without keyId', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, keyId: undefined }],
+    ['customerEmailKey with an empty secret', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: '' }],
+    ['customerEmailKey with a secret that is not text', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: 42 }],
+    ['customerEmailKey with no fields', (c: ConnectResource) => c.customerEmailKey(), {}],
+    ['customerEmailKey with a secret that is not base64', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: 'not base64!' }],
+    ['customerEmailKey with a key under 16 bytes', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: 'c2hvcnQta2V5' }],
+    ['updateGrant without grant', (c: ConnectResource) => c.updateGrant(), { ...ConnectAnswers.updateGrant, grant: undefined }],
+    ['updateGrant with an empty grant', (c: ConnectResource) => c.updateGrant(), { ...ConnectAnswers.updateGrant, grant: '' }],
+  ] as const)('%s raises UnexpectedResponseError, so a missing secret never reads as one', async (_name, call, answer) => {
+    const { connect } = connectOver([reply(200, answer)]);
+
+    await expect(call(connect)).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+
+  it.skip.each([
     ['customerEmailKey', (c: ConnectResource) => c.customerEmailKey(), ConnectAnswers.customerEmailKey, ConnectAnswers.customerEmailKey.secret],
     ['updateGrant', (c: ConnectResource) => c.updateGrant(), ConnectAnswers.updateGrant, ConnectAnswers.updateGrant.grant],
   ] as const)('%s keeps the secret from the answer out of an UnexpectedResponseError', async (_name, call, answer, secret) => {
@@ -235,7 +265,7 @@ describe('P3: ConnectResource transport rules', () => {
 
     expect(error).toBeInstanceOf(UnexpectedResponseError);
     const details = error as UnexpectedResponseError;
-    expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)}`).not.toContain(secret);
+    expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)} ${inspect(error, { depth: 10 })}`).not.toContain(secret);
   });
 });
 

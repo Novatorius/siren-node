@@ -7,6 +7,9 @@ import { afterEach, beforeEach, expect, vi } from 'vitest';
  * request throws and fails the test after it ends, even when the code under
  * test caught the throw. A test that installs its own fetch replaces the
  * guard for that test only.
+ *
+ * It covers only the global fetch, the one way the SDK sends today. A
+ * packet that adds another way to send, such as `node:https`, extends it.
  */
 
 const realFetch = globalThis.fetch;
@@ -29,16 +32,24 @@ export function takeRefusedHosts(): string[] {
   return hosts;
 }
 
-beforeEach(() => {
+function install(): void {
   vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
     if (LOOPBACK.has(hostOf(input))) return realFetch(input as string, init);
     offMachine(hostOf(input));
     throw new Error('A test called the global fetch for a host off this machine. No test may reach the network.');
   });
+}
+
+// At load, so module scope and beforeAll in the test file see the guard too.
+install();
+
+beforeEach(() => {
+  install();
 });
 
 afterEach(() => {
   const hosts = takeRefusedHosts();
   vi.unstubAllGlobals();
+  install();
   expect(hosts, 'hosts a test tried to reach through the global fetch').toEqual([]);
 });

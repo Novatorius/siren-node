@@ -8,7 +8,8 @@
 
 /**
  * A new code verifier: 64 lower-case hex digits from 32 bytes of the
- * operating system's secure random source, as PHP's
+ * operating system's secure random source, `randomBytes(32)` from
+ * `node:crypto`, as PHP's
  * `bin2hex(random_bytes(32))`. It fits RFC 7636's 43 to 128 unreserved
  * characters.
  */
@@ -19,7 +20,8 @@ export function createCodeVerifier(): string {
 
 /**
  * A new `state` value: 32 lower-case hex digits from 16 bytes of the
- * operating system's secure random source, as PHP's
+ * operating system's secure random source, `randomBytes(16)` from
+ * `node:crypto`, as PHP's
  * `bin2hex(random_bytes(16))`.
  */
 export function createState(): string {

@@ -42,8 +42,9 @@ export type {
 } from './types';
 
 // The token sources and the forwarded event vocabulary, so a connected site
-// imports everything from one entry. Each is the same class or value the
-// main entry exports.
+// takes them from this entry too. Each is the same class or value the main
+// entry exports. Webhook verification (`webhooks.constructEvent`) stays on
+// the main client.
 export { ConnectorScope } from '../auth/connector-scope';
 export { StaticAccessToken } from '../auth/static-access-token';
 export { CallbackAccessTokenSource } from '../auth/callback-access-token-source';

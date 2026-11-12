@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
@@ -92,10 +93,10 @@ async function failure(promise: Promise<unknown>): Promise<Error> {
   throw new Error('expected the call to reject');
 }
 
-/** Every text an error shows: its message, its JSON form and its data. */
+/** Every text an error shows: its message, its JSON form, its data, its code, and what a logger prints, cause chain included. */
 function shown(error: Error): string {
   const details = error as Error & { data?: unknown; code?: unknown };
-  return `${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)} ${String(details.code)}`;
+  return `${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)} ${String(details.code)} ${inspect(error, { depth: 10 })}`;
 }
 
 const registerParams = {
@@ -409,6 +410,16 @@ describe('P2: OAuthClient.refresh', () => {
 
     expect(error).toBeInstanceOf(BadRequestError);
     expect(error).not.toBeInstanceOf(OAuthError);
+  });
+
+  it.skip('keeps the attemptId out of a ConnectionError', async () => {
+    const attemptId = 'attempt-SECRETATTEMPT-77';
+    const { oauth } = client([new HttpClientError(`timed out sending attempt_id=${attemptId}`)]);
+
+    const error = await failure(oauth.refresh({ ...refreshParams, attemptId }));
+
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect(shown(error)).not.toContain(attemptId);
   });
 
   it.skip('keeps the refresh token out of a ConnectionError, and keeps the client error cause', async () => {

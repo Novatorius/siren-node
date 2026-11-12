@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { ApiError, ConnectionError, HttpClientError, MissingScopeError, NotFoundError, SirenError, UnexpectedResponseError } from '../src/index';
 import { ConnectScope } from '../src/connect/index';
@@ -141,7 +142,7 @@ describe('P4: ConnectWebhookResource answers', () => {
 
     expect(error).toBeInstanceOf(UnexpectedResponseError);
     const details = error as UnexpectedResponseError;
-    expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)}`).not.toContain(ConnectAnswers.signingSecret);
+    expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)} ${inspect(error, { depth: 10 })}`).not.toContain(ConnectAnswers.signingSecret);
   });
 
   it.skip('replace raises UnexpectedResponseError for an answer without a text signingSecret', async () => {

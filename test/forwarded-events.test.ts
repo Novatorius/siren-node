@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
+  CallbackAccessTokenSource,
   ConflictError,
   ConnectionError,
   EventSlug,
@@ -22,9 +23,9 @@ import { FakeHttpClient, reply } from './http-fakes';
  * envelope a connected site sends to `POST /event/{slug}`.
  *
  * Integration shape (KB 568): the real Siren client and transport, with a
- * FakeHttpClient at the HttpClient seam. The answers are the ones Siren's
- * lib/Events/Core/Factories/Forwarded/ForwardedEventFactory.php lists at
- * b6f7140d0, and the envelope rules are lib/EventForwarding/Core/Services/
+ * FakeHttpClient at the HttpClient seam. The answers are the ones
+ * lib/Events/Core/Services/ForwardedEventIngestionService.php and the
+ * transaction reference wire format build at b6f7140d0, and the envelope rules are lib/EventForwarding/Core/Services/
  * EventWireFormat.php. The header is ForwardedEventSender::FINAL_ATTEMPT_HEADER
  * in lib/Connect/Service/Services/ForwardedEventSender.php.
  *
@@ -74,8 +75,9 @@ const CLOUD_SLUGS = [
 ];
 
 const Answers = {
-  accepted: { status: 'accepted', event: 'product-deleted', message: 'Event accepted.' },
-  duplicate: { status: 'duplicate', event: 'product-deleted', message: 'Event already received.' },
+  // ForwardedEventIngestionService.php lines 203 and 226.
+  accepted: { status: 'accepted', event: 'product-deleted', message: 'The event was recorded.' },
+  duplicate: { status: 'duplicate', event: 'product-deleted', message: 'This event was recorded before. Nothing new was recorded.' },
   saleCreated: { status: 'created', event: 'sale-triggered', message: 'Sale recorded.' },
   // ForwardedEventIngestionService::readEnvelope, lines 91 to 95 at b6f7140d0.
   cloudOrigin: {
@@ -91,9 +93,18 @@ const Answers = {
       context: { event: 'product-deleted', reason: 'waiting_for_record' },
     },
   },
-  notFound: { error: { message: 'No transaction matches that reference.', context: { reason: 'reference_not_found', field: 'data.transaction' } } },
+  // TransactionReferenceWireFormat::notFound, line 228, and the refusal at line 117, each with its field.
+  notFound: {
+    error: {
+      message: 'No transaction matches data.transaction. The sale it belongs to may not have arrived yet.',
+      context: { reason: 'reference_not_found', field: 'data.transaction' },
+    },
+  },
   otherProperty: {
-    error: { message: 'The order was recorded for another store.', context: { reason: 'reference_belongs_to_another_property' } },
+    error: {
+      message: 'The order medusa_order order_01 was recorded for another store in this organization, so this store cannot act on it. Do not send this event again.',
+      context: { reason: 'reference_belongs_to_another_property', field: 'data.transaction' },
+    },
   },
   unavailable: { error: { message: 'Service unavailable', context: [] } },
 };
@@ -261,14 +272,35 @@ describe('P6: events.forward is sent once', () => {
   });
 
   it.skip.each([
-    ['409 cloud_origin', reply(409, Answers.cloudOrigin), ConflictError],
-    ['404 reference_not_found', reply(404, Answers.notFound), NotFoundError],
-    ['422 reference_belongs_to_another_property', reply(422, Answers.otherProperty), ValidationError],
-  ])('raises %s without sending again', async (_name, answer, type) => {
+    ['409 cloud_origin', reply(409, Answers.cloudOrigin), ConflictError, 'cloud_origin'],
+    ['404 reference_not_found', reply(404, Answers.notFound), NotFoundError, 'reference_not_found'],
+    ['422 reference_belongs_to_another_property', reply(422, Answers.otherProperty), ValidationError, 'reference_belongs_to_another_property'],
+  ])('raises %s without sending again, with the reason in data for the outbox', async (_name, answer, type, reason) => {
     const { http, client } = siren([answer, reply(200, Answers.accepted)]);
 
-    await expect(client.events.forward('refund-triggered', { ...productDeleted, data: { transaction: { id: 1 } } })).rejects.toBeInstanceOf(type);
+    let caught: unknown;
+    try {
+      await client.events.forward('refund-triggered', { ...productDeleted, data: { transaction: { id: 1 } } });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(type);
+    expect((caught as SirenError).data).toMatchObject({ reason });
     expect(http.requests).toHaveLength(1);
+  });
+
+  it.skip('resends once with a refreshed token after a 401, keeping the final-attempt header', async () => {
+    const http = new FakeHttpClient([reply(401, { error: { message: 'Invalid access token.', context: [] } }), reply(200, Answers.accepted)]);
+    const refreshed = vi.fn(async () => 'tok-2');
+    const client = new Siren({ accessToken: new CallbackAccessTokenSource(() => 'tok-1', refreshed), httpClient: http, maxRetries: 3 });
+
+    await client.events.forward('product-deleted', productDeleted, { finalAttempt: true });
+
+    expect(refreshed).toHaveBeenCalledTimes(1);
+    expect(http.requests.map((request) => header(request, 'authorization'))).toEqual(['Bearer tok-1', 'Bearer tok-2']);
+    expect(http.requests.map((request) => header(request, 'x-siren-final-attempt'))).toEqual(['1', '1']);
+    expect(http.requests[1]!.body).toBe(http.requests[0]!.body);
   });
 });
 

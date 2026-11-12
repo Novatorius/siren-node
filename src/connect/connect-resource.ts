@@ -21,8 +21,12 @@ import type {
  *
  * Every method follows the transport's rules: one resend with a refreshed
  * token after the first 401, and retries on network errors, 429 and 5xx for
- * the methods marked retried. Each method below is retried, because each
- * route is a read or a write whose repeat changes nothing more. A 2xx whose
+ * the methods marked retried. The reads and `updateGrant` are retried,
+ * because a repeat changes nothing. The three reports (`reportSiteState`,
+ * `reportIntegrations`, `syncProducts`) are sent once: a site sends them
+ * from its task queue, which owns redelivery, so an inline retry would
+ * multiply every queue try. `disconnect` is sent once, because Cloud cuts
+ * the client off as it commits and answers a resend with 401. A 2xx whose
  * body is not a JSON object raises `UnexpectedResponseError`, and its
  * message quotes none of the body.
  */
@@ -56,7 +60,8 @@ export class ConnectResource {
   /**
    * `POST /connect/update-grant`, `connect:read`, no body. A short-lived
    * signed grant the site's updater sends to fetch a paid build. Retried:
-   * each send signs a new grant and records nothing.
+   * each send signs a new grant and records nothing. A 2xx without a
+   * non-empty text `grant` raises `UnexpectedResponseError`.
    */
   async updateGrant(): Promise<ConnectUpdateGrant> {
     // Stub: slice 5 packet P3.
@@ -66,7 +71,7 @@ export class ConnectResource {
   /**
    * `PUT /connect/site-state`, `connect:read`, with body `{ forwarding }`
    * plus each of `cutOverAt`, `localDataDeletedAt` and `migrationComplete`
-   * that is not `undefined`.
+   * that is not `undefined`. Sent once. The site's queue reports again.
    */
   async reportSiteState(params: SiteStateParams): Promise<SiteStateReport> {
     // Stub: slice 5 packet P3.
@@ -78,7 +83,7 @@ export class ConnectResource {
    * `PUT /connect/integrations`, `connect:records:write`, with body
    * `{ integrations }`: the whole list, up to 50, which replaces the one
    * Cloud held. Cloud answers 204 with no body, and the promise resolves
-   * with nothing.
+   * with nothing. Sent once. The site's queue reports again.
    */
   async reportIntegrations(integrations: ReportedIntegration[]): Promise<void> {
     // Stub: slice 5 packet P3.
@@ -88,7 +93,8 @@ export class ConnectResource {
   /**
    * `PUT /connect/products`, `connect:records:write`, with body `{ platform }`
    * plus each of `products`, `removed` and `pruneBefore` that is not
-   * `undefined`. Upserts and removes up to 200 products a call.
+   * `undefined`. Upserts and removes up to 200 products a call. Sent once.
+   * The site's queue sends the batch again.
    */
   async syncProducts(params: ProductSyncParams): Promise<ProductSyncResult> {
     // Stub: slice 5 packet P3.
@@ -121,7 +127,11 @@ export class ConnectResource {
   /**
    * `GET /connect/customer-email-key`, `connect:records:read`. The key the
    * site hashes customer emails with. Cloud sends it with
-   * `Cache-Control: no-store`. Never log it.
+   * `Cache-Control: no-store`. Never log it. A 2xx without a non-empty
+   * text `keyId`, and a `secret` that is standard base64 of at least 16
+   * bytes, raises `UnexpectedResponseError`, so a site never hashes with a
+   * missing or weak key. Siren's `CloudCustomerEmailKeys` reads it the same
+   * way.
    */
   async customerEmailKey(): Promise<CustomerEmailKey> {
     // Stub: slice 5 packet P3.

@@ -78,8 +78,8 @@ export const ConnectAnswers = {
     urlProblem: null,
     propertyId: 9,
     oauthClientId: 'sc_4b1f0e3a9d2c',
-    dateCreated: '2026-11-01T10:00:00+00:00',
-    dateModified: '2026-11-12T09:00:00+00:00',
+    dateCreated: '2026-11-01 10:00:00',
+    dateModified: '2026-11-12 09:00:00',
     property: { id: 9, siteUrl: 'https://store.example' },
   },
   /** ReplaceConnectorWebhook.php: the new secret, shown once. */
@@ -88,7 +88,10 @@ export const ConnectAnswers = {
   deleted: { deleted: true },
   /** TestConnectorWebhook.php line 78, ConnectorWebhookTester::sendTest. */
   tested: { delivered: true, httpStatus: 200, error: null },
-  /** ListConnectorWebhookDeliveries.php line 55, WebhookDeliveryAdapter. */
+  /**
+   * ListConnectorWebhookDeliveries.php line 55, WebhookDeliveryAdapter. Dates
+   * come from phpnomad's DateFormatterService as `Y-m-d H:i:s`, with no offset.
+   */
   delivery: {
     id: 501,
     webhookSubscriptionId: 77,
@@ -101,8 +104,8 @@ export const ConnectAnswers = {
     responseBody: 'ok',
     errorMessage: null,
     nextRetryAt: null,
-    deliveredAt: '2026-11-12T09:01:00+00:00',
-    dateCreated: '2026-11-12T09:00:59+00:00',
-    dateModified: '2026-11-12T09:01:00+00:00',
+    deliveredAt: '2026-11-12 09:01:00',
+    dateCreated: '2026-11-12 09:00:59',
+    dateModified: '2026-11-12 09:01:00',
   },
 } as const;

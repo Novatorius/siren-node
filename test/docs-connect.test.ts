@@ -33,6 +33,11 @@ function sentences(text: string): string[] {
   return text.replace(/\s+/g, ' ').split(/(?<=\.)\s/);
 }
 
+/** Whether a sentence states its advice without negating it, as "no", "not", "never", "need not" or "without" would. */
+function affirmed(sentence: string): boolean {
+  return !/\b(?:no|not|never|none|without|needn't|don't|doesn't|isn't)\b/i.test(sentence);
+}
+
 /** One path block in openapi.yaml, from its key to the next path. */
 function path(openapi: string, key: string): string {
   const start = openapi.indexOf(`\n  ${key}:\n`);
@@ -155,7 +160,9 @@ describe('P7: README', () => {
   });
 
   it.skip('says the store locks its refresh, resends only within 30 seconds, and picks a random attemptId', () => {
-    const all = sentences(section(read('README.md'), '## Connected sites'));
+    // Security advice counts only when it is affirmed, so a sentence that
+    // negates it ("needs no lock", "need not be random") does not match.
+    const all = sentences(section(read('README.md'), '## Connected sites')).filter(affirmed);
 
     expect(
       all.some((s) => /\block(?:s|ed)?\b/i.test(s) && /\brefresh/i.test(s)),
@@ -172,11 +179,30 @@ describe('P7: README', () => {
   });
 
   it.skip("says the store checks the callback's state against the one it kept, once", () => {
-    const all = sentences(section(read('README.md'), '## Connected sites'));
+    const all = sentences(section(read('README.md'), '## Connected sites')).filter(affirmed);
 
     expect(
       all.some((s) => /`state`/.test(s) && /\b(?:compare|match|check)/i.test(s) && /\bonce\b/i.test(s)),
       'a sentence says the callback state is checked against the kept one and used once',
+    ).toBe(true);
+  });
+
+  it.skip('says what a site does on each failure the SDK leaves to it', () => {
+    const all = sentences(section(read('README.md'), '## Connected sites'));
+    const says = (test: (s: string) => boolean, what: string) => expect(all.some(test), what).toBe(true);
+
+    says((s) => /`invalid_grant`/.test(s) && /`invalid_client`/.test(s) && /\bconnect(?:s|ing)? again\b|\breconnect/i.test(s), 'a sentence says invalid_grant or invalid_client on refresh means connecting again');
+    says((s) => /`disconnect`/.test(s) && /\b(?:sent|sends) once\b/i.test(s) && /\b401\b/.test(s), 'a sentence says disconnect is sent once and a 401 after it means the site is disconnected');
+    says((s) => /`replace`/.test(s) && /`ConnectionError`/.test(s), 'a sentence says to call replace again after a ConnectionError');
+    says((s) => /`exchangeCode`/.test(s) && /`ConnectionError`/.test(s) && /\b(?:over|again from the start|new verifier)\b/i.test(s), 'a sentence says a failed exchange starts the connection over');
+  });
+
+  it.skip('says to verify every webhook delivery with constructEvent and the signing secret', () => {
+    const all = sentences(section(read('README.md'), '## Connected sites')).filter(affirmed);
+
+    expect(
+      all.some((s) => /`constructEvent`|constructEvent\(/.test(s) && /\bsigning secret\b|`signingSecret`/i.test(s) && /\bverif/i.test(s)),
+      'a sentence says to verify each delivery with constructEvent and the signing secret',
     ).toBe(true);
   });
 

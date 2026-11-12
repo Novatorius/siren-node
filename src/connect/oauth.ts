@@ -51,9 +51,12 @@ export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;
  *   it never makes the client error itself the cause, because that error's
  *   message may quote the grant. Any other error from the client reaches the
  *   caller unchanged.
- * - No error message, `data` or field it raises carries a secret the call
- *   sent, the code, the verifier or the refresh token, each replaced in the
- *   client error's message. Nor does it carry a token from Cloud's answer.
+ * - No error it builds carries a secret the call sent (the code, the
+ *   verifier, the refresh token or the `attemptId`, each replaced in the
+ *   client error's message) or a token from Cloud's answer, in its message,
+ *   `data`, `code`, any other field or a `cause` it sets. A
+ *   `ConnectionError`'s `cause` is the host's own error, as the host built
+ *   it.
  */
 export class OAuthClient {
   /**
@@ -100,8 +103,9 @@ export class OAuthClient {
    * Throws `SirenError` when `clientId`, `redirectUri` or `state` is empty,
    * or when `codeChallenge` is not 43 characters of `A-Z`, `a-z`, `0-9`, `-`
    * and `_`, the only shape an S256 challenge has, so a verifier passed by
-   * mistake never lands in a browser's address bar. No message quotes the
-   * value it refused.
+   * mistake never lands in a browser's address bar, when the verifier came
+   * from `createCodeVerifier`, whose 64 hex digits never pass. No message
+   * quotes the value it refused.
    */
   authorizeUrl(params: OAuthAuthorizeParams): string {
     // Stub: slice 5 packet P2.
@@ -133,9 +137,10 @@ export class OAuthClient {
    *
    * The store takes its own lock around a refresh, so two refreshes of one
    * token never race. After a `ConnectionError`, a 429 or a 5xx it may send
-   * the same refresh again, with the same `attemptId`, within 30 seconds of
-   * the first try. Later than that, Cloud reads the repeat as a stolen token
-   * and revokes the whole family.
+   * the same refresh again once, with the same `attemptId`, within 30
+   * seconds of the first try. Any further recovery goes through its queue
+   * with that `attemptId`. Later than 30 seconds, Cloud reads the repeat as
+   * a stolen token and revokes the whole family.
    *
    * Throws `SirenError` before sending when `clientId` or `refreshToken` is
    * empty, or `attemptId` is given and empty.

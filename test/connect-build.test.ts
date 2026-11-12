@@ -70,6 +70,14 @@ describe('connect entry source', () => {
   });
 });
 
+// Outside CI a run without a build skips the build checks. CI builds first,
+// so there a missing build fails instead of skipping.
+describe('connect build output', () => {
+  it('is present when CI runs the tests', () => {
+    if (process.env.CI) expect(existsSync(dist('connect.js')), 'run npm run build before npm test').toBe(true);
+  });
+});
+
 describe.skipIf(!existsSync(dist('connect.js')))('connect build', () => {
   it('builds every file the export map names', () => {
     for (const file of ['connect.js', 'connect.cjs', 'connect.d.ts', 'connect.d.cts']) {

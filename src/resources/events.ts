@@ -88,14 +88,19 @@ export class EventsResource {
    * without one. Cloud counts any 2xx as delivered.
    *
    * Sent once, never retried, whatever the answer and whatever the client's
-   * `maxRetries`. A forwarded event is queue work, and the site's outbox
-   * owns redelivery (KB 591): it resends with the same `eventId`, which
-   * Cloud claims once, on the event's natural key or on `eventId`, and
-   * answers as `duplicate`. A 500 whose `error.context.reason` is
-   * `waiting_for_record` raises `ApiError` with that reason in `data`, and
-   * the outbox tries the event again later. `finalAttempt: true` adds the
-   * header `X-Siren-Final-Attempt: 1` to that one send, and no other call
-   * sends it.
+   * `maxRetries`. The one exception is the transport's rule for every call:
+   * after a 401 with an `AccessTokenSource`, one resend with a refreshed
+   * token, carrying the same headers, `X-Siren-Final-Attempt` included.
+   *
+   * A forwarded event is queue work, and the site's outbox owns redelivery:
+   * it resends with the same `eventId`, which Cloud claims once, on the
+   * event's natural key or on `eventId`, and answers as `duplicate`. The
+   * claim is scoped to the credential's Property, so every try of one event
+   * must use the same credential. A 500 whose `error.context.reason` is
+   * `waiting_for_record` raises `ApiError`, and a 404 `reference_not_found`
+   * raises `NotFoundError`, each with that reason in `data`, and the outbox
+   * tries the event again later. `finalAttempt: true` adds the header
+   * `X-Siren-Final-Attempt: 1` to that one send, and no other call sends it.
    *
    * Throws `SirenError`, and sends nothing, when `slug` is not a
    * `ForwardedEventSlug` value, so a typo never becomes a custom event, or

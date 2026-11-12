@@ -66,8 +66,9 @@ an exact `event:{slug}` scope may forward too.
 - Every OAuth call is sent exactly once. Cloud revokes a refresh token's whole
   family when it sees the token again more than 30 seconds after rotation,
   and a code is single use. The store locks its own refresh. It may resend a
-  refresh within 30 seconds with the same random `attemptId`, which Cloud
-  answers with the pair it already issued.
+  refresh once within 30 seconds with the same random `attemptId`, which
+  Cloud answers with the pair it already issued, and recovers further
+  through its queue.
 - 400 or 401 with a text `error` raises `OAuthError`. A refresh refused with
   `invalid_grant` or `invalid_client` means the grant is gone, as Siren's
   `OAuthConnectService::grantIsGone` reads it. 429 and 5xx raise the usual
@@ -76,8 +77,10 @@ an exact `event:{slug}` scope may forward too.
 - `authorizeUrl` writes the query in `OAuthConnectService::begin()` order and
   refuses anything that is not a 43-character base64url challenge, so a
   verifier never reaches a browser.
-- Retried connect routes: every read, the idempotent `PUT`s, `update-grant`
-  (each send signs a fresh grant) and webhook `DELETE`. Sent once: webhook
+- Retried connect routes: every read, `update-grant` (each send signs a
+  fresh grant) and webhook `DELETE`. Sent once: the three reports
+  (`site-state`, `integrations`, `products`), because a site sends them
+  from its task queue and Siren's own reporters retry them there, webhook
   `PUT`, which rotates the secret, webhook test, which Cloud limits to ten a
   site an hour, and `disconnect`, because Cloud cuts the client off as it
   commits and answers a resend with 401.
@@ -85,8 +88,9 @@ an exact `event:{slug}` scope may forward too.
   work, and the site's outbox owns redelivery, as
   [Retry Unification (KB 591)](https://navigator.novatori.us/r/kb/591)
   asks. Siren's own `ForwardedEventSender` sends once per outbox try and
-  waits minutes between tries. The outbox resends with the same `eventId`,
-  which Cloud claims once and answers `duplicate`. `finalAttempt` adds
+  waits minutes between tries. The outbox resends with the same `eventId`
+  and the same credential, which Cloud claims once per Property and answers
+  `duplicate`. `finalAttempt` adds
   `X-Siren-Final-Attempt: 1` to the outbox's last try, so Cloud's log of an
   event it will never record matches one send.
 - `forward` refuses, before sending, a slug outside the 28 (or it would
@@ -108,11 +112,14 @@ The SDK has no logger. Each failure reaches the caller as a thrown error.
 | A 2xx without the shape a method names | `UnexpectedResponseError`, with no secret from the body in it |
 | Connect route refused for scope | `MissingScopeError` with the scope, or `PermissionError` for `/ping` |
 | Connect route 401 | One resend with a refreshed token, as slice 2 sends it |
-| Connect route 429, 5xx or network failure | Retried for the retried routes. The others raise at once |
+| Connect route 429, 5xx or network failure | Retried for the reads and `updateGrant`. The reports and `disconnect` raise at once, and the site's queue reports again |
 | `plan` 503 `plan_unavailable` | `ApiError` with that code once retries run out. The store logs it and keeps its last plan |
 | `disconnect` resent after a lost answer | 401 or the store's `OAuthError` `invalid_grant`. The site is disconnected |
+| `forward` 429, other 5xx or network failure | `RateLimitError`, `ApiError` or `ConnectionError`. The outbox tries again later with the same `eventId` and credential |
 | `forward` 500 `waiting_for_record` | `ApiError` with the reason in `data`. The outbox tries again later |
-| `forward` 409, 404 or 422 | `ConflictError`, `NotFoundError` or `ValidationError`. The outbox stops trying |
+| `forward` 404 `reference_not_found` | `NotFoundError` with the reason in `data`. The outbox tries again later, a bounded number of times, as Siren's `ForwardedEventSender` does |
+| `forward` 401 | One resend with a refreshed token. A second 401 raises `AuthenticationError` |
+| `forward` 400, 403, 409 or 422 | `BadRequestError`, `PermissionError`, `ConflictError` or `ValidationError`, with Cloud's reason in `data`. The outbox stops trying and keeps the event as failed |
 
 ## Edits to files slice 2b also touches
 
@@ -155,16 +162,20 @@ answered with bodies read from the cited Cloud controllers, each with its
 file and line. Nobody captured them from a running Cloud, so a misread
 status or key would pass every packet. Slice 20 of the design runs the
 connector's golden path against a local Cloud, the first time these routes
-meet a running one. The hand-read bodies live in `test/connect-fakes.ts`
-(`ConnectAnswers`), the `Cloud` object in `test/oauth-client.test.ts`, the
-`Answers` object in `test/forwarded-events.test.ts` and the codec lists in
-`test/fixtures/forwarded-event-fields.ts`. `scripts/siren-fixtures.mjs` does
-not check them for drift.
+meet a running one, and it captures these bodies there and swaps them in.
+The hand-read bodies are the connect answers (`ConnectAnswers` in
+`test/connect-fakes.ts`), the OAuth answers (`Cloud` in
+`test/oauth-client.test.ts`), the event answers (`Answers` in
+`test/forwarded-events.test.ts`) and the codec lists
+(`test/fixtures/forwarded-event-fields.ts`). The Siren fixture script
+(`scripts/siren-fixtures.mjs`) does not check them for drift.
 
-No test reaches the network. `vitest.config.ts` runs `test/setup/no-network.ts`
-before every file. It replaces the global fetch with a guard that lets a
-request to this machine through and fails any test that sends one anywhere
-else, even when the code under test caught the error.
+No test reaches the network. The Vitest config runs the no-network setup
+file (`test/setup/no-network.ts`) before every test file. It replaces the
+global fetch with a guard that lets a request to this machine through and
+fails any test that sends one anywhere else, even when the code under test
+caught the error. It covers only the global fetch, the one way the SDK
+sends today.
 
 | File | Packet |
 |---|---|
@@ -186,9 +197,9 @@ whose client answers every send itself.
 
 ## Proof
 
-Against the stubs, every skipped test fails on its assertion except eleven,
+Against the stubs, every skipped test fails on its assertion except ten,
 each a guard the stubs already meet. A throwaway implementation of all
-seven packets passed all 723 tests, and each of 112 mutations against it,
-one per rule, scored as its control predicted.
-`scripts/mutations/ncc-slice-5-surface.json` changes the branch's own
-vocabulary and runs here.
+seven packets passes all 744 tests. Each of 132 mutations against it, one
+per rule, scores as the harness's controls predict. The surface mutation
+list (`scripts/mutations/ncc-slice-5-surface.json`) changes the branch's
+own vocabulary and the no-network guard, and runs here.
