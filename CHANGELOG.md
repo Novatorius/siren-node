@@ -15,6 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SaleParams` is a union of `LiveSaleParams` and `TestSaleParams`, so code that extends it as an
   interface no longer compiles. Extend `LiveSaleParams` or `SaleFields` instead. A real sale still
   requires `trackingId`.
+- `new Siren()` throws `SirenError` when `timeout` is not a number from 1 to 2147483647, when
+  `maxRetries` is not a whole number of 0 or more, or when `baseUrl` is not a non-empty string. NaN,
+  Infinity, `null` and strings are refused. Before, a NaN `maxRetries` turned retries off, Infinity
+  retried without end, a `timeout` above 2147483647 aborted every request after 1 ms, and a `null`
+  took the default.
+- `new Siren()` reads only the options object's own properties, each once. A `baseUrl`,
+  `httpClient`, credential, `timeout` or `maxRetries` inherited from a prototype is ignored, and a
+  `send` or token method that only `Object.prototype` supplies does not count. Fetch reads its own
+  options, so a host that cannot rule out prototype pollution passes its own `httpClient`.
+- A bearer token with a control character (C0, DEL or C1) or a character above U+00FF is refused
+  before it is sent, because neither can go in an HTTP header. An `apiKey` or string `accessToken`
+  throws `SirenError` when the client is built, and a `getAccessToken` answer raises `SirenError`. A
+  refresh answer that breaks the rule raises the 401 with a `SirenError` cause naming
+  `refreshAccessToken`. Before, fetch refused such a token and the SDK resent the request as a lost
+  connection.
 
 ### Added
 
@@ -71,18 +86,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `new Siren()` throws `SirenError` when `timeout` is not a number from 1 to 2147483647 or
-  `maxRetries` is not a whole number of 0 or more. NaN, Infinity, `null` and strings are refused.
-  Before, a NaN `maxRetries` turned retries off, Infinity retried without end, and a `timeout`
-  above 2147483647 aborted every request after 1 ms.
-- `new Siren()` reads only the options object's own properties. A `baseUrl`, `httpClient`,
-  credential, `timeout` or `maxRetries` inherited from `Object.prototype` is ignored, so a polluted
-  prototype cannot send the token to another host.
-- A bearer token with a control character or a character above U+00FF is refused before it is
-  sent, because neither can go in an HTTP header. An `apiKey` or string `accessToken` throws
-  `SirenError` when the client is built, a `getAccessToken` answer raises `SirenError`, and a
-  refresh answer counts as no token. Before, fetch refused such a token and the SDK resent the
-  request as a lost connection.
 - A 401 is resent once with a refreshed token when the credential is an `AccessTokenSource` that
   can refresh, whether or not the request may be retried, because Siren answers a 401 before it
   records anything. The resend does not count against `maxRetries`. An `apiKey` is never

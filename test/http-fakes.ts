@@ -8,6 +8,20 @@ import type { HttpClient, HttpRequest, HttpResponse } from '../src/http';
  * and the real resources, per Integration Testing Standards (KB 568).
  */
 
+/**
+ * Replaces the global fetch with one that fails the test when called, so a
+ * transport that ignores its client fails on that, not on a real network
+ * call. Undo it with `vi.unstubAllGlobals()`.
+ */
+export function failOnGlobalFetch(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new Error('the request went to the global fetch, not the HttpClient');
+    }),
+  );
+}
+
 /** An `HttpResponse` with a JSON body, or an empty body when `body` is undefined. */
 export function reply(
   status: number,

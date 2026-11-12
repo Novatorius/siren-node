@@ -264,8 +264,9 @@ export class HttpTransport {
    *    send. Every send of this call carries it until a refresh replaces it.
    *    A token that fails `usableBearerToken` (not a non-empty string, or
    *    holding a control character such as a line break or any character
-   *    above U+00FF) raises `SirenError`, naming `getAccessToken` and never
-   *    quoting the value, and nothing is sent.
+   *    above U+00FF) raises `SirenError` whose message names
+   *    `getAccessToken`, control characters and U+00FF, never quoting the
+   *    value, and nothing is sent.
    * 2. Sends through `client.send()`, building a new `HttpRequest`, headers
    *    included, for each send.
    * 3. A 2xx reply is returned. Any other reply that is not a 401 is never
@@ -274,7 +275,10 @@ export class HttpTransport {
    * 4. The first 401 of the call asks `tokens.refreshAccessToken(sent)` for a
    *    new token, passing the token that was refused. An answer that passes
    *    `usableBearerToken` is sent at once in a new request, with no wait.
-   *    Any other answer raises the 401. A later 401 in the same call, with or without retries in
+   *    An answer of `null` raises the 401 as it is. Any other answer raises
+   *    the 401 with `cause` set to a `SirenError` whose message names
+   *    `refreshAccessToken`, control characters and U+00FF, never quoting
+   *    the value, so a broken token source shows behind the 401. A later 401 in the same call, with or without retries in
    *    between, never refreshes again and raises through
    *    `errorFromResponse`, so Siren's revoked-site answer surfaces as
    *    `SiteDisconnectedError`.

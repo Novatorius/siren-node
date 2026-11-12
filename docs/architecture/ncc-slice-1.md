@@ -196,9 +196,6 @@ fails them.
   event ingestion or `events.ingest` retry.
 - `test/webhooks.test.ts`: the event count test expects 64.
 
-Each packet's tests carry the `it.skip` marker until its implementer removes
-it.
-
 These tests are the SDK's end-to-end proof for this slice. Each one sends a
 real request through the client's transport to a stubbed `fetch` and checks
 the body on the wire or the error a caller catches, with fixtures generated
@@ -207,18 +204,10 @@ slices. Slice 20 runs a local Cloud in Docker for the golden path. Capturing
 the two catalog bodies there and comparing them with `--check` is the live
 check on this slice's fixtures, and the slice 1 packets leave it to slice 20.
 
-The architect ran every acceptance test with its marker removed against a
-scratch implementation in a separate clone, then against one mutation per
-guard. The mutation harness (`scripts/mutation-proof.mjs`) scores each
-mutation on the exit code of `npm test && npm run typecheck`.
-`scripts/mutations/ncc-slice-1-surface.json` holds the mutations for the
-surface this commit writes in full, and reproduces on this branch with
+`scripts/mutations/ncc-slice-1-surface.json` holds mutations for the slice's
+surface, scored by `scripts/mutation-proof.mjs` on the exit code of
+`npm test && npm run typecheck`. They reproduce with
 `node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-1-surface.json`.
-The packet mutations can't be reproduced from this branch. Each one edits a
-line of the scratch implementation, which stays out of the repository so it
-can't stand in for the packets. The pull request carries their output
-unedited. The slice review re-proves each packet's tests against the real
-implementation.
 
 ## Left for later slices
 

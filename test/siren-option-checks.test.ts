@@ -1,30 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Siren, SirenError, type SirenOptions } from '../src/index';
-import { FakeHttpClient, reply } from './http-fakes';
+import { FakeHttpClient, failOnGlobalFetch, reply } from './http-fakes';
 
 /*
- * Acceptance tests for the Siren constructor's hardening (A76 items 2 and 3,
- * A82 and A83): `timeout` and `maxRetries` are checked when the client is
- * built, and the constructor reads only the options object's own
- * properties, so a polluted Object.prototype cannot choose the host, the
- * HTTP client, the credential or the retry policy.
+ * Acceptance tests for the Siren constructor's option rules: `baseUrl`,
+ * `timeout` and `maxRetries` are checked when the client is built, and the
+ * constructor reads only the options object's own properties, each once, so
+ * prototype pollution cannot choose the host, the HTTP client, the
+ * credential or the retry policy.
  *
  * Integration shape (KB 568): the real Siren client, transport and
  * resources, with the network mocked only at the HttpClient seam.
  */
-
-/**
- * Fails any test whose request reaches the global fetch, so a client that
- * ignores its HttpClient fails on that, not on a real network call.
- */
-function failOnGlobalFetch(): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => {
-      throw new Error('the request went to the global fetch, not the HttpClient');
-    }),
-  );
-}
 
 beforeEach(failOnGlobalFetch);
 
@@ -60,6 +47,7 @@ describe('Siren timeout check', () => {
     ['negative', -1],
     ['zero', 0],
     ['a fraction below 1', 0.5],
+    ['a fraction above the longest timer wait', 2_147_483_647.5],
     ['just above the longest timer wait', 2_147_483_648],
     ['far above the longest timer wait', 1e12],
     ['a string of digits', '30000'],
@@ -71,7 +59,7 @@ describe('Siren timeout check', () => {
 
     expect(error.message).toMatch(/\btimeout\b/);
     expect(error.message).not.toMatch(/maxRetries/);
-    expect(error.message).toContain('2147483647');
+    expect(error.message).toContain('from 1 to 2147483647');
     expect(error.message).toContain(described(timeout));
     expect(error.message).not.toContain('sk_secret_value');
     expect(error.message).not.toContain(KEY);
@@ -107,6 +95,7 @@ describe('Siren maxRetries check', () => {
     ['a fraction', 1.5],
     ['a negative fraction', -0.5],
     ['a string of digits', '2'],
+    ['a string that is not a number', 'sk_secret_value'],
     ['null', null],
     ['a boolean', false],
   ])('refuses a maxRetries that is %s, naming the option and what it got', (_name, maxRetries) => {
@@ -114,8 +103,9 @@ describe('Siren maxRetries check', () => {
 
     expect(error.message).toMatch(/maxRetries/);
     expect(error.message).not.toMatch(/\btimeout\b/);
-    expect(error.message).toMatch(/whole number/);
+    expect(error.message).toMatch(/whole number of 0 or more/);
     expect(error.message).toContain(described(maxRetries));
+    expect(error.message).not.toContain('sk_secret_value');
     expect(error.message).not.toContain(KEY);
   });
 
@@ -149,6 +139,30 @@ describe('Siren maxRetries check', () => {
   });
 });
 
+describe('Siren baseUrl check', () => {
+  it.skip.each([
+    ['an empty string', ''],
+    ['null', null],
+    ['a number', 42],
+    ['an object', { href: 'https://cloud.test/siren/v1' }],
+  ])('refuses a baseUrl that is %s, naming the option and what it got', (_name, baseUrl) => {
+    const error = constructorError({ baseUrl });
+
+    expect(error.message).toMatch(/baseUrl/);
+    expect(error.message).toMatch(/non-empty string/);
+    expect(error.message).toContain(described(baseUrl));
+    expect(error.message).not.toContain(KEY);
+  });
+
+  it('accepts a baseUrl string and sends to it', async () => {
+    const httpClient = new FakeHttpClient([reply(200, [])]);
+
+    await new Siren({ apiKey: KEY, httpClient, baseUrl: 'https://cloud.test/siren/v1/' }).payouts.list();
+
+    expect(httpClient.requests[0]!.url).toBe('https://cloud.test/siren/v1/payouts');
+  });
+});
+
 describe('Siren reads only its own options', () => {
   const polluted: string[] = [];
 
@@ -160,6 +174,7 @@ describe('Siren reads only its own options', () => {
 
   afterEach(() => {
     for (const name of polluted.splice(0)) delete (Object.prototype as Record<string, unknown>)[name];
+    expect(Object.keys(Object.prototype)).toEqual([]);
   });
 
   it.skip('sends to the default host when Object.prototype carries a baseUrl', async () => {
@@ -250,6 +265,93 @@ describe('Siren reads only its own options', () => {
 
     await new Siren(options as unknown as SirenOptions).payouts.list();
 
+    expect(httpClient.requests[0]!.url).toBe('https://cloud.test/siren/v1/payouts');
+    expect(httpClient.requests[0]!.timeout).toBe(2500);
+    expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`]);
+  });
+  it.skip('ignores every option an options object inherits from a prototype of its own', async () => {
+    vi.useFakeTimers();
+    const attacker = Object.create(null) as Record<string, unknown>;
+    Object.assign(attacker, {
+      baseUrl: 'https://attacker.test/siren/v1',
+      accessToken: 'attacker-credential',
+      timeout: 1,
+      maxRetries: 0,
+    });
+    const httpClient = new FakeHttpClient([reply(503, undefined), reply(200, [])]);
+    const options = Object.assign(Object.create(attacker) as Record<string, unknown>, { apiKey: KEY, httpClient });
+
+    const pending = new Siren(options as unknown as SirenOptions).conversions.list().catch((error: unknown) => error);
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toEqual([]);
+    expect(httpClient.requests.map((request) => request.url)).toEqual([
+      'https://api.sirenaffiliates.com/siren/v1/conversions',
+      'https://api.sirenaffiliates.com/siren/v1/conversions',
+    ]);
+    expect(httpClient.requests[0]!.timeout).toBe(30_000);
+    expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`, `Bearer ${KEY}`]);
+  });
+
+  it.skip('sends through the default client when the options object inherits an httpClient from its own prototype', async () => {
+    const attacker = new FakeHttpClient([reply(200, [])]);
+    const fetchSpy = vi.fn(async () => new Response('[]', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const options = Object.assign(Object.create({ httpClient: attacker }) as Record<string, unknown>, { apiKey: KEY });
+
+    await new Siren(options as unknown as SirenOptions).payouts.list();
+
+    expect(attacker.requests).toHaveLength(0);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends to its own baseUrl when Object.prototype carries another', async () => {
+    pollute('baseUrl', 'https://attacker.test/siren/v1');
+    const httpClient = new FakeHttpClient([reply(200, [])]);
+
+    await new Siren({ apiKey: KEY, httpClient, baseUrl: 'https://cloud.test/siren/v1' }).payouts.list();
+
+    expect(httpClient.requests[0]!.url).toBe('https://cloud.test/siren/v1/payouts');
+  });
+
+  it.skip('refuses an accessToken whose refreshAccessToken only Object.prototype supplies', () => {
+    pollute('refreshAccessToken', async () => 'attacker-credential');
+
+    expect(() => new Siren({ accessToken: { getAccessToken: () => 'oauth-access-1' } } as unknown as SirenOptions)).toThrow(
+      /accessToken/,
+    );
+  });
+
+  it.skip('refuses an httpClient whose send only Object.prototype supplies', () => {
+    pollute('send', async () => reply(200, []));
+
+    expect(() => new Siren({ apiKey: KEY, httpClient: {} } as unknown as SirenOptions)).toThrow(/httpClient/);
+  });
+
+  it('reads each option once, so a getter cannot pass the check with one value and send another', async () => {
+    const reads: Record<string, number> = {};
+    const httpClient = new FakeHttpClient([reply(200, [])]);
+    const values: Record<string, unknown[]> = {
+      apiKey: [KEY, 'sk_live_second_read'],
+      httpClient: [httpClient, new FakeHttpClient([reply(200, [])])],
+      baseUrl: ['https://cloud.test/siren/v1', 'https://attacker.test/siren/v1'],
+      timeout: [2500, 1],
+      maxRetries: [0, 5],
+    };
+    const options = {};
+    for (const [name, answers] of Object.entries(values)) {
+      Object.defineProperty(options, name, {
+        enumerable: true,
+        get: () => {
+          reads[name] = (reads[name] ?? 0) + 1;
+          return answers[Math.min(reads[name]! - 1, answers.length - 1)];
+        },
+      });
+    }
+
+    await new Siren(options as unknown as SirenOptions).payouts.list();
+
+    expect(reads).toEqual({ apiKey: 1, httpClient: 1, baseUrl: 1, timeout: 1, maxRetries: 1 });
     expect(httpClient.requests[0]!.url).toBe('https://cloud.test/siren/v1/payouts');
     expect(httpClient.requests[0]!.timeout).toBe(2500);
     expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`]);

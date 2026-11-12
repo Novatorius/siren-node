@@ -63,11 +63,18 @@ export class Siren {
    * Reads only the options object's own properties: `apiKey`,
    * `accessToken`, `httpClient`, `baseUrl`, `timeout` and `maxRetries`. A
    * value the object inherits, from `Object.prototype` or any other
-   * prototype, counts as absent, so a polluted prototype can never choose
-   * the host, the HTTP client, the credential or the retry policy. An
-   * object with no prototype works as well. The values themselves are read
-   * as they are, so a token source or client keeps its methods on its
-   * prototype.
+   * prototype, counts as absent, so prototype pollution cannot choose the
+   * host, the HTTP client, the credential or the retry policy through these
+   * reads. Fetch reads options of its own, so a host that cannot rule out
+   * pollution passes its own `httpClient`. An
+   * object with no prototype works as well. Each option is read once, so a
+   * getter cannot pass a check with one value and be used with another.
+   *
+   * The values themselves are read as they are, so a token source or client
+   * class keeps its methods on its prototype. A method counts only when the
+   * value or a prototype other than `Object.prototype` holds it, so a
+   * `send`, `getAccessToken` or `refreshAccessToken` that only
+   * `Object.prototype` supplies is missing, and the option is refused.
    *
    * Throws `SirenError` when the options pass both `apiKey` and
    * `accessToken`, neither, an empty one, an `accessToken` that is neither a
@@ -78,13 +85,15 @@ export class Siren {
    * credential says an apiKey is required and names `accessToken` as the
    * other choice. No message carries a credential.
    *
-   * Also throws `SirenError` when `timeout` is not a number from 1 to
-   * 2147483647 (the longest wait a timer holds), or `maxRetries` is not a
-   * whole number of 0 or more. NaN, Infinity, `null` and any value that is
-   * not a number are refused, and a fraction of a millisecond is allowed.
-   * Each message names the option, the range it takes and what it got: the
-   * number itself, or the type of any other value, never a string's text.
-   * Absent, they default to 30000 and 2.
+   * Also throws `SirenError` when `baseUrl` is not a non-empty string,
+   * `timeout` is not a number from 1 to 2147483647 (the longest wait a
+   * timer holds), or `maxRetries` is not a whole number of 0 or more. NaN,
+   * Infinity, `null` and any value of the wrong type are refused, and a
+   * fraction of a millisecond is allowed. Each message names the option,
+   * what it takes ("a non-empty string", "from 1 to 2147483647", "a whole
+   * number of 0 or more") and what it got: the number itself, or the type of
+   * any other value, never a string's text. Absent, they default to
+   * `DEFAULT_BASE_URL`, 30000 and 2. Unknown option names are ignored.
    *
    * `apiKey` and a string `accessToken` become a `StaticAccessToken`. An
    * `AccessTokenSource` is used as given. Requests go through `httpClient`,

@@ -8,12 +8,14 @@ import type { HttpClient } from './http';
 export interface SirenBaseOptions {
   /**
    * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
-   * Point this at staging or a local dev server as needed.
+   * Point this at staging or a local dev server as needed. Any value but a
+   * non-empty string throws `SirenError` at construction.
    */
   baseUrl?: string;
   /**
-   * Request timeout in milliseconds, from 1 to 2147483647. Defaults to
-   * 30000. Any other value, NaN and Infinity included, throws `SirenError`
+   * Timeout for each send in milliseconds, from 1 to 2147483647. Defaults
+   * to 30000. A call that retries makes several sends, each with its own
+   * timeout. Any other value, NaN and Infinity included, throws `SirenError`
    * at construction.
    */
   timeout?: number;
@@ -21,7 +23,8 @@ export interface SirenBaseOptions {
    * Retry count for network errors and 429/5xx responses on idempotent
    * operations (reads, and sales and refunds that Siren can match). Site
    * visits, custom events, sales with no `externalId` and management writes
-   * are never auto-retried. A whole number, 0 or more, and defaults to 2.
+   * are never auto-retried. A token the SDK refuses is never sent, so never
+   * retried. A whole number, 0 or more, and defaults to 2, with no ceiling.
    * Any other value throws `SirenError` at construction. A caller with a
    * durable queue sets 0, because the queue owns redelivery.
    *
