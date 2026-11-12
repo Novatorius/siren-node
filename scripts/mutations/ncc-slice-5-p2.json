@@ -1,0 +1,777 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/oauth.ts",
+    "find": "'Content-Type': 'application/json',",
+    "replace": "'Content-Type': 'text/plain',",
+    "expect": "caught",
+    "failing": [
+      "sends the SDK headers, no Authorization"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/oauth.ts",
+    "find": "const S256_CHALLENGE = /",
+    "replace": "const S256_CHALLENGE: RegExp = /",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/oauth.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/oauth.ts",
+    "find": "authorizeUrl(params: OAuthAuthorizeParams): string {",
+    "replace": "authorizeUrl(params: OAuthAuthorizeParams): string {{",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "base-url-keeps-slash",
+    "file": "src/connect/oauth.ts",
+    "find": "(given.baseUrl ?? DEFAULT_BASE_URL).replace(/\\/+$/, '')",
+    "replace": "(given.baseUrl ?? DEFAULT_BASE_URL)",
+    "expect": "caught",
+    "failing": [
+      "without a trailing slash"
+    ]
+  },
+  {
+    "id": "default-timeout-30s",
+    "file": "src/connect/oauth.ts",
+    "find": "given.timeout ?? DEFAULT_OAUTH_TIMEOUT_MS",
+    "replace": "given.timeout ?? 30_000",
+    "expect": "caught",
+    "failing": [
+      "waits 15 seconds by default"
+    ]
+  },
+  {
+    "id": "timeout-ignored",
+    "file": "src/connect/oauth.ts",
+    "find": "this.timeout = given.timeout ?? DEFAULT_OAUTH_TIMEOUT_MS;",
+    "replace": "this.timeout = DEFAULT_OAUTH_TIMEOUT_MS;",
+    "expect": "caught",
+    "failing": [
+      "waits the timeout it is given"
+    ]
+  },
+  {
+    "id": "consent-default-wrong",
+    "file": "src/connect/oauth.ts",
+    "find": "given.consentScreenUrl ?? DEFAULT_CONSENT_SCREEN_URL",
+    "replace": "given.consentScreenUrl ?? 'https://api.sirenaffiliates.com/connect'",
+    "expect": "caught",
+    "failing": [
+      "builds the consent screen URL with Siren's six query parameters"
+    ]
+  },
+  {
+    "id": "consent-option-ignored",
+    "file": "src/connect/oauth.ts",
+    "find": "this.consentScreenUrl = given.consentScreenUrl ?? DEFAULT_CONSENT_SCREEN_URL;",
+    "replace": "this.consentScreenUrl = DEFAULT_CONSENT_SCREEN_URL;",
+    "expect": "caught",
+    "failing": [
+      "uses the consentScreenUrl and scope it is given"
+    ]
+  },
+  {
+    "id": "client-send-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "httpClient !== null && typeof (httpClient as HttpClient).send === 'function'",
+    "replace": "httpClient !== null",
+    "expect": "caught",
+    "failing": [
+      "refuses httpClient"
+    ]
+  },
+  {
+    "id": "client-null-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "typeof httpClient === 'object' && httpClient !== null && typeof",
+    "replace": "typeof httpClient === 'object' && typeof",
+    "expect": "caught",
+    "failing": [
+      "refuses httpClient null"
+    ]
+  },
+  {
+    "id": "default-client-not-fetch",
+    "file": "src/connect/oauth.ts",
+    "find": "if (httpClient === undefined) return new FetchHttpClient();",
+    "replace": "if (httpClient === undefined) return { send: async () => ({ status: 200, headers: {}, body: '{}' }) };",
+    "expect": "caught",
+    "failing": [
+      "sends through the global fetch when no httpClient is given"
+    ]
+  },
+  {
+    "id": "name-not-trimmed",
+    "file": "src/connect/oauth.ts",
+    "find": "clientName.trim() === ''",
+    "replace": "clientName === ''",
+    "expect": "caught",
+    "failing": [
+      "refuses a clientName of only white space"
+    ]
+  },
+  {
+    "id": "redirects-empty-ok",
+    "file": "src/connect/oauth.ts",
+    "find": "redirectUris.length === 0 || ",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses no redirect URI"
+    ]
+  },
+  {
+    "id": "redirect-items-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": " || !redirectUris.every(isFilled)",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty redirect URI",
+      "refuses a redirect URI that is not text"
+    ]
+  },
+  {
+    "id": "software-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "!SOFTWARE_IDS.includes(softwareId)",
+    "replace": "false",
+    "expect": "caught",
+    "failing": [
+      "refuses an unknown softwareId"
+    ]
+  },
+  {
+    "id": "software-id-dropped",
+    "file": "src/connect/oauth.ts",
+    "find": "if (softwareId !== undefined) body.software_id = softwareId;",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "sends one JSON POST to /oauth/register with the RFC 7591 body"
+    ]
+  },
+  {
+    "id": "register-scope-fixed",
+    "file": "src/connect/oauth.ts",
+    "find": "scope: scope ?? ConnectorScope.CONNECTED_SITE,",
+    "replace": "scope: ConnectorScope.CONNECTED_SITE,",
+    "expect": "caught",
+    "failing": [
+      "sends the scope it is handed"
+    ]
+  },
+  {
+    "id": "register-needs-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "['client_id'], []",
+    "replace": "[], []",
+    "expect": "caught",
+    "failing": [
+      "raises UnexpectedResponseError for a 2xx with a body without client_id"
+    ]
+  },
+  {
+    "id": "authorization-header-sent",
+    "file": "src/connect/oauth.ts",
+    "find": "'User-Agent': USER_AGENT,",
+    "replace": "'User-Agent': USER_AGENT,\n          Authorization: 'Bearer none',",
+    "expect": "caught",
+    "failing": [
+      "no Authorization"
+    ]
+  },
+  {
+    "id": "accept-header-wrong",
+    "file": "src/connect/oauth.ts",
+    "find": "Accept: 'application/json',",
+    "replace": "Accept: '*/*',",
+    "expect": "caught",
+    "failing": [
+      "sends the SDK headers, no Authorization"
+    ]
+  },
+  {
+    "id": "user-agent-dropped",
+    "file": "src/connect/oauth.ts",
+    "find": "'User-Agent': USER_AGENT,",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "sends the SDK headers, no Authorization"
+    ]
+  },
+  {
+    "id": "method-not-post",
+    "file": "src/connect/oauth.ts",
+    "find": "method: 'POST',",
+    "replace": "method: 'PUT',",
+    "expect": "caught",
+    "failing": [
+      "sends the SDK headers, no Authorization"
+    ]
+  },
+  {
+    "id": "query-order-swapped",
+    "file": "src/connect/oauth.ts",
+    "find": "    query.append('code_challenge_method', 'S256');\n    query.append('state', state);",
+    "replace": "    query.append('state', state);\n    query.append('code_challenge_method', 'S256');",
+    "expect": "caught",
+    "failing": [
+      "in begin()'s order"
+    ]
+  },
+  {
+    "id": "challenge-method-plain",
+    "file": "src/connect/oauth.ts",
+    "find": "query.append('code_challenge_method', 'S256');",
+    "replace": "query.append('code_challenge_method', 'plain');",
+    "expect": "caught",
+    "failing": [
+      "in begin()'s order"
+    ]
+  },
+  {
+    "id": "authorize-scope-fixed",
+    "file": "src/connect/oauth.ts",
+    "find": "query.append('scope', scope ?? ConnectorScope.CONNECTED_SITE);",
+    "replace": "query.append('scope', ConnectorScope.CONNECTED_SITE);",
+    "expect": "caught",
+    "failing": [
+      "uses the consentScreenUrl and scope it is given"
+    ]
+  },
+  {
+    "id": "challenge-length-loose",
+    "file": "src/connect/oauth.ts",
+    "find": "const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;",
+    "replace": "const S256_CHALLENGE = /^[A-Za-z0-9_-]{42,44}$/;",
+    "expect": "caught",
+    "failing": [
+      "refuses a 42 character challenge",
+      "refuses a 44 character challenge"
+    ]
+  },
+  {
+    "id": "challenge-length-unbounded",
+    "file": "src/connect/oauth.ts",
+    "find": "const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;",
+    "replace": "const S256_CHALLENGE = /^[A-Za-z0-9_-]{43,}$/;",
+    "expect": "caught",
+    "failing": [
+      "refuses the verifier itself",
+      "refuses a 44 character challenge"
+    ]
+  },
+  {
+    "id": "challenge-padding-allowed",
+    "file": "src/connect/oauth.ts",
+    "find": "const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;",
+    "replace": "const S256_CHALLENGE = /^[A-Za-z0-9_=-]{43}$/;",
+    "expect": "caught",
+    "failing": [
+      "refuses a challenge with padding"
+    ]
+  },
+  {
+    "id": "challenge-plus-allowed",
+    "file": "src/connect/oauth.ts",
+    "find": "const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;",
+    "replace": "const S256_CHALLENGE = /^[A-Za-z0-9_+-]{43}$/;",
+    "expect": "caught",
+    "failing": [
+      "refuses a standard base64 challenge"
+    ]
+  },
+  {
+    "id": "challenge-quoted",
+    "file": "src/connect/oauth.ts",
+    "find": "      'Siren: authorizeUrl needs codeChallenge",
+    "replace": "      String(codeChallenge) + 'Siren: authorizeUrl needs codeChallenge",
+    "expect": "caught",
+    "failing": [
+      "quoting none of it"
+    ]
+  },
+  {
+    "id": "challenge-in-data",
+    "file": "src/connect/oauth.ts",
+    "find": "Never pass the verifier itself.',",
+    "replace": "Never pass the verifier itself.', { data: codeChallenge },",
+    "expect": "caught",
+    "failing": [
+      "quoting none of it"
+    ]
+  },
+  {
+    "id": "authorize-state-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "requireFilled('authorizeUrl', { clientId, redirectUri, state });",
+    "replace": "requireFilled('authorizeUrl', { clientId, redirectUri });",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty state"
+    ]
+  },
+  {
+    "id": "exchange-verifier-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "requireFilled('exchangeCode', { clientId, code, redirectUri, codeVerifier });",
+    "replace": "requireFilled('exchangeCode', { clientId, code, redirectUri });",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty codeVerifier"
+    ]
+  },
+  {
+    "id": "exchange-grant-wrong",
+    "file": "src/connect/oauth.ts",
+    "find": "        grant_type: 'authorization_code',",
+    "replace": "        grant_type: 'code',",
+    "expect": "caught",
+    "failing": [
+      "with the authorization_code grant"
+    ]
+  },
+  {
+    "id": "exchange-verifier-not-sent",
+    "file": "src/connect/oauth.ts",
+    "find": "code_verifier: codeVerifier,",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "with the authorization_code grant"
+    ]
+  },
+  {
+    "id": "exchange-code-not-scrubbed",
+    "file": "src/connect/oauth.ts",
+    "find": "[code, codeVerifier]",
+    "replace": "[codeVerifier]",
+    "expect": "caught",
+    "failing": [
+      "keeps the code and the verifier out of a ConnectionError"
+    ]
+  },
+  {
+    "id": "exchange-verifier-not-scrubbed",
+    "file": "src/connect/oauth.ts",
+    "find": "[code, codeVerifier]",
+    "replace": "[code]",
+    "expect": "caught",
+    "failing": [
+      "keeps the code and the verifier out of a ConnectionError"
+    ]
+  },
+  {
+    "id": "exchange-needs-access-only",
+    "file": "src/connect/oauth.ts",
+    "find": "['access_token', 'refresh_token'],\n      [code, codeVerifier]",
+    "replace": "['access_token'],\n      [code, codeVerifier]",
+    "expect": "caught",
+    "failing": [
+      "raises UnexpectedResponseError for a 2xx without refresh_token"
+    ]
+  },
+  {
+    "id": "refresh-token-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "requireFilled('refresh', { clientId, refreshToken });",
+    "replace": "requireFilled('refresh', { clientId });",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty refreshToken"
+    ]
+  },
+  {
+    "id": "refresh-empty-attempt-ok",
+    "file": "src/connect/oauth.ts",
+    "find": "if (attemptId !== undefined) requireFilled('refresh', { attemptId });",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty attemptId"
+    ]
+  },
+  {
+    "id": "refresh-attempt-not-sent",
+    "file": "src/connect/oauth.ts",
+    "find": "body.attempt_id = attemptId;",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "sends attempt_id when one is given"
+    ]
+  },
+  {
+    "id": "refresh-attempt-always-sent",
+    "file": "src/connect/oauth.ts",
+    "find": "const body: Record<string, unknown> = { grant_type: 'refresh_token', client_id: clientId, refresh_token: refreshToken };",
+    "replace": "const body: Record<string, unknown> = { grant_type: 'refresh_token', client_id: clientId, refresh_token: refreshToken, attempt_id: attemptId ?? 'none' };",
+    "expect": "caught",
+    "failing": [
+      "sends the refresh_token grant without attempt_id when none is given"
+    ]
+  },
+  {
+    "id": "refresh-attempt-not-scrubbed",
+    "file": "src/connect/oauth.ts",
+    "find": "secrets.push(attemptId);",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "keeps the attemptId out of a ConnectionError"
+    ]
+  },
+  {
+    "id": "refresh-token-not-scrubbed",
+    "file": "src/connect/oauth.ts",
+    "find": "const secrets = [refreshToken];",
+    "replace": "const secrets: string[] = [];",
+    "expect": "caught",
+    "failing": [
+      "keeps the refresh token out of a ConnectionError"
+    ]
+  },
+  {
+    "id": "refresh-needs-access-only",
+    "file": "src/connect/oauth.ts",
+    "find": "['access_token', 'refresh_token'], secrets",
+    "replace": "['access_token'], secrets",
+    "expect": "caught",
+    "failing": [
+      "raises UnexpectedResponseError for a 2xx without refresh_token"
+    ]
+  },
+  {
+    "id": "no-scrub",
+    "file": "src/connect/oauth.ts",
+    "find": "redact(error.message, secrets)",
+    "replace": "error.message",
+    "expect": "caught",
+    "failing": [
+      "keeps the code and the verifier out",
+      "keeps the refresh token out"
+    ]
+  },
+  {
+    "id": "cause-is-client-error",
+    "file": "src/connect/oauth.ts",
+    "find": "error.cause !== undefined ? { cause: error.cause } : {},",
+    "replace": "{ cause: error.cause !== undefined ? error.cause : error },",
+    "expect": "caught",
+    "failing": [
+      "gives the ConnectionError no cause when the client error has none"
+    ]
+  },
+  {
+    "id": "cause-dropped",
+    "file": "src/connect/oauth.ts",
+    "find": "error.cause !== undefined ? { cause: error.cause } : {},",
+    "replace": "{},",
+    "expect": "caught",
+    "failing": [
+      "keeps the client error cause"
+    ]
+  },
+  {
+    "id": "other-errors-wrapped",
+    "file": "src/connect/oauth.ts",
+    "find": "if (!(error instanceof HttpClientError)) throw error;",
+    "replace": "if (!(error instanceof Error)) throw error;",
+    "expect": "caught",
+    "failing": [
+      "passes any other error from the client through unchanged"
+    ]
+  },
+  {
+    "id": "resend-on-5xx",
+    "file": "src/connect/oauth.ts",
+    "find": "    const status = reply.status;",
+    "replace": "    if (reply.status >= 500) reply = await this.client.send({ method: 'POST', url, headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT }, body: JSON.stringify(body), timeout: this.timeout });\n    const status = reply.status;",
+    "expect": "caught",
+    "failing": [
+      "is sent exactly once on any failure"
+    ]
+  },
+  {
+    "id": "resend-on-429",
+    "file": "src/connect/oauth.ts",
+    "find": "    const status = reply.status;",
+    "replace": "    if (reply.status === 429) reply = await this.client.send({ method: 'POST', url, headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT }, body: JSON.stringify(body), timeout: this.timeout });\n    const status = reply.status;",
+    "expect": "caught",
+    "failing": [
+      "is sent exactly once on any failure"
+    ]
+  },
+  {
+    "id": "resend-on-network",
+    "file": "src/connect/oauth.ts",
+    "find": "if (!(error instanceof HttpClientError)) throw error;",
+    "replace": "if (!(error instanceof HttpClientError)) throw error;\n      try { reply = await this.client.send({ method: 'POST', url, headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT }, body: JSON.stringify(body), timeout: this.timeout }); } catch { /* resend */ }",
+    "expect": "caught",
+    "failing": [
+      "is sent exactly once on any failure"
+    ]
+  },
+  {
+    "id": "resend-on-oauth-error",
+    "file": "src/connect/oauth.ts",
+    "find": "    const answer = parseJson(reply.body);",
+    "replace": "    if (status === 400) reply = await this.client.send({ method: 'POST', url, headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT }, body: JSON.stringify(body), timeout: this.timeout });\n    const answer = parseJson(reply.body);",
+    "expect": "caught",
+    "failing": [
+      "is sent exactly once on any failure"
+    ]
+  },
+  {
+    "id": "object-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "if (isJsonObject(answer) && needs.every((field) => isFilled(answer[field]))) return answer as T;",
+    "replace": "if (needs.every((field) => isFilled((answer as Record<string, unknown>)[field]))) return answer as T;",
+    "expect": "caught",
+    "failing": [
+      "raises UnexpectedResponseError for a 2xx with a body that is not JSON"
+    ]
+  },
+  {
+    "id": "array-accepted",
+    "file": "src/connect/oauth.ts",
+    "find": "return typeof value === 'object' && value !== null && !Array.isArray(value);",
+    "replace": "return typeof value === 'object' && value !== null;",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "unexpected-carries-body",
+    "file": "src/connect/oauth.ts",
+    "find": "{ statusCode: status },\n      );",
+    "replace": "{ statusCode: status, data: answer },\n      );",
+    "expect": "caught",
+    "failing": [
+      "showing no token from the body"
+    ]
+  },
+  {
+    "id": "unexpected-cause-body",
+    "file": "src/connect/oauth.ts",
+    "find": "{ statusCode: status },\n      );",
+    "replace": "{ statusCode: status, cause: answer },\n      );",
+    "expect": "caught",
+    "failing": [
+      "showing no token from the body"
+    ]
+  },
+  {
+    "id": "redirect-to-error-mapper",
+    "file": "src/connect/oauth.ts",
+    "find": "if (status >= 300 && status < 400) {",
+    "replace": "if (status >= 300 && status < 302) {",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "redirect-read-as-answer",
+    "file": "src/connect/oauth.ts",
+    "find": "if (status >= 200 && status < 300) {",
+    "replace": "if (status >= 200 && status < 400) {",
+    "expect": "caught",
+    "failing": [
+      "raises a 302 as SirenError, not as an OAuth or API error"
+    ]
+  },
+  {
+    "id": "redirect-followed",
+    "file": "src/connect/oauth.ts",
+    "find": "if (status >= 300 && status < 400) {",
+    "replace": "if (status >= 300 && status < 400) {\n      reply = await this.client.send({ method: 'POST', url, headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT }, body: JSON.stringify(body), timeout: this.timeout });",
+    "expect": "caught",
+    "failing": [
+      "raises a 302 as SirenError, not as an OAuth or API error, and never follows it"
+    ]
+  },
+  {
+    "id": "oauth-400-only",
+    "file": "src/connect/oauth.ts",
+    "find": "(status === 400 || status === 401) && isJsonObject(answer)",
+    "replace": "status === 400 && isJsonObject(answer)",
+    "expect": "caught",
+    "failing": [
+      "raises a 401 with"
+    ]
+  },
+  {
+    "id": "oauth-any-status",
+    "file": "src/connect/oauth.ts",
+    "find": "(status === 400 || status === 401) && isJsonObject(answer)",
+    "replace": "status >= 400 && isJsonObject(answer)",
+    "expect": "caught",
+    "failing": [
+      "raises a 429 as the usual error",
+      "raises a 503 as the usual error"
+    ]
+  },
+  {
+    "id": "oauth-envelope-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "    if ((status === 400 || status === 401) && isJsonObject(answer) && isFilled(answer.error)) {\n      const description = isFilled(answer.error_description) ? answer.error_description : answer.error;\n      throw new OAuthError(description, { code: answer.error, statusCode: status });",
+    "replace": "    if ((status === 400 || status === 401) && isJsonObject(answer) && answer.error !== undefined) {\n      const description = isFilled(answer.error_description) ? answer.error_description : String(answer.error);\n      throw new OAuthError(description, { code: String(answer.error), statusCode: status });",
+    "expect": "caught",
+    "failing": [
+      "raises a 400 in the app's error envelope through errorFromResponse"
+    ]
+  },
+  {
+    "id": "description-ignored",
+    "file": "src/connect/oauth.ts",
+    "find": "isFilled(answer.error_description) ? answer.error_description : answer.error",
+    "replace": "answer.error",
+    "expect": "caught",
+    "failing": [
+      "raises a 400 with"
+    ]
+  },
+  {
+    "id": "description-no-fallback",
+    "file": "src/connect/oauth.ts",
+    "find": "isFilled(answer.error_description) ? answer.error_description : answer.error",
+    "replace": "String(answer.error_description)",
+    "expect": "caught",
+    "failing": [
+      "falls back to the code as the message"
+    ]
+  },
+  {
+    "id": "oauth-code-fixed",
+    "file": "src/connect/oauth.ts",
+    "find": "{ code: answer.error, statusCode: status }",
+    "replace": "{ code: 'invalid_grant', statusCode: status }",
+    "expect": "caught",
+    "failing": [
+      "as OAuthError with that code and status"
+    ]
+  },
+  {
+    "id": "oauth-status-fixed",
+    "file": "src/connect/oauth.ts",
+    "find": "{ code: answer.error, statusCode: status }",
+    "replace": "{ code: answer.error, statusCode: 400 }",
+    "expect": "caught",
+    "failing": [
+      "raises a 401 with"
+    ]
+  },
+  {
+    "id": "internal-retry-after-dropped",
+    "file": "src/connect/oauth.ts",
+    "find": "headerOf(reply, 'retry-after')",
+    "replace": "null",
+    "expect": "caught",
+    "failing": [
+      "reads a 429 header named retry-after"
+    ]
+  },
+  {
+    "id": "internal-header-case",
+    "file": "src/connect/oauth.ts",
+    "find": "key.toLowerCase() === wanted",
+    "replace": "key === wanted",
+    "expect": "caught",
+    "failing": [
+      "reads a 429 header named RETRY-AFTER"
+    ]
+  },
+  {
+    "id": "internal-scrub-shortest-first",
+    "file": "src/connect/oauth.ts",
+    "find": ".sort((a, b) => b.length - a.length)",
+    "replace": ".sort((a, b) => a.length - b.length)",
+    "expect": "caught",
+    "failing": [
+      "removes a secret that starts with another whole"
+    ]
+  },
+  {
+    "id": "internal-scrub-unescaped",
+    "file": "src/connect/oauth.ts",
+    "find": ".map((secret) => secret.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'))",
+    "replace": ".map((secret) => secret)",
+    "expect": "caught",
+    "failing": [
+      "removes a secret that holds regex characters"
+    ]
+  },
+  {
+    "id": "internal-scrub-first-only",
+    "file": "src/connect/oauth.ts",
+    "find": "new RegExp(pattern, 'g')",
+    "replace": "new RegExp(pattern)",
+    "expect": "caught",
+    "failing": [
+      "removes a secret that holds regex characters, every time it appears"
+    ]
+  },
+  {
+    "id": "internal-scrub-empty-guard",
+    "file": "src/connect/oauth.ts",
+    "find": "  if (filled.length === 0) return text;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "keeps the client error's message whole when the call sent no secret"
+    ]
+  },
+  {
+    "id": "internal-empty-error-is-oauth",
+    "file": "src/connect/oauth.ts",
+    "find": "&& isFilled(answer.error)) {",
+    "replace": "&& typeof answer.error === 'string') {",
+    "expect": "caught",
+    "failing": [
+      "reads a 400 whose error is an empty string through errorFromResponse"
+    ]
+  },
+  {
+    "id": "internal-empty-description-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "isFilled(answer.error_description) ? answer.error_description",
+    "replace": "typeof answer.error_description === 'string' ? answer.error_description",
+    "expect": "caught",
+    "failing": [
+      "falls back to the code when error_description is an empty string"
+    ]
+  },
+  {
+    "id": "internal-needs-any-value",
+    "file": "src/connect/oauth.ts",
+    "find": "needs.every((field) => isFilled(answer[field]))",
+    "replace": "needs.every((field) => answer[field] !== undefined)",
+    "expect": "caught",
+    "failing": [
+      "raises UnexpectedResponseError for a 2xx token body with"
+    ]
+  },
+  {
+    "id": "internal-consent-separator",
+    "file": "src/connect/oauth.ts",
+    "find": "this.consentScreenUrl.includes('?') ? '&' : '?'",
+    "replace": "'?'",
+    "expect": "caught",
+    "failing": [
+      "adds its query after one the consentScreenUrl already carries"
+    ]
+  }
+]
