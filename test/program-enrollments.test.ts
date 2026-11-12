@@ -5,6 +5,7 @@ import {
   PolicyError,
   ProgramEnrollmentsResource,
   SirenError,
+  UnexpectedResponseError,
 } from '../src/index';
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
@@ -45,6 +46,7 @@ const resource = (transport: HttpTransport) => new ProgramEnrollmentsResource(tr
 describe('P5: enrollments surface', () => {
   it('names the route', () => {
     expect(ProgramEnrollmentsResource.PATH).toBe('/collaborator-programs');
+    expect(ProgramEnrollmentsResource.LIST_FILTERS).toEqual(['collaboratorId', 'programId']);
   });
 });
 
@@ -63,6 +65,25 @@ describe('P5: enrollments.list', () => {
 
   it.skip('retries like a read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
+  });
+
+  it.skip.each([
+    ['propertyId', { propertyId: 5 }],
+    ['a misspelt filter', { programID: 2 }],
+  ])('refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
+    const { http, enrollments } = over([reply(200, page([]))]);
+
+    const error = await enrollments.list(params as never).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+    const { enrollments } = over([reply(200, { error: 'Something went wrong.' })]);
+
+    await expect(enrollments.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 });
 
@@ -107,19 +128,42 @@ describe('P5: enrollments.add and remove', () => {
 });
 
 describe('P5: enrollments through the collaborator record', () => {
-  it.skip('reads the programs a collaborator is in, skipping entries that are not objects', async () => {
-    const { http, enrollments } = over([reply(200, { id: 4, programs: [{ id: 2, name: 'Partners' }, 7] })]);
+  it.skip('reads the programs a collaborator is in', async () => {
+    const { http, enrollments } = over([
+      reply(200, { id: 4, programs: [{ id: 2, name: 'Partners' }, { id: 3, name: 'Creators' }] }),
+    ]);
 
-    expect(await enrollments.programsFor(4)).toEqual([{ id: 2, name: 'Partners' }]);
+    expect(await enrollments.programsFor(4)).toEqual([
+      { id: 2, name: 'Partners' },
+      { id: 3, name: 'Creators' },
+    ]);
     expect(http.requests[0]!.method).toBe('GET');
     expect(pathOf(http.requests[0])).toBe('/collaborators/4');
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,programs' });
   });
 
-  it.skip('answers an empty list when the record has no programs field', async () => {
-    const { enrollments } = over([reply(200, { id: 4 })]);
+  it.skip('answers an empty list when the record has an empty programs field', async () => {
+    const { enrollments } = over([reply(200, { id: 4, programs: [] })]);
 
     expect(await enrollments.programsFor(4)).toEqual([]);
+  });
+
+  it.skip.each([
+    ['no programs field', { id: 4 }],
+    ['a programs field that is not a list', { id: 4, programs: { id: 2 } }],
+    ['an entry that is a number', { id: 4, programs: [{ id: 2, name: 'Partners' }, 7] }],
+    ['an entry that is null', { id: 4, programs: [null] }],
+  ])('programsFor throws UnexpectedResponseError for %s, never a shorter list', async (_label, body) => {
+    const { enrollments } = over([reply(200, body)]);
+
+    await expect(enrollments.programsFor(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+
+  it.skip('collaboratorsIn refuses a key collaborators.list refuses, and sends nothing', async () => {
+    const { http, enrollments } = over([reply(200, page([]))]);
+
+    await expect(enrollments.collaboratorsIn(12, { propertyId: 5 } as never)).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
   });
 
   it.skip('lists the collaborators in a program, the argument winning over params', async () => {
@@ -174,6 +218,7 @@ describe('P5: enrollments refuse bad ids before sending', () => {
     ['enroll, program', (e) => e.enroll(0, [4])],
     ['enroll, no collaborators', (e) => e.enroll(12, [])],
     ['enroll, a bad collaborator', (e) => e.enroll(12, [4, 0])],
+    ['unenroll, program', (e) => e.unenroll(0, [4])],
     ['unenroll, no collaborators', (e) => e.unenroll(12, [])],
     ['replace, collaborator', (e) => e.replace(0, [12])],
     ['replace, a bad program', (e) => e.replace(4, [12, 0])],

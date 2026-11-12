@@ -1,7 +1,7 @@
-import type { CollaboratorStatus, ProgramStatus } from './taxonomy';
+import type { CollaboratorStatus, ProgramGroupSorter, ProgramStatus } from './taxonomy';
 
 /*
- * Wire types for the record resources slice 3 adds: collaborators, their
+ * Wire types for the record resources: collaborators, their
  * codes and enrollments, collaborator groups and their members, programs and
  * program groups. Siren Cloud owns these shapes. The field names match the
  * bodies its controllers build and the Siren PHP SDK's docblocks.
@@ -21,8 +21,9 @@ export type RecordSortOrder = 'ASC' | 'DESC';
  * Parameters every record list takes. Page with `page` and `perPage`, which
  * the SDK turns into Siren's `number` and `offset`, or pass `number` and
  * `offset` yourself. `fields` picks the returned fields, as a list or a
- * comma-separated string. Any other key is a filter, and a list value is
- * sent comma-separated, which Siren reads as "any of".
+ * comma-separated string. Each resource's own params add the filters its
+ * route reads, and a list value is sent comma-separated, which Siren reads
+ * as "any of". A key the route does not read throws `SirenError`.
  */
 export interface RecordListParams {
   /** Page number, starting at 1. */
@@ -39,19 +40,16 @@ export interface RecordListParams {
   order?: RecordSortOrder;
   /** The fields to return, as a list or a comma-separated string. */
   fields?: ReadonlyArray<string> | string;
-  [filter: string]: RecordFilterValue;
-}
-
-/** Query parameters for reading one record by id. */
-export interface RecordReadParams {
-  /** The fields to return, as a list or a comma-separated string. */
-  fields?: ReadonlyArray<string> | string;
 }
 
 /** What a bulk action answers: `{ success: true, affected }`. */
 export interface BulkResult {
   success?: boolean;
-  /** How many records the action changed. Siren drops ids it cannot find, without an error. */
+  /**
+   * How many records the action changed. Siren skips ids it cannot find or
+   * fails to change and still answers 200, so compare this with the number
+   * of ids sent.
+   */
   affected?: number;
   [field: string]: unknown;
 }
@@ -365,9 +363,9 @@ export interface CreateProgramParams {
   /** A map of engagement type to its rule. */
   engagementTypes: Record<string, ProgramEngagementRule>;
   incentiveTypeArgs?: Record<string, unknown>;
-  /** Plus tier. */
+  /** Needs the Plus plan. */
   collaboratorIds?: number[];
-  /** Plus tier. */
+  /** Needs the Plus plan. */
   collaboratorGroupId?: number;
   [field: string]: unknown;
 }
@@ -386,13 +384,13 @@ export interface ProgramGroup {
   id: number;
   name?: string;
   description?: string;
-  sorter?: string;
+  sorter?: ProgramGroupSorter | (string & {});
   [field: string]: unknown;
 }
 
 /** Filters and sorting for `programGroups.list()`. */
 export interface ProgramGroupListParams extends RecordListParams {
-  sorter?: string | ReadonlyArray<string>;
+  sorter?: ProgramGroupSorter | ReadonlyArray<ProgramGroupSorter>;
   /** Searches name and description. */
   s?: string;
   orderBy?: 'id' | 'name' | 'description' | 'sorter';
@@ -403,7 +401,7 @@ export interface CreateProgramGroupParams {
   name: string;
   description: string;
   /** A {@link ProgramGroupSorter} value. */
-  sorter: string;
+  sorter: ProgramGroupSorter;
   /** Program ids. */
   programs?: number[];
 }

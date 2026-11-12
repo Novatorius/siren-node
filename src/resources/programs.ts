@@ -5,25 +5,14 @@ import type {
   Program,
   ProgramCurrency,
   ProgramListParams,
-  RecordReadParams,
   RegistryOptions,
   StatusTypes,
   UpdateProgramParams,
 } from '../record-types';
 import type { SirenList } from '../types';
+import { ProgramBulkAction } from '../taxonomy';
 import { RecordsResource } from './records';
-
-/** The bulk actions `programs.bulk()` runs, as Siren names them. */
-export const ProgramBulkAction = {
-  Activate: 'activate',
-  Deactivate: 'deactivate',
-  Restore: 'restore',
-  Delete: 'delete',
-  PermanentDelete: 'permanent_delete',
-} as const;
-
-/** Union of the {@link ProgramBulkAction} strings. */
-export type ProgramBulkAction = (typeof ProgramBulkAction)[keyof typeof ProgramBulkAction];
+import type { RetrieveParams } from './records';
 
 /**
  * Programs (`/programs`): the incentive rules that turn engagements into
@@ -33,6 +22,9 @@ export type ProgramBulkAction = (typeof ProgramBulkAction)[keyof typeof ProgramB
  * positive whole number, and a bad one throws `SirenError` before sending.
  */
 export class ProgramsResource<T = Program> extends RecordsResource<T> {
+  /** The filters `GET /programs` reads. {@link list} refuses any other key, `propertyId` included. */
+  static readonly LIST_FILTERS = ['status', 'incentiveType', 'incentiveResolverType', 'units', 's', 'programGroupId'] as const;
+
   constructor(http: HttpTransport) {
     super(http, '/programs');
   }
@@ -42,6 +34,9 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * `incentiveType`, `incentiveResolverType`, `units` (exact match, a list
    * means "any of"), `s` (search name and description) and
    * `programGroupId`. Sort with `orderBy` and `order`.
+   * Sends through `listRecords` with {@link LIST_FILTERS}: any other key
+   * throws `SirenError` before sending, and a 2xx that is not a list throws
+   * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: ProgramListParams = {}): Promise<SirenList<T>> {
     // Stub: slice 3 packet P8
@@ -49,8 +44,12 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
     return Promise.resolve([] as unknown as SirenList<T>);
   }
 
-  /** Reads one program with `GET /programs/{id}`. `fields` chooses the fields. */
-  retrieve(id: number, params: RecordReadParams = {}): Promise<T> {
+  /**
+   * Reads one program with `GET /programs/{id}` through `retrieveRecord`, so it
+   * takes `fields`, `include` and `propertyId`. Throws `NotFoundError` for an
+   * unknown id.
+   */
+  retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
     // Stub: slice 3 packet P8
     void id;
     void params;

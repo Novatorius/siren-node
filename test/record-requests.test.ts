@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError, ConnectionError, SirenError, UnexpectedResponseError } from '../src/index';
 import {
+  LIST_CONTROL_KEYS,
   MAX_BULK_IDS,
   bulkRecords,
   deleteRecord,
@@ -13,7 +14,7 @@ import {
   writeRecord,
 } from '../src/resources/record-requests';
 import { reply } from './http-fakes';
-import { bodyOf, expectRetried, expectSentOnce, pathOf, queryOf, transportOver } from './record-fakes';
+import { bodyOf, expectRetried, expectSentOnce, pathOf, queryOf, rateLimited, transportOver } from './record-fakes';
 
 /*
  * Slice 3 acceptance tests for packet P1: the internal request helpers every
@@ -70,24 +71,39 @@ describe('P1: recordId', () => {
 });
 
 describe('P1: recordListQuery', () => {
+  const filters = ['status', 'id', 'programId', 'email', 's', 'active', 'code', 'meta'];
+
   it.skip('pages with page and perPage the way toListQuery does', () => {
-    expect(recordListQuery({ page: 3, perPage: 50 })).toEqual({ number: 50, offset: 100 });
-    expect(recordListQuery({ page: 2 })).toEqual({ number: 10, offset: 10 });
-    expect(recordListQuery({ perPage: 500, page: 2 })).toEqual({ number: 200, offset: 200 });
-    expect(recordListQuery({ number: 25, offset: 5, page: 9, perPage: 1 })).toEqual({ number: 25, offset: 5 });
+    expect(recordListQuery({ page: 3, perPage: 50 }, [])).toEqual({ number: 50, offset: 100 });
+    expect(recordListQuery({ page: 2 }, [])).toEqual({ number: 10, offset: 10 });
+    expect(recordListQuery({ perPage: 500, page: 2 }, [])).toEqual({ number: 200, offset: 200 });
+    expect(recordListQuery({ number: 25, offset: 5, page: 9, perPage: 1 }, [])).toEqual({ number: 25, offset: 5 });
   });
 
   it.skip('sends a list comma-separated, filters and fields alike', () => {
     expect(
-      recordListQuery({ status: ['active', 'pending'], id: [4, 9], fields: ['id', 'email'], programId: 12 }),
+      recordListQuery({ status: ['active', 'pending'], id: [4, 9], fields: ['id', 'email'], programId: 12 }, filters),
     ).toEqual({ status: 'active,pending', id: '4,9', fields: 'id,email', programId: 12 });
   });
 
   it.skip('leaves out an empty list and undefined, and keeps a boolean, a string and a number as they are', () => {
-    expect(recordListQuery({ status: [], s: undefined, fields: 'id,email', orderBy: 'id', active: false })).toEqual({
-      fields: 'id,email',
+    expect(
+      recordListQuery({ status: [], s: undefined, fields: 'id,email', orderBy: 'id', active: false }, filters),
+    ).toEqual({ fields: 'id,email', orderBy: 'id', active: false });
+  });
+
+  it.skip('allows a comma only in fields and in the search text', () => {
+    expect(recordListQuery({ fields: 'id,email', s: 'flo, ada' }, filters)).toEqual({ fields: 'id,email', s: 'flo, ada' });
+  });
+
+  it.skip('takes the paging, sorting and fields keys whatever the filters', () => {
+    expect(LIST_CONTROL_KEYS).toEqual(['page', 'perPage', 'number', 'offset', 'orderBy', 'order', 'fields']);
+    expect(recordListQuery({ orderBy: 'id', order: 'DESC', fields: ['id'], number: 5, offset: 0 }, [])).toEqual({
       orderBy: 'id',
-      active: false,
+      order: 'DESC',
+      fields: 'id',
+      number: 5,
+      offset: 0,
     });
   });
 
@@ -98,9 +114,12 @@ describe('P1: recordListQuery', () => {
     ['a list holding a boolean', { id: [1, true] }],
     ['a list holding NaN', { id: [1, Number.NaN] }],
     ['a list member with a comma', { email: ['a@example.com', 'b,c@example.com'] }],
+    ['a string filter with a comma', { code: 'SAVE10,VIP' }],
     ['a function', { s: () => 'x' }],
+    ['a key the route does not read', { propertyId: 5 }],
+    ['a misspelt filter', { programID: 5 }],
   ])('refuses %s with SirenError naming the key', (_label, params) => {
-    const error = caught(() => recordListQuery(params as never));
+    const error = caught(() => recordListQuery(params, filters));
 
     expect(error).toBeInstanceOf(SirenError);
     expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
@@ -113,7 +132,9 @@ describe('P1: listRecords', () => {
   it.skip('reads GET {path} with the list query and answers the items with estimatedCount', async () => {
     const { http, transport } = transportOver([reply(200, envelope)]);
 
-    const list = await listRecords(transport, '/collaborator-programs', { programId: [2, 3], page: 2, perPage: 5 });
+    const list = await listRecords(transport, '/collaborator-programs', { programId: [2, 3], page: 2, perPage: 5 }, [
+      'programId',
+    ]);
 
     expect(http.requests).toHaveLength(1);
     expect(http.requests[0]!.method).toBe('GET');
@@ -127,7 +148,7 @@ describe('P1: listRecords', () => {
   it.skip('sends a boolean filter as true or false', async () => {
     const { http, transport } = transportOver([reply(200, envelope)]);
 
-    await listRecords(transport, '/programs', { test: true, live: false });
+    await listRecords(transport, '/programs', { test: true, live: false }, ['test', 'live']);
 
     expect(queryOf(http.requests[0])).toEqual({ test: 'true', live: 'false' });
   });
@@ -135,21 +156,39 @@ describe('P1: listRecords', () => {
   it.skip('reads a bare array with the count header', async () => {
     const { transport } = transportOver([reply(200, [{ id: 1 }], { 'x-siren-estimated-count': '7' })]);
 
-    const list = await listRecords(transport, '/programs');
+    const list = await listRecords(transport, '/programs', {}, []);
 
     expect([...list]).toEqual([{ id: 1 }]);
     expect(list.estimatedCount).toBe(7);
   });
 
   it.skip('retries like a read', async () => {
-    await expectRetried((transport) => listRecords(transport, '/programs'), reply(200, envelope));
+    await expectRetried((transport) => listRecords(transport, '/programs', {}, []), reply(200, envelope));
   });
 
-  it.skip('sends nothing for a value it refuses', async () => {
+  it.skip.each([
+    ['a value it refuses', { id: [1, { id: 2 }] }],
+    ['a key the route does not read', { propertyId: 5 }],
+  ])('sends nothing for %s', async (_label, params) => {
     const { http, transport } = transportOver([reply(200, envelope)]);
 
-    await expect(listRecords(transport, '/programs', { id: [1, { id: 2 }] } as never)).rejects.toBeInstanceOf(SirenError);
+    await expect(listRecords(transport, '/programs', params, ['id'])).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip.each([
+    ['an error object', reply(200, { error: 'Something went wrong.' })],
+    ['items that are not a list', reply(200, { items: { id: 1 }, total: 1 })],
+    ['a JSON null', reply(200, null)],
+    ['a string', reply(200, 'ok')],
+    ['an empty body', reply(200)],
+  ])('throws UnexpectedResponseError with the status for %s, never an empty page', async (_label, answer) => {
+    const { transport } = transportOver([answer]);
+
+    const error = await listRecords(transport, '/programs', {}, []).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 });
 
@@ -256,7 +295,7 @@ describe('P1: writeRecord', () => {
 
   it.skip('sends once on a 429', async () => {
     const { http, transport } = transportOver([
-      reply(429, { error: { message: 'Slow down.', context: [] } }, { 'Retry-After': '0' }),
+      reply(429, rateLimited, { 'Retry-After': '0' }),
       reply(201, { id: 1 }),
     ]);
 
@@ -360,6 +399,18 @@ describe('P1: bulkRecords', () => {
 
   it.skip('sends once on a 503 or a network failure', async () => {
     await expectSentOnce((transport) => bulkRecords(transport, '/programs', 'delete', [1]), reply(200, done));
+  });
+
+  it.skip.each([
+    ['an array', reply(200, [done])],
+    ['an empty body', reply(200)],
+  ])('throws UnexpectedResponseError for %s, after one send', async (_label, answer) => {
+    const { http, transport } = transportOver([answer, reply(200, done)]);
+
+    const error = await bulkRecords(transport, '/programs', 'delete', [1]).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect(http.requests).toHaveLength(1);
   });
 
   it.skip('raises the error Siren answers with, after one send', async () => {

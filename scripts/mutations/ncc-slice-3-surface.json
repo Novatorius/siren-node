@@ -1,9 +1,9 @@
 [
   {
     "id": "control-break",
-    "file": "src/resources/programs.ts",
-    "find": "  PermanentDelete: 'permanent_delete',",
-    "replace": "  PermanentDelete: 'permanentDelete',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanentDelete',\n} as const;",
     "expect": "caught",
     "failing": [
       "P8: programs surface"
@@ -11,9 +11,9 @@
   },
   {
     "id": "control-harmless",
-    "file": "src/resources/programs.ts",
-    "find": "  Restore: 'restore',",
-    "replace": "  Restore: 'res' + 'tore',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'res' + 'tore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "survives",
     "failing": []
   },
@@ -27,17 +27,17 @@
   },
   {
     "id": "control-malformed-syntax",
-    "file": "src/resources/programs.ts",
-    "find": "  Restore: 'restore',",
-    "replace": "  Restore: 'restore',,",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',,\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "refused",
     "failing": []
   },
   {
     "id": "control-wrong-reason",
-    "file": "src/resources/programs.ts",
-    "find": "  PermanentDelete: 'permanent_delete',",
-    "replace": "  PermanentDelete: 'permanentDelete',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanentDelete',\n} as const;",
     "expect": "wrong-reason",
     "failing": [
       "P9: programGroups surface"
@@ -64,10 +64,20 @@
     ]
   },
   {
+    "id": "pq-code-type-pattern",
+    "file": "src/property-qualifier.ts",
+    "find": "  CODE_TYPE_PATTERN: /^coupon@source:[a-z0-9_-]{1,32}$/,",
+    "replace": "  CODE_TYPE_PATTERN: /^coupon@source:[a-z0-9_-]{1,64}$/,",
+    "expect": "caught",
+    "failing": [
+      "names the separator and the name rule"
+    ]
+  },
+  {
     "id": "co-bulk-activate",
-    "file": "src/resources/collaborators.ts",
-    "find": "  Activate: 'activate',",
-    "replace": "  Activate: 'activatex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activatex',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -75,9 +85,9 @@
   },
   {
     "id": "co-bulk-deactivate",
-    "file": "src/resources/collaborators.ts",
-    "find": "  Deactivate: 'deactivate',",
-    "replace": "  Deactivate: 'deactivatex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivatex',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -85,9 +95,9 @@
   },
   {
     "id": "co-bulk-restore",
-    "file": "src/resources/collaborators.ts",
-    "find": "  Restore: 'restore',",
-    "replace": "  Restore: 'restorex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restorex',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -95,9 +105,9 @@
   },
   {
     "id": "co-bulk-delete",
-    "file": "src/resources/collaborators.ts",
-    "find": "  Delete: 'delete',",
-    "replace": "  Delete: 'deletex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'deletex',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -105,9 +115,9 @@
   },
   {
     "id": "co-bulk-permanent_delete",
-    "file": "src/resources/collaborators.ts",
-    "find": "  PermanentDelete: 'permanent_delete',",
-    "replace": "  PermanentDelete: 'permanent_deletex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_deletex',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -115,9 +125,9 @@
   },
   {
     "id": "co-bulk-addToProgram",
-    "file": "src/resources/collaborators.ts",
-    "find": "  AddToProgram: 'addToProgram',",
-    "replace": "  AddToProgram: 'addToProgramx',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgramx',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -125,9 +135,9 @@
   },
   {
     "id": "co-bulk-removeFromProgram",
-    "file": "src/resources/collaborators.ts",
-    "find": "  RemoveFromProgram: 'removeFromProgram',",
-    "replace": "  RemoveFromProgram: 'removeFromProgramx',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgramx',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -135,9 +145,9 @@
   },
   {
     "id": "co-bulk-addToDistributor",
-    "file": "src/resources/collaborators.ts",
-    "find": "  AddToDistributor: 'addToDistributor',",
-    "replace": "  AddToDistributor: 'addToDistributorx',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributorx',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -145,9 +155,9 @@
   },
   {
     "id": "co-bulk-removeFromDistributor",
-    "file": "src/resources/collaborators.ts",
-    "find": "  RemoveFromDistributor: 'removeFromDistributor',",
-    "replace": "  RemoveFromDistributor: 'removeFromDistributorx',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributorx',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -155,9 +165,9 @@
   },
   {
     "id": "co-bulk-sendSignupEmail",
-    "file": "src/resources/collaborators.ts",
-    "find": "  SendSignupEmail: 'sendSignupEmail',",
-    "replace": "  SendSignupEmail: 'sendSignupEmailx',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmailx',\n} as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -178,6 +188,16 @@
     "file": "src/resources/collaborators.ts",
     "find": "['fullName', 'nickname'] as const;",
     "replace": "['fullName', 'nickname', 'fields'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-list-filters",
+    "file": "src/resources/collaborators.ts",
+    "find": "'programId', 'distributorId'] as const;",
+    "replace": "'programId', 'distributorId', 'propertyId'] as const;",
     "expect": "caught",
     "failing": [
       "P3: collaborators surface"
@@ -214,10 +234,20 @@
     ]
   },
   {
-    "id": "al-tracking",
+    "id": "al-query-filters",
     "file": "src/resources/collaborator-aliases.ts",
-    "find": "  Tracking: 'tracking',",
-    "replace": "  Tracking: 'track',",
+    "find": "['code', 'type', 'collaboratorId'] as const;",
+    "replace": "['code', 'type', 'collaboratorId', 'propertyId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "names the route and the plain code types"
+    ]
+  },
+  {
+    "id": "al-tracking",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorAliasType = {\n  Tracking: 'tracking',\n  Coupon: 'coupon',\n} as const;",
+    "replace": "export const CollaboratorAliasType = {\n  Tracking: 'track',\n  Coupon: 'coupon',\n} as const;",
     "expect": "caught",
     "failing": [
       "names the route and the plain code types"
@@ -225,9 +255,9 @@
   },
   {
     "id": "al-coupon",
-    "file": "src/resources/collaborator-aliases.ts",
-    "find": "  Coupon: 'coupon',",
-    "replace": "  Coupon: 'coupons',",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorAliasType = {\n  Tracking: 'tracking',\n  Coupon: 'coupon',\n} as const;",
+    "replace": "export const CollaboratorAliasType = {\n  Tracking: 'tracking',\n  Coupon: 'coupons',\n} as const;",
     "expect": "caught",
     "failing": [
       "names the route and the plain code types"
@@ -244,6 +274,16 @@
     ]
   },
   {
+    "id": "en-list-filters",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "['collaboratorId', 'programId'] as const;",
+    "replace": "['collaboratorId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P5: enrollments surface"
+    ]
+  },
+  {
     "id": "gr-members-instance",
     "file": "src/resources/collaborator-groups.ts",
     "find": "    this.members = new CollaboratorGroupMembersResource(http);",
@@ -254,10 +294,50 @@
     ]
   },
   {
-    "id": "pr-bulk-activate",
+    "id": "gr-list-filters",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "['structure', 's'] as const;",
+    "replace": "['structure'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P6: collaboratorGroups list and retrieve rules"
+    ]
+  },
+  {
+    "id": "gm-list-filters",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "['collaboratorId'] as const;",
+    "replace": "['collaboratorId', 'groupId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P7: members list and retrieve rules"
+    ]
+  },
+  {
+    "id": "pr-list-filters",
     "file": "src/resources/programs.ts",
-    "find": "  Activate: 'activate',",
-    "replace": "  Activate: 'activatex',",
+    "find": "'s', 'programGroupId'] as const;",
+    "replace": "'s'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P8: programs list and retrieve rules"
+    ]
+  },
+  {
+    "id": "pg-list-filters",
+    "file": "src/resources/program-groups.ts",
+    "find": "['sorter', 's'] as const;",
+    "replace": "['s', 'sorter'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P9: programGroups list and retrieve rules"
+    ]
+  },
+  {
+    "id": "pr-bulk-activate",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activatex',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
       "P8: programs surface"
@@ -265,9 +345,9 @@
   },
   {
     "id": "pr-bulk-deactivate",
-    "file": "src/resources/programs.ts",
-    "find": "  Deactivate: 'deactivate',",
-    "replace": "  Deactivate: 'deactivatex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivatex',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
       "P8: programs surface"
@@ -275,9 +355,9 @@
   },
   {
     "id": "pr-bulk-restore",
-    "file": "src/resources/programs.ts",
-    "find": "  Restore: 'restore',",
-    "replace": "  Restore: 'restorex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restorex',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
       "P8: programs surface"
@@ -285,9 +365,9 @@
   },
   {
     "id": "pr-bulk-delete",
-    "file": "src/resources/programs.ts",
-    "find": "  Delete: 'delete',",
-    "replace": "  Delete: 'deletex',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'deletex',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
       "P8: programs surface"
@@ -295,9 +375,9 @@
   },
   {
     "id": "pg-oldest",
-    "file": "src/resources/program-groups.ts",
-    "find": "  OldestBindingWins: 'oldestBindingWins',",
-    "replace": "  OldestBindingWins: 'oldest',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramGroupSorter = {\n  /** The program the opportunity was bound to first wins. */\n  OldestBindingWins: 'oldestBindingWins',\n  /** The program the opportunity was bound to most recently wins. */\n  NewestBindingWins: 'newestBindingWins',\n} as const;",
+    "replace": "export const ProgramGroupSorter = {\n  /** The program the opportunity was bound to first wins. */\n  OldestBindingWins: 'oldest',\n  /** The program the opportunity was bound to most recently wins. */\n  NewestBindingWins: 'newestBindingWins',\n} as const;",
     "expect": "caught",
     "failing": [
       "P9: programGroups surface"
@@ -305,9 +385,9 @@
   },
   {
     "id": "pg-newest",
-    "file": "src/resources/program-groups.ts",
-    "find": "  NewestBindingWins: 'newestBindingWins',",
-    "replace": "  NewestBindingWins: 'newest',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramGroupSorter = {\n  /** The program the opportunity was bound to first wins. */\n  OldestBindingWins: 'oldestBindingWins',\n  /** The program the opportunity was bound to most recently wins. */\n  NewestBindingWins: 'newestBindingWins',\n} as const;",
+    "replace": "export const ProgramGroupSorter = {\n  /** The program the opportunity was bound to first wins. */\n  OldestBindingWins: 'oldestBindingWins',\n  /** The program the opportunity was bound to most recently wins. */\n  NewestBindingWins: 'newest',\n} as const;",
     "expect": "caught",
     "failing": [
       "P9: programGroups surface"
@@ -315,9 +395,9 @@
   },
   {
     "id": "pg-delete",
-    "file": "src/resources/program-groups.ts",
-    "find": "  Delete: 'delete',",
-    "replace": "  Delete: 'remove',",
+    "file": "src/taxonomy.ts",
+    "find": "export const ProgramGroupBulkAction = {\n  Delete: 'delete',\n} as const;",
+    "replace": "export const ProgramGroupBulkAction = {\n  Delete: 'remove',\n} as const;",
     "expect": "caught",
     "failing": [
       "P9: programGroups surface"

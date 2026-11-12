@@ -106,6 +106,17 @@ describe('P11: README records section', () => {
   });
 });
 
+describe('P11: README list rules', () => {
+  it.skip('says a record list refuses a key Siren would ignore, before sending', () => {
+    const all = sentences(section(read('README.md'), '## Collaborators and programs'));
+
+    expect(
+      all.some((s) => /\blists?\b/i.test(s) && /\bkeys?\b/i.test(s) && /`SirenError`/.test(s)),
+      'a sentence says a list throws SirenError for a key it does not send',
+    ).toBe(true);
+  });
+});
+
 describe('P11: CHANGELOG', () => {
   it.skip('lists the record resources under Unreleased, Added', () => {
     const added = section(section(read('CHANGELOG.md'), '## [Unreleased]'), '### Added');

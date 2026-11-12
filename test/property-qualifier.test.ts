@@ -5,7 +5,9 @@ import { PropertyQualifier, SirenError } from '../src/index';
  * Slice 3 acceptance tests for packet P2: PropertyQualifier, the plain-name
  * rule and the `@property:N` namespace Siren Cloud files a connected site's
  * names under. The cases follow the Siren PHP SDK's PropertyQualifier
- * (src/PropertyQualifier.php at 59383e6) and Cloud's NAME_PATTERN check.
+ * (src/PropertyQualifier.php at 59383e6), Cloud's NAME_PATTERN check, and
+ * Cloud's CODE_TYPE_PATTERN for a code type that names one integration's
+ * coupons (ConnectorRequestRules.php at b6f7140).
  *
  * Unit shape: PropertyQualifier is pure.
  *
@@ -19,6 +21,8 @@ describe('P2: PropertyQualifier constants', () => {
     expect(PropertyQualifier.SEPARATOR).toBe('@property:');
     expect(PropertyQualifier.NAME_PATTERN.source).toBe('^[A-Za-z0-9_-]+$');
     expect(PropertyQualifier.NAME_PATTERN.flags).toBe('');
+    expect(PropertyQualifier.CODE_TYPE_PATTERN.source).toBe('^coupon@source:[a-z0-9_-]{1,32}$');
+    expect(PropertyQualifier.CODE_TYPE_PATTERN.flags).toBe('');
   });
 });
 
@@ -31,6 +35,7 @@ describe('P2: PropertyQualifier.unqualify', () => {
     ['coupon@property:', 'coupon@property:'],
     ['coupon@property:5x', 'coupon@property:5x'],
     ['coupon@property:5@property:6', 'coupon@property:5'],
+    ['coupon@property:99999999999999999999', 'coupon@property:99999999999999999999'],
     ['', ''],
   ])('unqualify(%j) is %j', (name, plain) => {
     expect(PropertyQualifier.unqualify(name)).toBe(plain);
@@ -99,6 +104,54 @@ describe('P2: PropertyQualifier.assertName', () => {
   });
 });
 
+describe('P2: PropertyQualifier.isValidCodeType', () => {
+  it.skip.each(['coupon', 'credit_coupon_PTS', 'coupon@source:wc', 'coupon@source:edd-2', `coupon@source:${'a'.repeat(32)}`])(
+    'accepts %j',
+    (type) => {
+      expect(PropertyQualifier.isValidCodeType(type)).toBe(true);
+    },
+  );
+
+  it.skip.each([
+    ['empty', ''],
+    ['a Property qualifier', 'coupon@property:5'],
+    ['a source with no integration', 'coupon@source:'],
+    ['a source integration of 33 characters', `coupon@source:${'a'.repeat(33)}`],
+    ['an upper-case source integration', 'coupon@source:WC'],
+    ['a source on another type', 'tracking@source:wc'],
+    ['a source with a trailing newline', 'coupon@source:wc\n'],
+    ['a comma', 'coupon@source:wc,edd'],
+    ['a number', 5],
+    ['null', null],
+  ])('refuses %s', (_label, type) => {
+    expect(PropertyQualifier.isValidCodeType(type)).toBe(false);
+  });
+});
+
+describe('P2: PropertyQualifier.assertCodeType', () => {
+  it.skip.each(['coupon', 'coupon@source:wc'])('returns %j unchanged', (type) => {
+    expect(PropertyQualifier.assertCodeType(type, 'type')).toBe(type);
+  });
+
+  it.skip.each([
+    ['empty', ''],
+    ['a Property qualifier', 'coupon@property:5'],
+    ['a source on another type', 'tracking@source:wc'],
+    ['null', null],
+  ])('throws SirenError for %s, naming the field and never the type', (_label, type) => {
+    let caught: unknown;
+    try {
+      PropertyQualifier.assertCodeType(type, 'type');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(SirenError);
+    expect((caught as SirenError).message).toBe(
+      "Send type as letters, digits, underscores and hyphens, or as coupon@source:{integration}. Siren adds the site's Property itself.",
+    );
+  });
+});
+
 describe('P2: PropertyQualifier.plainRecord', () => {
   it.skip('strips the qualifier and records the Property', () => {
     const record = { code: 'SAVE10', type: 'coupon@property:5', collaboratorId: 4 };
@@ -115,6 +168,13 @@ describe('P2: PropertyQualifier.plainRecord', () => {
     expect(PropertyQualifier.plainRecord({ code: 'ADA', type: 'tracking' }, 'type')).toEqual({
       code: 'ADA',
       type: 'tracking',
+      propertyId: null,
+    });
+  });
+
+  it.skip('leaves a suffix that is not a safe integer on, with a null Property', () => {
+    expect(PropertyQualifier.plainRecord({ type: 'coupon@property:99999999999999999999' }, 'type')).toEqual({
+      type: 'coupon@property:99999999999999999999',
       propertyId: null,
     });
   });

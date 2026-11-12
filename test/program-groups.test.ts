@@ -7,6 +7,7 @@ import {
   ProgramGroupSorter,
   ProgramGroupsResource,
   SirenError,
+  UnexpectedResponseError,
 } from '../src/index';
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
@@ -138,5 +139,44 @@ describe('P9: programGroups writes', () => {
 
     await expect(call(groups)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
+  });
+});
+
+describe('P9: programGroups list and retrieve rules', () => {
+  it('names the filters list sends', () => {
+    expect(ProgramGroupsResource.LIST_FILTERS).toEqual(['sorter', 's']);
+  });
+
+  it.skip.each([
+    ['propertyId', { propertyId: 5 }],
+    ['a misspelt filter', { programID: 2 }],
+  ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
+    const { http, groups } = over([reply(200, page([]))]);
+
+    const error = await groups.list(params as never).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
+    const { groups } = over([reply(200, { error: 'Something went wrong.' })]);
+
+    await expect(groups.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+
+  it.skip('retrieve sends include and propertyId the way every retrieve does', async () => {
+    const { http, groups } = over([reply(200, ProgramGroupAnswers.listed)]);
+
+    await groups.retrieve(3, { fields: 'id', include: 'extended', propertyId: 3 });
+
+    expect(queryOf(http.requests[0])).toEqual({ fields: 'id', include: 'extended', propertyId: '3' });
+  });
+
+  it.skip('retrieve throws UnexpectedResponseError for a 2xx that is not an object', async () => {
+    const { groups } = over([reply(200, [ProgramGroupAnswers.listed])]);
+
+    await expect(groups.retrieve(3)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 });

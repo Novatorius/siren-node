@@ -170,3 +170,42 @@ describe('P8: programs writes', () => {
     expect(http.requests).toHaveLength(0);
   });
 });
+
+describe('P8: programs list and retrieve rules', () => {
+  it('names the filters list sends', () => {
+    expect(ProgramsResource.LIST_FILTERS).toEqual(['status', 'incentiveType', 'incentiveResolverType', 'units', 's', 'programGroupId']);
+  });
+
+  it.skip.each([
+    ['propertyId', { propertyId: 5 }],
+    ['a misspelt filter', { programID: 2 }],
+  ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
+    const { http, programs } = over([reply(200, page([]))]);
+
+    const error = await programs.list(params as never).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
+    const { programs } = over([reply(200, { error: 'Something went wrong.' })]);
+
+    await expect(programs.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+
+  it.skip('retrieve sends include and propertyId the way every retrieve does', async () => {
+    const { http, programs } = over([reply(200, ProgramAnswers.listed)]);
+
+    await programs.retrieve(1, { fields: 'id', include: 'extended', propertyId: 3 });
+
+    expect(queryOf(http.requests[0])).toEqual({ fields: 'id', include: 'extended', propertyId: '3' });
+  });
+
+  it.skip('retrieve throws UnexpectedResponseError for a 2xx that is not an object', async () => {
+    const { programs } = over([reply(200, [ProgramAnswers.listed])]);
+
+    await expect(programs.retrieve(1)).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+});

@@ -8,15 +8,6 @@ import type {
 } from '../record-types';
 import type { SirenList } from '../types';
 
-/** The plain code types Siren gives out. A credit coupon's type is `credit_coupon_{CURRENCY}`. */
-export const CollaboratorAliasType = {
-  Tracking: 'tracking',
-  Coupon: 'coupon',
-} as const;
-
-/** Union of the {@link CollaboratorAliasType} strings. */
-export type CollaboratorAliasType = (typeof CollaboratorAliasType)[keyof typeof CollaboratorAliasType];
-
 /**
  * A collaborator's aliases: the tracking codes and coupon codes that
  * attribute a visit or a sale to them.
@@ -33,11 +24,14 @@ export type CollaboratorAliasType = (typeof CollaboratorAliasType)[keyof typeof 
  * per type across all namespaces.
  *
  * Every method that takes a type throws `SirenError` before sending when it
- * is not letters, digits, underscores and hyphens
- * (`PropertyQualifier.assertName`), a list member of `query({ type })`
- * included. Every method that takes a code trims it and throws `SirenError`
- * before sending when nothing is left. Every id must be a positive whole
- * number. Reads retry. {@link create}, {@link free} and
+ * is neither letters, digits, underscores and hyphens nor one integration's
+ * coupon type such as `coupon@source:wc` (`PropertyQualifier.assertCodeType`),
+ * a list member of `query({ type })` included. Every method that takes a
+ * code, `query({ code })` and its list members included, trims it and
+ * throws `SirenError` before sending when nothing is left or it holds a
+ * comma, since Siren reads a comma in a filter as "any of". Every id, a
+ * `query({ collaboratorId })` and its list members included, must be a
+ * positive whole number. Reads retry. {@link create}, {@link free} and
  * {@link setTrackingCode} are sent once.
  *
  * {@link list}, {@link trackingCode} and {@link setTrackingCode} read and
@@ -48,13 +42,17 @@ export class CollaboratorAliasesResource {
   /** The route codes live on. */
   static readonly PATH = '/collaborator-aliases';
 
+  /** The filters {@link query} sends. It refuses any other key. */
+  static readonly QUERY_FILTERS = ['code', 'type', 'collaboratorId'] as const;
+
   constructor(private readonly http: HttpTransport) {}
 
   /**
    * A collaborator's aliases, each `{ code, type, issuedDate }`, read with
-   * `GET /collaborators/{id}?fields=id,aliases`. Answers an empty array when
-   * the record has no `aliases` list, and skips any entry that is not an
-   * object.
+   * `GET /collaborators/{id}?fields=id,aliases`. Siren always sends the
+   * field it was asked for, so a record with no `aliases` list, or with an
+   * entry that is not an object, throws `UnexpectedResponseError`, never an
+   * empty answer.
    */
   list(collaboratorId: number): Promise<CollaboratorAliasEntry[]> {
     // Stub: slice 3 packet P4
@@ -66,7 +64,9 @@ export class CollaboratorAliasesResource {
   /**
    * The collaborator's current tracking code, read with `GET
    * /collaborators/{id}?fields=id,referralCode`, or `null` when they have
-   * none (a missing, empty or non-string `referralCode`).
+   * none (`referralCode` is `null` or empty). A missing `referralCode`, or
+   * one that is neither a string nor `null`, throws
+   * `UnexpectedResponseError`.
    */
   trackingCode(collaboratorId: number): Promise<string | null> {
     // Stub: slice 3 packet P4
@@ -78,7 +78,7 @@ export class CollaboratorAliasesResource {
    * Gives the collaborator a new tracking code with `PUT /collaborators/{id}`
    * and body `{ trackingId }` (the code trimmed), sent once, and answers the
    * updated collaborator. Throws `SirenError` before sending for a code that
-   * is empty once trimmed.
+   * is empty once trimmed or holds a comma.
    * Siren refuses a code another collaborator holds with a 400, raised as
    * `BadRequestError`, and refuses `trackingId` from a connected site with a
    * 403.
@@ -94,7 +94,8 @@ export class CollaboratorAliasesResource {
    * Who holds a code: the newest alias with this code and plain type, or
    * `null` when nobody does. Reads `GET /collaborator-aliases` with `code`,
    * `type`, `number: 1`, `orderBy: 'dateIssued'` and `order: 'DESC'`, so the
-   * one row Siren answers is the newest.
+   * one row Siren answers is the newest. A list answer of the wrong shape
+   * throws `UnexpectedResponseError`, never `null`.
    */
   findByCode(code: string, type: string): Promise<CollaboratorAlias | null> {
     // Stub: slice 3 packet P4
@@ -121,8 +122,12 @@ export class CollaboratorAliasesResource {
    * match: `code`, `type` (plain, matched in every namespace) and
    * `collaboratorId`. A list value matches any of its values, but a
    * connected site may send only one type. Sort with `orderBy` and `order`.
-   * Newest first by default. Each record comes back through
-   * `PropertyQualifier.plainRecord(record, 'type')`.
+   * Newest first by default. Any key outside {@link QUERY_FILTERS} and the
+   * paging and sorting keys throws `SirenError`. An empty `type` or `code`
+   * list throws too. Each record comes back through
+   * `PropertyQualifier.plainRecord(record, 'type')`, and the list keeps
+   * `estimatedCount`. A 2xx that is not a list throws
+   * `UnexpectedResponseError`.
    */
   query(params: CollaboratorAliasQueryParams = {}): Promise<SirenList<CollaboratorAlias>> {
     // Stub: slice 3 packet P4
@@ -138,7 +143,13 @@ export class CollaboratorAliasesResource {
    * Throws `CodeConflictError`, built with `CodeConflictError.fromConflict`
    * from the 409 `ConflictError` Siren answers, with the trimmed code and
    * the type that were sent, when someone already holds the code under this
-   * type, in any namespace (A106).
+   * type, in any namespace. Every other error passes through unchanged.
+   *
+   * Siren's 409 does not name the holder, and that holder may be this same
+   * collaborator: a send whose answer was lost, sent again, meets the code
+   * the first send placed. After a `ConnectionError` or a
+   * `CodeConflictError`, call {@link findByCode} and compare its
+   * `collaboratorId` before treating the code as someone else's.
    */
   create(code: string, type: string, collaboratorId: number): Promise<CollaboratorAlias> {
     // Stub: slice 3 packet P4
@@ -153,7 +164,13 @@ export class CollaboratorAliasesResource {
    * /collaborator-aliases?code=...&type=...` and no body, sent once, as a
    * coupon panel does when a coupon is renamed, reassigned or deleted. A
    * connected site frees only codes in its own namespace. Freeing a code
-   * nobody holds is not an error. Answers `{ deleted: true }`.
+   * nobody holds is not an error. Answers `{ deleted: true }`, which says
+   * the request succeeded, not that a code was removed.
+   *
+   * Siren deletes only an exact type match. A dashboard session's token
+   * sends the type as given, so it frees only codes in no site's namespace,
+   * and cannot reach a site's `coupon@property:5`, which only that site's
+   * own token frees. Sending it again after a lost answer is safe.
    */
   free(code: string, type: string): Promise<DeletedResult> {
     // Stub: slice 3 packet P4

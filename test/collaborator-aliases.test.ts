@@ -9,6 +9,7 @@ import {
   ErrorCode,
   PolicyError,
   SirenError,
+  UnexpectedResponseError,
 } from '../src/index';
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
@@ -50,6 +51,7 @@ describe('P4: aliases surface', () => {
   it('names the route and the plain code types', () => {
     expect(CollaboratorAliasesResource.PATH).toBe('/collaborator-aliases');
     expect(CollaboratorAliasType).toEqual({ Tracking: 'tracking', Coupon: 'coupon' });
+    expect(CollaboratorAliasesResource.QUERY_FILTERS).toEqual(['code', 'type', 'collaboratorId']);
   });
 });
 
@@ -87,8 +89,22 @@ describe('P4: aliases.query', () => {
     expect(list.estimatedCount).toBe(2);
   });
 
+  it.skip('trims each code it sends', async () => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    await aliases.query({ code: [' SAVE10 ', 'VIP '] });
+
+    expect(queryOf(http.requests[0])).toEqual({ code: 'SAVE10,VIP' });
+  });
+
   it.skip('retries like a read', async () => {
     await expectRetried((transport) => resource(transport).query(), reply(200, page([CollaboratorAnswers.alias])));
+  });
+
+  it.skip('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+    const { aliases } = over([reply(200, { error: 'Something went wrong.' })]);
+
+    await expect(aliases.query()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 });
 
@@ -137,6 +153,19 @@ describe('P4: aliases.findByCode and forCollaborator', () => {
 
     expect(await aliases.findByCode('NOPE', 'coupon')).toBeNull();
     expect(await aliases.forCollaborator(4, 'coupon')).toBeNull();
+  });
+
+  it.skip('reads an integration coupon type as given', async () => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    expect(await aliases.findByCode('SAVE10', 'coupon@source:wc')).toBeNull();
+    expect(queryOf(http.requests[0])).toMatchObject({ code: 'SAVE10', type: 'coupon@source:wc' });
+  });
+
+  it.skip('throws UnexpectedResponseError for a list answer of the wrong shape, never null', async () => {
+    const { aliases } = over([reply(200, { items: { code: 'SAVE10' } })]);
+
+    await expect(aliases.findByCode('SAVE10', 'coupon')).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
   it.skip('retries both like reads', async () => {
@@ -227,40 +256,58 @@ describe('P4: aliases.free', () => {
 });
 
 describe('P4: aliases on the collaborator record', () => {
-  it.skip('lists the record aliases field, skipping entries that are not objects', async () => {
+  it.skip('lists the record aliases field', async () => {
     const entries = [
       { code: 'FLO', type: 'tracking', issuedDate: '2026-01-15T10:30:00+00:00' },
-      'junk',
       { code: 'SAVE10', type: 'coupon', issuedDate: '2026-10-16T12:00:00+00:00' },
     ];
     const { http, aliases } = over([reply(200, { id: 4, aliases: entries })]);
 
-    expect(await aliases.list(4)).toEqual([entries[0], entries[2]]);
+    expect(await aliases.list(4)).toEqual(entries);
     expect(http.requests[0]!.method).toBe('GET');
     expect(pathOf(http.requests[0])).toBe('/collaborators/4');
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,aliases' });
   });
 
-  it.skip('answers an empty list when the record has no aliases field', async () => {
-    const { aliases } = over([reply(200, { id: 4 })]);
+  it.skip('answers an empty list when the record has an empty aliases field', async () => {
+    const { aliases } = over([reply(200, { id: 4, aliases: [] })]);
 
     expect(await aliases.list(4)).toEqual([]);
   });
 
-  it.skip('reads the referral code, or null when there is none', async () => {
+  it.skip.each([
+    ['no aliases field', { id: 4 }],
+    ['an aliases field that is not a list', { id: 4, aliases: { code: 'FLO' } }],
+    ['an entry that is a string', { id: 4, aliases: [{ code: 'FLO', type: 'tracking' }, 'junk'] }],
+    ['an entry that is null', { id: 4, aliases: [null] }],
+  ])('list throws UnexpectedResponseError for %s, never a shorter list', async (_label, body) => {
+    const { aliases } = over([reply(200, body)]);
+
+    await expect(aliases.list(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+
+  it.skip('reads the referral code, or null when it is null or empty', async () => {
     const { http, aliases } = over([
       reply(200, { id: 4, referralCode: 'FLO' }),
       reply(200, { id: 4, referralCode: null }),
       reply(200, { id: 4, referralCode: '' }),
-      reply(200, { id: 4 }),
     ]);
 
     expect(await aliases.trackingCode(4)).toBe('FLO');
     expect(await aliases.trackingCode(4)).toBeNull();
     expect(await aliases.trackingCode(4)).toBeNull();
-    expect(await aliases.trackingCode(4)).toBeNull();
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,referralCode' });
     expect(pathOf(http.requests[0])).toBe('/collaborators/4');
+  });
+
+  it.skip.each([
+    ['no referralCode field', { id: 4 }],
+    ['a numeric referralCode', { id: 4, referralCode: 5 }],
+    ['a referralCode list', { id: 4, referralCode: ['FLO'] }],
+  ])('trackingCode throws UnexpectedResponseError for %s, never null', async (_label, body) => {
+    const { aliases } = over([reply(200, body)]);
+
+    await expect(aliases.trackingCode(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
   it.skip('puts the trimmed tracking code as trackingId and answers the collaborator', async () => {
@@ -273,19 +320,12 @@ describe('P4: aliases on the collaborator record', () => {
   });
 
   it.skip('raises the 400 for a code another collaborator holds as BadRequestError', async () => {
-    const { aliases } = over([
-      reply(400, {
-        error: {
-          message: 'Validations failed.',
-          context: {
-            type: 'VALIDATION_FAILED',
-            failedValidations: [{ field: 'trackingId', message: 'trackingId is not available.', type: 'UNAVAILABLE' }],
-          },
-        },
-      }),
-    ]);
+    const { aliases } = over([reply(400, CollaboratorAnswers.trackingTaken)]);
 
-    await expect(aliases.setTrackingCode(4, 'TAKEN')).rejects.toBeInstanceOf(BadRequestError);
+    const error = await aliases.setTrackingCode(4, 'TAKEN').catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    expect((error as BadRequestError).fieldErrors[0]?.field).toBe('trackingId');
   });
 
   it.skip('retries the reads and sends setTrackingCode once', async () => {
@@ -316,11 +356,58 @@ describe('P4: aliases refuse bad input before sending', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('refuses an empty type list and a type that is not a string', async () => {
+  it.skip('every method that takes a type accepts an integration coupon type', async () => {
+    const { http, aliases } = over([reply(200, page([])), reply(200, page([])), reply(200, page([])), reply(201, CollaboratorAnswers.alias), reply(200, CollaboratorAnswers.freed)]);
+
+    await aliases.findByCode('SAVE10', 'coupon@source:wc');
+    await aliases.forCollaborator(4, 'coupon@source:wc');
+    await aliases.query({ type: 'coupon@source:wc' });
+    await aliases.create('SAVE10', 'coupon@source:wc', 4);
+    await aliases.free('SAVE10', 'coupon@source:wc');
+
+    expect(http.requests).toHaveLength(5);
+    expect(bodyOf(http.requests[3])).toEqual({ code: 'SAVE10', type: 'coupon@source:wc', collaboratorId: 4 });
+    expect(queryOf(http.requests[4])).toEqual({ code: 'SAVE10', type: 'coupon@source:wc' });
+  });
+
+  it.skip('refuses an empty type or code list and a type that is not a string', async () => {
     const { http, aliases } = over([reply(200, page([]))]);
 
     await expect(aliases.query({ type: [] })).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.query({ code: [] })).rejects.toBeInstanceOf(SirenError);
     await expect(aliases.query({ type: 5 } as never)).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip.each([
+    ['propertyId', { propertyId: 5 }],
+    ['a misspelt filter', { collaboratorID: 4 }],
+  ])('query refuses %s with SirenError naming the key', async (_label, params) => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    const error = await aliases.query(params as never).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('every method that takes a code refuses one with a comma', async () => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    await expect(aliases.findByCode('SAVE10,VIP', 'coupon')).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.query({ code: 'SAVE10,VIP' })).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.query({ code: ['SAVE10', 'A,B'] })).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.create('SAVE10,VIP', 'coupon', 4)).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.free('SAVE10,VIP', 'coupon')).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.setTrackingCode(4, 'ADA,FLO')).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip.each([[0], [[4, 0]], [['4']], [[1.5]]])('query refuses collaboratorId %j', async (collaboratorId) => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    await expect(aliases.query({ collaboratorId } as never)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
   });
 

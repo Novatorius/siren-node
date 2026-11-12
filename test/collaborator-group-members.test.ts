@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CollaboratorGroupMembersResource, CollaboratorGroupsResource, NotFoundError, SirenError } from '../src/index';
+import {
+  CollaboratorGroupMembersResource,
+  CollaboratorGroupsResource,
+  NotFoundError,
+  SirenError,
+  UnexpectedResponseError,
+} from '../src/index';
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
 import { GroupAnswers, bodyOf, expectRetried, expectSentOnce, page, pathOf, queryOf, transportOver } from './record-fakes';
@@ -109,5 +115,30 @@ describe('P7: members writes', () => {
 
     await expect(call(members)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
+  });
+});
+
+describe('P7: members list and retrieve rules', () => {
+  it('names the filters list sends', () => {
+    expect(CollaboratorGroupMembersResource.LIST_FILTERS).toEqual(['collaboratorId']);
+  });
+
+  it.skip.each([
+    ['propertyId', { propertyId: 5 }],
+    ['a misspelt filter', { programID: 2 }],
+  ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
+    const { http, members } = over([reply(200, page([]))]);
+
+    const error = await members.list(5, params as never).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
+    const { members } = over([reply(200, { error: 'Something went wrong.' })]);
+
+    await expect(members.list(5)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 });

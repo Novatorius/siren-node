@@ -32,13 +32,17 @@ export class ProgramEnrollmentsResource {
   /** The route enrollments live on. */
   static readonly PATH = '/collaborator-programs';
 
+  /** The filters {@link list} sends. It refuses any other key. */
+  static readonly LIST_FILTERS = ['collaboratorId', 'programId'] as const;
+
   constructor(private readonly http: HttpTransport) {}
 
   /**
    * The programs a collaborator is enrolled in, each `{ id, name }`, read
-   * with `GET /collaborators/{id}?fields=id,programs`. Answers an empty
-   * array when the record has no `programs` list, and skips any entry that
-   * is not an object.
+   * with `GET /collaborators/{id}?fields=id,programs`. Siren always sends
+   * the field it was asked for, so a record with no `programs` list, or
+   * with an entry that is not an object, throws `UnexpectedResponseError`,
+   * never an empty answer.
    */
   programsFor(collaboratorId: number): Promise<EnrolledProgram[]> {
     // Stub: slice 3 packet P5
@@ -50,8 +54,8 @@ export class ProgramEnrollmentsResource {
   /**
    * A page of the collaborators enrolled in a program, read with `GET
    * /collaborators` and `programId`. Takes the same parameters as
-   * `collaborators.list()`. The `programId` argument wins over one in
-   * `params`.
+   * `collaborators.list()`, and refuses the same keys. The `programId`
+   * argument wins over one in `params`.
    */
   collaboratorsIn(
     programId: number,
@@ -104,6 +108,9 @@ export class ProgramEnrollmentsResource {
    * `{ collaboratorId, programId }` per enrollment. Filters, each an exact
    * match: `collaboratorId` and `programId`. A list value matches any of its
    * values. Sort with `orderBy` and `order`.
+   * Sends through `listRecords` with {@link LIST_FILTERS}: any other key
+   * throws `SirenError` before sending, and a 2xx that is not a list throws
+   * `UnexpectedResponseError`, never an empty page.
    */
   list(params: ProgramEnrollmentListParams = {}): Promise<SirenList<ProgramEnrollment>> {
     // Stub: slice 3 packet P5

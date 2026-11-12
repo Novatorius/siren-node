@@ -4,30 +4,12 @@ import type {
   CreateProgramGroupParams,
   ProgramGroup,
   ProgramGroupListParams,
-  RecordReadParams,
   UpdateProgramGroupParams,
 } from '../record-types';
 import type { SirenList } from '../types';
+import { ProgramGroupBulkAction } from '../taxonomy';
 import { RecordsResource } from './records';
-
-/** How a program group picks the winning program when several could claim the same engagement. */
-export const ProgramGroupSorter = {
-  /** The program the opportunity was bound to first wins. */
-  OldestBindingWins: 'oldestBindingWins',
-  /** The program the opportunity was bound to most recently wins. */
-  NewestBindingWins: 'newestBindingWins',
-} as const;
-
-/** Union of the {@link ProgramGroupSorter} strings. */
-export type ProgramGroupSorter = (typeof ProgramGroupSorter)[keyof typeof ProgramGroupSorter];
-
-/** The bulk actions `programGroups.bulk()` runs, as Siren names them. */
-export const ProgramGroupBulkAction = {
-  Delete: 'delete',
-} as const;
-
-/** Union of the {@link ProgramGroupBulkAction} strings. */
-export type ProgramGroupBulkAction = (typeof ProgramGroupBulkAction)[keyof typeof ProgramGroupBulkAction];
+import type { RetrieveParams } from './records';
 
 /**
  * Program groups (`/program-groups`): sets of programs that compete for the
@@ -37,6 +19,9 @@ export type ProgramGroupBulkAction = (typeof ProgramGroupBulkAction)[keyof typeo
  * positive whole number, and a bad one throws `SirenError` before sending.
  */
 export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> {
+  /** The filters `GET /program-groups` reads. {@link list} refuses any other key, `propertyId` included. */
+  static readonly LIST_FILTERS = ['sorter', 's'] as const;
+
   constructor(http: HttpTransport) {
     super(http, '/program-groups');
   }
@@ -45,6 +30,9 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
    * Lists one page of program groups with `GET /program-groups`. Filters:
    * `sorter` and `s` (search name and description). Sort with `orderBy` and
    * `order`.
+   * Sends through `listRecords` with {@link LIST_FILTERS}: any other key
+   * throws `SirenError` before sending, and a 2xx that is not a list throws
+   * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: ProgramGroupListParams = {}): Promise<SirenList<T>> {
     // Stub: slice 3 packet P9
@@ -52,8 +40,12 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
     return Promise.resolve([] as unknown as SirenList<T>);
   }
 
-  /** Reads one program group with `GET /program-groups/{id}`. `fields` chooses the fields. */
-  retrieve(id: number, params: RecordReadParams = {}): Promise<T> {
+  /**
+   * Reads one program group with `GET /program-groups/{id}` through `retrieveRecord`, so it
+   * takes `fields`, `include` and `propertyId`. Throws `NotFoundError` for an
+   * unknown id.
+   */
+  retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
     // Stub: slice 3 packet P9
     void id;
     void params;

@@ -12,7 +12,8 @@ import { FakeHttpClient, reply, spySource } from './http-fakes';
  * machine.
  */
 
-export const BASE = 'https://api.sirenaffiliates.com/siren/v1';
+/** A reserved host (RFC 6761), so even a request that slipped past the fake could not reach Siren. */
+export const BASE = 'https://example.invalid/siren/v1';
 
 /**
  * The real transport over a fake client that answers `replies` in order and
@@ -205,7 +206,7 @@ export const CollaboratorAnswers = {
       context: { param: 'status' },
     },
   },
-  /** CreateNewCollaborator for a reserved address. Status 422. */
+  /** saas/Auth/ConnectorRequestRules.php line 980, refuseReservedAddress, raised through RestStrategy. Status 422. */
   reservedAddress: {
     error: {
       message: 'This address is reserved by Siren Cloud. Sign up with a real email address.',
@@ -213,6 +214,35 @@ export const CollaboratorAnswers = {
       context: { param: 'email' },
     },
   },
+  /** lib/Collaborators/Service/Handlers/Interceptors/SaveCollaboratorTrackingAlias.php lines 76 to 84, a tracking code another collaborator holds. Status 400. */
+  trackingTaken: {
+    error: {
+      message: 'Validations failed.',
+      context: {
+        type: 'VALIDATION_FAILED',
+        failedValidations: [
+          {
+            field: 'trackingId',
+            message: 'trackingId is already in use by another collaborator. Tracking codes ignore upper and lower case.',
+            type: 'DUPLICATE_ENTRY',
+            context: [],
+          },
+        ],
+      },
+    },
+  },
+  /** CollaboratorBulkAction.php lines 181 to 190 and describeSignupEmailFailure at line 202, two of three signup emails sent. Status 502. */
+  signupEmailFailed: {
+    error: {
+      message: 'Signup email sent to 2 collaborator(s). 1 could not be sent. Please try again or contact support.',
+      context: { type: 'signup_email_failed', sent: 2, failed: 1 },
+    },
+  },
+} as const;
+
+/** saas/Auth/RateLimitMiddleware.php lines 123 to 127. Status 429, sent with `Retry-After`. */
+export const rateLimited = {
+  error: { message: 'Too many requests. Please try again later.', context: { retryAfter: 0 } },
 } as const;
 
 /*
@@ -325,7 +355,7 @@ export const ProgramAnswers = {
     error:
       'This program cannot be permanently deleted because it still has 1 obligation that has not been paid out. Settle or cancel them first.',
   },
-  /** ProgramBulkAction. */
+  /** ProgramBulkAction.php line 152. */
   bulk: { success: true, affected: 2 },
   /** GetProgramStatusTypes.php lines 49 to 65. */
   statusTypes: { options: { active: 'Active', inactive: 'Inactive' }, tones: { active: 'positive', inactive: 'negative' } },
@@ -345,11 +375,11 @@ export const ProgramAnswers = {
 export const ProgramGroupAnswers = {
   /** GetProgramGroups, the default fields `id,name,description,sorter`. */
   listed: { id: 3, name: 'Partners', description: 'Partner programs', sorter: 'newestBindingWins' },
-  /** CreateNewProgramGroup through ProgramGroupAdapter, no dates. Status 201. */
+  /** CreateNewProgramGroup through ProgramGroupAdapter::toArray, no dates. Status 201. */
   created: { id: 3, name: 'Partners', description: 'Partner programs', sorter: 'newestBindingWins' },
-  /** UpdateProgramGroup, the same adapter. */
+  /** UpdateProgramGroup through ProgramGroupAdapter::toArray. */
   updated: { id: 3, name: 'Partners', description: 'Partner programs', sorter: 'oldestBindingWins' },
-  /** ProgramGroupBulkAction. */
+  /** ProgramGroupBulkAction.php line 115. */
   bulk: { success: true, affected: 1 },
   /** RequiresCapabilityMiddleware on the program group writes. Status 403. */
   planRequired: {

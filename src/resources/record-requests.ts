@@ -1,5 +1,4 @@
 import type { HttpTransport } from '../http';
-import type { RecordListParams } from '../record-types';
 import type { SirenList } from '../types';
 
 /*
@@ -41,6 +40,14 @@ export function recordId(id: unknown, method: string, what = 'id'): number {
 }
 
 /**
+ * The keys every record list takes, whatever its filters: paging, sorting
+ * and `fields`.
+ *
+ * @internal
+ */
+export const LIST_CONTROL_KEYS = ['page', 'perPage', 'number', 'offset', 'orderBy', 'order', 'fields'] as const;
+
+/**
  * Turns a record list's params into the query a list route reads. Pages
  * with `page`/`perPage` the way `toListQuery` does. A list value, such as
  * `status: ['active', 'pending']` or `fields: ['id', 'email']`, is sent
@@ -48,37 +55,56 @@ export function recordId(id: unknown, method: string, what = 'id'): number {
  * field list for `fields`. An empty list is left out. A boolean is sent as
  * `true` or `false`. `undefined` is left out.
  *
- * Throws `SirenError` before sending for a value Siren could not read: an
- * object, a list holding anything but strings and finite numbers, or a list
- * member that holds a comma, since Siren would split it into two values.
- * Nothing is dropped silently.
+ * `filters` names the filter keys the route reads. Siren ignores a key it
+ * does not read and answers every record, so a key that is neither one of
+ * {@link LIST_CONTROL_KEYS} nor in `filters` throws `SirenError` naming it,
+ * `propertyId` included.
+ *
+ * Throws `SirenError` naming the key, before sending, for a value Siren
+ * could not read as sent: an object, `null`, a function, a list holding
+ * anything but strings and finite numbers, a list member that holds a
+ * comma, or a string filter that holds a comma. Siren splits a comma in any
+ * filter string into "any of", so `code: 'A,B'` would match two codes. A
+ * comma is allowed only in `fields` and in the search text `s`. Nothing is
+ * dropped silently.
  *
  * @internal
  */
 export function recordListQuery(
-  params: RecordListParams,
+  params: object,
+  filters: readonly string[],
 ): Record<string, string | number | boolean | undefined> {
   // Stub: slice 3 packet P1
   void params;
+  void filters;
   return {};
 }
 
 /**
  * Reads one page of a record list with `GET {path}`, retriable, through
- * {@link recordListQuery}. Answers as `RecordsResource.list()` does: a real
- * array, with Siren's `total` as the non-enumerable `estimatedCount`.
+ * {@link recordListQuery} with the route's `filters`. Answers a real array,
+ * with Siren's `total` as the non-enumerable `estimatedCount`, or the
+ * `x-siren-estimated-count` header for a bare array.
+ *
+ * Throws `UnexpectedResponseError` with the status Siren sent when a 2xx
+ * body is neither a JSON array nor an object whose `items` is an array, an
+ * empty body included. `RecordsResource.list()` reads such a body as an
+ * empty page. A record list never does, since "nobody holds this code" must
+ * not stand in for a broken answer.
  *
  * @internal
  */
 export async function listRecords<T>(
   http: Transport,
   path: string,
-  params: RecordListParams = {},
+  params: object,
+  filters: readonly string[],
 ): Promise<SirenList<T>> {
   // Stub: slice 3 packet P1
   void http;
   void path;
   void params;
+  void filters;
   return [] as unknown as SirenList<T>;
 }
 

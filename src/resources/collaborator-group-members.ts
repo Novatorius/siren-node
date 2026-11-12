@@ -13,12 +13,18 @@ import type { SirenList } from '../types';
  * number, and a bad one throws `SirenError` before sending.
  */
 export class CollaboratorGroupMembersResource {
+  /** The filters the members list reads. {@link list} refuses any other key. */
+  static readonly LIST_FILTERS = ['collaboratorId'] as const;
+
   constructor(private readonly http: HttpTransport) {}
 
   /**
    * Lists one page of a group's members with `GET
    * /collaborator-groups/{groupId}/members`. Filter: `collaboratorId`. Sort
    * with `orderBy` and `order`.
+   * Sends through `listRecords` with {@link CollaboratorGroupMembersResource.LIST_FILTERS}: any other key
+   * throws `SirenError` before sending, and a 2xx that is not a list throws
+   * `UnexpectedResponseError`, never an empty page.
    */
   list(groupId: number, params: CollaboratorGroupMemberListParams = {}): Promise<SirenList<CollaboratorGroupMember>> {
     // Stub: slice 3 packet P7
