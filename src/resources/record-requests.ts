@@ -1,5 +1,8 @@
+import { SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
+import { parseJsonBody } from '../http';
 import type { SirenList } from '../types';
+import { toListQuery } from './records';
 
 /*
  * The requests every record resource sends, in one place, so a rule cannot
@@ -23,6 +26,24 @@ type Transport = Pick<HttpTransport, 'request'>;
 export type RecordWriteMethod = 'POST' | 'PUT';
 
 /**
+ * True for a positive safe integer, the only id Siren reads as sent.
+ *
+ * @internal
+ */
+export function isRecordId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+}
+
+/**
+ * True for a parsed JSON object: not `null`, not an array, not a scalar.
+ *
+ * @internal
+ */
+export function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
  * Returns `id` when it is a positive safe integer. Otherwise throws
  * `SirenError` before anything is sent, with a message that starts with
  * `method` and names the id it got, as `retrieveRecord` words it:
@@ -33,11 +54,11 @@ export type RecordWriteMethod = 'POST' | 'PUT';
  * @internal
  */
 export function recordId(id: unknown, method: string, what = 'id'): number {
-  // Stub: slice 3 packet P1
-  void id;
-  void method;
-  void what;
-  return 1;
+  if (!isRecordId(id)) {
+    const shown = typeof id === 'string' ? JSON.stringify(id) : String(id);
+    throw new SirenError(`${method} needs a positive whole number ${what}, and got ${shown}.`);
+  }
+  return id;
 }
 
 /**
@@ -99,11 +120,54 @@ export function recordListQuery(
   filters: readonly string[],
   ids: ListIdFilters = {},
 ): Record<string, string | number | boolean | undefined> {
-  // Stub: slice 3 packet P1
-  void params;
-  void filters;
-  void ids;
-  return {};
+  const allowed = new Set<string>([...LIST_CONTROL_KEYS, ...filters]);
+  const one = new Set<string>(ids.one ?? []);
+  const many = new Set<string>(ids.many ?? []);
+  const query: Record<string, string | number | boolean | undefined> = {};
+
+  for (const key of Object.keys(params)) {
+    if (!allowed.has(key)) {
+      throw new SirenError(`This list does not read ${key}, and Siren would ignore it and answer every record.`);
+    }
+  }
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+
+    if (one.has(key) && !isRecordId(value)) {
+      throw new SirenError(`${key} takes one positive whole number id, since Siren reads only one.`);
+    }
+    if (many.has(key) && !(Array.isArray(value) ? value : [value]).every(isRecordId)) {
+      throw new SirenError(`${key} takes a positive whole number id or a list of them.`);
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        if (key === 'fields') continue;
+        throw new SirenError(`An empty ${key} list would answer every record. Send at least one value.`);
+      }
+      for (const member of value as unknown[]) {
+        if (typeof member !== 'string' && !(typeof member === 'number' && Number.isFinite(member))) {
+          throw new SirenError(`Send ${key} as a list of strings or finite numbers.`);
+        }
+        if (String(member).includes(',')) {
+          throw new SirenError(`A ${key} list member cannot hold a comma, which Siren reads as "any of".`);
+        }
+      }
+      query[key] = value.join(',');
+    } else if (typeof value === 'string') {
+      if (value.includes(',') && key !== 'fields' && key !== 's') {
+        throw new SirenError(`A ${key} value cannot hold a comma, which Siren reads as "any of".`);
+      }
+      query[key] = value;
+    } else if ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean') {
+      query[key] = value;
+    } else {
+      throw new SirenError(`Send ${key} as a string, a finite number, a boolean or a list of strings or numbers.`);
+    }
+  }
+
+  return toListQuery(query);
 }
 
 /**
@@ -127,13 +191,50 @@ export async function listRecords<T>(
   filters: readonly string[],
   ids: ListIdFilters = {},
 ): Promise<SirenList<T>> {
-  // Stub: slice 3 packet P1
-  void http;
-  void path;
-  void params;
-  void filters;
-  void ids;
-  return [] as unknown as SirenList<T>;
+  const query = recordListQuery(params, filters, ids);
+  const response = await http.request({ method: 'GET', path, query, retriable: true });
+  const body = await parseJsonBody(response);
+
+  let records: unknown[];
+  let count: number | undefined;
+  if (Array.isArray(body)) {
+    records = body;
+  } else if (isJsonObject(body) && Array.isArray(body.items)) {
+    records = body.items as unknown[];
+    if (typeof body.total === 'number' && Number.isFinite(body.total)) count = body.total;
+  } else {
+    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a record list.`, {
+      statusCode: response.status,
+      data: body,
+    });
+  }
+
+  if (!records.every(isJsonObject)) {
+    throw new UnexpectedResponseError(`Siren answered GET ${path} with a list row that is not a JSON object.`, {
+      statusCode: response.status,
+      data: body,
+    });
+  }
+
+  if (count === undefined) {
+    const header = response.headers.get('x-siren-estimated-count');
+    if (header != null && header !== '') {
+      const parsed = Number(header);
+      if (Number.isFinite(parsed)) count = parsed;
+    }
+  }
+
+  const list = records as SirenList<T>;
+  if (count !== undefined) {
+    // Non-enumerable, as RecordsResource.list sets it, so it stays out of JSON and spreads.
+    Object.defineProperty(list, 'estimatedCount', {
+      value: count,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return list;
 }
 
 /**
@@ -155,12 +256,20 @@ export async function readObject<T>(
   query: Record<string, string | number | boolean | undefined> = {},
   check?: (body: Record<string, unknown>) => string | undefined,
 ): Promise<T> {
-  // Stub: slice 3 packet P1
-  void http;
-  void path;
-  void query;
-  void check;
-  return {} as T;
+  const response = await http.request({ method: 'GET', path, query, retriable: true });
+  const body = await parseJsonBody(response);
+  if (!isJsonObject(body)) {
+    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON object.`, {
+      statusCode: response.status,
+      data: body,
+    });
+  }
+
+  const problem = check === undefined ? undefined : check(body);
+  if (problem !== undefined) {
+    throw new UnexpectedResponseError(problem, { statusCode: response.status, data: body });
+  }
+  return body as T;
 }
 
 /**
@@ -171,10 +280,15 @@ export async function readObject<T>(
  * @internal
  */
 export async function readList<T>(http: Transport, path: string): Promise<T[]> {
-  // Stub: slice 3 packet P1
-  void http;
-  void path;
-  return [];
+  const response = await http.request({ method: 'GET', path, retriable: true });
+  const body = await parseJsonBody(response);
+  if (!Array.isArray(body)) {
+    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON array.`, {
+      statusCode: response.status,
+      data: body,
+    });
+  }
+  return body as T[];
 }
 
 /**
@@ -192,12 +306,15 @@ export async function writeRecord<T>(
   path: string,
   body: unknown,
 ): Promise<T> {
-  // Stub: slice 3 packet P1
-  void http;
-  void method;
-  void path;
-  void body;
-  return {} as T;
+  const response = await http.request({ method, path, body, retriable: false });
+  const answer = await parseJsonBody(response);
+  if (!isJsonObject(answer)) {
+    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`, {
+      statusCode: response.status,
+      data: answer,
+    });
+  }
+  return answer as T;
 }
 
 /**
@@ -214,12 +331,15 @@ export async function writeList<T>(
   path: string,
   body: unknown,
 ): Promise<T[]> {
-  // Stub: slice 3 packet P1
-  void http;
-  void method;
-  void path;
-  void body;
-  return [];
+  const response = await http.request({ method, path, body, retriable: false });
+  const answer = await parseJsonBody(response);
+  if (!Array.isArray(answer)) {
+    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON array.`, {
+      statusCode: response.status,
+      data: answer,
+    });
+  }
+  return answer as T[];
 }
 
 /**
@@ -238,11 +358,18 @@ export async function deleteRecord<T>(
   path: string,
   query: Record<string, string | number | boolean | undefined> = {},
 ): Promise<T | null> {
-  // Stub: slice 3 packet P1
-  void http;
-  void path;
-  void query;
-  return null;
+  const response = await http.request({ method: 'DELETE', path, query, retriable: false });
+  const text = await response.text();
+  if (text === '' && response.status === 204) return null;
+
+  const answer = text === '' ? undefined : await parseJsonBody({ text: async () => text });
+  if (!isJsonObject(answer)) {
+    throw new UnexpectedResponseError(
+      `Siren answered DELETE ${path} with a ${response.status} whose body is not a JSON object.`,
+      { statusCode: response.status, data: answer === undefined ? text : answer },
+    );
+  }
+  return answer as T;
 }
 
 /**
@@ -263,11 +390,18 @@ export async function bulkRecords<T>(
   ids: readonly number[],
   extra: Record<string, unknown> = {},
 ): Promise<T> {
-  // Stub: slice 3 packet P1
-  void http;
-  void collection;
-  void action;
-  void ids;
-  void extra;
-  return {} as T;
+  if (typeof action !== 'string' || action === '') {
+    throw new SirenError('bulk needs an action.');
+  }
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new SirenError('bulk needs a list of one or more ids.');
+  }
+  if (ids.length > MAX_BULK_IDS) {
+    throw new SirenError(`bulk takes at most ${MAX_BULK_IDS} ids, and got ${ids.length}.`);
+  }
+  for (const id of ids) recordId(id, 'bulk');
+  if (Object.prototype.hasOwnProperty.call(extra, 'action') || Object.prototype.hasOwnProperty.call(extra, 'ids')) {
+    throw new SirenError('bulk sets action and ids itself, so extra cannot name either.');
+  }
+  return writeRecord<T>(http, 'POST', `${collection}/bulk`, { action, ids: [...ids], ...extra });
 }
