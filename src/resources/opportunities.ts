@@ -1,7 +1,8 @@
 import type { HttpTransport } from '../http';
 import type { Opportunity, OpportunityListParams, UpdateOpportunityParams } from '../record-types';
 import type { SirenList } from '../types';
-import { RecordsResource } from './records';
+import { listRecords, recordId, writeRecord } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
 
 /**
@@ -53,9 +54,7 @@ export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
    * `UnexpectedResponseError`.
    */
   override list(params: OpportunityListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 4 packet P1
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+    return listRecords<T>(this.http, this.path, params, OpportunitiesResource.LIST_FILTERS, OpportunitiesResource.ID_FILTERS);
   }
 
   /**
@@ -66,10 +65,7 @@ export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
    * object.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 4 packet P1
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 
   /**
@@ -78,10 +74,8 @@ export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
    * as `2026-10-16 12:00:00`). Accepts `status` (`active` or `inactive`) and
    * `lastTriggered`. Throws `NotFoundError` for an unknown id.
    */
-  update(id: number, params: UpdateOpportunityParams): Promise<T> {
-    // Stub: slice 4 packet P1
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async update(id: number, params: UpdateOpportunityParams): Promise<T> {
+    const path = `${this.path}/${recordId(id, 'opportunities.update')}`;
+    return writeRecord<T>(this.http, 'PUT', path, params);
   }
 }

@@ -1,4 +1,6 @@
+import { SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
+import { PropertyQualifier } from '../property-qualifier';
 import type {
   CreateCustomCurrencyParams,
   CustomCurrency,
@@ -8,7 +10,17 @@ import type {
   UpdateCustomCurrencyParams,
 } from '../record-types';
 import type { SirenList } from '../types';
+import { deleteRecord, listRecords, writeRecord } from './record-requests';
 import { RecordsResource } from './records';
+
+/** The one message every refused currency code throws. */
+const CODE_MESSAGE = 'Send a currency code as letters, digits, underscores and hyphens, such as STORE_CREDIT.';
+
+/** Returns `value` when Siren's route reads it as one code. Otherwise throws `SirenError` before sending. */
+function currencyCode(value: unknown): string {
+  if (!PropertyQualifier.isValidName(value)) throw new SirenError(CODE_MESSAGE);
+  return value;
+}
 
 /**
  * Custom currencies (`/currencies/custom`): points, store credit and other
@@ -51,10 +63,8 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    * `SirenError` before sending, and a 2xx that is not a list throws
    * `UnexpectedResponseError`, never an empty page.
    */
-  override list(params: CustomCurrencyListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 4 packet P4
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+  override async list(params: CustomCurrencyListParams = {}): Promise<SirenList<T>> {
+    return listRecords<T>(this.http, this.path, params, CustomCurrenciesResource.LIST_FILTERS);
   }
 
   /**
@@ -64,11 +74,11 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    * first row. `params.fields` picks the fields. The code and `number`
    * always win over anything else in `params`.
    */
-  retrieve(code: string, params: Pick<RecordListParams, 'fields'> = {}): Promise<T | null> {
-    // Stub: slice 4 packet P4
-    void code;
-    void params;
-    return Promise.resolve(null);
+  async retrieve(code: string, params: Pick<RecordListParams, 'fields'> = {}): Promise<T | null> {
+    const checked = currencyCode(code);
+    const query = { fields: params.fields, code: checked, number: 1 };
+    const rows = await listRecords<T>(this.http, this.path, query, CustomCurrenciesResource.LIST_FILTERS);
+    return rows[0] ?? null;
   }
 
   /**
@@ -81,10 +91,9 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    * the currency with {@link retrieve} first: an answer means the first
    * send worked.
    */
-  create(params: CreateCustomCurrencyParams): Promise<T> {
-    // Stub: slice 4 packet P4
-    void params;
-    return Promise.resolve({} as T);
+  async create(params: CreateCustomCurrencyParams): Promise<T> {
+    currencyCode(params.code);
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -94,11 +103,8 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    * for an unknown code. Sending it again after a lost answer sets the same
    * values, so it is safe.
    */
-  update(code: string, params: UpdateCustomCurrencyParams): Promise<T> {
-    // Stub: slice 4 packet P4
-    void code;
-    void params;
-    return Promise.resolve({} as T);
+  async update(code: string, params: UpdateCustomCurrencyParams): Promise<T> {
+    return writeRecord<T>(this.http, 'PUT', `${this.path}/${currencyCode(code)}`, params);
   }
 
   /**
@@ -112,10 +118,12 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    * `UnexpectedResponseError` when a 2xx carries no object. A resend after
    * a lost answer answers `NotFoundError` when the first send worked.
    */
-  delete(code: string, wipeLedger = false): Promise<DeletedCustomCurrency> {
-    // Stub: slice 4 packet P4
-    void code;
-    void wipeLedger;
-    return Promise.resolve({});
+  async delete(code: string, wipeLedger = false): Promise<DeletedCustomCurrency> {
+    const path = `${this.path}/${currencyCode(code)}`;
+    const answer = await deleteRecord<DeletedCustomCurrency>(this.http, path, wipeLedger === true ? { wipeLedger: true } : {});
+    if (answer === null) {
+      throw new UnexpectedResponseError(`Siren answered DELETE ${path} with no body.`, { statusCode: 204 });
+    }
+    return answer;
   }
 }
