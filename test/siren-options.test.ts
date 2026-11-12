@@ -19,14 +19,7 @@ import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
  * with the network mocked only at the HttpClient seam. The last two describe
  * blocks prove the slice's done condition: once at the seam, and once through
  * the real FetchHttpClient against a real HTTP server on 127.0.0.1.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
  */
-
 
 /** The real fetch, kept before failOnGlobalFetch replaces the global one. */
 const realFetch = globalThis.fetch;

@@ -34,6 +34,16 @@
     "failing": []
   },
   {
+    "id": "control-wrong-reason",
+    "file": "src/event-types.ts",
+    "find": "PayoutPaid: 'payout.paid',",
+    "replace": "PayoutPaid: 'payout.payed',",
+    "expect": "wrong-reason",
+    "failing": [
+      "P7: conversions.retrieve"
+    ]
+  },
+  {
     "id": "webhook-drop-event",
     "file": "src/event-types.ts",
     "find": "  StoreDisconnected: 'store.disconnected',\n",
@@ -351,8 +361,8 @@
   {
     "id": "wire-refund-drops-lines",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, lines: undefined });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, lines: undefined }, true);",
     "expect": "caught",
     "failing": [
       "sends a partial refund with amount, currency and named lines"
@@ -361,8 +371,8 @@
   {
     "id": "wire-refund-drops-kind",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, kind: undefined });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, kind: undefined }, true);",
     "expect": "caught",
     "failing": [
       "sends a whole cancellation"
@@ -371,8 +381,8 @@
   {
     "id": "wire-refund-drops-amount",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, amount: undefined });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, amount: undefined }, true);",
     "expect": "caught",
     "failing": [
       "sends a partial refund"
@@ -381,8 +391,8 @@
   {
     "id": "wire-visit-numeric",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('site-visited', params);",
-    "replace": "    return this.send('site-visited', { ...params, collaboratorId: Number(params.collaboratorId) });",
+    "find": "    return this.send(EventSlug.SiteVisited, params, false);",
+    "replace": "    return this.send(EventSlug.SiteVisited, { ...params, collaboratorId: Number(params.collaboratorId) }, false);",
     "expect": "caught",
     "failing": [
       "sends a tracking code reference as collaboratorId"
@@ -391,8 +401,8 @@
   {
     "id": "transport-retries-4xx",
     "file": "src/http.ts",
-    "find": "(response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;",
-    "replace": "(response.status === 429 || response.status >= 400) && attempt + 1 < maxAttempts;",
+    "find": "if ((response.status === 429 || response.status >= 500) && req.retriable && retries < this.maxRetries) {",
+    "replace": "if ((response.status === 429 || response.status >= 400) && req.retriable && retries < this.maxRetries) {",
     "expect": "caught",
     "failing": [
       "sends each refusal once"
@@ -421,8 +431,8 @@
   {
     "id": "wire-refund-drops-currency",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, currency: undefined });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, currency: undefined }, true);",
     "expect": "caught",
     "failing": [
       "sends a partial refund"
@@ -431,8 +441,8 @@
   {
     "id": "wire-refund-drops-refundid",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, refundId: undefined });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, refundId: undefined }, true);",
     "expect": "caught",
     "failing": [
       "sends a partial refund",
@@ -442,8 +452,8 @@
   {
     "id": "wire-refund-drops-whole",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, whole: undefined });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, whole: undefined }, true);",
     "expect": "caught",
     "failing": [
       "sends a whole cancellation"
@@ -452,8 +462,8 @@
   {
     "id": "wire-refund-line-drops-lineid",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, lines: params.lines?.map(({ lineId, ...line }) => (void lineId, line)) });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, lines: params.lines?.map(({ lineId, ...line }) => (void lineId, line)) }, true);",
     "expect": "caught",
     "failing": [
       "sends a partial refund"
@@ -462,8 +472,8 @@
   {
     "id": "wire-refund-line-drops-sku",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, lines: params.lines?.map(({ sku, ...line }) => (void sku, line)) });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, lines: params.lines?.map(({ sku, ...line }) => (void sku, line)) }, true);",
     "expect": "caught",
     "failing": [
       "sends a partial refund"
@@ -472,8 +482,8 @@
   {
     "id": "wire-refund-line-drops-quantity",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, lines: params.lines?.map(({ quantity, ...line }) => (void quantity, line)) });",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, { ...params, lines: params.lines?.map(({ quantity, ...line }) => (void quantity, line)) }, true);",
     "expect": "caught",
     "failing": [
       "sends a partial refund"
@@ -524,8 +534,8 @@
   {
     "id": "wire-visit-drops-userid",
     "file": "src/resources/events.ts",
-    "find": "    return this.send('site-visited', params);",
-    "replace": "    return this.send('site-visited', { collaboratorId: params.collaboratorId });",
+    "find": "    return this.send(EventSlug.SiteVisited, params, false);",
+    "replace": "    return this.send(EventSlug.SiteVisited, { collaboratorId: params.collaboratorId }, false);",
     "expect": "caught",
     "failing": [
       "still sends a numeric collaboratorId"
@@ -534,8 +544,8 @@
   {
     "id": "wire-sale-not-retriable",
     "file": "src/resources/events.ts",
-    "find": "      retriable: true,\n    });\n    const result: EventResult = {};",
-    "replace": "      retriable: slug !== 'sale',\n    });\n    const result: EventResult = {};",
+    "find": "    return this.send(EventSlug.Sale, payload, params.externalId != null);",
+    "replace": "    return this.send(EventSlug.Sale, payload, false);",
     "expect": "caught",
     "failing": [
       "retries a sale"
@@ -544,8 +554,8 @@
   {
     "id": "wire-refund-not-retriable",
     "file": "src/resources/events.ts",
-    "find": "      retriable: true,\n    });\n    const result: EventResult = {};",
-    "replace": "      retriable: slug !== 'refund',\n    });\n    const result: EventResult = {};",
+    "find": "    return this.send(EventSlug.Refund, params, true);",
+    "replace": "    return this.send(EventSlug.Refund, params, false);",
     "expect": "caught",
     "failing": [
       "retries a refund"
@@ -554,8 +564,8 @@
   {
     "id": "transport-retries-401",
     "file": "src/http.ts",
-    "find": "(response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;",
-    "replace": "(response.status === 429 || response.status >= 500 || response.status === 401) && attempt + 1 < maxAttempts;",
+    "find": "        throw refused;",
+    "replace": "        if (req.retriable && retries < this.maxRetries) {\n          retries += 1;\n          continue;\n        }\n        throw refused;",
     "expect": "caught",
     "failing": [
       "sends each refusal once"
@@ -564,8 +574,8 @@
   {
     "id": "transport-retries-403",
     "file": "src/http.ts",
-    "find": "(response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;",
-    "replace": "(response.status === 429 || response.status >= 500 || response.status === 403) && attempt + 1 < maxAttempts;",
+    "find": "if ((response.status === 429 || response.status >= 500) && req.retriable && retries < this.maxRetries) {",
+    "replace": "if ((response.status === 429 || response.status >= 500 || response.status === 403) && req.retriable && retries < this.maxRetries) {",
     "expect": "caught",
     "failing": [
       "sends each refusal once"
@@ -574,8 +584,8 @@
   {
     "id": "transport-retries-409",
     "file": "src/http.ts",
-    "find": "(response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;",
-    "replace": "(response.status === 429 || response.status >= 500 || response.status === 409) && attempt + 1 < maxAttempts;",
+    "find": "if ((response.status === 429 || response.status >= 500) && req.retriable && retries < this.maxRetries) {",
+    "replace": "if ((response.status === 429 || response.status >= 500 || response.status === 409) && req.retriable && retries < this.maxRetries) {",
     "expect": "caught",
     "failing": [
       "sends each refusal once"

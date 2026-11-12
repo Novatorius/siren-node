@@ -34,6 +34,16 @@
     "failing": []
   },
   {
+    "id": "control-wrong-reason",
+    "file": "src/auth/connector-scope.ts",
+    "find": "  ConnectAll: 'connect:*',",
+    "replace": "  ConnectAll: 'connect:all',",
+    "expect": "wrong-reason",
+    "failing": [
+      "P7: conversions.retrieve"
+    ]
+  },
+  {
     "id": "scope-webhooks",
     "file": "src/auth/connector-scope.ts",
     "find": "  Webhooks: 'connect:webhooks',",

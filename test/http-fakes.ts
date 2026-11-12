@@ -3,10 +3,24 @@ import type { AccessTokenSource } from '../src/auth/access-token-source';
 import type { HttpClient, HttpRequest, HttpResponse } from '../src/http';
 
 /*
- * Slice 2 test doubles. The network boundary in this slice is the SDK's
- * `HttpClient` seam, so the integration tests mock there and keep the real
- * transport and the real resources, per Integration Testing Standards (KB 568).
+ * Test doubles for the SDK's `HttpClient` seam. The seam is the network
+ * boundary, so the integration tests mock there and keep the real transport
+ * and the real resources, per Integration Testing Standards (KB 568).
  */
+
+/**
+ * Replaces the global fetch with one that fails the test when called, so a
+ * transport that ignores its client fails on that, not on a real network
+ * call. Undo it with `vi.unstubAllGlobals()`.
+ */
+export function failOnGlobalFetch(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new Error('the request went to the global fetch, not the HttpClient');
+    }),
+  );
+}
 
 /** An `HttpResponse` with a JSON body, or an empty body when `body` is undefined. */
 export function reply(

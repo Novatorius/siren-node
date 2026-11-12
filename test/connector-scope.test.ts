@@ -4,16 +4,9 @@ import { ConnectorScope } from '../src/index';
 /*
  * Slice 2 acceptance tests for packet P6: ConnectorScope.
  *
- * The four values and CONNECTED_SITE are vocabulary, written in full in the
- * architecture commit, so their tests run now. They come from the PHP SDK's
- * ConnectorScope at 59383e6 and Siren's ConnectorTokenMiddleware READ_SCOPE
- * and WRITE_SCOPE at bb49b7d.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * The four values and CONNECTED_SITE are vocabulary. They come from the PHP
+ * SDK's ConnectorScope at 59383e6 and Siren's ConnectorTokenMiddleware
+ * READ_SCOPE and WRITE_SCOPE at bb49b7d.
  */
 
 describe('ConnectorScope vocabulary', () => {
