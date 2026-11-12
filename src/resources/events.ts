@@ -12,11 +12,17 @@ import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '.
  * as `status` and `body`. While the organization's engine is paused, Siren
  * queues the event and answers 202, which sets `queued: true`.
  *
- * Sales, refunds and custom events retry on network errors and 429/5xx up
- * to the client's `maxRetries`. Siren answers a resent sale with the first
- * result and records each `refundId` once per order, so a retry records
- * nothing new. A site visit is sent once, because Siren records every visit
- * it receives, and a retry after a lost reply would record it twice.
+ * Sales and refunds retry on network errors and 429/5xx up to the client's
+ * `maxRetries`. Siren answers a resent sale with the first result and
+ * records each `refundId` once per order, so a retry records nothing new.
+ * Three sends go out once, because Siren has no key to match a resent copy,
+ * and a retry after a lost reply would record the event twice: a site visit,
+ * which Siren records every time it arrives, a custom event sent through
+ * `ingest`, whatever its slug, and a sale with no `externalId`, which Siren
+ * gives a random id when it is a test and refuses when it is not.
+ *
+ * Stub: slice 1 packet P10 makes `ingest` and a sale with no `externalId`
+ * go out once. Until then both are marked retriable.
  */
 export class EventsResource {
   constructor(private readonly http: HttpClient) {}
@@ -27,6 +33,12 @@ export class EventsResource {
    * `total` is in major currency units (9.99 = $9.99). When `items` are
    * supplied, reward pools compute `amount x quantity` per line; a missing
    * `quantity` defaults to 1.
+   *
+   * A sale whose `externalId` is missing or `null` is sent once, whatever
+   * `test` holds. Siren gives a test sale with no id a random one, so a
+   * resent copy would record a second test, and it refuses a real sale with
+   * no id. Every sale that carries an `externalId`, an empty one included,
+   * retries, since Siren matches it by `source` and `externalId`.
    */
   sale(params: SaleParams): Promise<EventResult> {
     const { items, ...rest } = params;
@@ -58,6 +70,11 @@ export class EventsResource {
   /**
    * Ingest a custom event type registered on your organization. `payload`
    * is passed through unchanged as the JSON body.
+   *
+   * Sent once, never retried, whatever the slug. Siren has no key to match a
+   * resent custom event, so a retry after a lost reply would record it twice.
+   * This also keeps `ingest('site-visited', ...)` to the same rule as
+   * `siteVisited`.
    */
   ingest(slug: string, payload: Record<string, unknown>): Promise<EventResult> {
     return this.send(slug, payload, true);

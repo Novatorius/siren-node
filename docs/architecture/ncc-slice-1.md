@@ -92,7 +92,10 @@ records it.
   wait instead, also capped at 8 s. The two catalog reads, `events.sale` and
   `events.refund` are marked `retriable`, and tests pin each one.
   `events.siteVisited` is not, as packet P9 makes it, because Siren records
-  every visit it receives. A caller with a durable queue sets
+  every visit it receives. `events.ingest` is not, whatever its slug, and
+  neither is a sale with no `externalId`, as packet P10 makes them. A sale
+  that carries an `externalId`, test or real, keeps its retry, and a test
+  pins that. A caller with a durable queue sets
   `maxRetries: 0`, because the queue owns redelivery, and an SDK retry inside
   a queued attempt would multiply the attempts.
 - **What each error means for a retry.**
@@ -116,6 +119,21 @@ records it.
   keeps both keys from the store's own order and refund, never one per
   attempt. A `duplicate` status in the result is a success. Siren records
   every visit it receives (`SiteVisitedFactory`), so a visit is sent once.
+  Siren matches no key on a custom event either, so `events.ingest` is sent
+  once. That rule holds for every slug, which keeps
+  `ingest('site-visited', ...)` from retrying a visit around P9. A test sale
+  with no `externalId`, or a `null` one, gets a random id from
+  `SaleEventFactory` (`first-call-` and 8 hex digits). A resent one records a
+  second test transaction, so the organization's test history shows two
+  tests where the store sent one. The SDK sends any sale whose `externalId`
+  is missing or `null` once, and reads nothing else from the params. Siren
+  reads `test` as true for `true`, `1`, `'1'` and `'true'`
+  (`IsBoolean::parse`), so a check on `test === true` would miss a test
+  sale from a JavaScript caller. A real sale with no `externalId` fails
+  Siren's validation with a 400 and is never retried anyway, so the wider
+  rule costs nothing. An empty string counts as an id. A sale that carries
+  an `externalId` is matched by `source` and `externalId`, and a test sale
+  with no `source` gets Siren's fixed test source, so both keep their retry.
 
 ## Why the vocabulary is written in full
 
@@ -146,6 +164,7 @@ fails them.
 | P7 | `ApiKeysResource.scopes()` | mechanical |
 | P8 | README, CHANGELOG and `openapi.yaml` for every change above | mechanical, docs |
 | P9 | `events.siteVisited` sent once, and the event sends name their routes by `EventSlug` | mechanical |
+| P10 | `events.ingest` sent once, a sale with no `externalId` sent once, and the README, CHANGELOG and note lines that say so | mechanical |
 
 ## Acceptance tests
 
@@ -153,7 +172,11 @@ fails them.
   or the PHP SDK, and each built-in event scope against its `EventSlug`.
 - `test/wire-events.test.ts`: the JSON body of a sale with `lineId`, a test
   sale, a partial and a whole refund, and a visit by tracking code. A sale
-  and a refund are retried on a 503. P9's tests send a visit once.
+  and a refund are retried on a 503, and so is a test sale with an
+  `externalId`, an empty one included. P9's tests send a visit once. P10's
+  tests send a custom event, `ingest('site-visited', ...)`,
+  `ingest('sale', ...)` and a sale with no `externalId` once, on a 503 and
+  on a dropped connection, whatever `test` holds.
 - `test/types/wire-types.ts`: compile-time contract, run by `npm run
   typecheck`. A refund without `refundId`, a real sale without `trackingId`,
   a bad `kind` and a bare text `collaboratorId` each fail to typecheck.
@@ -167,7 +190,10 @@ fails them.
   README for each new field, route, event, code, method and class. The API
   reference documents the wire. The record vocabularies are SDK exports with
   no wire field of their own yet, so the CHANGELOG names them and the
-  reference does not.
+  reference does not. P10's test reads the README and the CHANGELOG's
+  Unreleased section for the two send-once rules, and refuses any sentence
+  that says, without a "never", "not" or "no longer", that custom events,
+  event ingestion or `events.ingest` retry.
 - `test/webhooks.test.ts`: the event count test expects 64.
 
 Each packet's tests carry the `it.skip` marker until its implementer removes

@@ -8,8 +8,9 @@ import { ErrorCode, WebhookEventType } from '../src/index';
  * repository ships, so each new field, route, event and code must appear in
  * it, and the CHANGELOG and README must name each new public method and class.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to packet P8. Its
- * implementer turns `it.skip(` into `it(` and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
+ * its describe block. That packet's implementer turns `it.skip(` into `it(`
+ * for its own tests and changes nothing else here.
  */
 
 function read(name: string): string {
@@ -123,5 +124,38 @@ describe('P8: CHANGELOG and README', () => {
     expect(readme).toMatch(/lines:\s*\[/);
     expect(readme).toContain('subscriptions.events()');
     expect(readme).toContain('apiKeys.scopes()');
+  });
+});
+
+describe('P10: CHANGELOG and README', () => {
+  /** A document's sentences, with line breaks and indents folded to one space. */
+  function sentences(text: string): string[] {
+    return text.replace(/\s+/g, ' ').split(/(?<=\.) /);
+  }
+
+  /** A sentence that says custom events, event ingestion or events.ingest retry, with no negation. */
+  function claimsIngestRetries(sentence: string): boolean {
+    const retries = /(\bcustom events?\b|\bevent ingestion\b|`events\.ingest`)[^.]*\b(auto-?)?retr(y|ies|ied|ying)\b/i;
+    return retries.test(sentence) && !/\b(never|not|no longer)\b/i.test(sentence);
+  }
+
+  it.skip('say events.ingest and a sale with no externalId are sent once, and never that custom events retry', () => {
+    for (const [name, text] of [
+      ['README.md', read('README.md')],
+      ['CHANGELOG Unreleased', unreleased()],
+    ] as const) {
+      const all = sentences(text);
+      for (const sentence of all) {
+        expect(claimsIngestRetries(sentence), `${name}: ${sentence}`).toBe(false);
+      }
+      expect(
+        all.some((s) => /`events\.ingest`[^.]*\bsent once\b/.test(s)),
+        `${name} says events.ingest is sent once`,
+      ).toBe(true);
+      expect(
+        all.some((s) => /\bsale\b[^.]*\b(with no|without an?)\s+`externalId`[^.]*\bsent once\b/i.test(s)),
+        `${name} says a sale with no externalId is sent once`,
+      ).toBe(true);
+    }
   });
 });
