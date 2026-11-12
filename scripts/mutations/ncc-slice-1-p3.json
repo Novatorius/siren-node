@@ -1,0 +1,189 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/errors.ts",
+    "find": "    if (isKnownErrorCode(code)) return POLICY_ERROR_CODES.includes(code);\n    if (typeof contextOf(data).param === 'string') return true;",
+    "replace": "    if (code !== '\\u0000') return false;",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with each policy code to PolicyError"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/errors.ts",
+    "find": "/** What Siren says when a route's authorization policy refuses the caller. */",
+    "replace": "/** What Siren says when a route's authorization policy refuses the caller, unchanged. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/errors.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/errors.ts",
+    "find": "    if (typeof contextOf(data).param === 'string') return true;",
+    "replace": "    if (typeof contextOf(data).param === 'string' return true;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "policy-drop-known-code-rule",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return POLICY_ERROR_CODES.includes(code);",
+    "replace": "if (isKnownErrorCode(code) && POLICY_ERROR_CODES.includes(code)) return true;",
+    "expect": "caught",
+    "failing": [
+      "keeps a 403 with a known code outside the policy list a plain PermissionError, whatever the wording",
+      "answers matches() by the same rule"
+    ]
+  },
+  {
+    "id": "policy-codes-ignored",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return POLICY_ERROR_CODES.includes(code);",
+    "replace": "if (isKnownErrorCode(code)) return false;",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with each policy code to PolicyError"
+    ]
+  },
+  {
+    "id": "policy-one-code-only",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return POLICY_ERROR_CODES.includes(code);",
+    "replace": "if (isKnownErrorCode(code)) return code === ErrorCode.FieldNotAllowed;",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with each policy code to PolicyError"
+    ]
+  },
+  {
+    "id": "policy-unknown-code-decides",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return POLICY_ERROR_CODES.includes(code);",
+    "replace": "if (code !== undefined) return (POLICY_ERROR_CODES as readonly string[]).includes(code);",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with an unknown code by its wording"
+    ]
+  },
+  {
+    "id": "policy-drop-param-match",
+    "file": "src/errors.ts",
+    "find": "    if (typeof contextOf(data).param === 'string') return true;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with no code to PolicyError when the context names a refused field"
+    ]
+  },
+  {
+    "id": "policy-param-match-any-type",
+    "file": "src/errors.ts",
+    "find": "    if (typeof contextOf(data).param === 'string') return true;",
+    "replace": "    if (contextOf(data).param !== undefined) return true;",
+    "expect": "caught",
+    "failing": [
+      "keeps a 403 whose context param is not a string a plain PermissionError"
+    ]
+  },
+  {
+    "id": "policy-param-match-not-empty",
+    "file": "src/errors.ts",
+    "find": "    if (typeof contextOf(data).param === 'string') return true;",
+    "replace": "    if (typeof contextOf(data).param === 'string' && contextOf(data).param !== '') return true;",
+    "expect": "caught",
+    "failing": [
+      "counts an empty string param as named, as the PHP SDK does"
+    ]
+  },
+  {
+    "id": "param-not-read",
+    "file": "src/errors.ts",
+    "find": "    if (typeof param === 'string') this.param = param;",
+    "replace": "    void param;",
+    "expect": "caught",
+    "failing": [
+      "reads the refused field from error.context.param",
+      "maps a 403 with no code to PolicyError when the context names a refused field"
+    ]
+  },
+  {
+    "id": "param-any-type",
+    "file": "src/errors.ts",
+    "find": "    if (typeof param === 'string') this.param = param;",
+    "replace": "    if (param !== undefined) this.param = param as string;",
+    "expect": "caught",
+    "failing": [
+      "leaves param undefined when the context names no field"
+    ]
+  },
+  {
+    "id": "param-not-empty",
+    "file": "src/errors.ts",
+    "find": "    if (typeof param === 'string') this.param = param;",
+    "replace": "    if (typeof param === 'string' && param !== '') this.param = param;",
+    "expect": "caught",
+    "failing": [
+      "counts an empty string param as named, as the PHP SDK does"
+    ]
+  },
+  {
+    "id": "wording-case-sensitive",
+    "file": "src/errors.ts",
+    "find": "    const wording = message.toLowerCase();",
+    "replace": "    const wording = message;",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with no code by each piece of policy wording, in any case"
+    ]
+  },
+  {
+    "id": "wording-drop-denied",
+    "file": "src/errors.ts",
+    "find": "      wording === PolicyError.DENIED_MESSAGE.toLowerCase() ||\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with no code by each piece of policy wording, in any case"
+    ]
+  },
+  {
+    "id": "wording-denied-as-substring",
+    "file": "src/errors.ts",
+    "find": "      wording === PolicyError.DENIED_MESSAGE.toLowerCase() ||",
+    "replace": "      wording.includes(PolicyError.DENIED_MESSAGE.toLowerCase()) ||",
+    "expect": "caught",
+    "failing": [
+      "leaves a 403 with no code and other wording a plain PermissionError"
+    ]
+  },
+  {
+    "id": "wording-drop-connected-site",
+    "file": "src/errors.ts",
+    "find": "      wording.includes('connected site') ||\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with no code by each piece of policy wording, in any case"
+    ]
+  },
+  {
+    "id": "wording-drop-run-on-this-site",
+    "file": "src/errors.ts",
+    "find": "      wording.includes('connected site') ||\n      wording.includes('run on this site')",
+    "replace": "      wording.includes('connected site')",
+    "expect": "caught",
+    "failing": [
+      "maps a 403 with no code by each piece of policy wording, in any case",
+      "maps a 403 with an unknown code by its wording"
+    ]
+  }
+]

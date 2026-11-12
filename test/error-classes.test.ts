@@ -180,7 +180,7 @@ describe('P3: PolicyError', () => {
     expect(PolicyError.DENIED_MESSAGE).toBe("You don't have permission to do that.");
   });
 
-  it.skip('maps a 403 with each policy code to PolicyError', async () => {
+  it('maps a 403 with each policy code to PolicyError', async () => {
     for (const code of POLICY_ERROR_CODES) {
       const error = await thrownBy(403, err('Refused.', code));
       expect(error, code).toBeInstanceOf(PolicyError);
@@ -192,7 +192,7 @@ describe('P3: PolicyError', () => {
     }
   });
 
-  it.skip('keeps a 403 with a known code outside the policy list a plain PermissionError, whatever the wording', async () => {
+  it('keeps a 403 with a known code outside the policy list a plain PermissionError, whatever the wording', async () => {
     for (const code of ['plan_required', 'admin_required', 'migration_closed', 'email_confirmation_required']) {
       const error = await thrownBy(403, err("You don't have permission to do that. A connected site may not.", code));
       expect(error, code).toBeInstanceOf(PermissionError);
@@ -200,25 +200,25 @@ describe('P3: PolicyError', () => {
     }
   });
 
-  it.skip('reads the refused field from error.context.param', async () => {
+  it('reads the refused field from error.context.param', async () => {
     const error = await thrownBy(403, err('A site may not set status.', 'field_not_allowed', { param: 'status' }));
     expect((error as PolicyError).param).toBe('status');
   });
 
-  it.skip('leaves param undefined when the context names no field', async () => {
+  it('leaves param undefined when the context names no field', async () => {
     const withoutParam = await thrownBy(403, err('Refused.', 'not_permitted'));
     expect((withoutParam as PolicyError).param).toBeUndefined();
     const numericParam = await thrownBy(403, err('Refused.', 'not_permitted', { param: 7 }));
     expect((numericParam as PolicyError).param).toBeUndefined();
   });
 
-  it.skip('maps a 403 with no code to PolicyError when the context names a refused field', async () => {
+  it('maps a 403 with no code to PolicyError when the context names a refused field', async () => {
     const error = await thrownBy(403, err('Refused.', undefined, { param: 'email' }));
     expect(error).toBeInstanceOf(PolicyError);
     expect((error as PolicyError).param).toBe('email');
   });
 
-  it.skip('maps a 403 with no code by each piece of policy wording, in any case', async () => {
+  it('maps a 403 with no code by each piece of policy wording, in any case', async () => {
     for (const message of [
       "You don't have permission to do that.",
       "YOU DON'T HAVE PERMISSION TO DO THAT.",
@@ -229,12 +229,12 @@ describe('P3: PolicyError', () => {
     }
   });
 
-  it.skip('maps a 403 with an unknown code by its wording', async () => {
+  it('maps a 403 with an unknown code by its wording', async () => {
     const error = await thrownBy(403, err('That program does not run on this site.', 'legacy_refusal'));
     expect(error).toBeInstanceOf(PolicyError);
   });
 
-  it.skip('leaves a 403 with no code and other wording a plain PermissionError', async () => {
+  it('leaves a 403 with no code and other wording a plain PermissionError', async () => {
     for (const message of ['Forbidden.', "You don't have permission to do that. Ask an organization admin."]) {
       const error = await thrownBy(403, err(message));
       expect(error, message).toBeInstanceOf(PermissionError);
@@ -242,7 +242,7 @@ describe('P3: PolicyError', () => {
     }
   });
 
-  it.skip('checks the scope and store wording before the policy wording', async () => {
+  it('checks the scope and store wording before the policy wording', async () => {
     const scope = await thrownBy(403, err('A connected site is not authorized for records:programs:read.'));
     expect(scope).toBeInstanceOf(MissingScopeError);
     expect(scope).not.toBeInstanceOf(PolicyError);
@@ -251,7 +251,7 @@ describe('P3: PolicyError', () => {
     expect(store).not.toBeInstanceOf(PolicyError);
   });
 
-  it.skip('answers matches() by the same rule', () => {
+  it('answers matches() by the same rule', () => {
     expect(PolicyError.matches('Refused.', 'report_not_allowed')).toBe(true);
     expect(PolicyError.matches('Refused.', undefined, { param: 'status' })).toBe(true);
     expect(PolicyError.matches('Refused.', 'plan_required', { param: 'status' })).toBe(false);
