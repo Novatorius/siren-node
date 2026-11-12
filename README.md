@@ -260,7 +260,7 @@ await siren.collaborators.bulk(CollaboratorBulkAction.AddToProgram, [42, 43], { 
 
 A connected site creates a collaborator with `createPending`, which sends `fullName`, `nickname`
 and `email` with `status: 'pending'` so the organization approves them, and throws `SirenError`
-for any other key. The site changes a collaborator only with `updateDetails`, which sends
+for any other field. The site changes a collaborator only with `updateDetails`, which sends
 `fullName` and `nickname` and throws `SirenError` for any other key.
 
 ```ts
