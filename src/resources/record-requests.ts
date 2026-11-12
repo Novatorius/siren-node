@@ -4,7 +4,8 @@ import type { SirenList } from '../types';
 /*
  * The requests every record resource sends, in one place, so a rule cannot
  * reach one resource and miss another. Reads are retriable. Writes and
- * deletes are sent once, whatever the client's `maxRetries`, because a
+ * deletes are sent once, whatever the client's `maxRetries`, apart from the
+ * one resend after a 401 that every request gets, because a
  * second create makes a second record and a second delete of a collaborator
  * or a program removes the record the first one only marked deleted. This
  * mirrors the PHP SDK's ListResource, `write()` and `remove()`.
@@ -81,7 +82,7 @@ export interface ListIdFilters {
  * `filters` names the filter keys the route reads. Siren ignores a key it
  * does not read and answers every record, so a key that is neither one of
  * {@link LIST_CONTROL_KEYS} nor in `filters` throws `SirenError` naming it,
- * `propertyId` included.
+ * `propertyId` included, even when its value is `undefined`.
  *
  * Throws `SirenError` naming the key, before sending, for a value Siren
  * could not read as sent: an object, `null`, a function, a list holding
@@ -113,9 +114,9 @@ export function recordListQuery(
  *
  * Throws `UnexpectedResponseError` with the status Siren sent when a 2xx
  * body is neither a JSON array nor an object whose `items` is an array, an
- * empty body included, or when any row is not a JSON object.
- * `RecordsResource.list()` reads such a body as an empty page. A record list never does, since "nobody holds this code" must
- * not stand in for a broken answer.
+ * empty body included, or when any row is not a JSON object. It never
+ * answers an empty page for such a body, since "nobody holds this code"
+ * must not stand in for a broken answer.
  *
  * @internal
  */

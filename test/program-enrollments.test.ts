@@ -10,10 +10,11 @@ import {
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
 import {
-  CollaboratorAnswers,
   bodyOf,
+  CollaboratorAnswers,
   expectRetried,
   expectSentOnce,
+  malformedSuccess,
   page,
   pathOf,
   queryOf,
@@ -85,7 +86,7 @@ describe('P5: enrollments.list', () => {
   });
 
   it.skip('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
-    const { enrollments } = over([reply(200, { error: 'Something went wrong.' })]);
+    const { enrollments } = over([reply(200, malformedSuccess)]);
 
     await expect(enrollments.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
@@ -176,7 +177,7 @@ describe('P5: enrollments through the collaborator record', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('collaboratorsIn refuses a programId in params rather than lose it to the argument, and sends nothing', async () => {
+  it.skip('collaboratorsIn refuses a programId in params and sends nothing', async () => {
     const { http, enrollments } = over([reply(200, page([]))]);
 
     const error = await enrollments.collaboratorsIn(12, { programId: 99 } as never).catch((thrown: unknown) => thrown);
@@ -205,6 +206,13 @@ describe('P5: enrollments through the collaborator record', () => {
       ['POST', '/collaborators/bulk', '{"action":"addToProgram","ids":[4,5],"programId":12}'],
       ['POST', '/collaborators/bulk', '{"action":"removeFromProgram","ids":[4],"programId":12}'],
     ]);
+  });
+
+  it.skip('answers a partial enroll or unenroll as Siren sends it, with affected lower than the ids sent', async () => {
+    const { enrollments } = over([reply(200, { success: true, affected: 1 })]);
+
+    expect(await enrollments.enroll(12, [4, 5])).toEqual({ success: true, affected: 1 });
+    expect(await enrollments.unenroll(12, [4, 5])).toEqual({ success: true, affected: 1 });
   });
 
   it.skip('replaces the enrollments with exactly these programs, an empty list included', async () => {

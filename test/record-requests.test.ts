@@ -18,6 +18,7 @@ import {
   bodyOf,
   expectRetried,
   expectSentOnce,
+  malformedSuccess,
   pathOf,
   queryOf,
   rateLimited,
@@ -129,6 +130,7 @@ describe('P1: recordListQuery', () => {
     ['a function', { s: () => 'x' }],
     ['a key the route does not read', { propertyId: 5 }],
     ['a misspelt filter', { programID: 5 }],
+    ['a key the route does not read, set to undefined', { propertyId: undefined }],
     ['an empty filter list', { status: [] }],
     ['an empty id list', { id: [] }],
   ])('refuses %s with SirenError naming the key', (_label, params) => {
@@ -222,7 +224,7 @@ describe('P1: listRecords', () => {
   });
 
   it.skip.each([
-    ['an error object', reply(200, { error: 'Something went wrong.' })],
+    ['an error object', reply(200, malformedSuccess)],
     ['items that are not a list', reply(200, { items: { id: 1 }, total: 1 })],
     ['a JSON null', reply(200, null)],
     ['a string', reply(200, 'ok')],

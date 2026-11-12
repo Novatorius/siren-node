@@ -11,7 +11,18 @@ import {
 } from '../src/index';
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
-import { GroupAnswers, bodyOf, expectRetried, expectSentOnce, page, pathOf, queryOf, transportOver } from './record-fakes';
+import {
+  bodyOf,
+  emptyNotFound,
+  expectRetried,
+  expectSentOnce,
+  GroupAnswers,
+  malformedSuccess,
+  page,
+  pathOf,
+  queryOf,
+  transportOver,
+} from './record-fakes';
 
 /*
  * Slice 3 acceptance tests for packet P6: CollaboratorGroupsResource, the
@@ -63,7 +74,7 @@ describe('P6: collaboratorGroups reads', () => {
   });
 
   it.skip('raises NotFoundError for the empty 404 of an unknown group', async () => {
-    await expect(over([reply(404)]).groups.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(over([emptyNotFound()]).groups.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it.skip('reads the structures', async () => {
@@ -158,7 +169,7 @@ describe('P6: collaboratorGroups list and retrieve rules', () => {
   });
 
   it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
-    const { groups } = over([reply(200, { error: 'Something went wrong.' })]);
+    const { groups } = over([reply(200, malformedSuccess)]);
 
     await expect(groups.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });

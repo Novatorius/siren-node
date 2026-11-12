@@ -265,7 +265,7 @@ describe('record vocabulary', () => {
   // Slice 3. Siren Cloud at b6f7140: the IsAny list in
   // lib/Collaborators/Rest/Service/CollaboratorBulkAction.php line 261. The
   // PHP SDK's Collaborators::BULK_* constants (src/Resources/Collaborators.php
-  // lines 20 to 29) lack `reject`, which Cloud accepts, so Cloud's list wins.
+  // lines 20 to 29) lack `reject`, which Cloud accepts, so the SDK follows Cloud.
   it('CollaboratorBulkAction holds every action Siren runs on collaborators', () => {
     expect(CollaboratorBulkAction).toEqual({
       Activate: 'activate',

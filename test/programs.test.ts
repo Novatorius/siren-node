@@ -10,7 +10,17 @@ import {
 } from '../src/index';
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
-import { ProgramAnswers, bodyOf, expectRetried, expectSentOnce, page, pathOf, queryOf, transportOver } from './record-fakes';
+import {
+  bodyOf,
+  expectRetried,
+  expectSentOnce,
+  malformedSuccess,
+  page,
+  pathOf,
+  ProgramAnswers,
+  queryOf,
+  transportOver,
+} from './record-fakes';
 
 /*
  * Slice 3 acceptance tests for packet P8: ProgramsResource, the `/programs`
@@ -47,10 +57,22 @@ describe('P8: programs reads', () => {
   it.skip('lists GET /programs with filters, the group filter and paging', async () => {
     const { http, programs } = over([reply(200, page([ProgramAnswers.listed], 1, 50))]);
 
-    const list = await programs.list({ status: ProgramStatus.Active, units: ['USD', 'PTS'], programGroupId: 2, number: 50 });
+    const list = await programs.list({
+      status: ProgramStatus.Active,
+      units: ['USD', 'PTS'],
+      programGroupId: 2,
+      engagementType: 'sale',
+      number: 50,
+    });
 
     expect([http.requests[0]!.method, pathOf(http.requests[0])]).toEqual(['GET', '/programs']);
-    expect(queryOf(http.requests[0])).toEqual({ status: 'active', units: 'USD,PTS', programGroupId: '2', number: '50' });
+    expect(queryOf(http.requests[0])).toEqual({
+      status: 'active',
+      units: 'USD,PTS',
+      programGroupId: '2',
+      engagementType: 'sale',
+      number: '50',
+    });
     expect([...list]).toEqual([ProgramAnswers.listed]);
     expect(list.estimatedCount).toBe(1);
   });
@@ -162,7 +184,15 @@ describe('P8: programs writes', () => {
 
 describe('P8: programs list and retrieve rules', () => {
   it('names the filters list sends', () => {
-    expect(ProgramsResource.LIST_FILTERS).toEqual(['status', 'incentiveType', 'incentiveResolverType', 'units', 's', 'programGroupId']);
+    expect(ProgramsResource.LIST_FILTERS).toEqual([
+      'status',
+      'incentiveType',
+      'incentiveResolverType',
+      'units',
+      's',
+      'programGroupId',
+      'engagementType',
+    ]);
     expect(ProgramsResource.ID_FILTERS).toEqual({ one: ['programGroupId'] });
   });
 
@@ -183,7 +213,7 @@ describe('P8: programs list and retrieve rules', () => {
   });
 
   it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
-    const { programs } = over([reply(200, { error: 'Something went wrong.' })]);
+    const { programs } = over([reply(200, malformedSuccess)]);
 
     await expect(programs.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });

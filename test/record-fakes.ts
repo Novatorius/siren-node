@@ -237,7 +237,6 @@ export const CollaboratorAnswers = {
       },
     },
   },
-  /** CollaboratorBulkAction.php lines 181 to 190 and describeSignupEmailFailure at line 202, two of three signup emails sent. Status 502. */
   /**
    * saas/Auth/ConnectorRequestRules.php line 1081, with the code from
    * lib/Core/Service/Rest/ApiErrorCode.php line 43. Status 403, the default
@@ -250,6 +249,7 @@ export const CollaboratorAnswers = {
       context: { param: 'type' },
     },
   },
+  /** CollaboratorBulkAction.php lines 181 to 190 and describeSignupEmailFailure at line 202, two of three signup emails sent. Status 502. */
   signupEmailFailed: {
     error: {
       message: 'Signup email sent to 2 collaborator(s). 1 could not be sent. Please try again or contact support.',
@@ -266,6 +266,21 @@ export const CollaboratorAnswers = {
 export const rateLimited = {
   error: { message: 'Too many requests. Please try again later.', context: { retryAfter: 0 } },
 } as const;
+
+/**
+ * The empty 404 Siren answers for an unknown id: GetCollaboratorById.php
+ * lines 131 and 132, GetCollaboratorGroupById.php lines 75 and 76 and
+ * GetProgramGroupById.php lines 125 and 126 set the status and no body.
+ */
+export function emptyNotFound(): HttpResponse {
+  return reply(404);
+}
+
+/**
+ * A 2xx that is not a record answer. Siren never sends it. The tests use it
+ * to prove a wrong-shaped success throws `UnexpectedResponseError`.
+ */
+export const malformedSuccess = { error: 'Something went wrong.' } as const;
 
 /** saas/Strategies/RestStrategy.php line 330, the answer for an error nothing else caught. Status 500. */
 export const unexpectedFailure = {

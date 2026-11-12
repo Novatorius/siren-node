@@ -8,7 +8,17 @@ import {
 } from '../src/index';
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
-import { GroupAnswers, bodyOf, expectRetried, expectSentOnce, page, pathOf, queryOf, transportOver } from './record-fakes';
+import {
+  bodyOf,
+  expectRetried,
+  expectSentOnce,
+  GroupAnswers,
+  malformedSuccess,
+  page,
+  pathOf,
+  queryOf,
+  transportOver,
+} from './record-fakes';
 
 /*
  * Slice 3 acceptance tests for packet P7: CollaboratorGroupMembersResource,
@@ -141,7 +151,7 @@ describe('P7: members list and retrieve rules', () => {
   });
 
   it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
-    const { members } = over([reply(200, { error: 'Something went wrong.' })]);
+    const { members } = over([reply(200, malformedSuccess)]);
 
     await expect(members.list(5)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });

@@ -139,7 +139,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    *
    * After a lost answer, what a resend does depends on the email. For
    * someone the organization already has, Siren answers the held record it
-   * already made and does not email the person twice. For someone new, the
+   * already made, and emails the person again only after a day or when the
+   * first email failed. For someone new, the
    * first send already created the collaborator, so Siren refuses the resend
    * as a duplicate email with a 400. List with `{ email }` to find the
    * record before sending again.
@@ -161,7 +162,7 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * answers the record Siren reads back after the write. Send only the
    * fields to change. A binding list that is sent replaces the whole set.
    * `fields` is the custom-field map, and the answer carries it back when it
-   * is sent.
+   * is sent. Sending it again after a lost answer sets the same values, so it is safe.
    */
   update(id: number, params: UpdateCollaboratorParams): Promise<T> {
     // Stub: slice 3 packet P3
@@ -184,7 +185,7 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * field, `status`, `email`, `trackingId` (codes change through
    * `aliases.create()` and `aliases.free()`), `fields`, `id` or any other.
    * The message is exactly `updateDetails cannot send "{key}". A connected
-   * site changes only fullName and nickname.`
+   * site changes only fullName and nickname.` Sending it again after a lost answer sets the same values, so it is safe.
    */
   updateDetails(id: number, params: UpdateCollaboratorDetailsParams): Promise<T> {
     // Stub: slice 3 packet P3
@@ -202,7 +203,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    *
    * After a lost answer, `retrieve` the record before sending again: a
    * second delete of a record the first one marked deleted removes it for
-   * good.
+   * good. A record with status `deleted` means the first send worked, and
+   * `NotFoundError` means the record is gone.
    */
   delete(id: number): Promise<T | null> {
     // Stub: slice 3 packet P3
@@ -211,12 +213,14 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
   }
 
   /**
-   * Runs a bulk action with `POST /collaborators/bulk`, sent once.
-   * `addToProgram` and `removeFromProgram` need `{ programId }` in `extra`,
-   * and the distributor actions need `{ distributorId }`. Takes 1 to 500
-   * ids. `extra.programId` and `extra.distributorId`, when present, must be
-   * positive whole numbers, or `SirenError` is thrown before sending, since
-   * Siren casts them to whole numbers.
+   * Runs a bulk action with `POST /collaborators/bulk`, sent once. Takes 1
+   * to 500 ids. Each action takes only its own extra: `addToProgram` and
+   * `removeFromProgram` need `{ programId }` in `extra`, the distributor
+   * actions need `{ distributorId }`, and every other action takes none.
+   * Before sending, `SirenError` names any other key in `extra`, a missing
+   * one, and a `programId` or `distributorId` that is not a positive whole
+   * number, since Cloud hands every parameter to the action and casts the
+   * ids to whole numbers.
    *
    * Siren skips ids it cannot find or fails to change and still answers 200,
    * so an `affected` count lower than the number of ids sent means some
@@ -225,7 +229,9 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * `sent` and `failed` counts in `data`. Do not resend the whole batch after it,
    * since the `sent` ones already went out. Siren keeps no record of a sent
    * signup email, so any resend of `sendSignupEmail`, after a lost answer
-   * too, emails every id in it again.
+   * too, emails every id in it again. The status actions change nothing for
+   * an id already in that status and send no second decision email, so a
+   * resend of one is safe.
    */
   bulk(
     action: CollaboratorBulkAction,

@@ -19,10 +19,12 @@ import {
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
 import {
-  CollaboratorAnswers,
   bodyOf,
+  CollaboratorAnswers,
+  emptyNotFound,
   expectRetried,
   expectSentOnce,
+  malformedSuccess,
   page,
   pathOf,
   queryOf,
@@ -131,7 +133,7 @@ describe('P3: collaborators.list', () => {
   });
 
   it.skip('throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
-    const { collaborators } = over([reply(200, { error: 'Something went wrong.' })]);
+    const { collaborators } = over([reply(200, malformedSuccess)]);
 
     await expect(collaborators.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
@@ -162,7 +164,7 @@ describe('P3: collaborators.retrieve', () => {
   });
 
   it.skip('raises NotFoundError for the empty 404 Siren answers for an unknown id', async () => {
-    const { collaborators } = over([reply(404)]);
+    const { collaborators } = over([emptyNotFound()]);
 
     await expect(collaborators.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -398,6 +400,22 @@ describe('P3: collaborators.bulk', () => {
 
     expect(error).toBeInstanceOf(SirenError);
     expect((error as SirenError).message).toContain(field);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip.each([
+    ['activate with a programId', CollaboratorBulkAction.Activate, { programId: 5 }, 'programId'],
+    ['addToProgram without a programId', CollaboratorBulkAction.AddToProgram, {}, 'programId'],
+    ['addToProgram with a distributorId too', CollaboratorBulkAction.AddToProgram, { programId: 5, distributorId: 3 }, 'distributorId'],
+    ['addToDistributor with a key it does not read', CollaboratorBulkAction.AddToDistributor, { distributorId: 3, note: 'x' }, 'note'],
+    ['sendSignupEmail with any extra', CollaboratorBulkAction.SendSignupEmail, { force: true }, 'force'],
+  ])('refuses %s with SirenError naming the key, and sends nothing', async (_label, action, extra, key) => {
+    const { http, collaborators } = over([reply(200, CollaboratorAnswers.bulk)]);
+
+    const error = await collaborators.bulk(action, [1], extra).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain(key);
     expect(http.requests).toHaveLength(0);
   });
 

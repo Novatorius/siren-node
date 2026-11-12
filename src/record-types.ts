@@ -324,6 +324,8 @@ export interface ProgramListParams extends RecordListParams {
   s?: string;
   /** Programs in this program group: one id, never a list, since Siren reads it as one whole number. */
   programGroupId?: number;
+  /** Programs with a rule for this engagement type, such as `sale`. One type, matched exactly. */
+  engagementType?: string;
   orderBy?:
     | 'id'
     | 'name'
