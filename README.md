@@ -365,6 +365,23 @@ await siren.conversions.bulk(ConversionBulkAction.Approve, [101, 102]);
 
 Send a binding with `transactions.create` whenever the outside record has an id. A resend after a
 lost answer then gets a 409, raised as `ConflictError`, instead of making a second transaction.
+Siren finds the first send only by `bindingId` and `bindingDataType` together, so the SDK refuses
+one without the other, and a binding of `""`, `"0"` or `0`, which Siren reads as none.
+
+A conversion create and a collaborator credit take no binding. After either loses its answer, send
+it again through `conversions.recoverCreate` or `transactions.recoverCreditCollaborator`, with the
+same arguments. Each reads the conversions Siren holds and sends the write only for what is
+missing. An answer it cannot read raises `UnexpectedResponseError` and sends nothing, so a broken
+answer never makes a second conversion.
+
+```ts
+const { conversion, created } = await siren.conversions.recoverCreate({
+  engagementId: 31,
+  transactionId: 71,
+  type: 'sale',
+  status: 'pending',
+});
+```
 
 `siren.credits` reads a collaborator's store credit and places the checkout holds that reserve it.
 `CreditsResource.holdReference` builds the reference a checkout's holds carry, for the `holds`
@@ -402,7 +419,9 @@ const settings = await siren.settings.collaborator();
 Every write here is sent once, as in the section above, apart from the one resend after a 401.
 Each write's doc says what a second send does and how to check before you send it again. Reads
 retry on a network error, 429 or 5xx inside `maxRetries`. Each list throws `SirenError` for a key
-its route does not read, and every id must be a positive whole number.
+its route does not read, and every id must be a positive whole number. The conversion, transaction,
+custom currency and distributor creates send only the fields Siren reads and throw `SirenError`
+for any other key, naming it.
 
 ## Parity with the PHP SDK
 
@@ -410,8 +429,10 @@ The Node SDK carries every public method of the Siren PHP SDK 0.3.0 under the sa
 left out. The table lists each PHP method, its Node name, and how the two differ where they do.
 Across every record resource, Node throws `SirenError` before sending where PHP throws
 `InvalidArgumentException`, a list answers a `SirenList` with `estimatedCount` where PHP answers
-a `ListResult`, a 2xx answer of the wrong shape raises `UnexpectedResponseError`, and every
-record write is sent once.
+a `ListResult`, a 2xx answer of the wrong shape raises `UnexpectedResponseError`, every
+record write is sent once, and a `retrieve` sends only `fields`, `include` and `propertyId`, where
+PHP passes any key. The table covers the resource methods. PHP's `ListResource` also has three
+public static helpers (`listQuery`, `query` and `toListResult`), which Node keeps internal.
 
 | PHP | Node | Difference |
 |---|---|---|
@@ -432,17 +453,17 @@ record write is sent once.
 | `$siren->apiKeys->revoke()` | `siren.apiKeys.revoke()` |  |
 | `$siren->conversions->list()` | `siren.conversions.list()` |  |
 | `$siren->conversions->retrieve()` | `siren.conversions.retrieve()` |  |
-| `$siren->conversions->create()` | `siren.conversions.create()` |  |
+| `$siren->conversions->create()` | `siren.conversions.create()` | Sends only the five fields Siren reads and refuses any other key, and refuses an `engagementId`, `transactionId` or `obligationId` that is not a positive whole number, where PHP sends the array as given. After a lost answer, `recoverCreate` sends it again only when Siren holds no such conversion. |
 | `$siren->conversions->update()` | `siren.conversions.update()` | Answers `null` for the empty 200 Siren sends, or the record when Siren sends one, where PHP answers `[]`, which would look like a record. |
-| `$siren->conversions->delete()` | `siren.conversions.delete()` |  |
+| `$siren->conversions->delete()` | `siren.conversions.delete()` | Answers `null` for Siren's 204 and throws `UnexpectedResponseError` for an empty 200, where PHP answers `[]` for any empty body. |
 | `$siren->conversions->bulk()` | `siren.conversions.bulk()` |  |
 | `$siren->conversions->types()` | `siren.conversions.types()` |  |
 | `$siren->transactions->list()` | `siren.transactions.list()` |  |
 | `$siren->transactions->retrieve()` | `siren.transactions.retrieve()` |  |
 | `$siren->transactions->details()` | `siren.transactions.details()` | Throws `UnexpectedResponseError` when the `details` field is missing or broken, where PHP answers `[]`, because Siren always sends a field it was asked for. |
-| `$siren->transactions->create()` | `siren.transactions.create()` | Takes 1 to 500 detail lines, each an object, and throws `SirenError` before sending otherwise, where PHP checks only for a non-empty array. |
+| `$siren->transactions->create()` | `siren.transactions.create()` | Takes 1 to 500 detail lines, each an object, and throws `SirenError` before sending otherwise, where PHP checks only for a non-empty array. Sends only `details`, `bindingId` and `bindingDataType`, and only the seven line keys Siren reads, refusing any other key. Refuses half a binding, or a binding of `""`, `"0"` or `0`, which Siren reads as none. |
 | `$siren->transactions->bulk()` | `siren.transactions.bulk()` |  |
-| `$siren->transactions->creditCollaborator()` | `siren.transactions.creditCollaborator()` | Takes 1 to 500 positive whole ids, a positive collaborator id and a non-empty `type`, and throws `SirenError` before sending otherwise. |
+| `$siren->transactions->creditCollaborator()` | `siren.transactions.creditCollaborator()` | Takes 1 to 500 positive whole ids, a positive collaborator id and a non-empty `type`, and throws `SirenError` before sending otherwise. After a lost answer, `recoverCreditCollaborator` credits only the transactions that hold no conversion for the collaborator. |
 | `$siren->transactions->sources()` | `siren.transactions.sources()` |  |
 | `$siren->obligations->list()` | `siren.obligations.list()` |  |
 | `$siren->payouts->list()` | `siren.payouts.list()` |  |
@@ -500,37 +521,37 @@ record write is sent once.
 | `$siren->opportunities->list()` | `siren.opportunities.list()` | Refuses `id` and `s`, which Siren ignores for an organization and so would answer every opportunity. Read one by id with `retrieve`. |
 | `$siren->opportunities->retrieve()` | `siren.opportunities.retrieve()` |  |
 | `$siren->opportunities->update()` | `siren.opportunities.update()` |  |
-| `$siren->engagements->list()` | `siren.engagements.list()` | Also takes `from` and `to`, each a day as `YYYY-MM-DD`, which Siren reads beside the four filters PHP names. |
+| `$siren->engagements->list()` | `siren.engagements.list()` | Also takes `from` and `to`, each a day as `YYYY-MM-DD`, which Siren reads beside the four filters PHP names. Refuses either when it is not a real day, which Siren would leave out and answer every engagement. |
 | `$siren->engagements->retrieve()` | `siren.engagements.retrieve()` |  |
 | `$siren->engagements->types()` | `siren.engagements.types()` |  |
 | `$siren->engagements->calculations()` | `siren.engagements.calculations()` |  |
 | `$siren->distributors->list()` | `siren.distributors.list()` |  |
 | `$siren->distributors->retrieve()` | `siren.distributors.retrieve()` |  |
-| `$siren->distributors->create()` | `siren.distributors.create()` |  |
+| `$siren->distributors->create()` | `siren.distributors.create()` | Sends only the fifteen fields PHP documents, which Siren reads, and refuses any other key, where PHP sends the array as given. |
 | `$siren->distributors->update()` | `siren.distributors.update()` |  |
-| `$siren->distributors->delete()` | `siren.distributors.delete()` |  |
+| `$siren->distributors->delete()` | `siren.distributors.delete()` | Answers `null` for Siren's 204 and throws `UnexpectedResponseError` for an empty 200, where PHP answers `[]` for any empty body. |
 | `$siren->distributors->bulk()` | `siren.distributors.bulk()` |  |
 | `$siren->distributors->creditMetric()` | `siren.distributors.creditMetric()` | Also takes `points`, a whole number from 1 to 1,000,000,000,000, which Siren reads for a distributor with no point value. |
 | `$siren->customCurrencies->list()` | `siren.customCurrencies.list()` |  |
 | `$siren->customCurrencies->retrieve()` | `siren.customCurrencies.retrieve()` | Takes only `fields`, and every code must be letters, digits, underscores and hyphens, since the code is a path segment on update and delete. |
-| `$siren->customCurrencies->create()` | `siren.customCurrencies.create()` |  |
-| `$siren->customCurrencies->update()` | `siren.customCurrencies.update()` |  |
-| `$siren->customCurrencies->delete()` | `siren.customCurrencies.delete()` |  |
-| `$siren->credits->adjust()` | `siren.credits.adjust()` |  |
+| `$siren->customCurrencies->create()` | `siren.customCurrencies.create()` | Sends only the eight fields Siren reads, `scale` and `propertyIds` included, which PHP does not document, and refuses any other key. The code must be letters, digits, underscores and hyphens. |
+| `$siren->customCurrencies->update()` | `siren.customCurrencies.update()` | The code must be letters, digits, underscores and hyphens, since it is a path segment. |
+| `$siren->customCurrencies->delete()` | `siren.customCurrencies.delete()` | The code must be letters, digits, underscores and hyphens. Throws `UnexpectedResponseError` when a 2xx carries no object, where PHP answers `[]`. |
+| `$siren->credits->adjust()` | `siren.credits.adjust()` | The currency must be letters, digits, underscores and hyphens, where PHP checks only that it is not empty. |
 | `$siren->credits->balances()` | `siren.credits.balances()` | Throws `UnexpectedResponseError` when the `creditBalances` field is missing or broken, where PHP answers `[]`, so "no credit" never stands in for a broken answer. |
-| `$siren->credits->checkoutBalances()` | `siren.credits.checkoutBalances()` | Throws `UnexpectedResponseError` for a body that is not a list, where PHP drops broken rows, and carries no `held` field, since Siren sends none. |
-| `$siren->credits->checkoutBalance()` | `siren.credits.checkoutBalance()` |  |
-| `$siren->credits->entries()` | `siren.credits.entries()` |  |
-| `$siren->credits->holds()` | `siren.credits.holds()` |  |
-| `$siren->credits->placeHold()` | `siren.credits.placeHold()` | A 429 stays `RateLimitError`, where PHP raises `HoldLimitException`, because Siren has no hold cap. Every 409 becomes `HoldConflictError`. |
+| `$siren->credits->checkoutBalances()` | `siren.credits.checkoutBalances()` | Throws `UnexpectedResponseError` for a body that is not a list, where PHP drops broken rows, and carries no `held` field, since Siren sends none. The currency must be letters, digits, underscores and hyphens. |
+| `$siren->credits->checkoutBalance()` | `siren.credits.checkoutBalance()` | The currency must be letters, digits, underscores and hyphens, where PHP checks only that it is not empty. |
+| `$siren->credits->entries()` | `siren.credits.entries()` | A `collaboratorId` that is not a positive whole number does not count as naming the query, where PHP counts any number. The `currency` filter must be letters, digits, underscores and hyphens. |
+| `$siren->credits->holds()` | `siren.credits.holds()` | A `collaboratorId` that is not a positive whole number does not count as naming the query, where PHP counts any number. The `currency` filter must be letters, digits, underscores and hyphens. |
+| `$siren->credits->placeHold()` | `siren.credits.placeHold()` | A 429 stays `RateLimitError`, where PHP raises `HoldLimitException`, because Siren has no hold cap. Every 409 becomes `HoldConflictError`. The currency must be letters, digits, underscores and hyphens. |
 | `$siren->credits->releaseHold()` | `siren.credits.releaseHold()` | Sent once, where PHP retries. A release is safe to repeat, so the caller's queue repeats it. |
 | `Credits::holdReference()` | `CreditsResource.holdReference()` |  |
 | `$siren->mappings->list()` | `siren.mappings.list()` |  |
 | `$siren->mappings->forExternal()` | `siren.mappings.forExternal()` |  |
 | `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |
 | `$siren->mappings->create()` | `siren.mappings.create()` |  |
-| `$siren->mappings->deleteForCollaborator()` | `siren.mappings.deleteForCollaborator()` |  |
-| `$siren->mappings->deleteForExternal()` | `siren.mappings.deleteForExternal()` |  |
+| `$siren->mappings->deleteForCollaborator()` | `siren.mappings.deleteForCollaborator()` | Throws `UnexpectedResponseError` when a 2xx carries no object, where PHP answers `[]`. |
+| `$siren->mappings->deleteForExternal()` | `siren.mappings.deleteForExternal()` | Throws `UnexpectedResponseError` when a 2xx carries no object, where PHP answers `[]`. |
 | `$siren->settings->collaborator()` | `siren.settings.collaborator()` |  |
 | `$siren->settings->value()` | `siren.settings.value()` | Also refuses a name holding a comma, with one message, since Siren reads a comma as "any of". |
 

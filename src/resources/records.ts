@@ -290,10 +290,12 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    *
    * It never sends the create after an answer it cannot read. A 2xx body
    * that is not a record list (not JSON, no `items` key, an `items` that is
-   * not a list), a row that is not an object, and a row whose
-   * `transactionId`, `engagementId` or `type` is not the create's all throw
-   * `UnexpectedResponseError` with the status Siren sent, and every error
-   * from the read reaches the caller as it is, with the create unsent.
+   * not a list) or holds a row that is not an object throws
+   * `UnexpectedResponseError` with the status Siren sent. A row whose
+   * `transactionId`, `engagementId` or `type` is not the create's means
+   * Siren did not read a filter, and throws `UnexpectedResponseError` too.
+   * Every error from the read reaches the caller as it is, with the create
+   * unsent.
    *
    * Throws `SirenError` before anything is sent when `params` has no
    * `transactionId`, with exactly `conversions.recoverCreate() needs a
@@ -565,12 +567,13 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * nothing when none is left.
    *
    * It never sends after an answer it cannot read. A 2xx body that is not a
-   * record list (not JSON, no `items` key, an `items` that is not a list), a
-   * row that is not an object, and a row whose `transactionId` is not one
-   * asked, whose `collaboratorId` is not the collaborator or whose `type` is
-   * not the type all throw `UnexpectedResponseError` with the status Siren
-   * sent, and every error from a read reaches the caller as it is, with
-   * nothing sent.
+   * record list (not JSON, no `items` key, an `items` that is not a list) or
+   * holds a row that is not an object throws `UnexpectedResponseError` with
+   * the status Siren sent. A row whose `transactionId` is not one asked,
+   * whose `collaboratorId` is not the collaborator or whose `type` is not
+   * the type means Siren did not read a filter, and throws
+   * `UnexpectedResponseError` too. Every error from a read reaches the
+   * caller as it is, with nothing sent.
    *
    * Throws `SirenError` before anything is sent for every reason
    * {@link creditCollaborator} gives. The reads and the send are separate

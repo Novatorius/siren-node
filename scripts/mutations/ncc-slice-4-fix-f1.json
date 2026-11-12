@@ -1,0 +1,225 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/records.ts",
+    "find": "    if (rows.length > 0) return { conversion: rows[0] as T, created: false };",
+    "replace": "    if (rows.length > 9) return { conversion: rows[0] as T, created: false };",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > answers the conversion the first send made and sends nothing"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/records.ts",
+    "find": "Run one recovery per\n   * conversion at a time.",
+    "replace": "Run one recovery for each\n   * conversion at a time.",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/records.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/records.ts",
+    "find": "    const asked = new Set<number>(transactionIds);",
+    "replace": "    const asked = new Set<number>((transactionIds);",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/records.ts",
+    "find": "    if (rows.length > 0) return { conversion: rows[0] as T, created: false };",
+    "replace": "    if (rows.length > 9) return { conversion: rows[0] as T, created: false };",
+    "expect": "wrong-reason",
+    "failing": [
+      "4 fix F1: recovery surface"
+    ]
+  },
+  {
+    "id": "f1-create-reads-unguarded-as-empty",
+    "file": "src/resources/records.ts",
+    "find": "    const rows = await listRecords<Record<string, unknown>>(\n      this.http,\n      this.path,\n      {\n        transactionId,\n        engagementId,\n        type: params.type,\n        fields: 'id,engagementId,transactionId,type,status',\n        number: 1,\n        orderBy: 'id',\n        order: 'ASC',\n      },\n      ConversionsResource.RECOVERY_FILTERS,\n      ConversionsResource.RECOVERY_ID_FILTERS,\n    );",
+    "replace": "    const rows = await listRecords<Record<string, unknown>>(\n      this.http,\n      this.path,\n      {\n        transactionId,\n        engagementId,\n        type: params.type,\n        fields: 'id,engagementId,transactionId,type,status',\n        number: 1,\n        orderBy: 'id',\n        order: 'ASC',\n      },\n      ConversionsResource.RECOVERY_FILTERS,\n      ConversionsResource.RECOVERY_ID_FILTERS,\n    ).catch(() => [] as Array<Record<string, unknown>>);",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > raises for a malformed 200 that is not JSON",
+      "4 fix F1: conversions.recoverCreate > raises for a 200 whose items key is missing",
+      "4 fix F1: conversions.recoverCreate > raises for a 200 whose items is not an array",
+      "4 fix F1: conversions.recoverCreate > lets an error from the read through"
+    ]
+  },
+  {
+    "id": "f1-create-no-transaction-check",
+    "file": "src/resources/records.ts",
+    "find": "    if (params?.transactionId === undefined) {",
+    "replace": "    if (params?.transactionId === -1) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > refuses a create with no transactionId before anything is sent"
+    ]
+  },
+  {
+    "id": "f1-create-ids-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    const engagementId = recordId(params.engagementId, 'conversions.recoverCreate', 'engagementId');\n    const transactionId = recordId(params.transactionId, 'conversions.recoverCreate', 'transactionId');\n    const rows = await listRecords<Record<string, unknown>>(\n      this.http,\n      this.path,\n      {\n        transactionId,\n        engagementId,\n        type: params.type,\n        fields: 'id,engagementId,transactionId,type,status',\n        number: 1,\n        orderBy: 'id',\n        order: 'ASC',\n      },\n      ConversionsResource.RECOVERY_FILTERS,\n      ConversionsResource.RECOVERY_ID_FILTERS,\n    );",
+    "replace": "    const engagementId = params.engagementId;\n    const transactionId = params.transactionId as number;\n    const rows = await listRecords<Record<string, unknown>>(\n      this.http,\n      this.path,\n      {\n        transactionId,\n        engagementId,\n        type: params.type,\n        fields: 'id,engagementId,transactionId,type,status',\n        number: 1,\n        orderBy: 'id',\n        order: 'ASC',\n      },\n      ConversionsResource.RECOVERY_FILTERS,\n      {},\n    );",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > refuses a zero engagementId before anything is sent",
+      "4 fix F1: conversions.recoverCreate > refuses a fractional transactionId before anything is sent"
+    ]
+  },
+  {
+    "id": "f1-create-row-transaction-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "if (row.transactionId !== transactionId || row.engagementId !== engagementId || row.type !== params.type) {",
+    "replace": "if (row.engagementId !== engagementId || row.type !== params.type) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > raises for a row naming another transaction"
+    ]
+  },
+  {
+    "id": "f1-create-row-engagement-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "if (row.transactionId !== transactionId || row.engagementId !== engagementId || row.type !== params.type) {",
+    "replace": "if (row.transactionId !== transactionId || row.type !== params.type) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > raises for a row naming another engagement"
+    ]
+  },
+  {
+    "id": "f1-create-row-type-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "if (row.transactionId !== transactionId || row.engagementId !== engagementId || row.type !== params.type) {",
+    "replace": "if (row.transactionId !== transactionId || row.engagementId !== engagementId) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > raises for a row naming another type"
+    ]
+  },
+  {
+    "id": "f1-create-resends-when-found",
+    "file": "src/resources/records.ts",
+    "find": "    if (rows.length > 0) return { conversion: rows[0] as T, created: false };",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > answers the conversion the first send made and sends nothing"
+    ]
+  },
+  {
+    "id": "f1-create-never-resends",
+    "file": "src/resources/records.ts",
+    "find": "    return { conversion: await this.create(params), created: true };",
+    "replace": "    return { conversion: {} as T, created: true };",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > sends the create once more on an empty items list"
+    ]
+  },
+  {
+    "id": "f1-create-drops-engagement-filter",
+    "file": "src/resources/records.ts",
+    "find": "        transactionId,\n        engagementId,\n        type: params.type,",
+    "replace": "        transactionId,\n        type: params.type,",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > reads GET /conversions by the create transaction, engagement and type, oldest first"
+    ]
+  },
+  {
+    "id": "f1-credit-reads-unguarded-as-empty",
+    "file": "src/resources/records.ts",
+    "find": "      const rows = await listRecords<Record<string, unknown>>(\n        this.http,\n        '/conversions',\n        {\n          transactionId: [...transactionIds],\n          collaboratorId,\n          type: kind,\n          fields: 'id,transactionId,collaboratorId,type',\n          number: 200,\n          offset,\n          orderBy: 'id',\n          order: 'ASC',\n        },\n        ConversionsResource.RECOVERY_FILTERS,\n        ConversionsResource.RECOVERY_ID_FILTERS,\n      );",
+    "replace": "      const rows = await listRecords<Record<string, unknown>>(\n        this.http,\n        '/conversions',\n        {\n          transactionId: [...transactionIds],\n          collaboratorId,\n          type: kind,\n          fields: 'id,transactionId,collaboratorId,type',\n          number: 200,\n          offset,\n          orderBy: 'id',\n          order: 'ASC',\n        },\n        ConversionsResource.RECOVERY_FILTERS,\n        ConversionsResource.RECOVERY_ID_FILTERS,\n      ).catch(() => [] as Array<Record<string, unknown>>);",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a malformed 200 that is not JSON",
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a 200 whose items key is missing",
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a 200 whose items is not an array",
+      "4 fix F1: transactions.recoverCreditCollaborator > lets an error from the read through"
+    ]
+  },
+  {
+    "id": "f1-credit-row-transaction-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "if (typeof id !== 'number' || !asked.has(id) || row.collaboratorId !== collaboratorId || row.type !== kind) {",
+    "replace": "if (typeof id !== 'number' || row.collaboratorId !== collaboratorId || row.type !== kind) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a row naming a transaction not asked"
+    ]
+  },
+  {
+    "id": "f1-credit-row-collaborator-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "if (typeof id !== 'number' || !asked.has(id) || row.collaboratorId !== collaboratorId || row.type !== kind) {",
+    "replace": "if (typeof id !== 'number' || !asked.has(id) || row.type !== kind) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a row naming another collaborator",
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a row naming no collaboratorId"
+    ]
+  },
+  {
+    "id": "f1-credit-row-type-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "if (typeof id !== 'number' || !asked.has(id) || row.collaboratorId !== collaboratorId || row.type !== kind) {",
+    "replace": "if (typeof id !== 'number' || !asked.has(id) || row.collaboratorId !== collaboratorId) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > raises for a row naming another type"
+    ]
+  },
+  {
+    "id": "f1-credit-drops-collaborator-filter",
+    "file": "src/resources/records.ts",
+    "find": "          transactionId: [...transactionIds],\n          collaboratorId,\n",
+    "replace": "          transactionId: [...transactionIds],\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > reads GET /conversions by the asked transactions, the collaborator and the type sale when none is given"
+    ]
+  },
+  {
+    "id": "f1-credit-one-page",
+    "file": "src/resources/records.ts",
+    "find": "      if (rows.length < 200) break;",
+    "replace": "      break;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > reads every page before it decides, so a credit on page two is not sent again"
+    ]
+  },
+  {
+    "id": "f1-credit-resends-all",
+    "file": "src/resources/records.ts",
+    "find": "    const rest = transactionIds.filter((id) => !found.has(id));",
+    "replace": "    const rest = [...transactionIds];",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > sends only the transactions this collaborator holds no conversion for, in the order asked",
+      "4 fix F1: transactions.recoverCreditCollaborator > sends nothing when every transaction already holds its conversion"
+    ]
+  },
+  {
+    "id": "f1-credit-checks-after-read",
+    "file": "src/resources/records.ts",
+    "find": "    if (type !== undefined && (typeof type !== 'string' || type === '')) {\n      throw new SirenError(`${method} needs a type that is a non-empty string.`);\n    }\n    const kind",
+    "replace": "    const kind",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > refuses an empty type before anything is sent"
+    ]
+  }
+]
