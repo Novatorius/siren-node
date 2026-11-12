@@ -6,12 +6,6 @@ import { describe, expect, it } from 'vitest';
  * connected-site surface. The README, the CHANGELOG's Unreleased section and
  * openapi.yaml are what a caller reads, so each new entry, class, method and
  * route must appear there.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`. The packet that removes the last
- * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 function read(name: string): string {
@@ -134,7 +128,7 @@ const CONNECT_ROUTES: Array<[string, string, string]> = [
 ];
 
 describe('P7: openapi.yaml', () => {
-  it.skip.each(CONNECT_ROUTES)('documents %s %s for a connected site holding %s', (key, method, scope) => {
+  it.each(CONNECT_ROUTES)('documents %s %s for a connected site holding %s', (key, method, scope) => {
     const op = operation(path(read('openapi.yaml'), key), method);
 
     expect(op).toMatch(/operationId: \w+/);
@@ -145,7 +139,7 @@ describe('P7: openapi.yaml', () => {
     expect(op).toMatch(/'403':/);
   });
 
-  it.skip.each([
+  it.each([
     ['/oauth/register', ['client_name', 'redirect_uris', 'scope', 'software_id'], "'201':"],
     ['/oauth/token', ['grant_type', 'client_id', 'code', 'redirect_uri', 'code_verifier', 'refresh_token', 'attempt_id'], "'200':"],
   ])('documents POST %s as public, with its body fields and the OAuth error envelope', (key, fields, success) => {
@@ -158,7 +152,7 @@ describe('P7: openapi.yaml', () => {
     expect(op).toContain('error_description');
   });
 
-  it.skip('documents the forwarded event envelope as a schema, and the event route takes it with connect:ingest and the final attempt header', () => {
+  it('documents the forwarded event envelope as a schema, and the event route takes it with connect:ingest and the final attempt header', () => {
     const openapi = read('openapi.yaml');
     const schemaStart = openapi.indexOf('\n    ForwardedEventEnvelope:\n');
     expect(schemaStart).toBeGreaterThan(-1);
@@ -196,7 +190,7 @@ describe('README advice checks', () => {
 });
 
 describe('P7: README', () => {
-  it.skip('has a Connected sites section that names the entry, the OAuth helpers, the client and events.forward', () => {
+  it('has a Connected sites section that names the entry, the OAuth helpers, the client and events.forward', () => {
     const connected = section(read('README.md'), '## Connected sites');
 
     for (const name of [
@@ -216,7 +210,7 @@ describe('P7: README', () => {
     }
   });
 
-  it.skip("says the SDK sends a refresh once and never retries it, that the store's one resend reuses attemptId, and that the store keeps the tokens", () => {
+  it("says the SDK sends a refresh once and never retries it, that the store's one resend reuses attemptId, and that the store keeps the tokens", () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
 
     expect(
@@ -233,7 +227,7 @@ describe('P7: README', () => {
     ).toBe(true);
   });
 
-  it.skip('says the store locks its refresh, resends only within 30 seconds, and picks a random attemptId', () => {
+  it('says the store locks its refresh, resends only within 30 seconds, and picks a random attemptId', () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
 
     expect(advises(all, ADVICE.lock), 'the README says the store locks its own refresh, and nothing makes the lock optional').toBe(true);
@@ -241,13 +235,13 @@ describe('P7: README', () => {
     expect(advises(all, ADVICE.randomAttemptId), 'the README says attemptId is random').toBe(true);
   });
 
-  it.skip("says the store checks the callback's state against the one it kept, once", () => {
+  it("says the store checks the callback's state against the one it kept, once", () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
 
     expect(advises(all, ADVICE.state), 'the README says the callback state is checked against the kept one and used once').toBe(true);
   });
 
-  it.skip('says what a site does on each failure the SDK leaves to it', () => {
+  it('says what a site does on each failure the SDK leaves to it', () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
     const says = (test: (s: string) => boolean, what: string) => expect(all.some(test), what).toBe(true);
 
@@ -257,19 +251,19 @@ describe('P7: README', () => {
     says((s) => /`exchangeCode`/.test(s) && /`ConnectionError`/.test(s) && /\b(?:over|again from the start|new verifier)\b/i.test(s), 'a sentence says a failed exchange starts the connection over');
   });
 
-  it.skip('says to verify every webhook delivery with constructEvent and the signing secret', () => {
+  it('says to verify every webhook delivery with constructEvent and the signing secret', () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
 
     expect(advises(all, ADVICE.verifyWebhooks), 'the README says to verify each delivery with constructEvent and the signing secret').toBe(true);
   });
 
-  it.skip('says never to log the customer email key or the signing secret', () => {
+  it('says never to log the customer email key or the signing secret', () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
 
     expect(advises(all, ADVICE.noSecretsInLogs), 'the README says never to log the customer email key or the signing secret').toBe(true);
   });
 
-  it.skip('says events.forward is sent once and the outbox resends with the same eventId', () => {
+  it('says events.forward is sent once and the outbox resends with the same eventId', () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
 
     expect(
@@ -284,7 +278,7 @@ describe('P7: README', () => {
 });
 
 describe('P7: CHANGELOG', () => {
-  it.skip('names every new entry, class, method and type under Unreleased', () => {
+  it('names every new entry, class, method and type under Unreleased', () => {
     const changelog = read('CHANGELOG.md');
     const start = changelog.indexOf('## [Unreleased]');
     const end = changelog.indexOf('\n## [', start + 1);
