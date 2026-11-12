@@ -1,3 +1,4 @@
+import { SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import type { ListParams, SirenList } from '../types';
@@ -128,6 +129,50 @@ export interface RetrieveParams {
 }
 
 /**
+ * Reads one record with `GET {collection}/{id}`, for every resource that has
+ * a `retrieve`, so a rule cannot reach one reader and miss another.
+ *
+ * Refuses an `id` that is not a positive safe integer, a string included,
+ * before sending, with a message that names the id it got. Sends a `fields`
+ * list comma-separated and leaves out an empty one, so Siren answers its
+ * default fields. Marks the request retriable, since it is a read. Throws
+ * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+ *
+ * @internal
+ */
+export async function retrieveRecord<T>(
+  http: Pick<HttpTransport, 'request'>,
+  collection: string,
+  id: unknown,
+  params: RetrieveParams = {},
+): Promise<T> {
+  if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1) {
+    const shown = typeof id === 'string' ? JSON.stringify(id) : String(id);
+    throw new SirenError(`retrieve needs a positive whole number id, and got ${shown}.`);
+  }
+
+  const path = `${collection}/${id}`;
+  const { fields, include, propertyId } = params;
+  const query: Query = {
+    fields: Array.isArray(fields) ? (fields.length > 0 ? fields.join(',') : undefined) : fields,
+    include,
+    propertyId,
+  };
+
+  const response = await http.request({ method: 'GET', path, query, retriable: true });
+  const body = await parseJsonBody(response);
+
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new UnexpectedResponseError(
+      `Siren answered GET ${path} with a body that is not a JSON object.`,
+      { statusCode: response.status, data: body },
+    );
+  }
+
+  return body as T;
+}
+
+/**
  * Conversions (`/conversions`): an engagement that turned into a reward.
  *
  * `list()` reads one page, and `retrieve(id)` reads one conversion. Both take
@@ -152,9 +197,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * bound to one store gets this for another store's conversion), and
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
-  async retrieve(_id: number, _params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 2 packet P7.
-    return {} as T;
+  async retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 }
 
@@ -182,8 +226,7 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * when Siren has no such transaction or the credential cannot see it, and
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
-  async retrieve(_id: number, _params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 2 packet P7.
-    return {} as T;
+  async retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 }

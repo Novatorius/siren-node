@@ -46,7 +46,7 @@ const RESOURCES: Array<[string, string, Retrieve, Record<string, unknown>]> = [
 ];
 
 describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
-  it.skip('reads one record with GET {path}/{id} and answers the body', async () => {
+  it('reads one record with GET {path}/{id} and answers the body', async () => {
     const ctx = makeClient([jsonResponse(200, record)]);
 
     const id = record.id as number;
@@ -59,7 +59,7 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
     expect(ctx.lastCall().body).toBeUndefined();
   });
 
-  it.skip('sends a fields list comma-separated, and include and propertyId as given', async () => {
+  it('sends a fields list comma-separated, and include and propertyId as given', async () => {
     const ctx = makeClient([jsonResponse(200, record)]);
 
     const id = record.id as number;
@@ -77,14 +77,14 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
     expect(joined.searchParams.has('propertyId')).toBe(false);
   });
 
-  it.skip('retries like a read on a 503', async () => {
+  it('retries like a read on a 503', async () => {
     const ctx = makeClient([jsonResponse(503, {}), jsonResponse(200, record)], { maxRetries: 1 });
 
     expect(await retrieve(ctx.client, record.id as number)).toEqual(record);
     expect(ctx.calls()).toHaveLength(2);
   });
 
-  it.skip("raises Siren's 404 as NotFoundError with its message", async () => {
+  it("raises Siren's 404 as NotFoundError with its message", async () => {
     const ctx = makeClient([jsonResponse(404, CloudAnswers.notFound)], { maxRetries: 2 });
 
     const error = await retrieve(ctx.client, 99).catch((caught: unknown) => caught);
@@ -94,7 +94,7 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
     expect(ctx.calls()).toHaveLength(1);
   });
 
-  it.skip.each([
+  it.each([
     ['zero', 0],
     ['a negative id', -4],
     ['a fraction', 1.5],
@@ -114,7 +114,7 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
     expect(ctx.fetchMock).not.toHaveBeenCalled();
   });
 
-  it.skip.each([
+  it.each([
     ['a list', () => jsonResponse(200, [record])],
     ['an empty body', () => emptyResponse(200)],
     ['a string', () => jsonResponse(200, 'ok')],
