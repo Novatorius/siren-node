@@ -217,13 +217,14 @@ function resolveBaseUrl(baseUrl: unknown): string {
   if (baseUrl === undefined) return DEFAULT_BASE_URL;
   if (typeof baseUrl === 'string' && isHttpUrl(baseUrl)) return baseUrl;
   throw new SirenError(
-    `Siren: baseUrl must be an http or https URL with no user name, password, query, fragment, space or control character. It got ${described(baseUrl)}.`,
+    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,
   );
 }
 
 /** True for a string the transport can join paths onto and send a token to. */
 function isHttpUrl(text: string): boolean {
-  if (/[?#\u0000-\u0020\u007f]/.test(text)) return false;
+  if (/[^\u0021-\u007e]|[?#\\@]/.test(text)) return false;
+  if (!/^https?:\/\/[^/%]+(?:\/|$)/i.test(text)) return false;
   let url: URL;
   try {
     url = new URL(text);
