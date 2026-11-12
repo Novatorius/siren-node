@@ -177,13 +177,15 @@ describe('P5: enrollments through the collaborator record', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('collaboratorsIn refuses a programId in params and sends nothing', async () => {
+  it.skip('collaboratorsIn refuses a programId in params, even an undefined one, and sends nothing', async () => {
     const { http, enrollments } = over([reply(200, page([]))]);
 
-    const error = await enrollments.collaboratorsIn(12, { programId: 99 } as never).catch((thrown: unknown) => thrown);
+    for (const params of [{ programId: 99 }, { programId: undefined }]) {
+      const error = await enrollments.collaboratorsIn(12, params as never).catch((thrown: unknown) => thrown);
 
-    expect(error).toBeInstanceOf(SirenError);
-    expect((error as SirenError).message).toContain('programId');
+      expect(error).toBeInstanceOf(SirenError);
+      expect((error as SirenError).message).toContain('programId');
+    }
     expect(http.requests).toHaveLength(0);
   });
 
