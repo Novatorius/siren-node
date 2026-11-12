@@ -16,13 +16,6 @@ import { TransactionAnswers } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam, aimed at example.invalid.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * packet F2, named in its describe block. The F2 implementer deletes the
- * `.skip` from each of them, so `it.skip(` becomes `it(` and `it.skip.each(`
- * becomes `it.each(`, and deletes the one-line comment above each, and this
- * paragraph. Nothing else here changes. The tests with no `.skip` pass now
- * and guard against a check that refuses too much.
  */
 
 const HALF = 'transactions.create() needs bindingId and bindingDataType together, or neither. Siren finds a resent transaction only by both.';
@@ -35,8 +28,7 @@ function over() {
 }
 
 describe('4 fix F2: transactions.create binding pair', () => {
-  // Skipped until fix packet F2 (the binding pair) lands.
-  it.skip.each([
+  it.each([
     ['a bindingId alone', { bindingId: 'order-91' }],
     ['a numeric bindingId alone', { bindingId: 91 }],
     ['a bindingDataType alone', { bindingDataType: 'crm_order' }],
@@ -52,8 +44,7 @@ describe('4 fix F2: transactions.create binding pair', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  // Skipped until fix packet F2 (the binding pair) lands.
-  it.skip.each([
+  it.each([
     ['bindingId', '', '""'],
     ['bindingId', '0', '"0"'],
     ['bindingId', 0, '0'],
