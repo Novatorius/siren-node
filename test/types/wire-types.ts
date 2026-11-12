@@ -65,6 +65,15 @@ export function saleContract(siren: Siren): void {
   // @ts-expect-error a real sale needs source, externalId and total
   const partial: SaleParams = { trackingId: 2 };
   void partial;
+
+  // @ts-expect-error a real sale needs source
+  void siren.events.sale({ externalId: 'e', total: 1, trackingId: 2 });
+
+  // @ts-expect-error a real sale needs externalId
+  void siren.events.sale({ source: 's', total: 1, trackingId: 2 });
+
+  // @ts-expect-error a real sale needs total
+  void siren.events.sale({ source: 's', externalId: 'e', trackingId: 2 });
 }
 
 export function siteVisitContract(siren: Siren): void {

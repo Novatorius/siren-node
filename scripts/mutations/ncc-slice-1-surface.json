@@ -632,5 +632,27 @@
     "failing": [
       "each built-in event scope names its EventSlug"
     ]
+  },
+  {
+    "id": "type-live-externalid-optional",
+    "file": "src/types.ts",
+    "find": "  externalId: string | number;\n  /** Order total in major currency units (9.99 = $9.99). */\n  total: number;",
+    "replace": "  externalId?: string | number;\n  /** Order total in major currency units (9.99 = $9.99). */\n  total: number;",
+    "expect": "caught",
+    "failing": [
+      "wire-types.ts",
+      "Unused '@ts-expect-error'"
+    ]
+  },
+  {
+    "id": "type-live-total-optional",
+    "file": "src/types.ts",
+    "find": "  /** Order total in major currency units (9.99 = $9.99). */\n  total: number;",
+    "replace": "  /** Order total in major currency units (9.99 = $9.99). */\n  total?: number;",
+    "expect": "caught",
+    "failing": [
+      "wire-types.ts",
+      "Unused '@ts-expect-error'"
+    ]
   }
 ]
