@@ -1,0 +1,266 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/distributors.ts",
+    "find": "      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "replace": "      if (!Number.isSafeInteger(points) || points < 0 || points > MAX_METRIC_POINTS) {",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...params });",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/distributors.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/distributors.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/distributors.ts",
+    "find": "      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "replace": "      if (!Number.isSafeInteger(points) || points < 0 || points > MAX_METRIC_POINTS) {",
+    "expect": "wrong-reason",
+    "failing": [
+      "P3: distributors surface"
+    ]
+  },
+  {
+    "id": "p3-list-unchecked",
+    "file": "src/resources/distributors.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, DistributorsResource.LIST_FILTERS);",
+    "replace": "    return super.list(params as never);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors list and id rules"
+    ]
+  },
+  {
+    "id": "p3-filters-widened",
+    "file": "src/resources/distributors.ts",
+    "find": "params, DistributorsResource.LIST_FILTERS);",
+    "replace": "params, [...DistributorsResource.LIST_FILTERS, 'propertyId', 'metrictype']);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors list and id rules"
+    ]
+  },
+  {
+    "id": "p3-list-path",
+    "file": "src/resources/distributors.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, DistributorsResource.LIST_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, '/distributor', params, DistributorsResource.LIST_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors reads"
+    ]
+  },
+  {
+    "id": "p3-retrieve-path",
+    "file": "src/resources/distributors.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, '/distributor', id, params);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors reads"
+    ]
+  },
+  {
+    "id": "p3-retrieve-params-dropped",
+    "file": "src/resources/distributors.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors reads"
+    ]
+  },
+  {
+    "id": "p3-create-put",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  },
+  {
+    "id": "p3-create-body-dropped",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, {});",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  },
+  {
+    "id": "p3-update-post",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', path, params);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  },
+  {
+    "id": "p3-update-body-dropped",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', path, {});",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  },
+  {
+    "id": "p3-update-no-id-check",
+    "file": "src/resources/distributors.ts",
+    "find": "    const path = `${this.path}/${recordId(id, 'distributors.update')}`;",
+    "replace": "    const path = `${this.path}/${id}`;",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors list and id rules"
+    ]
+  },
+  {
+    "id": "p3-delete-no-id-check",
+    "file": "src/resources/distributors.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'distributors.delete')}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${id}`);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors list and id rules"
+    ]
+  },
+  {
+    "id": "p3-delete-path",
+    "file": "src/resources/distributors.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'distributors.delete')}`);",
+    "replace": "    return deleteRecord<T>(this.http, `/distributor/${recordId(id, 'distributors.delete')}`);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  },
+  {
+    "id": "p3-bulk-extra",
+    "file": "src/resources/distributors.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids, { points: 1 });",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  },
+  {
+    "id": "p3-bulk-path",
+    "file": "src/resources/distributors.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, '/distributor', action, ids);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  },
+  {
+    "id": "p3-points-cap",
+    "file": "src/resources/distributors.ts",
+    "find": "      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "replace": "      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS + 1) {",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "p3-points-cap-exclusive",
+    "file": "src/resources/distributors.ts",
+    "find": "      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "replace": "      if (!Number.isSafeInteger(points) || points < 1 || points >= MAX_METRIC_POINTS) {",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "p3-points-fraction",
+    "file": "src/resources/distributors.ts",
+    "find": "      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "replace": "      if (!Number.isFinite(points) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "p3-points-string",
+    "file": "src/resources/distributors.ts",
+    "find": "      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "replace": "      if (!Number.isSafeInteger(Number(points)) || points < 1 || points > MAX_METRIC_POINTS) {",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "p3-points-dropped",
+    "file": "src/resources/distributors.ts",
+    "find": "      body.points = points;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "p3-collaborator-unchecked",
+    "file": "src/resources/distributors.ts",
+    "find": "      collaboratorId: recordId(collaboratorId, 'distributors.creditMetric', 'collaboratorId'),",
+    "replace": "      collaboratorId,",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "p3-credit-path",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<CreditedMetric>(this.http, 'POST', `${this.path}/credit-metric`, body);",
+    "replace": "    return writeRecord<CreditedMetric>(this.http, 'POST', `${this.path}/credit`, body);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors creditMetric"
+    ]
+  },
+  {
+    "id": "p3-credit-retried",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<CreditedMetric>(this.http, 'POST', `${this.path}/credit-metric`, body);",
+    "replace": "    return this.http.request({ method: 'POST', path: `${this.path}/credit-metric`, body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as CreditedMetric);",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors writes"
+    ]
+  }
+]

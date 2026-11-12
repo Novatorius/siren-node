@@ -1,3 +1,4 @@
+import { SirenError } from '../errors';
 import type { HttpTransport } from '../http';
 import type {
   BulkResult,
@@ -9,8 +10,12 @@ import type {
 } from '../record-types';
 import type { SirenList } from '../types';
 import { DistributorBulkAction } from '../taxonomy';
-import { RecordsResource } from './records';
+import { bulkRecords, deleteRecord, listRecords, recordId, writeRecord } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
+
+/** The most points one `creditMetric` call may credit. Siren refuses more. */
+const MAX_METRIC_POINTS = 1_000_000_000_000;
 
 /**
  * Distributors (`/distributors`): pools that share revenue among the
@@ -49,9 +54,7 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: DistributorListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 4 packet P3
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+    return listRecords<T>(this.http, this.path, params, DistributorsResource.LIST_FILTERS);
   }
 
   /**
@@ -62,10 +65,7 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 4 packet P3
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 
   /**
@@ -76,9 +76,7 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * sending again.
    */
   create(params: CreateDistributorParams): Promise<T> {
-    // Stub: slice 4 packet P3
-    void params;
-    return Promise.resolve({} as T);
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -87,11 +85,9 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * Sending it again after a lost answer sets the same values, so it is
    * safe.
    */
-  update(id: number, params: UpdateDistributorParams): Promise<T> {
-    // Stub: slice 4 packet P3
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async update(id: number, params: UpdateDistributorParams): Promise<T> {
+    const path = `${this.path}/${recordId(id, 'distributors.update')}`;
+    return writeRecord<T>(this.http, 'PUT', path, params);
   }
 
   /**
@@ -103,10 +99,8 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * `deleted` means the first call worked, and `NotFoundError` means it is
    * gone.
    */
-  delete(id: number): Promise<T | null> {
-    // Stub: slice 4 packet P3
-    void id;
-    return Promise.resolve(null);
+  async delete(id: number): Promise<T | null> {
+    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'distributors.delete')}`);
   }
 
   /**
@@ -120,10 +114,7 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * a lost answer is safe, though `affected` may differ.
    */
   bulk(action: DistributorBulkAction, ids: readonly number[]): Promise<BulkResult> {
-    // Stub: slice 4 packet P3
-    void action;
-    void ids;
-    return Promise.resolve({});
+    return bulkRecords<BulkResult>(this.http, this.path, action, ids);
   }
 
   /**
@@ -143,10 +134,19 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * that range. Siren answers 422, raised as `ValidationError`, when nothing
    * was credited, and 404 when it has no such collaborator.
    */
-  creditMetric(collaboratorId: number, points?: number): Promise<CreditedMetric> {
-    // Stub: slice 4 packet P3
-    void collaboratorId;
-    void points;
-    return Promise.resolve({});
+  async creditMetric(collaboratorId: number, points?: number): Promise<CreditedMetric> {
+    const body: { collaboratorId: number; points?: number } = {
+      collaboratorId: recordId(collaboratorId, 'distributors.creditMetric', 'collaboratorId'),
+    };
+    if (points !== undefined) {
+      if (!Number.isSafeInteger(points) || points < 1 || points > MAX_METRIC_POINTS) {
+        const shown = typeof points === 'string' ? JSON.stringify(points) : String(points);
+        throw new SirenError(
+          `distributors.creditMetric needs points as a whole number from 1 to 1,000,000,000,000, and got ${shown}.`,
+        );
+      }
+      body.points = points;
+    }
+    return writeRecord<CreditedMetric>(this.http, 'POST', `${this.path}/credit-metric`, body);
   }
 }
