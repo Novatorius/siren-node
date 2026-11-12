@@ -62,7 +62,7 @@
     "expect": "caught",
     "failing": [
       "4 fix F4: engagements.list day filters > refuses a from that is a month with one digit",
-      "4 fix F4: engagements.list day filters > refuses a from that is a timestamp",
+      "4 fix F4: engagements.list day filters > refuses a from that is a trailing line break",
       "4 fix F4: engagements.list day filters > refuses a to that is a trailing line break"
     ]
   },
