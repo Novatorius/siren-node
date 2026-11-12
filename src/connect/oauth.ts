@@ -141,6 +141,9 @@ export class OAuthClient {
    * seconds of the first try. Any further recovery goes through its queue
    * with that `attemptId`. Later than 30 seconds, Cloud reads the repeat as
    * a stolen token and revokes the whole family.
+   * That one resend is the only exception to the rule that the site's
+   * queue owns retries. A queue waits minutes between tries, and Cloud's
+   * window closes after 30 seconds. The SDK itself never resends a refresh.
    *
    * Throws `SirenError` before sending when `clientId` or `refreshToken` is
    * empty, or `attemptId` is given and empty.

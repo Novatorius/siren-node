@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { describe, expect, it } from 'vitest';
-import { takeRefusedHosts } from './setup/no-network';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { guardInPlace, takeRefusedHosts } from './setup/no-network';
 
 /*
  * The guard test/setup/no-network.ts puts in place of the global fetch for
@@ -42,5 +42,19 @@ describe('no-network guard', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
     expect(takeRefusedHosts()).toEqual([]);
+  });
+});
+
+// Read in a later block's beforeAll, after the tests above and their
+// afterEach have run, to prove the guard holds between tests too.
+let betweenTests = false;
+
+describe('no-network guard between tests', () => {
+  beforeAll(() => {
+    betweenTests = guardInPlace();
+  });
+
+  it('is in place in a beforeAll that runs after earlier tests', () => {
+    expect(betweenTests).toBe(true);
   });
 });

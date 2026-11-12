@@ -352,5 +352,35 @@
     "failing": [
       "is in place when the test file loads"
     ]
+  },
+  {
+    "id": "guard-gone-between-tests",
+    "file": "test/setup/no-network.ts",
+    "find": "  vi.unstubAllGlobals();\n  install();\n",
+    "replace": "  vi.unstubAllGlobals();\n",
+    "expect": "caught",
+    "failing": [
+      "is in place in a beforeAll that runs after earlier tests"
+    ]
+  },
+  {
+    "id": "advice-ignores-refusals",
+    "file": "test/docs-connect.test.ts",
+    "find": "  return all.some(advice.says) && !all.some(advice.refuses);",
+    "replace": "  return all.some(advice.says);",
+    "expect": "caught",
+    "failing": [
+      "README advice checks"
+    ]
+  },
+  {
+    "id": "advice-lock-refuses-nothing",
+    "file": "test/docs-connect.test.ts",
+    "find": "      /\\b(?:no|without|skips?|skipping|optional|needs? not|needn't|unnecessary)\\b[^.]{0,40}\\block/i.test(s) ||\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "lock on"
+    ]
   }
 ]

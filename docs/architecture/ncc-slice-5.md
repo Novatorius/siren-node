@@ -68,7 +68,10 @@ an exact `event:{slug}` scope may forward too.
   and a code is single use. The store locks its own refresh. It may resend a
   refresh once within 30 seconds with the same random `attemptId`, which
   Cloud answers with the pair it already issued, and recovers further
-  through its queue.
+  through its queue. That one resend is the only exception to
+  [Retry Unification (KB 591)](https://navigator.novatori.us/r/kb/591)
+  in this slice. A queue waits minutes between tries, and Cloud's window
+  closes after 30 seconds, so the queue cannot make that try itself.
 - 400 or 401 with a text `error` raises `OAuthError`. A refresh refused with
   `invalid_grant` or `invalid_client` means the grant is gone, as Siren's
   `OAuthConnectService::grantIsGone` reads it. 429 and 5xx raise the usual
@@ -78,13 +81,18 @@ an exact `event:{slug}` scope may forward too.
   refuses anything that is not a 43-character base64url challenge, so a
   verifier never reaches a browser.
 - Retried connect routes: every read, `update-grant` (each send signs a
-  fresh grant) and webhook `DELETE`. Sent once: the three reports
+  fresh grant) and webhook `DELETE`. A site calls them inline, while a
+  person waits or as a task starts. A store that calls one from its own
+  queue builds its client with `maxRetries: 0`, so the queue's tries are
+  the only ones. Sent once: the three reports
   (`site-state`, `integrations`, `products`), because a site sends them
   from its task queue and Siren's own reporters retry them there, webhook
   `PUT`, which rotates the secret, webhook test, which Cloud limits to ten a
   site an hour, and `disconnect`, because Cloud cuts the client off as it
   commits and answers a resend with 401.
-- `events.forward` is sent once, never retried. A forwarded event is queue
+- `events.forward` is sent once, never retried, except for the transport's
+  one resend with a refreshed token after a 401, which Cloud refused before
+  it logged the event. A forwarded event is queue
   work, and the site's outbox owns redelivery, as
   [Retry Unification (KB 591)](https://navigator.novatori.us/r/kb/591)
   asks. Siren's own `ForwardedEventSender` sends once per outbox try and
@@ -92,7 +100,7 @@ an exact `event:{slug}` scope may forward too.
   and the same credential, which Cloud claims once per Property and answers
   `duplicate`. `finalAttempt` adds
   `X-Siren-Final-Attempt: 1` to the outbox's last try, so Cloud's log of an
-  event it will never record matches one send.
+  event it will never record matches one logged send.
 - `forward` refuses, before sending, a slug outside the 28 (or it would
   become a custom event), a version other than 1, a non-UUID `eventId`, an
   origin other than `site`, an `occurredAt` without an offset, and
@@ -112,7 +120,8 @@ The SDK has no logger. Each failure reaches the caller as a thrown error.
 | A 2xx without the shape a method names | `UnexpectedResponseError`, with no secret from the body in it |
 | Connect route refused for scope | `MissingScopeError` with the scope, or `PermissionError` for `/ping` |
 | Connect route 401 | One resend with a refreshed token, as slice 2 sends it |
-| Connect route 429, 5xx or network failure | Retried for the reads and `updateGrant`. The reports and `disconnect` raise at once, and the site's queue reports again |
+| Connect route 429, 5xx or network failure, retried | `plan`, `migrationWindow`, `customerEmailKey`, `ping`, `updateGrant`, `webhook.get`, `webhook.deliveries` and `webhook.delete` retry, then raise `RateLimitError`, `ApiError` or `ConnectionError` |
+| Connect route 429, 5xx or network failure, sent once | `reportSiteState`, `reportIntegrations` and `syncProducts` raise at once, and the site's queue reports again. `disconnect`, `webhook.replace` and `webhook.test` raise at once, and the store decides |
 | `plan` 503 `plan_unavailable` | `ApiError` with that code once retries run out. The store logs it and keeps its last plan |
 | `disconnect` resent after a lost answer | 401 or the store's `OAuthError` `invalid_grant`. The site is disconnected |
 | `forward` 429, other 5xx or network failure | `RateLimitError`, `ApiError` or `ConnectionError`. The outbox tries again later with the same `eventId` and credential |

@@ -32,12 +32,20 @@ export function takeRefusedHosts(): string[] {
   return hosts;
 }
 
+let guard: unknown;
+
+/** Whether the global fetch is the guard right now. Only the guard's own test calls it. */
+export function guardInPlace(): boolean {
+  return guard !== undefined && globalThis.fetch === guard;
+}
+
 function install(): void {
-  vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
+  guard = (input: unknown, init?: RequestInit) => {
     if (LOOPBACK.has(hostOf(input))) return realFetch(input as string, init);
     offMachine(hostOf(input));
     throw new Error('A test called the global fetch for a host off this machine. No test may reach the network.');
-  });
+  };
+  vi.stubGlobal('fetch', guard);
 }
 
 // At load, so module scope and beforeAll in the test file see the guard too.

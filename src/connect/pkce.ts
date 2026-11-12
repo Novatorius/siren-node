@@ -4,6 +4,9 @@
  * random bytes as hex, the state 16 random bytes as hex, and the challenge
  * the S256 method, base64url SHA-256 with no padding. Each is a pure
  * function. The store keeps the verifier and the state, never the SDK.
+ *
+ * The module imports `randomBytes` as `import { randomBytes } from
+ * 'node:crypto'`, the exact specifier its tests intercept.
  */
 
 /**

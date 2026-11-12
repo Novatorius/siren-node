@@ -1,9 +1,9 @@
-import { inspect } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { ApiError, ConnectionError, HttpClientError, MissingScopeError, PermissionError, UnexpectedResponseError } from '../src/index';
 import { ConnectScope, ConnectWebhookResource } from '../src/connect/index';
 import type { ConnectResource } from '../src/connect/index';
 import type { HttpRequest } from '../src/http';
+import { shown } from './error-text';
 import { reply } from './http-fakes';
 import { BASE, ConnectAnswers, connectOver } from './connect-fakes';
 
@@ -242,17 +242,32 @@ describe('P3: ConnectResource transport rules', () => {
 
   it.skip.each([
     ['customerEmailKey without keyId', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, keyId: undefined }],
+    ['customerEmailKey with an empty keyId', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, keyId: '' }],
     ['customerEmailKey with an empty secret', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: '' }],
     ['customerEmailKey with a secret that is not text', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: 42 }],
     ['customerEmailKey with no fields', (c: ConnectResource) => c.customerEmailKey(), {}],
     ['customerEmailKey with a secret that is not base64', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: 'this is not base64 at all, though it runs well past sixteen bytes' }],
     ['customerEmailKey with a key under 16 bytes', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: 'c2hvcnQta2V5' }],
+    ['customerEmailKey with a 15-byte key', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: 'ZmlmdGVlbi1ieXRlcy1r' }],
+    ['customerEmailKey with a base64url secret', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: '-_-_dXJsLXNhZmUta2V5LXBhZA' }],
     ['updateGrant without grant', (c: ConnectResource) => c.updateGrant(), { ...ConnectAnswers.updateGrant, grant: undefined }],
     ['updateGrant with an empty grant', (c: ConnectResource) => c.updateGrant(), { ...ConnectAnswers.updateGrant, grant: '' }],
-  ] as const)('%s raises UnexpectedResponseError, so a missing secret never reads as one', async (_name, call, answer) => {
+  ] as const)('%s raises UnexpectedResponseError, so a missing secret never reads as one, and shows none of the answer', async (_name, call, answer) => {
     const { connect } = connectOver([reply(200, answer)]);
 
-    await expect(call(connect)).rejects.toBeInstanceOf(UnexpectedResponseError);
+    const error = await failure(call(connect));
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    for (const value of [(answer as { secret?: unknown }).secret, (answer as { grant?: unknown }).grant]) {
+      if (typeof value === 'string' && value !== '') expect(shown(error)).not.toContain(value);
+    }
+  });
+
+  it.skip('customerEmailKey accepts a key of exactly 16 bytes', async () => {
+    const answer = { ...ConnectAnswers.customerEmailKey, secret: 'c2l4dGVlbi1ieXRlcy1reQ==' };
+    const { connect } = connectOver([reply(200, answer)]);
+
+    await expect(connect.customerEmailKey()).resolves.toEqual(answer);
   });
 
   it.skip.each([
@@ -264,8 +279,7 @@ describe('P3: ConnectResource transport rules', () => {
     const error = await failure(call(connect));
 
     expect(error).toBeInstanceOf(UnexpectedResponseError);
-    const details = error as UnexpectedResponseError;
-    expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)} ${inspect(error, { depth: 10 })}`).not.toContain(secret);
+    expect(shown(error)).not.toContain(secret);
   });
 });
 

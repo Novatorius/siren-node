@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
+  AuthenticationError,
   CallbackAccessTokenSource,
   ConflictError,
   ConnectionError,
@@ -16,6 +17,7 @@ import {
 } from '../src/index';
 import type { ForwardedEventEnvelope } from '../src/index';
 import type { HttpRequest, HttpResponse } from '../src/http';
+import { shown } from './error-text';
 import { FakeHttpClient, reply } from './http-fakes';
 
 /*
@@ -302,6 +304,24 @@ describe('P6: events.forward is sent once', () => {
     expect(http.requests.map((request) => header(request, 'x-siren-final-attempt'))).toEqual(['1', '1']);
     expect(http.requests[1]!.body).toBe(http.requests[0]!.body);
   });
+
+  it.skip('raises AuthenticationError after a second 401, with two sends in all', async () => {
+    const refused = reply(401, { error: { message: 'Invalid access token.', context: [] } });
+    const http = new FakeHttpClient([refused, refused, reply(200, Answers.accepted)]);
+    const refreshed = vi.fn(async () => 'tok-2');
+    const client = new Siren({ accessToken: new CallbackAccessTokenSource(() => 'tok-1', refreshed), httpClient: http, maxRetries: 3 });
+
+    let caught: unknown;
+    try {
+      await client.events.forward('product-deleted', productDeleted);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AuthenticationError);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+    expect(http.requests).toHaveLength(2);
+  });
 });
 
 describe('P6: events.forward refusals', () => {
@@ -339,7 +359,7 @@ describe('P6: events.forward refusals', () => {
     }
 
     expect(caught).toBeInstanceOf(SirenError);
-    expect((caught as Error).message).not.toContain(secret);
+    expect(shown(caught)).not.toContain(secret);
     expect(http.requests).toHaveLength(0);
   });
 

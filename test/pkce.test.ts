@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SirenError } from '../src/index';
 import { codeChallengeS256, createCodeVerifier, createState } from '../src/connect/index';
+import { shown } from './error-text';
 
 
 vi.mock('node:crypto', async (importOriginal) => {
@@ -69,7 +70,7 @@ describe('P1: codeChallengeS256', () => {
       caught = error;
     }
     expect(caught).toBeInstanceOf(SirenError);
-    expect((caught as Error).message).not.toContain('S3CRET');
+    expect(shown(caught)).not.toContain('S3CRET');
   });
 
   it.skip.each([[undefined], [null], [43], [['a'.repeat(43)]]])('refuses %j, which is not a string', (value) => {

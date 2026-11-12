@@ -33,9 +33,60 @@ function sentences(text: string): string[] {
   return text.replace(/\s+/g, ' ').split(/(?<=\.)\s/);
 }
 
-/** Whether a sentence states its advice without negating it, as "no", "not", "never", "need not" or "without" would. */
-function affirmed(sentence: string): boolean {
-  return !/\b(?:no|not|never|none|without|needn't|don't|doesn't|isn't)\b/i.test(sentence);
+/**
+ * One piece of security advice the README must give. `says` matches a
+ * sentence that gives it, in any natural wording, negations included.
+ * `refuses` matches a sentence that undoes it, such as one that makes the
+ * lock optional. The README gives the advice when some sentence says it and
+ * no sentence refuses it.
+ */
+interface Advice {
+  says: (sentence: string) => boolean;
+  refuses: (sentence: string) => boolean;
+}
+
+const ADVICE = {
+  lock: {
+    says: (s) => /\block(?:s|ed)?\b/i.test(s) && /\brefresh/i.test(s),
+    refuses: (s) =>
+      /\b(?:no|without|skips?|skipping|optional|needs? not|needn't|unnecessary)\b[^.]{0,40}\block/i.test(s) ||
+      /\block\b[^.]{0,40}\b(?:is optional|is unnecessary|is not needed|isn't needed)\b/i.test(s),
+  },
+  window: {
+    says: (s) => /\b30 seconds\b/i.test(s) && /\b(?:revoke[sd]?|family)\b/i.test(s),
+    refuses: (s) => /\b(?:after|past|beyond|more than) 30 seconds\b[^.]{0,60}\b(?:is safe|is harmless|is fine|is allowed)\b/i.test(s),
+  },
+  randomAttemptId: {
+    says: (s) => /`attemptId`/.test(s) && /\brandom\b/i.test(s),
+    refuses: (s) =>
+      /\b(?:need not|needn't|does not need to|doesn't need to) be random\b/i.test(s) ||
+      /`attemptId`[^.]{0,40}\b(?:may|can|could) be (?:a |the )?(?:counter|sequence|timestamp|fixed)/i.test(s),
+  },
+  state: {
+    says: (s) => /`state`/.test(s) && /\b(?:compare|match|check)/i.test(s) && /\bonce\b/i.test(s),
+    refuses: (s) =>
+      /`state`[^.]{0,60}\b(?:is optional|may be skipped|need not be checked|needn't be checked)\b/i.test(s) ||
+      /\b(?:checking|comparing) `state` is optional\b|\b(?:skip|no need to check)\b[^.]{0,40}`state`/i.test(s),
+  },
+  verifyWebhooks: {
+    says: (s) => (/`constructEvent`|constructEvent\(/.test(s)) && /\bsigning secret\b|`signingSecret`/i.test(s) && /\bverif/i.test(s),
+    refuses: (s) =>
+      /\b(?:skip|optional|need not|needn't|no need to)\b[^.]{0,40}\bverif/i.test(s) || /\bverif\w*[^.]{0,40}\b(?:is optional|optional)\b/i.test(s),
+  },
+  noSecretsInLogs: {
+    says: (s) =>
+      /\bcustomer email key\b|`customerEmailKey`/i.test(s) &&
+      /\bsigning secret\b|`signingSecret`/i.test(s) &&
+      /\b(?:never|don't|do not)\s+(?:log|print)\b|\bout of (?:every |all )?(?:logs?|error reports?)\b/i.test(s),
+    refuses: (s) =>
+      /\b(?:customer email key|signing secret|token pair|tokens?)\b|`(?:customerEmailKey|signingSecret)`/i.test(s) &&
+      /\b(?:safe to|fine to|may|can) (?:be )?(?:log|logged|print|printed)\b/i.test(s),
+  },
+} satisfies Record<string, Advice>;
+
+/** Whether the sentences give the advice: one says it and none refuses it. */
+function advises(all: string[], advice: Advice): boolean {
+  return all.some(advice.says) && !all.some(advice.refuses);
 }
 
 /** One path block in openapi.yaml, from its key to the next path. */
@@ -121,6 +172,29 @@ describe('P7: openapi.yaml', () => {
   });
 });
 
+// The advice checks themselves, run now: each takes advice worded with a
+// natural negation and turns down advice that undoes it.
+describe('README advice checks', () => {
+  it.each([
+    ['lock', ['The store takes its own lock around each refresh, so two refreshes never race.'], true],
+    ['lock', ['The store takes its own lock around each refresh.', 'The store may skip the lock on refresh when it runs one worker.'], false],
+    ['lock', ['A refresh needs no lock.'], false],
+    ['window', ['Never resend a refresh after 30 seconds, or Cloud revokes the family.'], true],
+    ['window', ['Never resend a refresh after 30 seconds, or Cloud revokes the family.', 'A resend after 30 seconds is safe when the first try timed out.'], false],
+    ['randomAttemptId', ['Make `attemptId` a fresh random value for each refresh, not a counter.'], true],
+    ['randomAttemptId', ['`attemptId` need not be random.'], false],
+    ['randomAttemptId', ['Give `attemptId` a random value.', '`attemptId` may be a counter.'], false],
+    ['state', ['Refuse a `state` that does not match the one you kept, and use it once.'], true],
+    ['state', ['Refuse a `state` that does not match the one you kept, and use it once.', 'Checking `state` is optional on a trusted network.'], false],
+    ['verifyWebhooks', ['Verify every delivery with `constructEvent` and the signing secret, and never trust an unsigned one.'], true],
+    ['verifyWebhooks', ['Verify every delivery with `constructEvent` and the signing secret.', 'Verification is optional for deliveries from Cloud.'], false],
+    ['noSecretsInLogs', ['Never log the customer email key, the signing secret or the token pair.'], true],
+    ['noSecretsInLogs', ['Never log the customer email key or the signing secret.', 'The token pair is safe to log at debug level.'], false],
+  ] as const)('%s on %j gives %s', (rule, all, expected) => {
+    expect(advises([...all], ADVICE[rule])).toBe(expected);
+  });
+});
+
 describe('P7: README', () => {
   it.skip('has a Connected sites section that names the entry, the OAuth helpers, the client and events.forward', () => {
     const connected = section(read('README.md'), '## Connected sites');
@@ -142,7 +216,7 @@ describe('P7: README', () => {
     }
   });
 
-  it.skip('says a refresh is sent once and never retried, that a retry reuses attemptId, and that the store keeps the tokens', () => {
+  it.skip("says the SDK sends a refresh once and never retries it, that the store's one resend reuses attemptId, and that the store keeps the tokens", () => {
     const all = sentences(section(read('README.md'), '## Connected sites'));
 
     expect(
@@ -151,7 +225,7 @@ describe('P7: README', () => {
     ).toBe(true);
     expect(
       all.some((s) => /`attemptId`/.test(s) && /\bsame\b/i.test(s)),
-      'a sentence says a retry sends the same attemptId',
+      "a sentence says the store's resend sends the same attemptId",
     ).toBe(true);
     expect(
       all.some((s) => /\b(?:SDK|it) (?:keeps|stores|holds) (?:no|nothing)\b/i.test(s) && /\b(?:store|site)\b/i.test(s)),
@@ -160,31 +234,17 @@ describe('P7: README', () => {
   });
 
   it.skip('says the store locks its refresh, resends only within 30 seconds, and picks a random attemptId', () => {
-    // Security advice counts only when it is affirmed, so a sentence that
-    // negates it ("needs no lock", "need not be random") does not match.
-    const all = sentences(section(read('README.md'), '## Connected sites')).filter(affirmed);
+    const all = sentences(section(read('README.md'), '## Connected sites'));
 
-    expect(
-      all.some((s) => /\block(?:s|ed)?\b/i.test(s) && /\brefresh/i.test(s)),
-      'a sentence says the store locks its own refresh',
-    ).toBe(true);
-    expect(
-      all.some((s) => /\b30 seconds\b/i.test(s) && /\b(?:revoke[sd]?|family)\b/i.test(s)),
-      'a sentence says a resend after 30 seconds revokes the token family',
-    ).toBe(true);
-    expect(
-      all.some((s) => /`attemptId`/.test(s) && /\brandom\b/i.test(s)),
-      'a sentence says attemptId is random',
-    ).toBe(true);
+    expect(advises(all, ADVICE.lock), 'the README says the store locks its own refresh, and nothing makes the lock optional').toBe(true);
+    expect(advises(all, ADVICE.window), 'the README says a resend after 30 seconds revokes the token family').toBe(true);
+    expect(advises(all, ADVICE.randomAttemptId), 'the README says attemptId is random').toBe(true);
   });
 
   it.skip("says the store checks the callback's state against the one it kept, once", () => {
-    const all = sentences(section(read('README.md'), '## Connected sites')).filter(affirmed);
+    const all = sentences(section(read('README.md'), '## Connected sites'));
 
-    expect(
-      all.some((s) => /`state`/.test(s) && /\b(?:compare|match|check)/i.test(s) && /\bonce\b/i.test(s)),
-      'a sentence says the callback state is checked against the kept one and used once',
-    ).toBe(true);
+    expect(advises(all, ADVICE.state), 'the README says the callback state is checked against the kept one and used once').toBe(true);
   });
 
   it.skip('says what a site does on each failure the SDK leaves to it', () => {
@@ -198,12 +258,15 @@ describe('P7: README', () => {
   });
 
   it.skip('says to verify every webhook delivery with constructEvent and the signing secret', () => {
-    const all = sentences(section(read('README.md'), '## Connected sites')).filter(affirmed);
+    const all = sentences(section(read('README.md'), '## Connected sites'));
 
-    expect(
-      all.some((s) => /`constructEvent`|constructEvent\(/.test(s) && /\bsigning secret\b|`signingSecret`/i.test(s) && /\bverif/i.test(s)),
-      'a sentence says to verify each delivery with constructEvent and the signing secret',
-    ).toBe(true);
+    expect(advises(all, ADVICE.verifyWebhooks), 'the README says to verify each delivery with constructEvent and the signing secret').toBe(true);
+  });
+
+  it.skip('says never to log the customer email key or the signing secret', () => {
+    const all = sentences(section(read('README.md'), '## Connected sites'));
+
+    expect(advises(all, ADVICE.noSecretsInLogs), 'the README says never to log the customer email key or the signing secret').toBe(true);
   });
 
   it.skip('says events.forward is sent once and the outbox resends with the same eventId', () => {

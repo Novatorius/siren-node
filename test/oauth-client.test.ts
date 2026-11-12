@@ -1,4 +1,3 @@
-import { inspect } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
@@ -18,6 +17,7 @@ import {
   codeChallengeS256,
 } from '../src/connect/index';
 import type { HttpRequest, HttpResponse } from '../src/http';
+import { shown } from './error-text';
 import { FakeHttpClient, reply } from './http-fakes';
 
 /*
@@ -93,11 +93,6 @@ async function failure(promise: Promise<unknown>): Promise<Error> {
   throw new Error('expected the call to reject');
 }
 
-/** Every text an error shows: its message, its JSON form, its data, its code, and what a logger prints, cause chain included. */
-function shown(error: Error): string {
-  const details = error as Error & { data?: unknown; code?: unknown };
-  return `${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)} ${String(details.code)} ${inspect(error, { depth: 10 })}`;
-}
 
 const registerParams = {
   clientName: 'Example Store',
@@ -245,7 +240,7 @@ describe('P2: OAuthClient.authorizeUrl', () => {
     }
 
     expect(caught).toBeInstanceOf(SirenError);
-    expect((caught as Error).message).not.toContain(change.codeChallenge.slice(0, 12));
+    expect(shown(caught)).not.toContain(change.codeChallenge.slice(0, 12));
   });
 
   it.skip.each([['clientId'], ['redirectUri'], ['state']])('refuses an empty %s with SirenError', (field) => {

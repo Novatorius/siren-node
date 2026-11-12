@@ -22,7 +22,10 @@ import type {
  * Every method follows the transport's rules: one resend with a refreshed
  * token after the first 401, and retries on network errors, 429 and 5xx for
  * the methods marked retried. The reads and `updateGrant` are retried,
- * because a repeat changes nothing. The three reports (`reportSiteState`,
+ * because a repeat changes nothing and a site calls them inline, while a
+ * person waits or as a task starts. A store that calls one from its own
+ * queue builds its client with `maxRetries: 0`, so the queue's tries are
+ * the only ones. The three reports (`reportSiteState`,
  * `reportIntegrations`, `syncProducts`) are sent once: a site sends them
  * from its task queue, which owns redelivery, so an inline retry would
  * multiply every queue try. `disconnect` is sent once, because Cloud cuts
@@ -61,7 +64,8 @@ export class ConnectResource {
    * `POST /connect/update-grant`, `connect:read`, no body. A short-lived
    * signed grant the site's updater sends to fetch a paid build. Retried:
    * each send signs a new grant and records nothing. A 2xx without a
-   * non-empty text `grant` raises `UnexpectedResponseError`.
+   * non-empty text `grant` raises `UnexpectedResponseError`, which quotes
+   * no part of the answer.
    */
   async updateGrant(): Promise<ConnectUpdateGrant> {
     // Stub: slice 5 packet P3.
@@ -130,7 +134,8 @@ export class ConnectResource {
    * `Cache-Control: no-store`. Never log it. A 2xx without a non-empty
    * text `keyId`, and a `secret` that is standard base64 of at least 16
    * bytes, raises `UnexpectedResponseError`, so a site never hashes with a
-   * missing or weak key. Siren's `CloudCustomerEmailKeys` reads it the same
+   * missing or weak key. That error quotes no part of the answer, in its
+   * message, `data` or cause. Siren's `CloudCustomerEmailKeys` reads it the same
    * way.
    */
   async customerEmailKey(): Promise<CustomerEmailKey> {
