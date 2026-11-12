@@ -252,7 +252,7 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
     ['another type', credit(71, { type: 'lead' })],
     ['no collaboratorId', { id: 671, transactionId: 71, type: 'sale' }],
   ])('raises for a row naming %s, since Siren did not read the filter, and never sends again', async (_label, row) => {
-    const { http, transactions } = afterLostCredit([reply(200, page([row])), reply(200, TransactionAnswers.credited)]);
+    const { http, transactions } = afterLostCredit([reply(200, page([row])), reply(200, page([])), reply(200, TransactionAnswers.credited)]);
     await expect(transactions.creditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
 
     const error = await transactions.recoverCreditCollaborator([71, 72], 42).catch((thrown: unknown) => thrown);

@@ -12,8 +12,8 @@
   {
     "id": "control-harmless",
     "file": "src/resources/records.ts",
-    "find": "Run one recovery per\n   * conversion at a time.",
-    "replace": "Run one recovery for each\n   * conversion at a time.",
+    "find": "Run one recovery per\n   * conversion at a time,",
+    "replace": "Run one recovery for each\n   * conversion at a time,",
     "expect": "survives",
     "failing": []
   },

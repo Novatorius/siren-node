@@ -12,8 +12,8 @@
   {
     "id": "control-harmless",
     "file": "src/resources/records.ts",
-    "find": "Run one recovery per\n   * conversion at a time.",
-    "replace": "Run one recovery for each\n   * conversion at a time.",
+    "find": "Run one recovery per\n   * conversion at a time,",
+    "replace": "Run one recovery for each\n   * conversion at a time,",
     "expect": "survives",
     "failing": []
   },
@@ -194,11 +194,62 @@
   {
     "id": "f1-credit-one-page",
     "file": "src/resources/records.ts",
-    "find": "      if (rows.length < 200) break;",
+    "find": "      if (rows.length === 0) break;",
     "replace": "      break;",
     "expect": "caught",
     "failing": [
       "4 fix F1: transactions.recoverCreditCollaborator > reads every page before it decides, so a credit on page two is not sent again"
+    ]
+  },
+  {
+    "id": "f1-credit-stops-on-short-page",
+    "file": "src/resources/records.ts",
+    "find": "      if (rows.length === 0) break;",
+    "replace": "      if (rows.length < 200) break;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > reads on after a page shorter than asked"
+    ]
+  },
+  {
+    "id": "f1-credit-offset-by-page-size",
+    "file": "src/resources/records.ts",
+    "find": "      offset += rows.length;",
+    "replace": "      offset += 200;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > reads on after a page shorter than asked",
+      "4 fix F1: transactions.recoverCreditCollaborator > reads every page before it decides"
+    ]
+  },
+  {
+    "id": "f1-credit-sends-third-time",
+    "file": "src/resources/records.ts",
+    "find": "    const result = await this.creditCollaborator(rest, collaboratorId, type);",
+    "replace": "    const result = await this.creditCollaborator(rest, collaboratorId, type).catch(() => this.creditCollaborator(rest, collaboratorId, type));",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: transactions.recoverCreditCollaborator > lets an error from the second credit through and never sends a third"
+    ]
+  },
+  {
+    "id": "f1-create-sends-third-time",
+    "file": "src/resources/records.ts",
+    "find": "    return { conversion: await this.create(params), created: true };",
+    "replace": "    return { conversion: await this.create(params).catch(() => this.create(params)), created: true };",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > lets an error from the second create through and never sends a third"
+    ]
+  },
+  {
+    "id": "f1-create-row-status-compared",
+    "file": "src/resources/records.ts",
+    "find": "if (row.transactionId !== transactionId || row.engagementId !== engagementId || row.type !== params.type) {",
+    "replace": "if (row.transactionId !== transactionId || row.engagementId !== engagementId || row.type !== params.type || row.status !== params.status) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > answers a found conversion whose status has changed since, and sends nothing"
     ]
   },
   {
