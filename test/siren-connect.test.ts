@@ -15,12 +15,6 @@ import { BASE, ConnectAnswers } from './connect-fakes';
  * either one.
  *
  * Integration shape (KB 568): the real clients over a FakeHttpClient.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`. The packet that removes the last
- * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 const KEY = 'sk_live_APIKEYSECRET_123';
@@ -51,7 +45,7 @@ function caught(build: () => unknown): Error {
 }
 
 describe('P5: SirenConnect sends with the site token', () => {
-  it.skip('sends connect routes to the default base URL with the access token, the default timeout and the SDK headers', async () => {
+  it('sends connect routes to the default base URL with the access token, the default timeout and the SDK headers', async () => {
     const http = new FakeHttpClient([reply(200, ConnectAnswers.ping)]);
     const siren = new SirenConnect({ accessToken: 'tok-site', httpClient: http });
 
@@ -65,7 +59,7 @@ describe('P5: SirenConnect sends with the site token', () => {
     expect(http.requests[0]!.timeout).toBe(30_000);
   });
 
-  it.skip('honours baseUrl, timeout and maxRetries', async () => {
+  it('honours baseUrl, timeout and maxRetries', async () => {
     const http = new FakeHttpClient([
       reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }),
       reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }),
@@ -79,7 +73,7 @@ describe('P5: SirenConnect sends with the site token', () => {
     expect(http.requests[0]!.timeout).toBe(5000);
   });
 
-  it.skip('refreshes an AccessTokenSource once after a 401 and resends', async () => {
+  it('refreshes an AccessTokenSource once after a 401 and resends', async () => {
     const http = new FakeHttpClient([reply(401, ConnectAnswers.invalidToken), reply(200, ConnectAnswers.plan)]);
     const refused: string[] = [];
     const source = new CallbackAccessTokenSource(
@@ -97,7 +91,7 @@ describe('P5: SirenConnect sends with the site token', () => {
     expect(refused).toEqual(['tok-old']);
   });
 
-  it.skip('forwards events with the same token, through events.forward', async () => {
+  it('forwards events with the same token, through events.forward', async () => {
     const http = new FakeHttpClient([reply(200, { status: 'accepted', event: 'product-deleted', message: 'Event accepted.' })]);
     const siren = new SirenConnect({ accessToken: 'tok-site', httpClient: http });
 
@@ -144,7 +138,7 @@ describe('P5: SirenConnect options', () => {
     ['a polluted Object.prototype', { accessToken: 'tok', httpClient: http, polluted: true }],
   ];
 
-  it.skip.each(PARITY)('resolves %s exactly as new Siren() does', (_name, options) => {
+  it.each(PARITY)('resolves %s exactly as new Siren() does', (_name, options) => {
     const polluted = options.polluted === true;
     if (polluted) (Object.prototype as Record<string, unknown>).apiKey = KEY;
     try {
@@ -157,7 +151,7 @@ describe('P5: SirenConnect options', () => {
     }
   });
 
-  it.skip('sends the same request new Siren() sends for the same options', async () => {
+  it('sends the same request new Siren() sends for the same options', async () => {
     const options = { accessToken: 'tok', baseUrl: 'http://localhost:8080/siren/v1/', timeout: 1234, maxRetries: 0 };
     const viaConnect = new FakeHttpClient([reply(200, {})]);
     const viaSiren = new FakeHttpClient([reply(200, {})]);
@@ -168,7 +162,7 @@ describe('P5: SirenConnect options', () => {
     expect(viaConnect.requests).toEqual(viaSiren.requests);
   });
 
-  it.skip.each([
+  it.each([
     ['an apiKey alone', { apiKey: KEY }],
     ['an apiKey beside an accessToken', { apiKey: KEY, accessToken: 'tok' }],
     ['an empty apiKey beside an accessToken', { apiKey: '', accessToken: 'tok' }],
@@ -182,7 +176,7 @@ describe('P5: SirenConnect options', () => {
     expect(error.message).not.toContain('APIKEYSECRET');
   });
 
-  it.skip.each([
+  it.each([
     ['no options', undefined],
     ['empty options', {}],
     ['an accessToken given as undefined', { accessToken: undefined }],
