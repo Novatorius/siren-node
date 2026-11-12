@@ -32,10 +32,6 @@ import {
  * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource, reached through a real
  * CollaboratorsResource, over the real HttpTransport, with a FakeHttpClient
  * at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P5 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -54,7 +50,7 @@ describe('P5: enrollments surface', () => {
 });
 
 describe('P5: enrollments.list', () => {
-  it.skip('reads GET /collaborator-programs with any-of filters and paging, and answers the rows', async () => {
+  it('reads GET /collaborator-programs with any-of filters and paging, and answers the rows', async () => {
     const { http, enrollments } = over([reply(200, page([CollaboratorAnswers.enrolled], 1, 200))]);
 
     const list = await enrollments.list({ collaboratorId: 4, programId: [2, 3], perPage: 500, orderBy: 'programId' });
@@ -66,11 +62,11 @@ describe('P5: enrollments.list', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retries like a read', async () => {
+  it('retries like a read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
   });
 
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
     ['an empty collaborator list', { collaboratorId: [] }],
@@ -85,7 +81,7 @@ describe('P5: enrollments.list', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+  it('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
     const { enrollments } = over([reply(200, malformedSuccess)]);
 
     await expect(enrollments.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
@@ -93,7 +89,7 @@ describe('P5: enrollments.list', () => {
 });
 
 describe('P5: enrollments.add and remove', () => {
-  it.skip('posts one enrollment and answers it, the same for a repeat', async () => {
+  it('posts one enrollment and answers it, the same for a repeat', async () => {
     const { http, enrollments } = over([reply(201, CollaboratorAnswers.enrolled)]);
 
     expect(await enrollments.add(4, 2)).toEqual({ collaboratorId: 4, programId: 2 });
@@ -103,7 +99,7 @@ describe('P5: enrollments.add and remove', () => {
     expect(bodyOf(http.requests[0])).toEqual({ collaboratorId: 4, programId: 2 });
   });
 
-  it.skip('deletes one enrollment by query, with no body', async () => {
+  it('deletes one enrollment by query, with no body', async () => {
     const { http, enrollments } = over([reply(200, CollaboratorAnswers.unenrolled)]);
 
     expect(await enrollments.remove(4, 2)).toEqual({ deleted: true });
@@ -113,7 +109,7 @@ describe('P5: enrollments.add and remove', () => {
     expect(http.requests[0]!.body).toBeUndefined();
   });
 
-  it.skip.each([
+  it.each([
     ['add', (e: ProgramEnrollmentsResource) => e.add(4, 9)],
     ['remove', (e: ProgramEnrollmentsResource) => e.remove(4, 9)],
   ])('%s raises a program off the site as PolicyError', async (_name, call) => {
@@ -126,14 +122,14 @@ describe('P5: enrollments.add and remove', () => {
     expect((error as PolicyError).param).toBe('programId');
   });
 
-  it.skip('sends add and remove once', async () => {
+  it('sends add and remove once', async () => {
     await expectSentOnce((transport) => resource(transport).add(4, 2), reply(201, CollaboratorAnswers.enrolled));
     await expectSentOnce((transport) => resource(transport).remove(4, 2), reply(200, CollaboratorAnswers.unenrolled));
   });
 });
 
 describe('P5: enrollments through the collaborator record', () => {
-  it.skip('reads the programs a collaborator is in', async () => {
+  it('reads the programs a collaborator is in', async () => {
     const { http, enrollments } = over([
       reply(200, { id: 4, programs: [{ id: 2, name: 'Partners' }, { id: 3, name: 'Creators' }] }),
     ]);
@@ -147,13 +143,13 @@ describe('P5: enrollments through the collaborator record', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,programs' });
   });
 
-  it.skip('answers an empty list when the record has an empty programs field', async () => {
+  it('answers an empty list when the record has an empty programs field', async () => {
     const { enrollments } = over([reply(200, { id: 4, programs: [] })]);
 
     expect(await enrollments.programsFor(4)).toEqual([]);
   });
 
-  it.skip.each([
+  it.each([
     ['no programs field', { id: 4 }],
     ['a programs field that is not a list', { id: 4, programs: { id: 2 } }],
     ['an entry that is a number', { id: 4, programs: [{ id: 2, name: 'Partners' }, 7] }],
@@ -169,7 +165,7 @@ describe('P5: enrollments through the collaborator record', () => {
     expect((error as UnexpectedResponseError).message).toContain('4');
   });
 
-  it.skip('collaboratorsIn refuses a key collaborators.list refuses, and sends nothing', async () => {
+  it('collaboratorsIn refuses a key collaborators.list refuses, and sends nothing', async () => {
     const { http, enrollments } = over([reply(200, page([]))]);
 
     await expect(enrollments.collaboratorsIn(12, { propertyId: 5 } as never)).rejects.toBeInstanceOf(SirenError);
@@ -177,7 +173,7 @@ describe('P5: enrollments through the collaborator record', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('collaboratorsIn refuses a programId in params, even an undefined one, and sends nothing', async () => {
+  it('collaboratorsIn refuses a programId in params, even an undefined one, and sends nothing', async () => {
     const { http, enrollments } = over([reply(200, page([]))]);
 
     for (const params of [{ programId: 99 }, { programId: undefined }]) {
@@ -189,7 +185,7 @@ describe('P5: enrollments through the collaborator record', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('lists the collaborators in a program', async () => {
+  it('lists the collaborators in a program', async () => {
     const { http, enrollments } = over([reply(200, page([CollaboratorAnswers.listed], 1))]);
 
     const list = await enrollments.collaboratorsIn(12, { status: 'active', perPage: 20 });
@@ -199,7 +195,7 @@ describe('P5: enrollments through the collaborator record', () => {
     expect([...list]).toEqual([CollaboratorAnswers.listed]);
   });
 
-  it.skip('enrolls and unenrolls through the bulk actions', async () => {
+  it('enrolls and unenrolls through the bulk actions', async () => {
     const { http, enrollments } = over([reply(200, CollaboratorAnswers.bulk)]);
 
     expect(await enrollments.enroll(12, [4, 5])).toEqual(CollaboratorAnswers.bulk);
@@ -210,14 +206,14 @@ describe('P5: enrollments through the collaborator record', () => {
     ]);
   });
 
-  it.skip('answers a partial enroll or unenroll as Siren sends it, with affected lower than the ids sent', async () => {
+  it('answers a partial enroll or unenroll as Siren sends it, with affected lower than the ids sent', async () => {
     const { enrollments } = over([reply(200, { success: true, affected: 1 })]);
 
     expect(await enrollments.enroll(12, [4, 5])).toEqual({ success: true, affected: 1 });
     expect(await enrollments.unenroll(12, [4, 5])).toEqual({ success: true, affected: 1 });
   });
 
-  it.skip('replaces the enrollments with exactly these programs, an empty list included', async () => {
+  it('replaces the enrollments with exactly these programs, an empty list included', async () => {
     const { http, enrollments } = over([reply(200, CollaboratorAnswers.updated)]);
 
     expect(await enrollments.replace(4, [12, 15])).toEqual(CollaboratorAnswers.updated);
@@ -228,7 +224,7 @@ describe('P5: enrollments through the collaborator record', () => {
     ]);
   });
 
-  it.skip('retries the reads and sends the writes once', async () => {
+  it('retries the reads and sends the writes once', async () => {
     await expectRetried((transport) => resource(transport).programsFor(4), reply(200, { id: 4, programs: [] }));
     await expectRetried((transport) => resource(transport).collaboratorsIn(12), reply(200, page([])));
     await expectSentOnce((transport) => resource(transport).enroll(12, [4]), reply(200, CollaboratorAnswers.bulk));
@@ -254,7 +250,7 @@ describe('P5: enrollments refuse bad ids before sending', () => {
     ['replace, a bad program', (e) => e.replace(4, [12, 0])],
   ];
 
-  it.skip.each(calls)('%s', async (_name, call) => {
+  it.each(calls)('%s', async (_name, call) => {
     const { http, enrollments } = over([reply(200, {})]);
 
     await expect(call(enrollments)).rejects.toBeInstanceOf(SirenError);

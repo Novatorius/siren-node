@@ -1,0 +1,401 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    return { deleted: true };",
+    "replace": "    return { deleted: false };",
+    "expect": "caught",
+    "failing": [
+      "deletes one enrollment by query"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      throw new SirenError('replace needs a list of program ids.');",
+    "replace": "      throw new SirenError('replace needs a list of programs.');",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    return { deleted: true };",
+    "replace": "    return { deleted: true ;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    return { deleted: true };",
+    "replace": "    return { deleted: false };",
+    "expect": "wrong-reason",
+    "failing": [
+      "P2: PropertyQualifier.unqualify"
+    ]
+  },
+  {
+    "id": "p5-programs-fields",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "{ fields: 'id,programs' }",
+    "replace": "{ fields: 'programs' }",
+    "expect": "caught",
+    "failing": [
+      "reads the programs a collaborator is in"
+    ]
+  },
+  {
+    "id": "p5-programs-path",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      `/collaborators/${id}`,\n      { fields",
+    "replace": "      `/collaborators/${id}/programs`,\n      { fields",
+    "expect": "caught",
+    "failing": [
+      "reads the programs a collaborator is in"
+    ]
+  },
+  {
+    "id": "p5-programs-check-dropped",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "        Array.isArray(body.programs) && body.programs.every(isJsonObject)",
+    "replace": "        body !== null",
+    "expect": "caught",
+    "failing": [
+      "no programs field",
+      "a programs field that is not a list",
+      "an entry that is a number",
+      "an entry that is null"
+    ]
+  },
+  {
+    "id": "p5-programs-entries-unchecked",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "        Array.isArray(body.programs) && body.programs.every(isJsonObject)",
+    "replace": "        Array.isArray(body.programs)",
+    "expect": "caught",
+    "failing": [
+      "an entry that is a number",
+      "an entry that is null"
+    ]
+  },
+  {
+    "id": "p5-programs-message",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "`Siren answered collaborator ${id} without a programs list of objects.`",
+    "replace": "'Siren answered a broken collaborator.'",
+    "expect": "caught",
+    "failing": [
+      "programsFor throws UnexpectedResponseError"
+    ]
+  },
+  {
+    "id": "p5-programs-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "recordId(collaboratorId, 'programsFor', 'collaboratorId')",
+    "replace": "collaboratorId",
+    "expect": "caught",
+    "failing": [
+      "refuse bad ids before sending > programsFor"
+    ]
+  },
+  {
+    "id": "p5-in-param-allowed",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    if (Object.prototype.hasOwnProperty.call(params, 'programId')) {",
+    "replace": "    if ((params as Record<string, unknown>).programId !== undefined) {",
+    "expect": "caught",
+    "failing": [
+      "collaboratorsIn refuses a programId in params"
+    ]
+  },
+  {
+    "id": "p5-in-param-ignored",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    if (Object.prototype.hasOwnProperty.call(params, 'programId')) {",
+    "replace": "    if (params === null) {",
+    "expect": "caught",
+    "failing": [
+      "collaboratorsIn refuses a programId in params"
+    ]
+  },
+  {
+    "id": "p5-in-filters",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,",
+    "replace": "      [...CollaboratorsResource.LIST_FILTERS, 'propertyId'],\n      CollaboratorsResource.ID_FILTERS,",
+    "expect": "caught",
+    "failing": [
+      "collaboratorsIn refuses a key collaborators.list refuses"
+    ]
+  },
+  {
+    "id": "p5-in-ids",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,",
+    "replace": "      CollaboratorsResource.LIST_FILTERS,\n      {},",
+    "expect": "caught",
+    "failing": [
+      "collaboratorsIn refuses a key collaborators.list refuses"
+    ]
+  },
+  {
+    "id": "p5-in-program-dropped",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      { ...params, programId: id },",
+    "replace": "      { ...params },",
+    "expect": "caught",
+    "failing": [
+      "lists the collaborators in a program"
+    ]
+  },
+  {
+    "id": "p5-in-path",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      '/collaborators',\n      { ...params, programId: id },",
+    "replace": "      ProgramEnrollmentsResource.PATH,\n      { ...params, programId: id },",
+    "expect": "caught",
+    "failing": [
+      "lists the collaborators in a program"
+    ]
+  },
+  {
+    "id": "p5-in-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "recordId(programId, 'collaboratorsIn', 'programId')",
+    "replace": "programId",
+    "expect": "caught",
+    "failing": [
+      "refuse bad ids before sending > collaboratorsIn"
+    ]
+  },
+  {
+    "id": "p5-enroll-action",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "CollaboratorBulkAction.AddToProgram",
+    "replace": "CollaboratorBulkAction.AddToDistributor",
+    "expect": "caught",
+    "failing": [
+      "enrolls and unenrolls through the bulk actions"
+    ]
+  },
+  {
+    "id": "p5-unenroll-action",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "CollaboratorBulkAction.RemoveFromProgram",
+    "replace": "CollaboratorBulkAction.AddToProgram",
+    "expect": "caught",
+    "failing": [
+      "enrolls and unenrolls through the bulk actions"
+    ]
+  },
+  {
+    "id": "p5-enroll-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "recordId(programId, 'enroll', 'programId')",
+    "replace": "programId",
+    "expect": "caught",
+    "failing": [
+      "enroll, program"
+    ]
+  },
+  {
+    "id": "p5-unenroll-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "recordId(programId, 'unenroll', 'programId')",
+    "replace": "programId",
+    "expect": "caught",
+    "failing": [
+      "unenroll, program"
+    ]
+  },
+  {
+    "id": "p5-enroll-retried",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.AddToProgram, collaboratorIds, {\n      programId: id,\n    });",
+    "replace": "    return bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.AddToProgram, collaboratorIds, { programId: id }).catch(() => bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.AddToProgram, collaboratorIds, { programId: id }));",
+    "expect": "caught",
+    "failing": [
+      "retries the reads and sends the writes once"
+    ]
+  },
+  {
+    "id": "p5-unenroll-retried",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.RemoveFromProgram, collaboratorIds, {\n      programId: id,\n    });",
+    "replace": "    return bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.RemoveFromProgram, collaboratorIds, { programId: id }).catch(() => bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.RemoveFromProgram, collaboratorIds, { programId: id }));",
+    "expect": "caught",
+    "failing": [
+      "retries the reads and sends the writes once"
+    ]
+  },
+  {
+    "id": "p5-replace-ids-unchecked",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    const programs = programIds.map((programId: unknown) => recordId(programId, 'replace', 'programId'));",
+    "replace": "    const programs = [...programIds];",
+    "expect": "caught",
+    "failing": [
+      "replace, a bad program"
+    ]
+  },
+  {
+    "id": "p5-replace-collaborator-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "recordId(collaboratorId, 'replace', 'collaboratorId')",
+    "replace": "collaboratorId",
+    "expect": "caught",
+    "failing": [
+      "replace, collaborator"
+    ]
+  },
+  {
+    "id": "p5-replace-method",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { programs });",
+    "replace": "writeRecord<Collaborator>(this.http, 'POST', `/collaborators/${id}`, { programs });",
+    "expect": "caught",
+    "failing": [
+      "replaces the enrollments with exactly these programs"
+    ]
+  },
+  {
+    "id": "p5-replace-empty-skipped",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    const programs = programIds.map((programId: unknown) => recordId(programId, 'replace', 'programId'));",
+    "replace": "    const programs = programIds.map((programId: unknown) => recordId(programId, 'replace', 'programId'));\n    if (programs.length === 0) return { id } as Collaborator;",
+    "expect": "caught",
+    "failing": [
+      "replaces the enrollments with exactly these programs"
+    ]
+  },
+  {
+    "id": "p5-replace-retried",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    return writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { programs });",
+    "replace": "    return writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { programs }).catch(() => writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { programs }));",
+    "expect": "caught",
+    "failing": [
+      "retries the reads and sends the writes once"
+    ]
+  },
+  {
+    "id": "p5-list-ids",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      ProgramEnrollmentsResource.LIST_FILTERS,\n      ProgramEnrollmentsResource.ID_FILTERS,",
+    "replace": "      ProgramEnrollmentsResource.LIST_FILTERS,\n      {},",
+    "expect": "caught",
+    "failing": [
+      "refuses a text program id"
+    ]
+  },
+  {
+    "id": "p5-list-filters",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      ProgramEnrollmentsResource.LIST_FILTERS,\n      ProgramEnrollmentsResource.ID_FILTERS,",
+    "replace": "      [...ProgramEnrollmentsResource.LIST_FILTERS, 'propertyId', 'programID'],\n      ProgramEnrollmentsResource.ID_FILTERS,",
+    "expect": "caught",
+    "failing": [
+      "refuses propertyId",
+      "refuses a misspelt filter"
+    ]
+  },
+  {
+    "id": "p5-list-path",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "      ProgramEnrollmentsResource.PATH,\n      params,",
+    "replace": "      '/collaborators',\n      params,",
+    "expect": "caught",
+    "failing": [
+      "reads GET /collaborator-programs"
+    ]
+  },
+  {
+    "id": "p5-add-collaborator-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "collaboratorId: recordId(collaboratorId, 'add', 'collaboratorId'),",
+    "replace": "collaboratorId,",
+    "expect": "caught",
+    "failing": [
+      "add, collaborator"
+    ]
+  },
+  {
+    "id": "p5-add-program-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "programId: recordId(programId, 'add', 'programId'),",
+    "replace": "programId,",
+    "expect": "caught",
+    "failing": [
+      "add, program"
+    ]
+  },
+  {
+    "id": "p5-add-retried",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    return writeRecord<ProgramEnrollment>(this.http, 'POST', ProgramEnrollmentsResource.PATH, body);",
+    "replace": "    return writeRecord<ProgramEnrollment>(this.http, 'POST', ProgramEnrollmentsResource.PATH, body).catch(() => writeRecord<ProgramEnrollment>(this.http, 'POST', ProgramEnrollmentsResource.PATH, body));",
+    "expect": "caught",
+    "failing": [
+      "sends add and remove once"
+    ]
+  },
+  {
+    "id": "p5-remove-collaborator-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "collaboratorId: recordId(collaboratorId, 'remove', 'collaboratorId'),",
+    "replace": "collaboratorId,",
+    "expect": "caught",
+    "failing": [
+      "remove, collaborator"
+    ]
+  },
+  {
+    "id": "p5-remove-program-id",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "programId: recordId(programId, 'remove', 'programId'),",
+    "replace": "programId,",
+    "expect": "caught",
+    "failing": [
+      "remove, program"
+    ]
+  },
+  {
+    "id": "p5-remove-query-dropped",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    await deleteRecord(this.http, ProgramEnrollmentsResource.PATH, query);",
+    "replace": "    void query;\n    await deleteRecord(this.http, ProgramEnrollmentsResource.PATH);",
+    "expect": "caught",
+    "failing": [
+      "deletes one enrollment by query"
+    ]
+  },
+  {
+    "id": "p5-remove-retried",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    await deleteRecord(this.http, ProgramEnrollmentsResource.PATH, query);",
+    "replace": "    await deleteRecord(this.http, ProgramEnrollmentsResource.PATH, query).catch(() => deleteRecord(this.http, ProgramEnrollmentsResource.PATH, query));",
+    "expect": "caught",
+    "failing": [
+      "sends add and remove once"
+    ]
+  },
+  {
+    "id": "p5-remove-unawaited",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "    await deleteRecord(this.http, ProgramEnrollmentsResource.PATH, query);",
+    "replace": "    void deleteRecord(this.http, ProgramEnrollmentsResource.PATH, query).catch(() => undefined);",
+    "expect": "caught",
+    "failing": [
+      "raises a program off the site as PolicyError"
+    ]
+  }
+]
