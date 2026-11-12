@@ -68,7 +68,7 @@ export class Siren {
    * or a `FetchHttpClient` when there is none.
    */
   constructor(options: SirenOptions) {
-    // Stub: slice 2 packet P4. Until P4 lands, the client takes an apiKey
+    // Stub: slice 2 packet P5. Until P5 lands, the client takes an apiKey
     // only and sends it as 0.3.0 did.
     if (!options || typeof options.apiKey !== 'string' || options.apiKey.length === 0) {
       throw new SirenError(

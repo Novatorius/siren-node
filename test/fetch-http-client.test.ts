@@ -88,6 +88,7 @@ describe('P3: FetchHttpClient', () => {
       request({ method: 'GET', url: `${base}/siren/v1/conversions/7`, body: undefined }),
     );
 
+    expect(received).toHaveLength(1);
     expect(received[0]!.method).toBe('GET');
     expect(received[0]!.body).toBe('');
   });

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthenticationError,
   CallbackAccessTokenSource,
@@ -20,6 +20,22 @@ import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
  * its describe block. That packet's implementer turns `it.skip(` into `it(`
  * for its own tests and changes nothing else here.
  */
+
+
+/**
+ * Fails any test whose request reaches the global fetch, so a transport that
+ * ignores its client fails on that, not on a real network call.
+ */
+function tripwireFetch(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new Error('tripwire: the request went to the global fetch, not the HttpClient');
+    }),
+  );
+}
+
+beforeEach(tripwireFetch);
 
 afterEach(() => {
   vi.unstubAllGlobals();

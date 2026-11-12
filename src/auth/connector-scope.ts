@@ -29,7 +29,7 @@ export const ConnectorScope = {
 
   /** The scopes a connected site asks for, one per entry, in the order of `CONNECTED_SITE`. */
   forConnectedSite(): ConnectorScope[] {
-    // Stub: slice 2 packet P5.
+    // Stub: slice 2 packet P6.
     return [];
   },
 } as const;

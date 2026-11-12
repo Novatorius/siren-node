@@ -101,7 +101,7 @@ export class FetchHttpClient implements HttpClient {
   constructor(private readonly fetchFn?: typeof fetch) {}
 
   async send(_request: HttpRequest): Promise<HttpResponse> {
-    // Stub: slice 2 packet P2.
+    // Stub: slice 2 packet P3.
     return { status: 200, headers: {}, body: '' };
   }
 }
@@ -223,7 +223,7 @@ export class HttpTransport {
    *    nothing more is sent.
    */
   async request(req: SirenRequest): Promise<ApiResponse> {
-    // Stub: slice 2 packet P3. Until P3 lands, the transport sends through
+    // Stub: slice 2 packet P4. Until P4 lands, the transport sends through
     // the global fetch as 0.3.0 did, reads the token once, ignores `client`
     // and never refreshes.
     const url = this.buildUrl(req);

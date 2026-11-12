@@ -26,12 +26,12 @@ export class CallbackAccessTokenSource implements AccessTokenSource {
   ) {}
 
   async getAccessToken(): Promise<string> {
-    // Stub: slice 2 packet P1.
+    // Stub: slice 2 packet P2.
     return '';
   }
 
   async refreshAccessToken(_rejectedToken: string): Promise<string | null> {
-    // Stub: slice 2 packet P1.
-    return null;
+    // Stub: slice 2 packet P2.
+    return '';
   }
 }

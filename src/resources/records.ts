@@ -153,7 +153,7 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   async retrieve(_id: number, _params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 2 packet P6.
+    // Stub: slice 2 packet P7.
     return {} as T;
   }
 }
@@ -183,7 +183,7 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   async retrieve(_id: number, _params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 2 packet P6.
+    // Stub: slice 2 packet P7.
     return {} as T;
   }
 }
