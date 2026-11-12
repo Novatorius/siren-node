@@ -1,0 +1,508 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/credits.ts",
+    "find": "return `hold:${platform}:${checkout}`;",
+    "replace": "return `hold:${platform}/${checkout}`;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holdReference"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/credits.ts",
+    "find": "const ZERO_MESSAGE = 'A credit adjustment amount must not be zero.';",
+    "replace": "const ZERO_MESSAGE = 'A credit adjustment amount ' + 'must not be zero.';",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/credits.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/credits.ts",
+    "find": "if (amount === 0) throw new SirenError(ZERO_MESSAGE);",
+    "replace": "if (amount === 0 && amount !== 0) throw new SirenError(ZERO_MESSAGE);",
+    "expect": "wrong-reason",
+    "failing": [
+      "P5: credits surface"
+    ]
+  },
+  {
+    "id": "p5-zero-allowed",
+    "file": "src/resources/credits.ts",
+    "find": "if (amount === 0) throw new SirenError(ZERO_MESSAGE);",
+    "replace": "if (amount === 0 && amount !== 0) throw new SirenError(ZERO_MESSAGE);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust"
+    ]
+  },
+  {
+    "id": "p5-adjust-amount-fraction",
+    "file": "src/resources/credits.ts",
+    "find": "if (typeof amount !== 'number' || !Number.isSafeInteger(amount)) {",
+    "replace": "if (typeof amount !== 'number' || !Number.isFinite(amount)) {",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust"
+    ]
+  },
+  {
+    "id": "p5-adjust-amount-unsafe",
+    "file": "src/resources/credits.ts",
+    "find": "if (typeof amount !== 'number' || !Number.isSafeInteger(amount)) {",
+    "replace": "if (typeof amount !== 'number' || !Number.isInteger(amount)) {",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust"
+    ]
+  },
+  {
+    "id": "p5-description-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "      if (typeof description !== 'string') throw new SirenError('credits.adjust needs a description that is a string.');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust"
+    ]
+  },
+  {
+    "id": "p5-description-always",
+    "file": "src/resources/credits.ts",
+    "find": "    if (description !== undefined) {\n      if (typeof description",
+    "replace": "    {\n      if (typeof description",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust"
+    ]
+  },
+  {
+    "id": "p5-adjust-id-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "collaboratorId: recordId(collaboratorId, 'credits.adjust', 'collaboratorId'),",
+    "replace": "collaboratorId,",
+    "expect": "caught",
+    "failing": [
+      "P5: credits adjust"
+    ]
+  },
+  {
+    "id": "p5-currency-any-string",
+    "file": "src/resources/credits.ts",
+    "find": "if (!PropertyQualifier.isValidName(value)) throw new SirenError(CURRENCY_MESSAGE);",
+    "replace": "if (typeof value !== 'string' || value === '') throw new SirenError(CURRENCY_MESSAGE);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits currency codes"
+    ]
+  },
+  {
+    "id": "p5-entries-currency-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "    if (params.currency !== undefined) currencyCode(params.currency);\n    return listRecords<CreditEntry>(",
+    "replace": "    return listRecords<CreditEntry>(",
+    "expect": "caught",
+    "failing": [
+      "P5: credits currency codes"
+    ]
+  },
+  {
+    "id": "p5-holds-currency-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "    if (params.currency !== undefined) currencyCode(params.currency);\n    if (params.reference",
+    "replace": "    if (params.reference",
+    "expect": "caught",
+    "failing": [
+      "P5: credits currency codes"
+    ]
+  },
+  {
+    "id": "p5-balances-entry-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "return !Array.isArray(entries) || entries.some((entry) => typeof entry !== 'object' || entry === null || Array.isArray(entry))",
+    "replace": "return !Array.isArray(entries)",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-balances-field-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "return !Array.isArray(entries) || entries.some(",
+    "replace": "return entries === undefined || (entries as unknown[]).some(",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-balances-fields",
+    "file": "src/resources/credits.ts",
+    "find": "{ fields: 'id,creditBalances' }",
+    "replace": "{ fields: 'creditBalances' }",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-balances-id-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "const path = `/collaborators/${recordId(collaboratorId, 'credits.balances', 'collaboratorId')}`;",
+    "replace": "const path = `/collaborators/${collaboratorId}`;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-exclude-reference-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "    if (excludeReference !== undefined && !isReference(excludeReference)) {\n      throw new SirenError(referenceMessage('excludeReference'));\n    }\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-reference-parts",
+    "file": "src/resources/credits.ts",
+    "find": "    parts.length === 3 &&\n",
+    "replace": "    parts.length >= 3 &&\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-checkout-ids-dropped",
+    "file": "src/resources/credits.ts",
+    "find": "      CreditsResource.BALANCE_FILTERS,\n      CreditsResource.ID_FILTERS,\n",
+    "replace": "      CreditsResource.BALANCE_FILTERS,\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-reference-token-loose",
+    "file": "src/resources/credits.ts",
+    "find": "    isHoldName(parts[2], CreditsResource.HOLD_TOKEN_MAX_LENGTH)\n",
+    "replace": "    typeof parts[2] === 'string'\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-reference-token-length",
+    "file": "src/resources/credits.ts",
+    "find": "    isHoldName(parts[2], CreditsResource.HOLD_TOKEN_MAX_LENGTH)\n",
+    "replace": "    PropertyQualifier.isValidName(parts[2])\n",
+    "expect": "caught",
+    "failing": [
+      "P5 unit: hold references"
+    ]
+  },
+  {
+    "id": "p5-reference-prefix",
+    "file": "src/resources/credits.ts",
+    "find": "    parts[0] === 'hold' &&\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5 unit: hold references"
+    ]
+  },
+  {
+    "id": "p5-reference-platform-loose",
+    "file": "src/resources/credits.ts",
+    "find": "    isHoldName(parts[1], CreditsResource.HOLD_PLATFORM_MAX_LENGTH) &&\n",
+    "replace": "    typeof parts[1] === 'string' &&\n",
+    "expect": "caught",
+    "failing": [
+      "P5 unit: hold references"
+    ]
+  },
+  {
+    "id": "p5-reference-platform-length",
+    "file": "src/resources/credits.ts",
+    "find": "    isHoldName(parts[1], CreditsResource.HOLD_PLATFORM_MAX_LENGTH) &&\n",
+    "replace": "    PropertyQualifier.isValidName(parts[1]) &&\n",
+    "expect": "caught",
+    "failing": [
+      "P5 unit: hold references"
+    ]
+  },
+  {
+    "id": "p5-hold-name-length-tight",
+    "file": "src/resources/credits.ts",
+    "find": "return PropertyQualifier.isValidName(name) && name.length <= max;",
+    "replace": "return PropertyQualifier.isValidName(name) && name.length < max;",
+    "expect": "caught",
+    "failing": [
+      "P5 unit: hold references"
+    ]
+  },
+  {
+    "id": "p5-checkout-first-row",
+    "file": "src/resources/credits.ts",
+    "find": "return rows.find((row) => row.currency === code) ?? null;",
+    "replace": "return rows[0] ?? null;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-checkout-no-filter",
+    "file": "src/resources/credits.ts",
+    "find": "this.checkoutBalances(collaboratorId, code, excludeReference)",
+    "replace": "this.checkoutBalances(collaboratorId, undefined, excludeReference)",
+    "expect": "caught",
+    "failing": [
+      "P5: credits balances"
+    ]
+  },
+  {
+    "id": "p5-entries-named-zero-id",
+    "file": "src/resources/credits.ts",
+    "find": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;",
+    "replace": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-entries-blank-key",
+    "file": "src/resources/credits.ts",
+    "find": "  return typeof value === 'string' && value.trim() !== '';",
+    "replace": "  return typeof value === 'string';",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-entries-unnamed",
+    "file": "src/resources/credits.ts",
+    "find": "    if (!isRecordId(params.collaboratorId) && !filled(params.idempotencyKey)) throw new SirenError(ENTRIES_MESSAGE);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-holds-unnamed",
+    "file": "src/resources/credits.ts",
+    "find": "    if (!isRecordId(params.collaboratorId) && !filled(params.reference) && !filled(params.idempotencyKey)) {\n      throw new SirenError(HOLDS_MESSAGE);\n    }\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-holds-blank-reference",
+    "file": "src/resources/credits.ts",
+    "find": "!filled(params.reference) &&",
+    "replace": "params.reference === undefined &&",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-holds-reference-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "    if (params.reference !== undefined && !isReference(params.reference)) throw new SirenError(referenceMessage('reference'));\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-entries-ids-dropped",
+    "file": "src/resources/credits.ts",
+    "find": "      CreditsResource.ENTRY_FILTERS,\n      CreditsResource.ID_FILTERS,\n",
+    "replace": "      CreditsResource.ENTRY_FILTERS,\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-holds-ids-dropped",
+    "file": "src/resources/credits.ts",
+    "find": "CreditsResource.HOLD_FILTERS, CreditsResource.ID_FILTERS);",
+    "replace": "CreditsResource.HOLD_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits ledger and hold lists"
+    ]
+  },
+  {
+    "id": "p5-conflict-unmapped",
+    "file": "src/resources/credits.ts",
+    "find": "      if (error instanceof ConflictError) throw HoldConflictError.fromConflict(error);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-hold-id-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "collaboratorId: recordId(collaboratorId, 'credits.placeHold', 'collaboratorId'),",
+    "replace": "collaboratorId,",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-amount-min",
+    "file": "src/resources/credits.ts",
+    "find": "!Number.isSafeInteger(amount) || amount < 1) {",
+    "replace": "!Number.isSafeInteger(amount) || amount < -10) {",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-hold-amount-fraction",
+    "file": "src/resources/credits.ts",
+    "find": "if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 1) {",
+    "replace": "if (typeof amount !== 'number' || amount < 1) {",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-ttl-min",
+    "file": "src/resources/credits.ts",
+    "find": "        ttl < CreditsResource.HOLD_MIN_TTL ||\n",
+    "replace": "        ttl < CreditsResource.HOLD_MIN_TTL - 1 ||\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-ttl-max",
+    "file": "src/resources/credits.ts",
+    "find": "        ttl > CreditsResource.HOLD_MAX_TTL\n",
+    "replace": "        ttl > CreditsResource.HOLD_MAX_TTL + 1\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-ttl-max-tight",
+    "file": "src/resources/credits.ts",
+    "find": "        ttl > CreditsResource.HOLD_MAX_TTL\n",
+    "replace": "        ttl >= CreditsResource.HOLD_MAX_TTL\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-ttl-fraction",
+    "file": "src/resources/credits.ts",
+    "find": "        !Number.isSafeInteger(ttl) ||\n",
+    "replace": "        !Number.isFinite(ttl) ||\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-ttl-not-sent",
+    "file": "src/resources/credits.ts",
+    "find": "      body.ttl = ttl;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-name-length",
+    "file": "src/resources/credits.ts",
+    "find": "if (checked.length > max) throw",
+    "replace": "if (checked.length > max + 1) throw",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-name-length-tight",
+    "file": "src/resources/credits.ts",
+    "find": "if (checked.length > max) throw",
+    "replace": "if (checked.length >= max) throw",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-name-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "const checked = PropertyQualifier.assertName(name, field);",
+    "replace": "const checked = String(name);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-release-empty-ok",
+    "file": "src/resources/credits.ts",
+    "find": "    if (hold === null) throw new UnexpectedResponseError(`Siren answered DELETE ${path} with no hold.`, { statusCode: 204 });\n",
+    "replace": "    if (hold === null) return { id: holdId };\n",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-release-id-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "const path = `/credit-holds/${recordId(holdId, 'credits.releaseHold')}`;",
+    "replace": "const path = `/credit-holds/${holdId}`;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holds"
+    ]
+  },
+  {
+    "id": "p5-reference-shape",
+    "file": "src/resources/credits.ts",
+    "find": "const platform = holdName(platformId, 'platformId', CreditsResource.HOLD_PLATFORM_MAX_LENGTH);\n    const checkout = holdName(token, 'token', CreditsResource.HOLD_TOKEN_MAX_LENGTH);",
+    "replace": "const platform = String(platformId);\n    const checkout = String(token);",
+    "expect": "caught",
+    "failing": [
+      "P5: credits holdReference"
+    ]
+  }
+]
