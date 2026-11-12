@@ -18,11 +18,11 @@ import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '.
  * Three sends go out once, because Siren has no key to match a resent copy,
  * and a retry after a lost reply would record the event twice: a site visit,
  * which Siren records every time it arrives, a custom event sent through
- * `ingest`, whatever its slug, and a test sale with no `externalId`, which
- * Siren gives a random id.
+ * `ingest`, whatever its slug, and a sale with no `externalId`, which Siren
+ * gives a random id when it is a test and refuses when it is not.
  *
- * Stub: slice 1 packet P10 makes `ingest` and a test sale with no
- * `externalId` go out once. Until then both are marked retriable.
+ * Stub: slice 1 packet P10 makes `ingest` and a sale with no `externalId`
+ * go out once. Until then both are marked retriable.
  */
 export class EventsResource {
   constructor(private readonly http: HttpClient) {}
@@ -34,10 +34,11 @@ export class EventsResource {
    * supplied, reward pools compute `amount x quantity` per line; a missing
    * `quantity` defaults to 1.
    *
-   * A test sale (`test: true`) with no `externalId`, or a `null` one, is sent
-   * once, because Siren gives it a random id and would record a resent copy
-   * as a second test sale. Every other sale retries, since Siren matches it
-   * by `source` and `externalId`.
+   * A sale whose `externalId` is missing or `null` is sent once, whatever
+   * `test` holds. Siren gives a test sale with no id a random one, so a
+   * resent copy would record a second test, and it refuses a real sale with
+   * no id. Every sale that carries an `externalId`, an empty one included,
+   * retries, since Siren matches it by `source` and `externalId`.
    */
   sale(params: SaleParams): Promise<EventResult> {
     const { items, ...rest } = params;

@@ -216,7 +216,7 @@ describe('retry behavior', () => {
     expect(ctx.fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('retries event ingestion on network errors', async () => {
+  it('retries a sale on network errors', async () => {
     vi.useFakeTimers();
     const ctx = makeClient(
       [new TypeError('socket hang up'), emptyResponse(200, { 'X-Siren-OID': '42' })],

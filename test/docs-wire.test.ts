@@ -133,23 +133,28 @@ describe('P10: CHANGELOG and README', () => {
     return text.replace(/\s+/g, ' ').split(/(?<=\.) /);
   }
 
-  it.skip('say events.ingest and a test sale with no externalId are sent once, and never that custom events retry', () => {
+  /** A sentence that says custom events, event ingestion or events.ingest retry, with no negation. */
+  function claimsIngestRetries(sentence: string): boolean {
+    const retries = /(custom events?|event ingestion|`events\.ingest`)\b[^.]*\b(auto-?)?retr(y|ies|ied|ying)\b/i;
+    return retries.test(sentence) && !/\b(never|not|no longer)\b/i.test(sentence);
+  }
+
+  it.skip('say events.ingest and a sale with no externalId are sent once, and never that custom events retry', () => {
     for (const [name, text] of [
       ['README.md', read('README.md')],
       ['CHANGELOG Unreleased', unreleased()],
     ] as const) {
       const all = sentences(text);
       for (const sentence of all) {
-        expect(sentence, `${name}: ${sentence}`).not.toMatch(/custom events?\b[^.]*\bretried/i);
-        expect(sentence, `${name}: ${sentence}`).not.toMatch(/event ingestion\b[^.]*\bretr(y|ies)\b/i);
+        expect(claimsIngestRetries(sentence), `${name}: ${sentence}`).toBe(false);
       }
       expect(
-        all.some((s) => s.includes('`events.ingest`') && /\bonce\b/.test(s)),
+        all.some((s) => /`events\.ingest`[^.]*\bsent once\b/.test(s)),
         `${name} says events.ingest is sent once`,
       ).toBe(true);
       expect(
-        all.some((s) => /test sale/i.test(s) && s.includes('externalId') && /\bonce\b/.test(s)),
-        `${name} says a test sale with no externalId is sent once`,
+        all.some((s) => /\bsale\b[^.]*\b(with no|without an?)\s+`externalId`[^.]*\bsent once\b/i.test(s)),
+        `${name} says a sale with no externalId is sent once`,
       ).toBe(true);
     }
   });
