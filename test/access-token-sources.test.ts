@@ -14,18 +14,18 @@ import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src
  */
 
 describe('P1: StaticAccessToken', () => {
-  it.skip('answers the token it was given', async () => {
+  it('answers the token it was given', async () => {
     expect(await new StaticAccessToken('sk_live_abc').getAccessToken()).toBe('sk_live_abc');
   });
 
-  it.skip('cannot refresh, so it answers null for any refused token', async () => {
+  it('cannot refresh, so it answers null for any refused token', async () => {
     const source = new StaticAccessToken('sk_live_abc');
 
     expect(await source.refreshAccessToken('sk_live_abc')).toBeNull();
     expect(await source.refreshAccessToken('something-else')).toBeNull();
   });
 
-  it.skip.each([
+  it.each([
     ['an empty string', ''],
     ['a number', 42],
     ['undefined', undefined],
@@ -35,7 +35,7 @@ describe('P1: StaticAccessToken', () => {
 });
 
 describe('P2: CallbackAccessTokenSource', () => {
-  it.skip('answers what the get function returns, sync or async, and calls it each time', async () => {
+  it('answers what the get function returns, sync or async, and calls it each time', async () => {
     let n = 0;
     const get = vi.fn(() => `tok-${++n}`);
     const source = new CallbackAccessTokenSource(get);
@@ -46,7 +46,7 @@ describe('P2: CallbackAccessTokenSource', () => {
     expect(await new CallbackAccessTokenSource(async () => 'tok-async').getAccessToken()).toBe('tok-async');
   });
 
-  it.skip('passes the refused token to the refresh function and answers its token, sync or async', async () => {
+  it('passes the refused token to the refresh function and answers its token, sync or async', async () => {
     const refresh = vi.fn(async (rejected: string) => `${rejected}-fresh`);
     const source = new CallbackAccessTokenSource(() => 'tok-1', refresh);
 
@@ -56,11 +56,11 @@ describe('P2: CallbackAccessTokenSource', () => {
     expect(await new CallbackAccessTokenSource(() => 'a', () => 'b').refreshAccessToken('a')).toBe('b');
   });
 
-  it.skip('answers null without a refresh function', async () => {
+  it('answers null without a refresh function', async () => {
     expect(await new CallbackAccessTokenSource(() => 'tok-1').refreshAccessToken('tok-1')).toBeNull();
   });
 
-  it.skip.each([
+  it.each([
     ['null', null],
     ['an empty string', ''],
     ['a number', 7],
@@ -74,7 +74,7 @@ describe('P2: CallbackAccessTokenSource', () => {
     expect(await source.refreshAccessToken('tok-1')).toBeNull();
   });
 
-  it.skip('lets an error from either function through unchanged', async () => {
+  it('lets an error from either function through unchanged', async () => {
     const getFailure = new Error('store offline');
     const refreshFailure = new Error('grant revoked');
     const source = new CallbackAccessTokenSource(

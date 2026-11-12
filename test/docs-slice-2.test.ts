@@ -44,7 +44,7 @@ function path(openapi: string, key: string): string {
 }
 
 describe('P8: README configuration', () => {
-  it.skip('documents accessToken, AccessTokenSource, CallbackAccessTokenSource and httpClient', () => {
+  it('documents accessToken, AccessTokenSource, CallbackAccessTokenSource and httpClient', () => {
     const config = section(read('README.md'), '## Configuration');
 
     for (const name of ['accessToken', 'AccessTokenSource', 'CallbackAccessTokenSource', 'httpClient', 'HttpClient']) {
@@ -52,7 +52,7 @@ describe('P8: README configuration', () => {
     }
   });
 
-  it.skip('says a 401 is resent once with a refreshed token, that an apiKey is never refreshed, and what a host HttpClient must do', () => {
+  it('says a 401 is resent once with a refreshed token, that an apiKey is never refreshed, and what a host HttpClient must do', () => {
     const all = sentences(section(read('README.md'), '## Configuration'));
 
     expect(
@@ -79,7 +79,7 @@ describe('P8: README configuration', () => {
 });
 
 describe('P8: CHANGELOG', () => {
-  it.skip('names every new option, class and method under Unreleased', () => {
+  it('names every new option, class and method under Unreleased', () => {
     const changelog = read('CHANGELOG.md');
     const start = changelog.indexOf('## [Unreleased]');
     const end = changelog.indexOf('\n## [', start + 1);
@@ -104,7 +104,7 @@ describe('P8: CHANGELOG', () => {
 });
 
 describe('P8: openapi.yaml', () => {
-  it.skip.each([
+  it.each([
     ['/conversions/{id}', 'retrieveConversion'],
     ['/transactions/{id}', 'retrieveTransaction'],
   ])('documents GET %s with its query, scopes and answers', (key, operationId) => {

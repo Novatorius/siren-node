@@ -366,23 +366,73 @@ const storeConversions = await siren.conversions.list({ propertyId: 5, status: '
 
 ```ts
 const siren = new Siren({
-  apiKey: 'sk_live_...',                                 // required
-  baseUrl: 'https://api.sirenaffiliates.com/siren/v1',   // default; point at staging/local as needed
+  apiKey: 'sk_live_...',                                 // or accessToken, never both
+  baseUrl: 'https://api.sirenaffiliates.com/siren/v1',   // default, point at staging/local as needed
   timeout: 30_000,                                       // ms, default 30s
   maxRetries: 2,                                         // default 2
+  httpClient: new FetchHttpClient(),                     // default, or your own HttpClient
 });
 ```
 
+Pass `apiKey` or `accessToken`, never both. Both, neither or an empty one throws `SirenError`
+when you build the client.
+
+### Access tokens
+
+A connected store sends an OAuth access token instead of an API key. `accessToken` takes the token
+as a string, or an `AccessTokenSource` that supplies it and gets a fresh one when Siren refuses it:
+
+```ts
+import { CallbackAccessTokenSource, ConnectorScope, Siren } from '@novatorius/siren';
+
+const siren = new Siren({
+  accessToken: new CallbackAccessTokenSource(
+    () => store.accessToken(),
+    (rejected) => oauth.refresh(rejected), // answer null when the grant is gone
+  ),
+});
+
+// The scopes a connected site asks for in its OAuth flow.
+authorizeUrl.searchParams.set('scope', ConnectorScope.CONNECTED_SITE);
+```
+
+The SDK reads the token once per call, before the first send. When Siren answers a 401, the SDK
+asks the `AccessTokenSource` to refresh once and resends the request once with the new token,
+writes included, because Siren answers a 401 before it records anything. That resend does not
+count against `maxRetries`. A second 401 raises `AuthenticationError`, or `SiteDisconnectedError`
+when the organization revoked the site, which then needs to reconnect. An `apiKey` or a string
+`accessToken` is never refreshed, so its 401 raises after one send. An error the source throws
+reaches you unchanged, so a source whose refresh Siren refuses should answer `null` and let the
+401 surface. Each call refreshes at most once, and a source shared by concurrent callers keeps its
+own lock.
+
+### Retries
+
 Idempotent reads, sales and refunds automatically retry network errors and 429/5xx responses with
-exponential backoff (honoring `Retry-After`). Management writes — `apiKeys.create` and
-`webhooks.subscriptions.create` — are **never** auto-retried, so a flaky connection can't mint
+exponential backoff (honoring `Retry-After`). The management writes `apiKeys.create` and
+`webhooks.subscriptions.create` are **never** auto-retried, so a flaky connection can't mint
 duplicate credentials. `events.siteVisited` is never retried either, because Siren records every
 visit it receives. `events.ingest` is sent once for every slug, and a sale with no `externalId` is
-sent once, because Siren has no key to match a resent copy of either. A 401, 403 or 409 is sent
-once.
+sent once, because Siren has no key to match a resent copy of either. A 403 or 409 is sent once.
+A 401 is resent once after a refresh when the credential is an `AccessTokenSource` that can
+refresh, and a send-once request never goes out again after that resend.
 
 If your app sends events from a durable queue, set `maxRetries: 0`. The queue owns redelivery, and
 an SDK retry inside a queued attempt would multiply the attempts.
+
+### Your own HTTP stack
+
+By default the SDK sends through `FetchHttpClient`, over the global `fetch`. A host with its own
+HTTP stack implements `HttpClient`, one `send(request)` method, and passes it as `httpClient`. The
+request carries the full URL, every header, the body and `timeout` in milliseconds. Answer an
+`HttpResponse` with the status, the headers and the body as text for every status, 3xx, 4xx and
+5xx included. An `HttpClient` must never follow a redirect and answers the 3xx as it is, because a
+followed redirect would send the bearer token to another host. The SDK raises a 3xx as
+`SirenError`. An `HttpClient` keeps the request headers out of every error it throws, because they
+carry the token and the SDK hands that error to you unchanged as `cause`. Reject with
+`HttpClientError` only when no complete response arrived, such as a refused connection or a
+timeout. The SDK may resend those and then raises `ConnectionError`. Any other error reaches you
+unchanged and is never resent.
 
 ## Other SDKs
 

@@ -26,13 +26,16 @@ export class CallbackAccessTokenSource implements AccessTokenSource {
   ) {}
 
   async getAccessToken(): Promise<string> {
-    // Stub: slice 2 packet P2.
-    return '';
+    return this.get();
   }
 
-  async refreshAccessToken(_rejectedToken: string): Promise<string | null> {
-    // Stub: slice 2 packet P2. It answers an empty string, not the documented
-    // null, so the null tests fail against the stub.
-    return '';
+  async refreshAccessToken(rejectedToken: string): Promise<string | null> {
+    if (this.refresh === undefined) {
+      return null;
+    }
+
+    const token: unknown = await this.refresh(rejectedToken);
+
+    return typeof token === 'string' && token !== '' ? token : null;
   }
 }
