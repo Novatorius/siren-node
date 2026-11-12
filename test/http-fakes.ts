@@ -105,9 +105,9 @@ export const CloudAnswers = {
   },
   /**
    * A revoked or inactive connected site on the event routes.
-   * ApiKeyAuthMiddleware lines 384 and 394 answer 401 with this body and no
-   * code, so the SDK raises AuthenticationError, not SiteDisconnectedError
-   * (A137).
+   * ApiKeyAuthMiddleware answers 401 with this body and no code at both
+   * places it refuses such a site, so the SDK raises AuthenticationError, not
+   * SiteDisconnectedError. Siren should send site_disconnected there too.
    */
   eventSiteRevoked: {
     error: {

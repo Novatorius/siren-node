@@ -22,12 +22,15 @@ Siren `bb49b7d` (`saas/Auth/ApiKeyAuthMiddleware.php`,
 | 10 | `ConnectorScope`: `ConnectAll`, `Webhooks`, `RecordsRead`, `RecordsWrite`, `CONNECTED_SITE` and `forConnectedSite()` | `src/auth/connector-scope.ts` |
 | 11 | `conversions.retrieve(id, params)` and `transactions.retrieve(id, params)` on new `ConversionsResource` and `TransactionsResource` classes | `src/resources/records.ts` |
 
-`package.json` keeps version 0.3.0 and `engines` keeps `node >=18`. Nothing
-publishes. `DEFAULT_MAX_RETRIES` stays 2. A caller with a durable queue sets
+The version is 0.3.0, `engines` is `node >=18`, and nothing publishes.
+`DEFAULT_MAX_RETRIES` is 2. A caller with a durable queue sets
 `maxRetries: 0`, because its queue owns redelivery, as
 [Retry Unification (KB 591)](https://navigator.novatori.us/r/kb/591) asks.
-The connector core is that caller, and the slice that builds its `Siren`
-client passes 0.
+The connector core is that caller. Slice 11, which builds `SdkProviderClient`
+and `SdkRemoteIngest` over the SDK, passes 0 and carries that as an
+acceptance test. The one resend after a 401 stays outside the queue's count,
+because it renews a credential Siren refused before doing any work, and
+nothing Siren recorded can repeat.
 
 ## Class roles
 
@@ -47,8 +50,9 @@ Resources (events, webhooks, apiKeys, RecordsResource,
   build a SirenRequest and say whether it is retriable
 ```
 
-`HttpTransport` is the internal transport and takes the PHP SDK's name.
-`HttpClient` is the public seam, as in PHP. The transport hands resources an
+`HttpTransport` is the internal transport. `HttpClient` is the public seam,
+as in PHP, and `HttpClientError` sits beside it in `http.ts`, as PHP keeps
+`HttpClientException` beside `HttpClient`. The transport hands resources an
 `ApiResponse`, the part of the Fetch `Response` they read, so no resource
 changes beyond its import.
 
@@ -63,16 +67,19 @@ host asks for these scopes in the OAuth flow that produces the token.
 
 ## The 401 rule
 
-The transport mirrors `HttpTransport.php` lines 81 to 118:
+The transport mirrors the PHP SDK's refresh loop (`HttpTransport.php` lines
+81 to 118):
 
 1. It reads the token once per call, before the first send, and every send of
    the call carries it until a refresh replaces it. A token that is not a
-   non-empty string raises `SirenError`, naming `getAccessToken`, and nothing
-   is sent.
+   non-empty string, or that holds a control character such as a line break,
+   raises `SirenError`, naming `getAccessToken` and never quoting the value,
+   and nothing is sent. A line break in a header would make fetch quote the
+   whole value in its error.
 2. On the first 401 of the call, it asks the source for a new token, passing
-   the token that was refused. A non-empty string goes out at once, with no
-   wait, in a new request with the same method, URL and body. Any other
-   answer raises the 401.
+   the token that was refused. A non-empty string with no control character
+   goes out at once, with no wait, in a new request with the same method, URL
+   and body. Any other answer raises the 401.
 3. A later 401 in the same call, with or without retries in between, never
    refreshes again. It goes through `errorFromResponse`, so Siren's
    revoked-site answer (401, `site_disconnected`, "This site is no longer
@@ -84,7 +91,8 @@ The transport mirrors `HttpTransport.php` lines 81 to 118:
    nothing more goes out. That error replaces the 401, so a source whose
    refresh Siren refuses answers `null` and lets the disconnect surface. It
    throws only for a fault, such as an unreachable token store, as Siren's
-   own `ConnectionAccessTokenSource` does in PHP.
+   own `ConnectionAccessTokenSource` does in PHP. The host's source owns any
+   logging of that fault, since the SDK has no logger.
 
 An `apiKey` or a string `accessToken` becomes a `StaticAccessToken`, which
 answers `null`, so its 401 surfaces after one send.
@@ -182,7 +190,8 @@ vocabulary and names one value today, `extended`. It is a read, so it retries
 on 429, 5xx and a dropped connection.
 
 It throws `SirenError` before sending when `id` is not a positive whole
-number, as PHP's `recordPath` does, and the message names the id it got.
+number, a string included, as PHP's `recordPath` does, and the message names
+the id it got.
 Siren's 404 ("No record found with that ID.", which a key bound to another
 store also gets) raises `NotFoundError`. A 2xx body that is not a JSON object
 raises `UnexpectedResponseError`, as slice 1's catalog reads do, because an
@@ -193,13 +202,14 @@ reader only, as in PHP.
 
 ## Failure paths
 
-The SDK has no logger. Every failure reaches the caller as a thrown error:
+The SDK has no logger. Every failure below but the last reaches the caller as
+a thrown error:
 
 | Failure | What the caller gets |
 |---|---|
 | Missing, double or empty credential, bad `accessToken`, `httpClient` without `send` | `SirenError` from the constructor, with no credential in it |
 | The token store throws | That error, unchanged. Nothing sent |
-| The token store answers no token | `SirenError` naming `getAccessToken`. Nothing sent |
+| The token store answers no token, or one with a control character | `SirenError` naming `getAccessToken`, without the value. Nothing sent |
 | 401 and the source cannot refresh | The 401's `AuthenticationError` or `SiteDisconnectedError` |
 | The refresh throws | That error, unchanged. Nothing more sent |
 | 401 again after the resend | `SiteDisconnectedError` for a revoked site, else `AuthenticationError` |
@@ -208,14 +218,13 @@ The SDK has no logger. Every failure reaches the caller as a thrown error:
 | A host client bug | That error, unchanged. Never resent |
 | Bad record id | `SirenError` naming the id. Nothing sent |
 | A record body that is not an object | `UnexpectedResponseError` with the status, path and parsed body |
-
-`RecordsResource.list()` still reads a 2xx body that is not a list or a list
-envelope as an empty page. This slice leaves that reading alone.
+| A list body that is neither a list nor a list envelope | An empty page, as before this slice. This slice leaves that reading alone |
 
 ## Tests
 
-Acceptance tests are written in full and skipped with `it.skip`, which the
-packet's implementer turns into `it`. The vocabulary in `ConnectorScope`
+Acceptance tests are written in full and skipped with `it.skip` or
+`it.skip.each`. The packet's implementer deletes the `.skip` from every one
+of its own tests and leaves none skipped. The vocabulary in `ConnectorScope`
 runs now. Integration shape per
 [Integration Testing Standards (KB 568)](https://navigator.novatori.us/r/kb/568):
 the real client, transport and resources, with the network mocked only at
@@ -227,7 +236,8 @@ done-condition test runs the whole client through it.
 
 The Cloud answers in the fake client come from reading Siren's source at
 `bb49b7d`, cited beside each one. Nobody captured them from a running Cloud,
-so they can drift. The transport and client tests replace the global `fetch`
+so they can drift. Slice 20, which runs the connectors against a local Cloud,
+captures them and refreshes the fixtures. The transport and client tests replace the global `fetch`
 with a stub that fails the test when called, so a transport that ignores its
 client fails on that and never reaches the network.
 
@@ -263,9 +273,9 @@ documented `null`, so the `null` tests fail against them.
 Each acceptance test was unskipped against the stubs and failed on its
 assertion, except nine tests the stubs already pass. A scratch implementation
 of all eight packets passed the whole suite, then was deleted. A mutation run
-against it, one mutation per assertion that guards a rule, with the harness's
-three controls, scored every mutation as expected after test fixes. The
-packet mutation lists target that scratch code, so they stay in the run
-folder with the scratch patch and the outputs, as in slice 1. The list of
-mutations against the branch's own code,
-`scripts/mutations/ncc-slice-2-surface.json`, runs here.
+against it, one mutation for each rule a test checks, with the harness's
+three controls, scored every mutation as expected. The packet mutation lists
+target that scratch code, so they stay in the run folder with the scratch
+patch and the outputs, as in slice 1. The surface mutation list, which
+changes the branch's own code (`scripts/mutations/ncc-slice-2-surface.json`),
+runs here.

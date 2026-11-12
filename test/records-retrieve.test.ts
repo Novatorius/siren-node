@@ -18,9 +18,11 @@ import { emptyResponse, jsonResponse, makeClient } from './helpers';
  * by makeClient and answered with Siren's GetConversionById and
  * GetTransactionById bodies at bb49b7d.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
+ * the packet named in its describe block. That packet's implementer deletes
+ * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
+ * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
+ * changes nothing else here.
  */
 
 afterEach(() => {
@@ -60,12 +62,13 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
   it.skip('sends a fields list comma-separated, and include and propertyId as given', async () => {
     const ctx = makeClient([jsonResponse(200, record)]);
 
-    await retrieve(ctx.client, 7, { fields: ['id', 'status'], include: 'extended', propertyId: 3 });
+    const id = record.id as number;
+    await retrieve(ctx.client, id, { fields: ['id', 'status'], include: 'extended', propertyId: 3 });
     const listed = new URL(ctx.lastCall().url);
-    await retrieve(ctx.client, 7, { fields: 'id,dateCreated' });
+    await retrieve(ctx.client, id, { fields: 'id,dateCreated' });
     const joined = new URL(ctx.lastCall().url);
 
-    expect(listed.pathname).toBe(`/siren/v1${path}/7`);
+    expect(listed.pathname).toBe(`/siren/v1${path}/${id}`);
     expect(listed.searchParams.get('fields')).toBe('id,status');
     expect(listed.searchParams.get('include')).toBe('extended');
     expect(listed.searchParams.get('propertyId')).toBe('3');
@@ -77,7 +80,7 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
   it.skip('retries like a read on a 503', async () => {
     const ctx = makeClient([jsonResponse(503, {}), jsonResponse(200, record)], { maxRetries: 1 });
 
-    expect(await retrieve(ctx.client, 7)).toEqual(record);
+    expect(await retrieve(ctx.client, record.id as number)).toEqual(record);
     expect(ctx.calls()).toHaveLength(2);
   });
 
@@ -97,10 +100,13 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
     ['a fraction', 1.5],
     ['NaN', Number.NaN],
     ['Infinity', Number.POSITIVE_INFINITY],
+    ['a numeric string', '7'],
+    ['a word', 'abc'],
+    ['a path', '7/../api-keys'],
   ])('refuses %s with SirenError before sending', async (_label, id) => {
     const ctx = makeClient([jsonResponse(200, record)]);
 
-    const error = await retrieve(ctx.client, id).catch((caught: unknown) => caught);
+    const error = await retrieve(ctx.client, id as number).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(SirenError);
     expect((error as SirenError).message).toMatch(/\bid\b/);

@@ -20,29 +20,31 @@ import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
  * blocks prove the slice's done condition: once at the seam, and once through
  * the real FetchHttpClient against a real HTTP server on 127.0.0.1.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
+ * the packet named in its describe block. That packet's implementer deletes
+ * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
+ * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
+ * changes nothing else here.
  */
 
 
-/** The real fetch, kept before the tripwire replaces the global one. */
+/** The real fetch, kept before failOnGlobalFetch replaces the global one. */
 const realFetch = globalThis.fetch;
 
 /**
  * Fails any test whose request reaches the global fetch, so a transport that
  * ignores its client fails on that, not on a real network call.
  */
-function tripwireFetch(): void {
+function failOnGlobalFetch(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => {
-      throw new Error('tripwire: the request went to the global fetch, not the HttpClient');
+      throw new Error('the request went to the global fetch, not the HttpClient');
     }),
   );
 }
 
-beforeEach(tripwireFetch);
+beforeEach(failOnGlobalFetch);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -109,13 +111,16 @@ describe('P5: Siren credentials', () => {
     expect(() => new Siren(options as unknown as SirenOptions)).toThrow(/either apiKey or accessToken/i);
   });
 
-  it.skip('reads an accessToken given as undefined as absent', async () => {
+  it.skip('reads an option given as undefined as absent', async () => {
     const httpClient = new FakeHttpClient([reply(200, [])]);
-    const siren = new Siren({ apiKey: KEY, accessToken: undefined, httpClient } as unknown as SirenOptions);
+    const withKey = new Siren({ apiKey: KEY, accessToken: undefined, httpClient } as unknown as SirenOptions);
+    const withToken = new Siren({ apiKey: undefined, accessToken: 'oauth-access-1', httpClient } as unknown as SirenOptions);
 
-    await siren.payouts.list();
+    await withKey.payouts.list();
+    await withToken.payouts.list();
 
-    expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`]);
+    expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`, 'Bearer oauth-access-1']);
+    expect(() => new Siren({ apiKey: KEY, httpClient: undefined })).not.toThrow();
   });
 
   it.skip('keeps the credentials out of the error it raises', () => {
@@ -159,6 +164,14 @@ describe('P5: Siren httpClient', () => {
     expect(httpClient.requests[0]!.timeout).toBe(2500);
   });
 
+  it.skip('passes maxRetries 0 through, so a retriable read gets one send on a 503', async () => {
+    const httpClient = new FakeHttpClient([reply(503, undefined), reply(200, [])]);
+    const siren = new Siren({ apiKey: KEY, httpClient, maxRetries: 0 });
+
+    await expect(siren.conversions.list()).rejects.toBeInstanceOf(SirenError);
+    expect(httpClient.requests).toHaveLength(1);
+  });
+
   it.skip.each([
     ['an object with no send', {}],
     ['a function', () => undefined],
@@ -178,6 +191,7 @@ describe('P5: Siren httpClient', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer oauth-access-1');
+    expect(init.redirect).toBe('manual');
   });
 });
 
@@ -231,7 +245,11 @@ describe('P5: done condition over a real socket', () => {
 
   let server: Server;
   let base: string;
-  const received: Received[] = [];
+  let received: Received[] = [];
+
+  beforeEach(() => {
+    received = [];
+  });
 
   beforeAll(async () => {
     server = createServer((req, res) => {

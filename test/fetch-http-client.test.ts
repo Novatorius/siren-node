@@ -10,9 +10,11 @@ import { FetchHttpClient, HttpClientError, type HttpRequest } from '../src/index
  * against a real HTTP server on 127.0.0.1, so the method, headers, body and
  * timeout are checked where the server receives them.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
+ * the packet named in its describe block. That packet's implementer deletes
+ * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
+ * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
+ * changes nothing else here.
  */
 
 interface Received {

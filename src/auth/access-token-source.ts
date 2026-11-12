@@ -14,10 +14,10 @@
  * the host rotated elsewhere is picked up on the next call. When Siren answers
  * 401, the SDK calls {@link refreshAccessToken} once with the token it sent
  * and repeats the request with the new token, whether or not the request may
- * be retried, because a 401 means Siren refused the credential before doing
- * any work. A second 401 surfaces as an `AuthenticationError`, a
- * `SiteDisconnectedError` when Siren says the site is no longer connected,
- * which means the grant itself is gone and the site needs to reconnect.
+ * be retried, because Siren answers 401 before it writes anything. A second
+ * 401 surfaces as an `AuthenticationError`, or as a `SiteDisconnectedError`
+ * when Siren says the site is no longer connected, which means the grant
+ * itself is gone and the site needs to reconnect.
  *
  * Either method may answer with a value or a promise. An error either one
  * throws reaches the caller unchanged, and nothing more is sent. That error
@@ -34,8 +34,8 @@
 export interface AccessTokenSource {
   /**
    * The token to send as `Authorization: Bearer <token>`. It must be a
-   * non-empty string. The SDK raises `SirenError` and sends nothing when it
-   * is not.
+   * non-empty string with no control character. The SDK raises `SirenError`
+   * and sends nothing when it is not.
    */
   getAccessToken(): string | Promise<string>;
 
@@ -47,7 +47,7 @@ export interface AccessTokenSource {
    * caller already rotated the token, return the stored one instead of
    * refreshing again. Return `null` when no refresh is possible, and the SDK
    * raises the 401 it received. The SDK reads any answer but a non-empty
-   * string as `null`.
+   * string with no control character as `null`.
    */
   refreshAccessToken(rejectedToken: string): string | null | Promise<string | null>;
 }

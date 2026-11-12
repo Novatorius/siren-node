@@ -6,9 +6,11 @@ import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src
  * (CallbackAccessTokenSource). Each source mirrors its PHP SDK class at
  * 59383e6 (src/Auth).
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
+ * the packet named in its describe block. That packet's implementer deletes
+ * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
+ * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
+ * changes nothing else here.
  */
 
 describe('P1: StaticAccessToken', () => {

@@ -8,9 +8,11 @@ import { describe, expect, it } from 'vitest';
  * option, class and route must appear there, and no sentence may still say
  * every 401 is sent once.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
+ * the packet named in its describe block. That packet's implementer deletes
+ * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
+ * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
+ * changes nothing else here.
  */
 
 function read(name: string): string {
@@ -50,7 +52,7 @@ describe('P8: README configuration', () => {
     }
   });
 
-  it.skip('says a 401 is resent once with a refreshed token, and that an apiKey is never refreshed', () => {
+  it.skip('says a 401 is resent once with a refreshed token, that an apiKey is never refreshed, and what a host HttpClient must do', () => {
     const all = sentences(section(read('README.md'), '## Configuration'));
 
     expect(
@@ -60,6 +62,14 @@ describe('P8: README configuration', () => {
     expect(
       all.some((s) => /`apiKey`/.test(s) && /\b401\b/.test(s) && /\bnever\b|\bnot\b|\bno\b/.test(s)),
       'a sentence says an apiKey 401 is not refreshed',
+    ).toBe(true);
+    expect(
+      all.some((s) => /\bHttpClient\b/.test(s) && /\bredirect/i.test(s) && /\bnever\b|\bnot\b/.test(s)),
+      'a sentence says an HttpClient never follows a redirect',
+    ).toBe(true);
+    expect(
+      all.some((s) => /\bheaders?\b/i.test(s) && /\berrors?\b/i.test(s) && /\bout of\b|\bnever\b|\bnot\b/i.test(s)),
+      'a sentence says an HttpClient keeps the request headers out of its errors',
     ).toBe(true);
     expect(
       all.some((s) => /\bA 401, 403 or 409 is sent once\b/.test(s)),

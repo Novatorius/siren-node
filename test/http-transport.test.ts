@@ -24,9 +24,11 @@ import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
  * the network mocked only at the HttpClient seam by FakeHttpClient, which
  * replays Siren Cloud answers written from Siren's source.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
+ * the packet named in its describe block. That packet's implementer deletes
+ * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
+ * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
+ * changes nothing else here.
  */
 
 
@@ -34,16 +36,16 @@ import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
  * Fails any test whose request reaches the global fetch, so a transport that
  * ignores its client fails on that, not on a real network call.
  */
-function tripwireFetch(): void {
+function failOnGlobalFetch(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => {
-      throw new Error('tripwire: the request went to the global fetch, not the HttpClient');
+      throw new Error('the request went to the global fetch, not the HttpClient');
     }),
   );
 }
 
-beforeEach(tripwireFetch);
+beforeEach(failOnGlobalFetch);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -318,6 +320,7 @@ describe('P4: HttpTransport reads the token from the AccessTokenSource', () => {
     ['undefined', undefined],
     ['null', null],
     ['a number', 42],
+    ['a value with a line break', 'sk_secret_first\r\nX-Injected: 1'],
   ])('refuses a token that is %s with SirenError and sends nothing', async (_name, token) => {
     const tokens = spySource();
     tokens.getAccessToken.mockResolvedValueOnce(token);
@@ -327,6 +330,7 @@ describe('P4: HttpTransport reads the token from the AccessTokenSource', () => {
 
     expect(error).toBeInstanceOf(SirenError);
     expect((error as SirenError).message).toMatch(/getAccessToken/);
+    expect((error as SirenError).message).not.toContain('sk_secret_first');
     expect(client.requests).toHaveLength(0);
   });
 });
@@ -388,17 +392,22 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
   );
 
   it.skip.each(SEND_ONCE)(
-    'never retries %s when its first send loses the connection or gets a 503, with retries on',
+    'never retries %s when its first send loses the connection or gets a 503 or 429, with retries on',
     async (_name, call) => {
       vi.useFakeTimers();
-      for (const answer of [new HttpClientError('socket hang up'), reply(503, undefined)]) {
+      const firstSend: Array<[HttpResponse | Error, new (...args: never[]) => Error]> = [
+        [new HttpClientError('socket hang up'), ConnectionError],
+        [reply(503, undefined), ApiError],
+        [reply(429, { error: { message: 'Slow down.', context: [] } }, { 'Retry-After': '1' }), RateLimitError],
+      ];
+      for (const [answer, raised] of firstSend) {
         const client = new FakeHttpClient([answer, reply(200, { id: 1 })]);
 
         const pending = rejection(call(transport(client, spySource(), { maxRetries: 2 })));
         await vi.runAllTimersAsync();
         const error = await pending;
 
-        expect(error).toBeInstanceOf(answer instanceof Error ? ConnectionError : ApiError);
+        expect(error).toBeInstanceOf(raised);
         expect(client.requests).toHaveLength(1);
       }
     },
@@ -498,16 +507,23 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
     ['an empty string', ''],
     ['undefined', undefined],
     ['a number', 7],
+    ['a value with a line break', 'tok-2\r\nX-Injected: 1'],
   ])('raises the first 401 and sends nothing more when the refresh answers %s', async (_name, refreshed) => {
-    const tokens = spySource(['tok-1']);
-    tokens.refreshAccessToken.mockResolvedValue(refreshed);
-    const client = new FakeHttpClient([reply(401, CloudAnswers.siteDisconnected), reply(200, [])]);
+    for (const [refusal, raised] of [
+      [CloudAnswers.siteDisconnected, SiteDisconnectedError],
+      [CloudAnswers.authenticationRequired, AuthenticationError],
+    ] as const) {
+      const tokens = spySource(['tok-1']);
+      tokens.refreshAccessToken.mockResolvedValue(refreshed);
+      const client = new FakeHttpClient([reply(401, refusal), reply(200, [])]);
 
-    const error = await rejection(new RecordsResource(transport(client, tokens), '/conversions').list());
+      const error = await rejection(new RecordsResource(transport(client, tokens), '/conversions').list());
 
-    expect(error).toBeInstanceOf(SiteDisconnectedError);
-    expect(tokens.refreshAccessToken).toHaveBeenCalledTimes(1);
-    expect(client.requests).toHaveLength(1);
+      expect(error).toBeInstanceOf(raised);
+      expect((error as SirenError).statusCode).toBe(401);
+      expect(tokens.refreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(client.requests).toHaveLength(1);
+    }
   });
 
   it.skip('lets an error from refreshAccessToken through unchanged and sends nothing more', async () => {
@@ -560,6 +576,20 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
     expect((error as ConnectionError).message).not.toContain('sk_secret_first');
     expect((error as ConnectionError).message).toContain('Authorization: Bearer');
     expect((error as ConnectionError).cause).toBe(leaky);
+  });
+
+  it.skip('removes the fresh token too when the resend loses its connection with a leaky client error', async () => {
+    const leaky = new HttpClientError('retry failed, Authorization: Bearer sk_secret_second');
+    const client = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), leaky]);
+
+    const error = await rejection(
+      new RecordsResource(transport(client, spySource(['sk_secret_first'], 'sk_secret_second')), '/conversions').list(),
+    );
+
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect(client.requests).toHaveLength(2);
+    expect((error as ConnectionError).message).not.toContain('sk_secret_second');
+    expect((error as ConnectionError).message).not.toContain('sk_secret_first');
   });
 
   it.skip('does not count the resend as a retry: a retriable request still gets its retries after a refresh', async () => {

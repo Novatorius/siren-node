@@ -9,9 +9,11 @@ import { ConnectorScope } from '../src/index';
  * ConnectorScope at 59383e6 and Siren's ConnectorTokenMiddleware READ_SCOPE
  * and WRITE_SCOPE at bb49b7d.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
+ * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
+ * the packet named in its describe block. That packet's implementer deletes
+ * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
+ * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
+ * changes nothing else here.
  */
 
 describe('ConnectorScope vocabulary', () => {

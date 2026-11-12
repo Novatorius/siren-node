@@ -141,8 +141,9 @@ export interface SirenRequest {
    * a sale with no `externalId` and management writes are sent once.
    *
    * A 401 is not a retry. Every request, retriable or not, is sent once more
-   * with a refreshed token after Siren's first 401, because Siren refused
-   * the credential before doing any work. See {@link HttpTransport.request}.
+   * with a refreshed token after Siren's first 401, because Siren's routes
+   * answer 401 before they write. That holds by route convention in Siren,
+   * so each new write route must keep it. See {@link HttpTransport.request}.
    */
   retriable: boolean;
 }
@@ -205,25 +206,27 @@ export class HttpTransport {
    *
    * 1. Reads the token once, from `tokens.getAccessToken()`, before the first
    *    send. Every send of this call carries it until a refresh replaces it.
-   *    A token that is not a non-empty string raises `SirenError`, naming
-   *    `getAccessToken`, and nothing is sent.
+   *    A token that is not a non-empty string, or that holds a control
+   *    character such as a line break, raises `SirenError`, naming
+   *    `getAccessToken` and never quoting the value, and nothing is sent.
    * 2. Sends through `client.send()`, building a new `HttpRequest`, headers
    *    included, for each send.
    * 3. A 2xx reply is returned. Any other reply that is not a 401 is never
    *    refreshed. A 3xx raises `SirenError` with its status and is never
    *    followed or sent again.
    * 4. The first 401 of the call asks `tokens.refreshAccessToken(sent)` for a
-   *    new token, passing the token that was refused. A non-empty string is
-   *    sent at once in a new request, with no wait. Any other answer raises
-   *    the 401. A later 401 in the same call, with or without retries in
+   *    new token, passing the token that was refused. A non-empty string
+   *    with no control character is sent at once in a new request, with no
+   *    wait. Any other answer raises the 401. A later 401 in the same call, with or without retries in
    *    between, never refreshes again and raises through
    *    `errorFromResponse`, so Siren's revoked-site answer surfaces as
    *    `SiteDisconnectedError`.
    *
    *    The resend after a 401 applies to every request, retriable or not,
-   *    and does not use up a retry. Siren answers 401 from its
-   *    authentication layer, before the route records anything, so the
-   *    refused send left nothing to duplicate. A send-once request therefore
+   *    and does not use up a retry. Siren's routes answer 401 from
+   *    middleware, or from a request with no accepted credential, before
+   *    they write, so the refused send left nothing to duplicate. That holds
+   *    by route convention in Siren, and each new write route must keep it. A send-once request therefore
    *    reaches Siren with a usable credential exactly once, and is sent at
    *    most twice: the refused send and the resend. After the resend it is
    *    never sent again, whatever the reply.
