@@ -372,7 +372,7 @@
     "id": "wire-refund-drops-amount",
     "file": "src/resources/events.ts",
     "find": "    return this.send('refund', params);",
-    "replace": "    return this.send('refund', { ...params, amount: undefined, currency: undefined });",
+    "replace": "    return this.send('refund', { ...params, amount: undefined });",
     "expect": "caught",
     "failing": [
       "sends a partial refund"
@@ -416,6 +416,221 @@
     "expect": "caught",
     "failing": [
       "every 409 a plain ConflictError"
+    ]
+  },
+  {
+    "id": "wire-refund-drops-currency",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send('refund', params);",
+    "replace": "    return this.send('refund', { ...params, currency: undefined });",
+    "expect": "caught",
+    "failing": [
+      "sends a partial refund"
+    ]
+  },
+  {
+    "id": "wire-refund-drops-refundid",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send('refund', params);",
+    "replace": "    return this.send('refund', { ...params, refundId: undefined });",
+    "expect": "caught",
+    "failing": [
+      "sends a partial refund",
+      "sends a whole cancellation"
+    ]
+  },
+  {
+    "id": "wire-refund-drops-whole",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send('refund', params);",
+    "replace": "    return this.send('refund', { ...params, whole: undefined });",
+    "expect": "caught",
+    "failing": [
+      "sends a whole cancellation"
+    ]
+  },
+  {
+    "id": "wire-refund-line-drops-lineid",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send('refund', params);",
+    "replace": "    return this.send('refund', { ...params, lines: params.lines?.map(({ lineId, ...line }) => (void lineId, line)) });",
+    "expect": "caught",
+    "failing": [
+      "sends a partial refund"
+    ]
+  },
+  {
+    "id": "wire-refund-line-drops-sku",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send('refund', params);",
+    "replace": "    return this.send('refund', { ...params, lines: params.lines?.map(({ sku, ...line }) => (void sku, line)) });",
+    "expect": "caught",
+    "failing": [
+      "sends a partial refund"
+    ]
+  },
+  {
+    "id": "wire-refund-line-drops-quantity",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send('refund', params);",
+    "replace": "    return this.send('refund', { ...params, lines: params.lines?.map(({ quantity, ...line }) => (void quantity, line)) });",
+    "expect": "caught",
+    "failing": [
+      "sends a partial refund"
+    ]
+  },
+  {
+    "id": "wire-sale-drops-trackingid",
+    "file": "src/resources/events.ts",
+    "find": "    const payload: Record<string, unknown> = { ...rest };",
+    "replace": "    const payload: Record<string, unknown> = { ...rest };\n    delete payload.trackingId;",
+    "expect": "caught",
+    "failing": [
+      "sends each line item lineId unchanged"
+    ]
+  },
+  {
+    "id": "wire-sale-drops-total",
+    "file": "src/resources/events.ts",
+    "find": "    const payload: Record<string, unknown> = { ...rest };",
+    "replace": "    const payload: Record<string, unknown> = { ...rest };\n    delete payload.total;",
+    "expect": "caught",
+    "failing": [
+      "sends each line item lineId unchanged",
+      "sends a test sale with its optional fields"
+    ]
+  },
+  {
+    "id": "wire-sale-drops-source",
+    "file": "src/resources/events.ts",
+    "find": "    const payload: Record<string, unknown> = { ...rest };",
+    "replace": "    const payload: Record<string, unknown> = { ...rest };\n    delete payload.source;",
+    "expect": "caught",
+    "failing": [
+      "sends each line item lineId unchanged",
+      "sends a test sale with its optional fields"
+    ]
+  },
+  {
+    "id": "wire-sale-no-quantity-default",
+    "file": "src/resources/events.ts",
+    "find": "({ ...item, quantity: item.quantity ?? 1 })",
+    "replace": "({ ...item })",
+    "expect": "caught",
+    "failing": [
+      "sends each line item lineId unchanged"
+    ]
+  },
+  {
+    "id": "wire-visit-drops-userid",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send('site-visited', params);",
+    "replace": "    return this.send('site-visited', { collaboratorId: params.collaboratorId });",
+    "expect": "caught",
+    "failing": [
+      "still sends a numeric collaboratorId"
+    ]
+  },
+  {
+    "id": "wire-sale-not-retriable",
+    "file": "src/resources/events.ts",
+    "find": "      retriable: true,\n    });\n    const result: EventResult = {};",
+    "replace": "      retriable: slug !== 'sale',\n    });\n    const result: EventResult = {};",
+    "expect": "caught",
+    "failing": [
+      "retries a sale"
+    ]
+  },
+  {
+    "id": "wire-refund-not-retriable",
+    "file": "src/resources/events.ts",
+    "find": "      retriable: true,\n    });\n    const result: EventResult = {};",
+    "replace": "      retriable: slug !== 'refund',\n    });\n    const result: EventResult = {};",
+    "expect": "caught",
+    "failing": [
+      "retries a refund"
+    ]
+  },
+  {
+    "id": "transport-retries-401",
+    "file": "src/http.ts",
+    "find": "(response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;",
+    "replace": "(response.status === 429 || response.status >= 500 || response.status === 401) && attempt + 1 < maxAttempts;",
+    "expect": "caught",
+    "failing": [
+      "sends each refusal once"
+    ]
+  },
+  {
+    "id": "transport-retries-403",
+    "file": "src/http.ts",
+    "find": "(response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;",
+    "replace": "(response.status === 429 || response.status >= 500 || response.status === 403) && attempt + 1 < maxAttempts;",
+    "expect": "caught",
+    "failing": [
+      "sends each refusal once"
+    ]
+  },
+  {
+    "id": "transport-retries-409",
+    "file": "src/http.ts",
+    "find": "(response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;",
+    "replace": "(response.status === 429 || response.status >= 500 || response.status === 409) && attempt + 1 < maxAttempts;",
+    "expect": "caught",
+    "failing": [
+      "sends each refusal once"
+    ]
+  },
+  {
+    "id": "conflict-409-code-held-wrapped",
+    "file": "src/errors.ts",
+    "find": "    case 409:\n      return new ConflictError(message, details);",
+    "replace": "    case 409:\n      if (parsed.code === 'code_held') return new CodeConflictError(message, '', '', details);\n      return new ConflictError(message, details);",
+    "expect": "caught",
+    "failing": [
+      "every 409 a plain ConflictError"
+    ]
+  },
+  {
+    "id": "conflict-409-currency-wrapped",
+    "file": "src/errors.ts",
+    "find": "    case 409:\n      return new ConflictError(message, details);",
+    "replace": "    case 409:\n      if (parsed.code === 'hold_currency_not_at_store') return new HoldConflictError(message, details);\n      return new ConflictError(message, details);",
+    "expect": "caught",
+    "failing": [
+      "every 409 a plain ConflictError"
+    ]
+  },
+  {
+    "id": "type-test-sale-test-widened",
+    "file": "src/types.ts",
+    "find": "export interface TestSaleParams extends Partial<SaleFields> {\n  test: true;",
+    "replace": "export interface TestSaleParams extends Partial<SaleFields> {\n  test: boolean;",
+    "expect": "caught",
+    "failing": [
+      "wire-types.ts",
+      "Unused '@ts-expect-error'"
+    ]
+  },
+  {
+    "id": "type-live-source-optional",
+    "file": "src/types.ts",
+    "find": "  /** Commerce source identifier, e.g. `\"stripe\"`, `\"woocommerce\"`. */\n  source: string;\n  /** Your order or transaction id, used later to match refunds.",
+    "replace": "  /** Commerce source identifier, e.g. `\"stripe\"`, `\"woocommerce\"`. */\n  source?: string;\n  /** Your order or transaction id, used later to match refunds.",
+    "expect": "caught",
+    "failing": [
+      "wire-types.ts",
+      "Unused '@ts-expect-error'"
+    ]
+  },
+  {
+    "id": "slug-scope-drift",
+    "file": "src/taxonomy.ts",
+    "find": "SiteVisited: 'site-visited'",
+    "replace": "SiteVisited: 'site-visit'",
+    "expect": "caught",
+    "failing": [
+      "each built-in event scope names its EventSlug"
     ]
   }
 ]

@@ -6,14 +6,13 @@ Siren and the Siren PHP SDK, so the connector core in later slices can depend
 on the SDK for every Cloud term. Design: section 3, gaps 1 to 7, of
 [Design: Siren Node commerce connectors (Source 16182)](https://navigator.novatori.us/r/source/16182).
 
-Read from: Siren `bb49b7d`, the Siren PHP SDK `59383e6b`, and this branch,
-which merges pull request 11 (`refundId` required) first.
+Read from: Siren `bb49b7d` and the Siren PHP SDK `59383e6b`.
 
 ## What changes
 
 | Gap | Change | Where |
 |---|---|---|
-| 1 | `RefundParams` keeps the required `refundId` from pull request 11 and gains optional `amount`, `currency`, `lines` (`RefundLine`), `whole` and `kind` (`RefundKind`), the fields `RefundEventFactory` reads | `src/types.ts`, `src/taxonomy.ts` |
+| 1 | `RefundParams` requires `refundId` and takes optional `amount`, `currency`, `lines` (`RefundLine`), `whole` and `kind` (`RefundKind`), the fields `RefundEventFactory` reads | `src/types.ts`, `src/taxonomy.ts` |
 | 2 | `SaleParams` becomes `LiveSaleParams \| TestSaleParams`. A test sale takes `test: true` and needs no other field. `LineItem` gains `lineId` | `src/types.ts` |
 | 3 | `SiteVisitedParams.collaboratorId` takes `number \| tracking:${string}` | `src/types.ts` |
 | 4 | `WebhookEventType` holds all 64 events in Siren's `WebhookCatalog`. `webhooks.subscriptions.events()` reads `GET /webhooks/events` | `src/event-types.ts`, `src/resources/webhooks.ts` |
@@ -30,9 +29,8 @@ which merges pull request 11 (`refundId` required) first.
   (`lib/Webhooks/Service/Services/WebhookCatalog.php`), plus `*`.
 - `ErrorCode`: the 26 codes of Siren's `ApiErrorCode`
   (`lib/Core/Service/Rest/ApiErrorCode.php`).
-- `EventStatus` and `EventReason`: the statuses and reasons Siren's event
-  factories answer with. Reasons have their own vocabulary, so a status union
-  never accepts a reason.
+- `EventStatus`: the statuses Siren's event factories answer with.
+  `EventReason`: the reasons they give when an event earns nothing.
 - The twelve record vocabularies: the Siren PHP SDK's `src/*Status.php` and
   `src/CustomCurrencyType.php`, holding the values Siren accepts today.
 - `test/fixtures/webhook-events.json` and `test/fixtures/api-key-scopes.json`:
@@ -42,13 +40,15 @@ which merges pull request 11 (`refundId` required) first.
   checkout before the slice merges. The scopes fixture holds no custom event
   types, which an organization adds at run time.
 - `HoldConflictReason` and `ErrorCode` live with the error classes in
-  `src/errors.ts`, since only errors use them.
+  `src/errors.ts`, since only errors use them. Every other vocabulary lives
+  in `src/taxonomy.ts`.
 
 ## How errors are chosen
 
 `errorFromResponse` keeps its status switch. Its 401 and 403 branches call
 each specialized class's static `matches(message, code, data?)` in the PHP
-SDK's order:
+SDK's order. Static `matches()` and `fromConflict()` mirror the PHP SDK's
+exception classes, and new error classes in this SDK follow them:
 
 - 401: `SiteDisconnectedError`, then `ApiKeyNotAcceptedError`, else `AuthenticationError`.
 - 403: `MissingScopeError`, then `StoreKeyNotAllowedError`, then `PolicyError`, else `PermissionError`.
@@ -71,9 +71,10 @@ caller catches.
 
 ## Failure paths
 
-The SDK has no logger. Every failure reaches the caller as a thrown
-`SirenError` carrying the reply's `statusCode`, message, `code` and `data`,
-and the caller's own logger records it.
+The SDK is a client library with no logger and no `LoggerStrategy`. Every
+failure reaches the caller as a thrown `SirenError` carrying the reply's
+`statusCode`, message, `code` and `data`, and the caller's own logger
+records it.
 
 - **A reply the SDK cannot classify.** When a 401 or 403 carries no code Siren
   defines and no wording a class looks for, the caller gets the parent class,
@@ -86,16 +87,19 @@ and the caller's own logger records it.
   looks like a real answer. Siren builds both from constants, so a caller
   that sees one has a broken deployment, and the error is final.
 - **Retries.** The transport retries a request marked `retriable` on 429, 5xx
-  and a failed connection, up to `maxRetries`. The two catalog reads and the
-  event sends (`events.sale`, `events.refund`, `events.siteVisited`) are
-  marked `retriable`. A caller with a durable queue sets `maxRetries: 0`,
-  because the queue owns redelivery, and an SDK retry inside a queued attempt
-  would multiply the attempts.
+  and a failed connection, up to `maxRetries`, which defaults to 2. It waits
+  500 ms, doubling each time up to 8 s, and a `Retry-After` header sets the
+  wait instead, also capped at 8 s. The two catalog reads, `events.sale` and
+  `events.refund` are marked `retriable`, and tests pin each one.
+  `events.siteVisited` is not, as packet P9 makes it, because Siren records
+  every visit it receives. A caller with a durable queue sets
+  `maxRetries: 0`, because the queue owns redelivery, and an SDK retry inside
+  a queued attempt would multiply the attempts.
 - **What each error means for a retry.**
 
   | Error | Retry? |
   |---|---|
-  | `RateLimitError`, 5xx `ApiError`, `ConnectionError` | Yes, later. The transport has already tried `maxRetries` times |
+  | `RateLimitError`, 5xx `ApiError`, `ConnectionError` | Yes, by re-enqueueing the job. The transport has already tried `maxRetries` times, so never loop at the call site |
   | `UnexpectedResponseError` | No. The deployment is broken |
   | `SiteDisconnectedError` | No. Reconnect the site |
   | `PolicyError` | No. Change the request |
@@ -103,34 +107,31 @@ and the caller's own logger records it.
   | `HoldConflictError` with `no_credit` | No. Apply no credit |
   | `HoldConflictError` with `token_in_use` | Mint a new token and place a new hold. Never resend the same one |
   | `HoldConflictError` with a `null` reason | No. Apply no credit |
+  | Any other 4xx (`BadRequestError`, `NotFoundError`, `ValidationError`, `AuthenticationError`, `PermissionError`) | No. Fix the request or the credentials |
 
   A 401, 403 or 409 is sent once, and a test pins that with retries on.
 - **Sending an event twice.** Siren matches a sale by `source` and
   `externalId` and answers a replay with the first result, so a resent sale
   records nothing new. It records each `refundId` once per order. A caller
   keeps both keys from the store's own order and refund, never one per
-  attempt. A `duplicate` status in the result is a success.
+  attempt. A `duplicate` status in the result is a success. Siren records
+  every visit it receives (`SiteVisitedFactory`), so a visit is sent once.
 
-## What the architecture commit already holds, and why
+## Why the vocabulary is written in full
 
-The vocabulary is written in full here: the `WebhookEventType`, `ErrorCode`,
-`POLICY_ERROR_CODES`, `HoldConflictReason` and taxonomy values, the request
-types for gaps 1 to 3, and `UnexpectedResponseError`, which only passes its
-arguments on. A TypeScript `as const` object's type is its values, so the
-public surface cannot be stubbed without them. The
+The `WebhookEventType`, `ErrorCode`, `POLICY_ERROR_CODES`, `HoldConflictReason`
+and taxonomy values, the request types for gaps 1 to 3, and
+`UnexpectedResponseError`, which only passes its arguments on, are written in
+full. A TypeScript `as const` object's type is its values, so the public
+surface cannot be stubbed without them. The
 [Architecture Phase Contract (KB 643)](https://navigator.novatori.us/r/kb/643)
-allows this, for surface whose type is its content. Their tests pass on this
-commit, and a mutation run shows each one fails when a value or field is
-broken.
+allows this for surface whose type is its content, and a mutation run shows
+each value's test fails when the value is broken.
 
 Gaps 1 to 3 need no runtime change, because `events.sale`, `events.refund` and
-`events.siteVisited` already send the fields they are given. Their fixture
-tests pin the JSON body at the network, so a later change to those methods
-that drops a field fails them.
-
-The three existing 401 and 403 classes match on the code alone until packet
-P1 adds the known-code rule and the wording fallback to them. The new
-`matches()` stubs answer `false`.
+`events.siteVisited` send the fields they are given. Their fixture tests pin
+the JSON body at the network, so a change to those methods that drops a field
+fails them.
 
 ## Classes and packets
 
@@ -144,38 +145,46 @@ P1 adds the known-code rule and the wording fallback to them. The new
 | P6 | `WebhookSubscriptionsResource.events()` | mechanical |
 | P7 | `ApiKeysResource.scopes()` | mechanical |
 | P8 | README, CHANGELOG and `openapi.yaml` for every change above | mechanical, docs |
+| P9 | `events.siteVisited` sent once, and the event sends name their routes by `EventSlug` | mechanical |
 
 ## Acceptance tests
 
 - `test/wire-taxonomy.test.ts`: every vocabulary, pinned whole against Siren
-  or the PHP SDK. Passes now.
+  or the PHP SDK, and each built-in event scope against its `EventSlug`.
 - `test/wire-events.test.ts`: the JSON body of a sale with `lineId`, a test
-  sale, a partial and a whole refund, and a visit by tracking code. Passes now.
+  sale, a partial and a whole refund, and a visit by tracking code. A sale
+  and a refund are retried on a 503. P9's tests send a visit once.
 - `test/types/wire-types.ts`: compile-time contract, run by `npm run
   typecheck`. A refund without `refundId`, a real sale without `trackingId`,
   a bad `kind` and a bare text `collaboratorId` each fail to typecheck.
-- `test/error-classes.test.ts`: P1 to P5, marked `it.skip`, plus two tests
-  that pass now: every 409 stays a plain `ConflictError`, and each refusal is
-  sent once with retries on.
-- `test/catalog-reads.test.ts`: P6 and P7, marked `it.skip`, against the
-  generated fixtures in `test/fixtures/`.
-- `test/docs-wire.test.ts`: P8, marked `it.skip`. It reads `openapi.yaml`,
-  the CHANGELOG and the README for each new field, route, event, code, method
-  and class. The API reference documents the wire. The record vocabularies
-  are SDK exports with no wire field of their own yet, so the CHANGELOG names
-  them and the reference does not.
-- `test/webhooks.test.ts`: the existing event count test now expects 64.
+- `test/error-classes.test.ts`: P1 to P5, and two tests that every 409 stays a
+  plain `ConflictError` and that each refusal is sent once with retries on.
+  It sits apart from `test/errors.test.ts` so each packet's tests share one
+  describe block.
+- `test/catalog-reads.test.ts`: P6 and P7, against the generated fixtures in
+  `test/fixtures/`.
+- `test/docs-wire.test.ts`: P8. It reads `openapi.yaml`, the CHANGELOG and the
+  README for each new field, route, event, code, method and class. The API
+  reference documents the wire. The record vocabularies are SDK exports with
+  no wire field of their own yet, so the CHANGELOG names them and the
+  reference does not.
+- `test/webhooks.test.ts`: the event count test expects 64.
+
+Each packet's tests carry the `it.skip` marker until its implementer removes
+it.
 
 These tests are the SDK's end-to-end proof for this slice. Each one sends a
 real request through the client's transport to a stubbed `fetch` and checks
 the body on the wire or the error a caller catches, with fixtures generated
 from Siren's controllers. A run against a live Siren belongs to the connector
-slices, which prove the whole flow on UAT.
+slices. Slice 20 runs a local Cloud in Docker for the golden path. Capturing
+the two catalog bodies there and comparing them with `--check` is the live
+check on this slice's fixtures, and the slice 1 packets leave it to slice 20.
 
-Every acceptance test was run with its marker removed against a scratch
-implementation in a separate clone, then run against one mutation per guard.
-`scripts/mutation-proof.mjs` does the mutation runs and scores each one on the
-exit code of `npm test && npm run typecheck`.
+The architect ran every acceptance test with its marker removed against a
+scratch implementation in a separate clone, then against one mutation per
+guard. The mutation harness (`scripts/mutation-proof.mjs`) scores each
+mutation on the exit code of `npm test && npm run typecheck`.
 `scripts/mutations/ncc-slice-1-surface.json` holds the mutations for the
 surface this commit writes in full, and reproduces on this branch with
 `node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-1-surface.json`.

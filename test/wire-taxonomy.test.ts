@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  ApiKeyScope,
   ApiKeyStatus,
   CollaboratorStatus,
   ConversionStatus,
@@ -26,7 +27,8 @@ import {
 /*
  * Slice 1 acceptance tests: the wire vocabulary.
  *
- * Siren owns these terms (KB 566, global-taxonomy-and-sdk-doctrine). Each
+ * Siren owns these terms, per Taxonomy Ownership & SDK Typing Doctrine
+ * (KB 566, https://navigator.novatori.us/r/kb/566). Each
  * expectation below was copied from Siren at bb49b7d or from the Siren PHP
  * SDK at 59383e6b, and the comment on each block names the file. When one
  * fails, reconcile against Siren, never by editing the expectation to match
@@ -207,6 +209,12 @@ describe('event vocabulary', () => {
   // Siren PHP SDK src/EventSlug.php.
   it('EventSlug names the three built-in event routes', () => {
     expect(EventSlug).toEqual({ Sale: 'sale', Refund: 'refund', SiteVisited: 'site-visited' });
+  });
+
+  it('each built-in event scope names its EventSlug', () => {
+    expect(ApiKeyScope.Sale).toBe(`event:${EventSlug.Sale}`);
+    expect(ApiKeyScope.Refund).toBe(`event:${EventSlug.Refund}`);
+    expect(ApiKeyScope.SiteVisited).toBe(`event:${EventSlug.SiteVisited}`);
   });
 
   // Siren lib/Commerce/Models/RefundDetails.php KINDS, which
