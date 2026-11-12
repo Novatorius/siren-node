@@ -222,10 +222,10 @@ describe('P3: collaborators.createPending', () => {
   it('posts the details with status pending and answers the created collaborator', async () => {
     const { http, collaborators } = over([reply(201, CollaboratorAnswers.created)]);
 
-    expect(await collaborators.createPending({ ...params, trackingId: 'ADA' })).toEqual(CollaboratorAnswers.created);
+    expect(await collaborators.createPending(params)).toEqual(CollaboratorAnswers.created);
     expect(http.requests[0]!.method).toBe('POST');
     expect(pathOf(http.requests[0])).toBe('/collaborators');
-    expect(bodyOf(http.requests[0])).toEqual({ ...params, trackingId: 'ADA', status: 'pending' });
+    expect(bodyOf(http.requests[0])).toEqual({ ...params, status: 'pending' });
   });
 
   it.each([

@@ -496,5 +496,38 @@
     "failing": [
       "statusTypes throws UnexpectedResponseError"
     ]
+  },
+  {
+    "id": "p3-pending-deny-list",
+    "file": "src/resources/collaborators.ts",
+    "find": "      if (!allowed.includes(key)) {\n        throw new SirenError(\n          `createPending cannot send \"${key}\". A connected site sends only fullName, nickname and email, and gives out codes with aliases.create().`,\n        );\n      }\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses a caller's trackingId",
+      "refuses a caller's id",
+      "refuses a caller's propertyId"
+    ]
+  },
+  {
+    "id": "p3-pending-allows-tracking",
+    "file": "src/resources/collaborators.ts",
+    "find": "export const SITE_CREATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname', 'email'] as const;",
+    "replace": "export const SITE_CREATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname', 'email', 'trackingId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "names the fields a site may send on create",
+      "refuses a caller's trackingId"
+    ]
+  },
+  {
+    "id": "p3-pending-allow-message",
+    "file": "src/resources/collaborators.ts",
+    "find": "`createPending cannot send \"${key}\". A connected site sends only fullName, nickname and email, and gives out codes with aliases.create().`",
+    "replace": "`createPending cannot send ${key}.`",
+    "expect": "caught",
+    "failing": [
+      "refuses a caller's"
+    ]
   }
 ]

@@ -1,7 +1,7 @@
 # Slice 3: SDK records, part one
 
-This note sets the contract for slice 3 of the Siren Node commerce connectors
-build. Slice 3 gives the Node SDK the record resources a connector needs first: collaborators with their codes and
+This note describes slice 3 of the Siren Node commerce connectors build.
+Slice 3 gives the Node SDK the record resources a connector needs first: collaborators with their codes and
 program enrollments, collaborator groups with their members, programs and
 program groups. It closes part of gap 12 in
 [Design: Siren Node commerce connectors (Source 16182)](https://navigator.novatori.us/r/source/16182).
@@ -27,16 +27,14 @@ interceptor, the site rules for connected sites, and their PHPUnit tests).
 | `PropertyQualifier` | none | `src/property-qualifier.ts` |
 | request helpers, internal | none | `src/resources/record-requests.ts` |
 | record types | none | `src/record-types.ts` |
+| the `Siren` client's `collaborators`, `collaboratorGroups`, `programs` and `programGroups` fields | none | `src/client.ts` |
 | bulk actions, alias types, group sorters | none | `src/taxonomy.ts`, beside Siren's other vocabularies |
 
-`src/index.ts` gains export lines only. The version stays 0.3.0, `engines`
-stays `node >=18`, and nothing publishes.
-
-Slice 5 edits `src/client.ts`, `README.md`, `CHANGELOG.md` and
-`openapi.yaml`, so this slice leaves all four alone. Two late packets, P10
-(the four client fields) and P11 (the docs), start after slice 5 merges into
-`feat/node-commerce-connectors`. `git merge-tree` shows this branch and
-`feat/ncc-s05-connected-site` merge cleanly.
+`src/index.ts` gains export lines only. The `Siren` client builds the four
+top-level resources over its own transport. `README.md` gains a
+"Collaborators and programs" section, `CHANGELOG.md` lists the new
+resources, and `openapi.yaml` describes their routes. The version stays
+0.3.0, `engines` stays `node >=18`, and nothing publishes.
 
 ## Class roles
 
@@ -125,15 +123,22 @@ every request, since Siren answers 401 before it writes.
 A connected site's token reaches a narrower set of fields. Two methods exist
 for it, as in PHP:
 
-- `createPending` posts `status: 'pending'` and refuses `programs`,
-  `distributors`, `groups` and `status` before sending, whatever their value.
+- `createPending` sends `fullName`, `nickname` and `email` with `status:
+  'pending'` (`SITE_CREATABLE_COLLABORATOR_FIELDS`). It refuses `programs`,
+  `distributors`, `groups` and `status` before sending, whatever their
+  value, and every other key with a second message. Cloud's create route
+  also reads `trackingId`, but files that code in Cloud's own namespace,
+  outside the site's, so a site gives out codes with `aliases.create()`.
 - `updateDetails` sends `fullName` and `nickname` only and refuses any other
   key, `fields` included.
 
 Cloud files a site's codes under its Property (`coupon@property:5`).
-`PropertyQualifier` strips that suffix and reports the Property, and the
-alias resource answers every code through `plainRecord`, so the caller sees
-the plain type and a `propertyId`. Every code type a caller sends must pass
+`PropertyQualifier` strips that suffix and reports the Property. The reads
+on `/collaborator-aliases` (`query`, `findByCode` and `forCollaborator`) and
+the answer to `create` go through `plainRecord`, so the caller sees the
+plain type and a `propertyId`. `aliases.list` reads the collaborator
+record's own `aliases` field and answers each type as Cloud stores it,
+`coupon@property:5` included, as PHP 0.3.0's `list` does. Every code type a caller sends must pass
 `assertCodeType`: a plain name, or one integration's coupons such as
 `coupon@source:wc`, which Cloud's connector rule accepts on the alias
 routes. A caller cannot send a Property qualifier or a list in one string.
@@ -158,7 +163,8 @@ and `failed` counts in `data`.
 | `list` answers `ListResult` with page counts | `SirenList`, an array with `estimatedCount` | The existing Node list shape |
 | A 2xx write answer that is not an object passes through | `UnexpectedResponseError` | Matches `retrieve` and slice 5 |
 | `updateDetails` passes `fields` and `id` | refuses every key but `fullName` and `nickname` | Cloud reads `fields` on update as the custom-field map, while the site rule checks it as a list of read fields |
-| `createPending` and `updateDetails` skip a `null` binding | refuse the key whatever its value | A key check cannot be fooled by a harmless-looking value |
+| `createPending` and `updateDetails` refuse a binding key that is present, `null` included (`array_key_exists`) | the same, and a key set to `undefined` too | A key check refuses the key whatever its value, even one JSON would drop |
+| `createPending` sends every key but the bindings and `status`, `trackingId` included | sends only `fullName`, `nickname` and `email`, and refuses any other key | Cloud files a `trackingId` sent on create in its own namespace, outside the site's, and a stray key such as `id` or `propertyId` would go out unread |
 | Any list key is sent | a key outside the route's filters throws `SirenError` | Cloud ignores an unknown key and answers every record |
 | A comma in a filter string is sent | throws `SirenError`, except in `fields` and `s` | Cloud reads a comma as "any of" |
 | An empty filter list is sent as an empty string | throws `SirenError` | Cloud would answer every record |
@@ -170,44 +176,30 @@ and `failed` counts in `data`.
 | Code types are plain names | also `coupon@source:{integration}` | Cloud's connector rule allows it on the alias routes |
 | `findByCode` and `forCollaborator` send `number: 1` | also `orderBy: 'dateIssued'` and `order: 'DESC'` | D6 in [Recurring Defect Classes (Design Against These) (KB 589)](https://navigator.novatori.us/r/kb/589). Cloud at `b6f7140` defaults to that order |
 | `setTrackingCode` refuses only `''` and sends the code as given | trims it, and refuses a code that is empty once trimmed or holds a comma | Every other code method trims |
+| `members.add` and `members.set` send the members as given | both check that each member is an object with a positive whole `collaboratorId`, and `add` refuses an empty list | A bad id would reach Siren, and an empty add asks for nothing |
+| Bulk actions check only that there are 1 to 500 ids | also check that each id is a positive whole number | Every other id the SDK sends is checked the same way |
+| `collaboratorsIn` drops a `programId` in `params`, since the first argument wins | throws `SirenError` | A second program id is a caller's mistake, and dropping it would hide that ([Silent Failures — Fail Loud, No Exemptions (KB 592)](https://navigator.novatori.us/r/kb/592)) |
+| `aliases.free` and `enrollments.remove` answer Siren's body | answer `{ deleted: true }` once Siren answers a JSON object or a 204 | Cloud answers `{ deleted: true }` on both routes, and the constant says the request succeeded, never that a code or enrollment existed |
+| `programs.list` names no `engagementType` filter | `engagementType` is one of its `LIST_FILTERS` | Cloud's program list reads it (`GetPrograms.php` line 156), and the Node SDK refuses any filter it does not name |
 
 Method names, parameters and answers follow PHP otherwise.
 
-## Packets
-
-| Packet | Class | Depends on | Mechanical |
-|---|---|---|---|
-| P1 | request helpers | none | no |
-| P2 | `PropertyQualifier` | none | yes |
-| P3 | `CollaboratorsResource` | P1 | no |
-| P4 | `CollaboratorAliasesResource` | P1, P2 | no |
-| P5 | `ProgramEnrollmentsResource` | P1 | no |
-| P6 | `CollaboratorGroupsResource` | P1 | yes |
-| P7 | `CollaboratorGroupMembersResource` | P1 | no |
-| P8 | `ProgramsResource` | P1 | yes |
-| P9 | `ProgramGroupsResource` | P1 | yes |
-| P10 | four client fields | P1 to P9, slice 5 merged | yes |
-| P11 | README, CHANGELOG, openapi | P10 | no |
-
-A mechanical packet copies a pattern another packet or an existing resource
-already sets, with no rule of its own to decide, so a volume-tier worker can
-take it.
-
 ## Tests
 
-One acceptance file per packet, in the integration shape ([Integration Testing Standards — Introduction (KB 568)](https://navigator.novatori.us/r/kb/568)): the real
+Each resource and the request helpers have their own acceptance file, in the integration shape ([Integration Testing Standards — Introduction (KB 568)](https://navigator.novatori.us/r/kb/568)): the real
 resource over the real `HttpTransport`, with `FakeHttpClient` at the
 `HttpClient` seam. `test/record-fakes.ts` holds the transport builder, the
-send-once and retry checks, and Cloud's answers, each with the Cloud file it
-came from. The transport's base URL is the reserved host `example.invalid`.
-No test builds a client over the global fetch. P10's test builds `Siren`
-with a fake `httpClient` and that base URL, and stubs the global fetch to
+send-once and retry checks, and Cloud's answers, hand-read from Cloud's
+source, each with the file it came from, and not captured from a running
+Cloud. The transport's base URL is the reserved host `example.invalid`.
+No test builds a client over the global fetch. The client test
+(`test/client-records.test.ts`) builds `Siren` with a fake `httpClient` and that base URL, and stubs the global fetch to
 fail.
 
-Each test is skipped until its packet lands. The surface tests (constant
-vocabularies, filter lists, routes and nested resources) run now. Outside
-the repository, every test was run unskipped against the stubs, a throwaway
-implementation of all eleven packets was written only to prove the tests
-can pass, and a mutation list was scored against it, per [Proving a Test Is a Contract (KB 730)](https://navigator.novatori.us/r/kb/730).
-`scripts/mutations/ncc-slice-3-surface.json` proves the surface tests on this
-branch.
+Mutation lists under `scripts/mutations` prove the tests can fail, per
+[Proving a Test Is a Contract (KB 730)](https://navigator.novatori.us/r/kb/730):
+`ncc-slice-3-p1.json` to `ncc-slice-3-p11.json`, one for each part of the
+slice, and `ncc-slice-3-surface.json` for the vocabularies, filter lists,
+routes and nested resources. Run each with `node scripts/mutation-proof.mjs`
+inside `unshare -rn`, with only loopback up, so a mutation that lets a
+request through cannot reach the network.

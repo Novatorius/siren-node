@@ -100,6 +100,7 @@ export { PropertyQualifier } from './property-qualifier';
 export {
   CollaboratorsResource,
   COLLABORATOR_BINDING_FIELDS,
+  SITE_CREATABLE_COLLABORATOR_FIELDS,
   SITE_UPDATABLE_COLLABORATOR_FIELDS,
 } from './resources/collaborators';
 export { CollaboratorAliasesResource } from './resources/collaborator-aliases';

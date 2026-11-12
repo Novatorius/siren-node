@@ -34,6 +34,14 @@ export const COLLABORATOR_BINDING_FIELDS = ['programs', 'distributors', 'groups'
  */
 export const SITE_UPDATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname'] as const;
 
+/**
+ * The only fields `createPending()` sends besides `status: 'pending'`: the
+ * ones Cloud's create route reads that a connected site may set. The route
+ * also reads `trackingId`, but files that code in Cloud's own namespace,
+ * outside the site's, so a site gives out codes with `aliases.create()`.
+ */
+export const SITE_CREATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname', 'email'] as const;
+
 /** The keys `createPending()` refuses: the bindings and `status`, which Siren sets. */
 const PENDING_REFUSED_FIELDS: readonly string[] = [...COLLABORATOR_BINDING_FIELDS, 'status'];
 
@@ -142,15 +150,22 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
 
   /**
    * Creates a collaborator the way a connected site must: `POST
-   * /collaborators` with `status: 'pending'`, so the organization approves
-   * them, and no `programs`, `distributors` or `groups`. Enroll them
-   * afterwards with `enrollments.add()`.
+   * /collaborators` with `fullName`, `nickname`, `email` and `status:
+   * 'pending'`, so the organization approves them. Enroll them afterwards
+   * with `enrollments.add()`, and give out their codes with
+   * `aliases.create()`.
    *
    * Throws `SirenError` before sending when `params` holds a binding field
    * (whatever its value, an empty list or `undefined` included) or `status`,
    * as the PHP SDK refuses them, with exactly `createPending cannot send
    * "{field}". Siren sets a pending collaborator's status, and a site
-   * enrolls them with enrollments.add() afterwards.`
+   * enrolls them with enrollments.add() afterwards.` Throws `SirenError`
+   * before sending for any other key outside
+   * {@link SITE_CREATABLE_COLLABORATOR_FIELDS}, whatever its value, with
+   * exactly `createPending cannot send "{key}". A connected site sends only
+   * fullName, nickname and email, and gives out codes with aliases.create().`
+   * That covers `trackingId`, which Cloud would file outside the site's
+   * namespace, and `id`, `propertyId` or any other key Cloud does not read.
    *
    * After a lost answer, what a resend does depends on the email. For
    * someone the organization already has, Siren answers the held record it
@@ -167,10 +182,16 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * collaborator and deletes it, so look them up again by email after that.
    */
   async createPending(params: CreatePendingCollaboratorParams): Promise<T> {
+    const allowed: readonly string[] = SITE_CREATABLE_COLLABORATOR_FIELDS;
     for (const key of Object.keys(params)) {
       if (PENDING_REFUSED_FIELDS.includes(key)) {
         throw new SirenError(
           `createPending cannot send "${key}". Siren sets a pending collaborator's status, and a site enrolls them with enrollments.add() afterwards.`,
+        );
+      }
+      if (!allowed.includes(key)) {
+        throw new SirenError(
+          `createPending cannot send "${key}". A connected site sends only fullName, nickname and email, and gives out codes with aliases.create().`,
         );
       }
     }

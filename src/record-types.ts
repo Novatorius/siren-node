@@ -140,12 +140,14 @@ export interface CreateCollaboratorParams {
   groups?: number[];
 }
 
-/** The fields `collaborators.createPending()` sends, the way a connected site must. */
+/**
+ * The fields `collaborators.createPending()` sends, the way a connected site
+ * must. A site gives out codes with `collaborators.aliases.create()`.
+ */
 export interface CreatePendingCollaboratorParams {
   fullName: string;
   nickname: string;
   email: string;
-  trackingId?: string;
 }
 
 /** The fields `collaborators.update()` sends. Send only the fields to change. */
@@ -180,9 +182,10 @@ export interface CollaboratorAlias {
   [field: string]: unknown;
 }
 
-/** One entry of a collaborator record's `aliases` field. */
+/** One entry of a collaborator record's `aliases` field, as Siren stores it. */
 export interface CollaboratorAliasEntry {
   code: string;
+  /** The type as Siren stores it, so a connected site's code reads `coupon@property:5`. */
   type: string;
   issuedDate?: string;
   [field: string]: unknown;
