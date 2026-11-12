@@ -64,11 +64,11 @@ describe('P8: README configuration', () => {
       'a sentence says an apiKey 401 is not refreshed',
     ).toBe(true);
     expect(
-      all.some((s) => /\bHttpClient\b/.test(s) && /\bredirect/i.test(s) && /\bnever\b|\bnot\b/.test(s)),
+      all.some((s) => /\bHttpClient\b/.test(s) && /\b(?:never|must not|does not) follows? (?:a |any )?redirects?\b/i.test(s)),
       'a sentence says an HttpClient never follows a redirect',
     ).toBe(true);
     expect(
-      all.some((s) => /\bheaders?\b/i.test(s) && /\berrors?\b/i.test(s) && /\bout of\b|\bnever\b|\bnot\b/i.test(s)),
+      all.some((s) => /\brequest headers\b/i.test(s) && /\bout of (?:every |its |any )?errors?\b/i.test(s)),
       'a sentence says an HttpClient keeps the request headers out of its errors',
     ).toBe(true);
     expect(

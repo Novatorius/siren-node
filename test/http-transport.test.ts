@@ -321,6 +321,9 @@ describe('P4: HttpTransport reads the token from the AccessTokenSource', () => {
     ['null', null],
     ['a number', 42],
     ['a value with a line break', 'sk_secret_first\r\nX-Injected: 1'],
+    ['a value with a lone line feed', 'sk_secret_first\nX'],
+    ['a value with a lone carriage return', 'sk_secret_first\rX'],
+    ['a value with a NUL', 'sk_secret_first\u0000X'],
   ])('refuses a token that is %s with SirenError and sends nothing', async (_name, token) => {
     const tokens = spySource();
     tokens.getAccessToken.mockResolvedValueOnce(token);
@@ -509,6 +512,9 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
     ['undefined', undefined],
     ['a number', 7],
     ['a value with a line break', 'tok-2\r\nX-Injected: 1'],
+    ['a value with a lone line feed', 'tok-2\nX'],
+    ['a value with a lone carriage return', 'tok-2\rX'],
+    ['a value with a NUL', 'tok-2\u0000X'],
   ])('raises the first 401 and sends nothing more when the refresh answers %s', async (_name, refreshed) => {
     for (const [refusal, raised] of [
       [CloudAnswers.siteDisconnected, SiteDisconnectedError],
@@ -523,6 +529,7 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
       expect(error).toBeInstanceOf(raised);
       expect(error instanceof SiteDisconnectedError).toBe(raised === SiteDisconnectedError);
       expect((error as SirenError).statusCode).toBe(401);
+      expect((error as SirenError).message).toBe(refusal.error.message);
       expect(tokens.refreshAccessToken).toHaveBeenCalledTimes(1);
       expect(client.requests).toHaveLength(1);
     }
@@ -581,7 +588,9 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
   });
 
   it.skip('removes the fresh token too when the resend loses its connection with a leaky client error', async () => {
-    const leaky = new HttpClientError('retry failed, Authorization: Bearer sk_secret_second');
+    const leaky = new HttpClientError(
+      'retry with sk_secret_second failed, Authorization: Bearer sk_secret_second, first tried sk_secret_first',
+    );
     const client = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), leaky]);
 
     const error = await rejection(

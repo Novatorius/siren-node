@@ -214,7 +214,7 @@ a thrown error:
 | The refresh throws | That error, unchanged. Nothing more sent |
 | 401 again after the resend | `SiteDisconnectedError` for a revoked site, else `AuthenticationError` |
 | A redirect | `SirenError` with the 3xx status. Never followed |
-| No complete response, retries used up | `ConnectionError`, `cause` set, tokens removed from its message |
+| No complete response, retries used up | `ConnectionError`, tokens removed from its message. Its `cause` is the host's error as the host built it, so a host client that put the token in its error leaks it there |
 | A host client bug | That error, unchanged. Never resent |
 | Bad record id | `SirenError` naming the id. Nothing sent |
 | A record body that is not an object | `UnexpectedResponseError` with the status, path and parsed body |
