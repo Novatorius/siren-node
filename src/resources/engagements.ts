@@ -1,9 +1,24 @@
+import { SirenError } from '../errors';
 import type { HttpTransport } from '../http';
 import type { Engagement, EngagementListParams, RegistryOptions } from '../record-types';
 import type { SirenList } from '../types';
 import { listRecords, readObject } from './record-requests';
 import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
+
+/**
+ * True for a string that is exactly YYYY-MM-DD and names a real calendar
+ * day, the rule Cloud's `DayRangeFilterMiddleware` reads `from` and `to` by.
+ * The day is rebuilt with `setUTCFullYear`, which reads every year as given,
+ * where `Date.UTC` would read years 0 to 99 as 1900 to 1999.
+ */
+export function isDay(value: unknown): boolean {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number) as [number, number, number];
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
 
 /**
  * Engagements (`/engagements`): a collaborator's claim on an opportunity in
@@ -49,7 +64,14 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * `String()`. `undefined` counts as not given.
    */
   override async list(params: EngagementListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 4 fix packet F4 (the day filters).
+    for (const key of ['from', 'to'] as const) {
+      const value: unknown = (params as Record<string, unknown>)[key];
+      if (value === undefined) continue;
+      if (!isDay(value)) {
+        const shown = typeof value === 'string' ? JSON.stringify(value) : String(value);
+        throw new SirenError(`engagements.list() needs ${key} as a day, YYYY-MM-DD, and got ${shown}.`);
+      }
+    }
     return listRecords<T>(this.http, this.path, params, EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS);
   }
 
