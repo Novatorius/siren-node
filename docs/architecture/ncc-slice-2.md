@@ -187,3 +187,14 @@ P5 lands, the constructor takes an `apiKey` only and hands the transport an
 inline source that answers it. That keeps the existing suite green on the
 architecture commit. P4 replaces the body, and P5 replaces the constructor's
 resolution. Every other new body returns a fixed value of its type.
+
+## Proof
+
+Each acceptance test was unskipped against the stubs and failed on its
+assertion, except nine guards the stubs already satisfy. A scratch
+implementation of all eight packets passed the whole suite, then was thrown
+away. A mutation run against it, one mutation per guard with the harness's
+three controls, scored every mutation as expected after one test fix. The
+packet mutation lists, the scratch patch and the outputs stay in the run
+folder, as in slice 1 (A114). The surface list,
+`scripts/mutations/ncc-slice-2-surface.json`, runs on this branch.
