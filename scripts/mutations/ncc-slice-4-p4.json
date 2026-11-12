@@ -1,0 +1,138 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "const query = { fields: params.fields, code: checked, number: 1 };",
+    "replace": "const query = { fields: params.fields, code: checked, number: 2 };",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies reads"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "const CODE_MESSAGE = 'Send a currency code as letters, digits, underscores and hyphens, such as STORE_CREDIT.';",
+    "replace": "const CODE_MESSAGE = 'Send a currency code as letters, digits, ' + 'underscores and hyphens, such as STORE_CREDIT.';",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "wipeLedger === true ? { wipeLedger: true } : {}",
+    "replace": "{ wipeLedger }",
+    "expect": "wrong-reason",
+    "failing": [
+      "P4: custom currencies surface"
+    ]
+  },
+  {
+    "id": "p4-code-any-string",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "if (!PropertyQualifier.isValidName(value)) throw new SirenError(CODE_MESSAGE);",
+    "replace": "if (typeof value !== 'string' || value === '') throw new SirenError(CODE_MESSAGE);",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currency codes"
+    ]
+  },
+  {
+    "id": "p4-retrieve-unchecked",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "const checked = currencyCode(code);",
+    "replace": "const checked = code;",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currency codes"
+    ]
+  },
+  {
+    "id": "p4-create-unchecked",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "    currencyCode(params.code);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currency codes"
+    ]
+  },
+  {
+    "id": "p4-update-unchecked",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "return writeRecord<T>(this.http, 'PUT', `${this.path}/${currencyCode(code)}`, params);",
+    "replace": "return writeRecord<T>(this.http, 'PUT', `${this.path}/${code}`, params);",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currency codes"
+    ]
+  },
+  {
+    "id": "p4-delete-unchecked",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "const path = `${this.path}/${currencyCode(code)}`;",
+    "replace": "const path = `${this.path}/${code}`;",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currency codes"
+    ]
+  },
+  {
+    "id": "p4-list-unchecked-keys",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "return listRecords<T>(this.http, this.path, params, CustomCurrenciesResource.LIST_FILTERS);",
+    "replace": "return listRecords<T>(this.http, this.path, params, [...CustomCurrenciesResource.LIST_FILTERS, 'propertyId', 'Code']);",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currency codes"
+    ]
+  },
+  {
+    "id": "p4-retrieve-params-win",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "const query = { fields: params.fields, code: checked, number: 1 };",
+    "replace": "const query = { fields: params.fields, code: checked, number: 1, ...params };",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies reads"
+    ]
+  },
+  {
+    "id": "p4-retrieve-not-null",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "return rows[0] ?? null;",
+    "replace": "return rows[0] ?? ({} as T);",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies reads"
+    ]
+  },
+  {
+    "id": "p4-wipe-always-sent",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "wipeLedger === true ? { wipeLedger: true } : {}",
+    "replace": "{ wipeLedger }",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies writes"
+    ]
+  },
+  {
+    "id": "p4-delete-empty-ok",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "    if (answer === null) {\n      throw new UnexpectedResponseError(`Siren answered DELETE ${path} with no body.`, { statusCode: 204 });\n    }\n    return answer;",
+    "replace": "    return answer as DeletedCustomCurrency;",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies writes"
+    ]
+  }
+]
