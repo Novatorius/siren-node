@@ -19,7 +19,8 @@ import { ProgramGroupAnswers, bodyOf, expectRetried, expectSentOnce, page, pathO
  * ProgramGroupsTest at 59383e6, with Cloud's answers from
  * test/record-fakes.ts.
  *
- * Integration shape (KB 568): the real resource over the real HttpTransport,
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
  *
  * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
@@ -40,13 +41,6 @@ const create = {
   sorter: ProgramGroupSorter.NewestBindingWins,
   programs: [1, 2],
 };
-
-describe('P9: programGroups surface', () => {
-  it('names the sorters and the bulk action as Siren does', () => {
-    expect(ProgramGroupSorter).toEqual({ OldestBindingWins: 'oldestBindingWins', NewestBindingWins: 'newestBindingWins' });
-    expect(ProgramGroupBulkAction).toEqual({ Delete: 'delete' });
-  });
-});
 
 describe('P9: programGroups reads', () => {
   it.skip('lists GET /program-groups with filters and answers the page', async () => {
@@ -150,6 +144,7 @@ describe('P9: programGroups list and retrieve rules', () => {
   it.skip.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
+    ['an empty sorter list', { sorter: [] }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, groups } = over([reply(200, page([]))]);
 

@@ -6,7 +6,11 @@
  * Each one is a `const` object with a union type of the same name, as
  * `WebhookEventType` and `ApiKeyScope` are. The values match the Siren PHP
  * SDK's classes of the same names, and where the Siren service lists more
- * values than the PHP SDK, the service's list wins.
+ * values than the PHP SDK, the service's list wins. The bulk actions and
+ * alias types come from constants on the PHP SDK's resource classes instead
+ * (`Collaborators::BULK_*`, `Programs::BULK_*`, `ProgramGroups::BULK_DELETE`
+ * and `CollaboratorAliases::TYPE_*`), and `ProgramGroupSorter` matches its
+ * PHP class.
  *
  * ```ts
  * const approved = await siren.conversions.list({ status: ConversionStatus.Approved });
@@ -217,6 +221,8 @@ export type CustomCurrencyType = (typeof CustomCurrencyType)[keyof typeof Custom
 /** The bulk actions `collaborators.bulk()` runs, as Siren names them. */
 export const CollaboratorBulkAction = {
   Activate: 'activate',
+  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */
+  Reject: 'reject',
   Deactivate: 'deactivate',
   Restore: 'restore',
   Delete: 'delete',

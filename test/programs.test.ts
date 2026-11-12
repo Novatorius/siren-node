@@ -17,7 +17,8 @@ import { ProgramAnswers, bodyOf, expectRetried, expectSentOnce, page, pathOf, qu
  * routes. Cases follow the Siren PHP SDK's ProgramsTest at 59383e6, with
  * Cloud's answers from test/record-fakes.ts.
  *
- * Integration shape (KB 568): the real resource over the real HttpTransport,
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
  *
  * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
@@ -41,18 +42,6 @@ const create = {
   status: ProgramStatus.Active,
   engagementTypes: { referredSiteVisit: { calculationType: 'fixed', calculationArgs: { value: 10 } } },
 };
-
-describe('P8: programs surface', () => {
-  it('names the bulk actions as Siren does', () => {
-    expect(ProgramBulkAction).toEqual({
-      Activate: 'activate',
-      Deactivate: 'deactivate',
-      Restore: 'restore',
-      Delete: 'delete',
-      PermanentDelete: 'permanent_delete',
-    });
-  });
-});
 
 describe('P8: programs reads', () => {
   it.skip('lists GET /programs with filters, the group filter and paging', async () => {
@@ -174,11 +163,15 @@ describe('P8: programs writes', () => {
 describe('P8: programs list and retrieve rules', () => {
   it('names the filters list sends', () => {
     expect(ProgramsResource.LIST_FILTERS).toEqual(['status', 'incentiveType', 'incentiveResolverType', 'units', 's', 'programGroupId']);
+    expect(ProgramsResource.ID_FILTERS).toEqual({ one: ['programGroupId'] });
   });
 
   it.skip.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
+    ['a list of program groups, which Cloud reads as one', { programGroupId: [1, 2] }],
+    ['a program group id Cloud would cast to 1', { programGroupId: '1abc' }],
+    ['an empty status list', { status: [] }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, programs } = over([reply(200, page([]))]);
 

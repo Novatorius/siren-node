@@ -44,6 +44,10 @@ export const SITE_UPDATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname'] as co
  * that takes an id throws `SirenError` before sending when it is not a
  * positive whole number.
  *
+ * A write's answer is lost when it throws `ConnectionError` or a 5xx
+ * `ApiError`. Siren may have written before the answer failed, so each
+ * write says how to find out before sending it again.
+ *
  * A dashboard session's token reaches every method. A connected site's
  * token reads with `connect:records:read` and writes only through
  * {@link createPending}, {@link updateDetails}, `aliases.create`,
@@ -53,6 +57,8 @@ export const SITE_UPDATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname'] as co
 export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> {
   /** The filters `GET /collaborators` reads. {@link list} refuses any other key. */
   static readonly LIST_FILTERS = ['id', 'status', 'fullName', 'nickname', 'email', 's', 'programId', 'distributorId'] as const;
+  /** The id filters its list reads, checked before sending: `programId` and `distributorId` take one id, and `id` one id or a list, each a positive whole number. */
+  static readonly ID_FILTERS = { one: ['programId', 'distributorId'], many: ['id'] } as const;
 
   /** A collaborator's tracking and coupon codes. */
   readonly aliases: CollaboratorAliasesResource;
@@ -73,7 +79,9 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * tracking codes), `programId` and `distributorId`. Sort with `orderBy` and
    * `order`. `fields` picks the returned fields. Any other key, `propertyId`
    * included, throws `SirenError` before sending, since Siren would ignore
-   * it and answer every collaborator. Answers as every record list does: an
+   * it and answer every collaborator, and so does an empty filter list.
+   * `programId` and `distributorId` take one positive whole number, never a
+   * list, since Siren casts them to one ({@link ID_FILTERS}). Answers as every record list does: an
    * array with Siren's `total` as `estimatedCount`. A 2xx that is not a list
    * throws `UnexpectedResponseError`, never an empty page.
    */
@@ -129,8 +137,12 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * "{field}". Siren sets a pending collaborator's status, and a site
    * enrolls them with enrollments.add() afterwards.`
    *
-   * After a lost answer, sending it again is safe: for a held record Siren
-   * answers the one it already holds and does not email the person twice.
+   * After a lost answer, what a resend does depends on the email. For
+   * someone the organization already has, Siren answers the held record it
+   * already made and does not email the person twice. For someone new, the
+   * first send already created the collaborator, so Siren refuses the resend
+   * as a duplicate email with a 400. List with `{ email }` to find the
+   * record before sending again.
    *
    * When the organization already has a collaborator with that email and
    * this site does not, Siren answers 201 with a held record for this site:
@@ -211,7 +223,9 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * were skipped. `sendSignupEmail` answers 502 when some emails could not
    * be sent, raised as `ApiError` with `code` `signup_email_failed` and the
    * `sent` and `failed` counts in `data`. Do not resend the whole batch after it,
-   * since the `sent` ones already went out.
+   * since the `sent` ones already went out. Siren keeps no record of a sent
+   * signup email, so any resend of `sendSignupEmail`, after a lost answer
+   * too, emails every id in it again.
    */
   bulk(
     action: CollaboratorBulkAction,

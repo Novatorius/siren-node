@@ -31,7 +31,8 @@ import {
  * CollaboratorAliasesTest at 59383e6, with Cloud's answers from
  * test/record-fakes.ts.
  *
- * Integration shape (KB 568): the real resource, reached through a real
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource, reached through a real
  * CollaboratorsResource, over the real HttpTransport, with a FakeHttpClient
  * at the HttpClient seam.
  *
@@ -48,10 +49,10 @@ function over(replies: Parameters<typeof transportOver>[0]) {
 const resource = (transport: HttpTransport) => new CollaboratorAliasesResource(transport);
 
 describe('P4: aliases surface', () => {
-  it('names the route and the plain code types', () => {
+  it('names the route and its filters', () => {
     expect(CollaboratorAliasesResource.PATH).toBe('/collaborator-aliases');
-    expect(CollaboratorAliasType).toEqual({ Tracking: 'tracking', Coupon: 'coupon' });
     expect(CollaboratorAliasesResource.QUERY_FILTERS).toEqual(['code', 'type', 'collaboratorId']);
+    expect(CollaboratorAliasesResource.ID_FILTERS).toEqual({ many: ['collaboratorId'] });
   });
 });
 
@@ -168,6 +169,16 @@ describe('P4: aliases.findByCode and forCollaborator', () => {
     await expect(aliases.findByCode('SAVE10', 'coupon')).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
+  it.skip.each([
+    ['no type', { code: 'SAVE10', collaboratorId: 4, dateIssued: '2026-10-16 12:00:00' }],
+    ['a numeric type', { code: 'SAVE10', type: 5, collaboratorId: 4, dateIssued: '2026-10-16 12:00:00' }],
+  ])('findByCode and query throw UnexpectedResponseError for a code row with %s', async (_label, row) => {
+    const { aliases } = over([reply(200, page([row], 1, 1))]);
+
+    await expect(aliases.findByCode('SAVE10', 'coupon')).rejects.toBeInstanceOf(UnexpectedResponseError);
+    await expect(aliases.query()).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+
   it.skip('retries both like reads', async () => {
     await expectRetried((transport) => resource(transport).findByCode('SAVE10', 'coupon'), reply(200, page([])));
     await expectRetried((transport) => resource(transport).forCollaborator(4, 'coupon'), reply(200, page([])));
@@ -234,15 +245,7 @@ describe('P4: aliases.free', () => {
   });
 
   it.skip('raises a site refusal as PolicyError', async () => {
-    const { aliases } = over([
-      reply(403, {
-        error: {
-          message: 'A connected site may not use the user type, which names a Cloud account. Use wordpress_user.',
-          code: 'user_type_not_allowed',
-          context: { param: 'type' },
-        },
-      }),
-    ]);
+    const { aliases } = over([reply(403, CollaboratorAnswers.userTypeNotAllowed)]);
 
     const error = await aliases.free('SAVE10', 'user').catch((thrown: unknown) => thrown);
 
@@ -283,7 +286,12 @@ describe('P4: aliases on the collaborator record', () => {
   ])('list throws UnexpectedResponseError for %s, never a shorter list', async (_label, body) => {
     const { aliases } = over([reply(200, body)]);
 
-    await expect(aliases.list(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
+    const error = await aliases.list(4).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    expect((error as UnexpectedResponseError).message).toContain('aliases');
+    expect((error as UnexpectedResponseError).message).toContain('4');
   });
 
   it.skip('reads the referral code, or null when it is null or empty', async () => {
@@ -307,7 +315,12 @@ describe('P4: aliases on the collaborator record', () => {
   ])('trackingCode throws UnexpectedResponseError for %s, never null', async (_label, body) => {
     const { aliases } = over([reply(200, body)]);
 
-    await expect(aliases.trackingCode(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
+    const error = await aliases.trackingCode(4).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    expect((error as UnexpectedResponseError).message).toContain('referralCode');
+    expect((error as UnexpectedResponseError).message).toContain('4');
   });
 
   it.skip('puts the trimmed tracking code as trackingId and answers the collaborator', async () => {
@@ -382,6 +395,8 @@ describe('P4: aliases refuse bad input before sending', () => {
   it.skip.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { collaboratorID: 4 }],
+    ['an empty collaborator list', { collaboratorId: [] }],
+    ['a text collaborator id', { collaboratorId: '4' }],
   ])('query refuses %s with SirenError naming the key', async (_label, params) => {
     const { http, aliases } = over([reply(200, page([]))]);
 

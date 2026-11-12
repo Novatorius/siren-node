@@ -16,7 +16,8 @@ import { GroupAnswers, bodyOf, expectRetried, expectSentOnce, page, pathOf, quer
  * SDK's CollaboratorGroupsTest::testMemberRoutes at 59383e6, with Cloud's
  * answers from test/record-fakes.ts.
  *
- * Integration shape (KB 568): the real resource, reached through a real
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource, reached through a real
  * CollaboratorGroupsResource, over the real HttpTransport, with a
  * FakeHttpClient at the HttpClient seam.
  *
@@ -121,11 +122,14 @@ describe('P7: members writes', () => {
 describe('P7: members list and retrieve rules', () => {
   it('names the filters list sends', () => {
     expect(CollaboratorGroupMembersResource.LIST_FILTERS).toEqual(['collaboratorId']);
+    expect(CollaboratorGroupMembersResource.ID_FILTERS).toEqual({ many: ['collaboratorId'] });
   });
 
   it.skip.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
+    ['an empty collaborator list', { collaboratorId: [] }],
+    ['a collaborator id of 0', { collaboratorId: 0 }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, members } = over([reply(200, page([]))]);
 
