@@ -114,6 +114,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FORWARDED_EVENT_VERSION` is 1. `finalAttempt: true` adds `X-Siren-Final-Attempt: 1`.
 - `openapi.yaml` documents `/oauth/register`, `/oauth/token`, every `/connect/*` route with the
   scope it needs, the `ForwardedEventEnvelope` schema and the `X-Siren-Final-Attempt` header.
+- Record resources on the client: `siren.collaborators` (`CollaboratorsResource`), with their
+  tracking and coupon codes at `siren.collaborators.aliases` (`CollaboratorAliasesResource`) and
+  their program enrollments at `siren.collaborators.enrollments` (`ProgramEnrollmentsResource`),
+  `siren.collaboratorGroups` (`CollaboratorGroupsResource`) with their members at
+  `siren.collaboratorGroups.members` (`CollaboratorGroupMembersResource`), `siren.programs`
+  (`ProgramsResource`) and `siren.programGroups` (`ProgramGroupsResource`). Record writes are sent
+  once, and reads retry. A list throws `SirenError` for a key its route does not read, an empty
+  filter list, a comma outside `fields` and `s`, and an id that is not a positive whole number.
+- `collaborators.createPending` and `collaborators.updateDetails`, the create and update a connected
+  site may send.
+- `PropertyQualifier`, which reads the Property a connected site's code type is filed under, such as
+  `coupon@property:5`, and checks the names and code types a caller sends.
+- `CollaboratorBulkAction`, `CollaboratorAliasType`, `ProgramBulkAction`, `ProgramGroupSorter` and
+  `ProgramGroupBulkAction`, Siren's names for the record actions, code types and group sorters.
 
 ### Changed
 

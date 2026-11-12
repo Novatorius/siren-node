@@ -8,7 +8,11 @@ import type {
   ProgramEnrollment,
   ProgramEnrollmentListParams,
 } from '../record-types';
+import { SirenError } from '../errors';
+import { CollaboratorBulkAction } from '../taxonomy';
 import type { SirenList } from '../types';
+import { CollaboratorsResource } from './collaborators';
+import { bulkRecords, deleteRecord, isJsonObject, listRecords, readObject, recordId, writeRecord } from './record-requests';
 
 /**
  * Collaborator program enrollments: which collaborators take part in which
@@ -53,11 +57,18 @@ export class ProgramEnrollmentsResource {
    * collaborator id, never an empty answer. It reads through `readObject`
    * with a `check`.
    */
-  programsFor(collaboratorId: number): Promise<EnrolledProgram[]> {
-    // Stub: slice 3 packet P5
-    void collaboratorId;
-    void this.http;
-    return Promise.resolve([]);
+  async programsFor(collaboratorId: number): Promise<EnrolledProgram[]> {
+    const id = recordId(collaboratorId, 'programsFor', 'collaboratorId');
+    const record = await readObject<{ programs: EnrolledProgram[] }>(
+      this.http,
+      `/collaborators/${id}`,
+      { fields: 'id,programs' },
+      (body) =>
+        Array.isArray(body.programs) && body.programs.every(isJsonObject)
+          ? undefined
+          : `Siren answered collaborator ${id} without a programs list of objects.`,
+    );
+    return record.programs;
   }
 
   /**
@@ -66,14 +77,21 @@ export class ProgramEnrollmentsResource {
    * `collaborators.list()` but `programId`, and refuses the same keys. A
    * `programId` in `params` throws `SirenError` before sending.
    */
-  collaboratorsIn(
+  async collaboratorsIn(
     programId: number,
     params: Omit<CollaboratorListParams, 'programId'> = {},
   ): Promise<SirenList<Collaborator>> {
-    // Stub: slice 3 packet P5
-    void programId;
-    void params;
-    return Promise.resolve([] as unknown as SirenList<Collaborator>);
+    const id = recordId(programId, 'collaboratorsIn', 'programId');
+    if (Object.prototype.hasOwnProperty.call(params, 'programId')) {
+      throw new SirenError('collaboratorsIn takes the program as its first argument, so params cannot hold programId.');
+    }
+    return listRecords<Collaborator>(
+      this.http,
+      '/collaborators',
+      { ...params, programId: id },
+      CollaboratorsResource.LIST_FILTERS,
+      CollaboratorsResource.ID_FILTERS,
+    );
   }
 
   /**
@@ -85,11 +103,11 @@ export class ProgramEnrollmentsResource {
    * Sending it again after a lost answer is safe: Siren skips a collaborator
    * already enrolled, so `affected` may differ from the first send's.
    */
-  enroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
-    // Stub: slice 3 packet P5
-    void programId;
-    void collaboratorIds;
-    return Promise.resolve({});
+  async enroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
+    const id = recordId(programId, 'enroll', 'programId');
+    return bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.AddToProgram, collaboratorIds, {
+      programId: id,
+    });
   }
 
   /**
@@ -100,11 +118,11 @@ export class ProgramEnrollmentsResource {
    * skipped. Sending it again after a lost answer is safe: a collaborator
    * the first send removed stays removed, though `affected` may differ.
    */
-  unenroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
-    // Stub: slice 3 packet P5
-    void programId;
-    void collaboratorIds;
-    return Promise.resolve({});
+  async unenroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
+    const id = recordId(programId, 'unenroll', 'programId');
+    return bulkRecords<BulkResult>(this.http, '/collaborators', CollaboratorBulkAction.RemoveFromProgram, collaboratorIds, {
+      programId: id,
+    });
   }
 
   /**
@@ -114,11 +132,13 @@ export class ProgramEnrollmentsResource {
    * number. Answers the updated collaborator.
    * Sending it again after a lost answer sets the same values, so it is safe.
    */
-  replace(collaboratorId: number, programIds: readonly number[]): Promise<Collaborator> {
-    // Stub: slice 3 packet P5
-    void collaboratorId;
-    void programIds;
-    return Promise.resolve({ id: 1 });
+  async replace(collaboratorId: number, programIds: readonly number[]): Promise<Collaborator> {
+    const id = recordId(collaboratorId, 'replace', 'collaboratorId');
+    if (!Array.isArray(programIds)) {
+      throw new SirenError('replace needs a list of program ids.');
+    }
+    const programs = programIds.map((programId: unknown) => recordId(programId, 'replace', 'programId'));
+    return writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { programs });
   }
 
   /**
@@ -130,10 +150,14 @@ export class ProgramEnrollmentsResource {
    * and an empty filter list throw `SirenError` before sending, and a 2xx that is not a list throws
    * `UnexpectedResponseError`, never an empty page.
    */
-  list(params: ProgramEnrollmentListParams = {}): Promise<SirenList<ProgramEnrollment>> {
-    // Stub: slice 3 packet P5
-    void params;
-    return Promise.resolve([] as unknown as SirenList<ProgramEnrollment>);
+  async list(params: ProgramEnrollmentListParams = {}): Promise<SirenList<ProgramEnrollment>> {
+    return listRecords<ProgramEnrollment>(
+      this.http,
+      ProgramEnrollmentsResource.PATH,
+      params,
+      ProgramEnrollmentsResource.LIST_FILTERS,
+      ProgramEnrollmentsResource.ID_FILTERS,
+    );
   }
 
   /**
@@ -143,11 +167,12 @@ export class ProgramEnrollmentsResource {
    * error, so sending it again after a lost answer is safe. Answers
    * `{ collaboratorId, programId }`.
    */
-  add(collaboratorId: number, programId: number): Promise<ProgramEnrollment> {
-    // Stub: slice 3 packet P5
-    void collaboratorId;
-    void programId;
-    return Promise.resolve({ collaboratorId: 1, programId: 1 });
+  async add(collaboratorId: number, programId: number): Promise<ProgramEnrollment> {
+    const body = {
+      collaboratorId: recordId(collaboratorId, 'add', 'collaboratorId'),
+      programId: recordId(programId, 'add', 'programId'),
+    };
+    return writeRecord<ProgramEnrollment>(this.http, 'POST', ProgramEnrollmentsResource.PATH, body);
   }
 
   /**
@@ -157,10 +182,12 @@ export class ProgramEnrollmentsResource {
    * so sending it again after a lost answer is safe. Answers
    * `{ deleted: true }`.
    */
-  remove(collaboratorId: number, programId: number): Promise<DeletedResult> {
-    // Stub: slice 3 packet P5
-    void collaboratorId;
-    void programId;
-    return Promise.resolve({ deleted: false });
+  async remove(collaboratorId: number, programId: number): Promise<DeletedResult> {
+    const query = {
+      collaboratorId: recordId(collaboratorId, 'remove', 'collaboratorId'),
+      programId: recordId(programId, 'remove', 'programId'),
+    };
+    await deleteRecord(this.http, ProgramEnrollmentsResource.PATH, query);
+    return { deleted: true };
   }
 }
