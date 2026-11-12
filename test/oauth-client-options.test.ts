@@ -20,13 +20,6 @@ import { FakeHttpClient, reply } from './http-fakes';
  *
  * Integration shape (KB 568): the real clients over a FakeHttpClient at the
  * HttpClient seam. Nothing here sends through the network.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * packet F1, named in its describe block. The F1 implementer deletes the
- * `.skip` from each of them, so `it.skip(` becomes `it(` and `it.skip.each(`
- * becomes `it.each(`, and deletes the one-line comment above each, and this
- * paragraph. Nothing else here changes. The tests with no `.skip` pass now
- * and guard against a check that refuses too much.
  */
 
 const KEY = `sk_live_${'b'.repeat(64)}`;
@@ -158,8 +151,7 @@ const ACCEPTED_URLS: Array<[string, string, string]> = [
 const REGISTER = { clientName: 'Example Store', redirectUris: ['https://store.example/cb'] };
 
 describe('5 fix F1: OAuthClient baseUrl check', () => {
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip.each(REFUSED_URLS)('refuses a baseUrl that is %s, with the message Siren gives and no part of the URL', (_name, baseUrl) => {
+  it.each(REFUSED_URLS)('refuses a baseUrl that is %s, with the message Siren gives and no part of the URL', (_name, baseUrl) => {
     const expected = sirenRefusal({ baseUrl });
 
     const error = oauthRefusal({ baseUrl });
@@ -169,8 +161,7 @@ describe('5 fix F1: OAuthClient baseUrl check', () => {
     if (typeof baseUrl === 'string') expect(leaked(error, expected, baseUrl)).toEqual([]);
   });
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('never sends a refresh grant to the host after an @, the review probe', async () => {
+  it('never sends a refresh grant to the host after an @, the review probe', async () => {
     const http = new FakeHttpClient([reply(200, TOKENS)]);
 
     let outcome: unknown;
@@ -204,8 +195,7 @@ describe('5 fix F1: OAuthClient baseUrl check', () => {
 });
 
 describe('5 fix F1: OAuthClient consentScreenUrl check', () => {
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip.each(REFUSED_URLS)(
+  it.each(REFUSED_URLS)(
     'refuses a consentScreenUrl that is %s, with the baseUrl message under its own name and no part of the URL',
     (_name, consentScreenUrl) => {
       const expected = sirenRefusal({ baseUrl: consentScreenUrl });
@@ -219,8 +209,7 @@ describe('5 fix F1: OAuthClient consentScreenUrl check', () => {
     },
   );
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('never builds a consent link to the host after an @', () => {
+  it('never builds a consent link to the host after an @', () => {
     let outcome: unknown;
     try {
       outcome = new OAuthClient({
@@ -248,8 +237,7 @@ describe('5 fix F1: OAuthClient consentScreenUrl check', () => {
 });
 
 describe('5 fix F1: OAuthClient timeout check', () => {
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip.each([
+  it.each([
     ['NaN', Number.NaN],
     ['Infinity', Number.POSITIVE_INFINITY],
     ['negative', -1],
@@ -313,8 +301,7 @@ describe('5 fix F1: OAuthClient httpClient check', () => {
     expect(oauthRefusal({ httpClient }).message).toBe(expected.message);
   });
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('refuses an httpClient whose send only Object.prototype supplies, as Siren does', () => {
+  it('refuses an httpClient whose send only Object.prototype supplies, as Siren does', () => {
     const attacker = vi.fn(async () => reply(200, TOKENS));
     pollute('send', attacker);
     const expected = sirenRefusal({ httpClient: {} });
@@ -338,8 +325,7 @@ describe('5 fix F1: OAuthClient reads only its own options', () => {
     vi.unstubAllGlobals();
   });
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('sends a refresh to the default host when Object.prototype carries a baseUrl', async () => {
+  it('sends a refresh to the default host when Object.prototype carries a baseUrl', async () => {
     pollute('baseUrl', 'https://attacker.example.invalid/siren/v1');
     const http = new FakeHttpClient([reply(200, TOKENS)]);
 
@@ -348,8 +334,7 @@ describe('5 fix F1: OAuthClient reads only its own options', () => {
     expect(http.requests.map((request) => request.url)).toEqual([`${BASE}/oauth/token`]);
   });
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('builds the consent link on the default screen when Object.prototype carries a consentScreenUrl', () => {
+  it('builds the consent link on the default screen when Object.prototype carries a consentScreenUrl', () => {
     pollute('consentScreenUrl', 'https://attacker.example.invalid/connect-site');
 
     const link = new OAuthClient({ httpClient: new FakeHttpClient([]) }).authorizeUrl(AUTHORIZE);
@@ -357,8 +342,7 @@ describe('5 fix F1: OAuthClient reads only its own options', () => {
     expect(link.startsWith(`${CONSENT}?client_id=`)).toBe(true);
   });
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('waits 15 seconds when Object.prototype carries a timeout', async () => {
+  it('waits 15 seconds when Object.prototype carries a timeout', async () => {
     pollute('timeout', 1);
     const http = new FakeHttpClient([reply(200, TOKENS)]);
 
@@ -367,8 +351,7 @@ describe('5 fix F1: OAuthClient reads only its own options', () => {
     expect(http.requests.map((request) => request.timeout)).toEqual([15_000]);
   });
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('sends through the global fetch, not the polluting client, when Object.prototype carries an httpClient', async () => {
+  it('sends through the global fetch, not the polluting client, when Object.prototype carries an httpClient', async () => {
     const attacker = new FakeHttpClient([reply(200, TOKENS)]);
     pollute('httpClient', attacker);
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(TOKENS), { status: 200 }));
@@ -380,8 +363,7 @@ describe('5 fix F1: OAuthClient reads only its own options', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  // Skipped until fix packet F1 (OAuthClient option checks) lands.
-  it.skip('ignores every option the options object inherits from a prototype of its own', async () => {
+  it('ignores every option the options object inherits from a prototype of its own', async () => {
     const inherited = new FakeHttpClient([reply(200, TOKENS)]);
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(TOKENS), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
