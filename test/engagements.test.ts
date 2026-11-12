@@ -12,10 +12,6 @@ import { EngagementAnswers, notFoundById } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P2 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -42,7 +38,7 @@ describe('P2: engagements surface', () => {
 });
 
 describe('P2: engagements reads', () => {
-  it.skip('lists GET /engagements with every filter, a day range and paging', async () => {
+  it('lists GET /engagements with every filter, a day range and paging', async () => {
     const { http, engagements } = over([reply(200, page([EngagementAnswers.listed], 1, 25))]);
 
     const list = await engagements.list({
@@ -71,7 +67,7 @@ describe('P2: engagements reads', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retrieves GET /engagements/{id} with fields', async () => {
+  it('retrieves GET /engagements/{id} with fields', async () => {
     const { http, engagements } = over([reply(200, EngagementAnswers.listed)]);
 
     expect(await engagements.retrieve(31, { fields: 'id,score' })).toEqual(EngagementAnswers.listed);
@@ -79,11 +75,11 @@ describe('P2: engagements reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,score' });
   });
 
-  it.skip('raises NotFoundError for an unknown engagement', async () => {
+  it('raises NotFoundError for an unknown engagement', async () => {
     await expect(over([reply(404, notFoundById)]).engagements.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it.skip('reads the types and calculations from their routes', async () => {
+  it('reads the types and calculations from their routes', async () => {
     const { http, engagements } = over([reply(200, EngagementAnswers.types), reply(200, EngagementAnswers.calculations)]);
 
     expect(await engagements.types()).toEqual(EngagementAnswers.types);
@@ -94,14 +90,14 @@ describe('P2: engagements reads', () => {
     ]);
   });
 
-  it.skip.each([
+  it.each([
     ['types', (e: EngagementsResource) => e.types()],
     ['calculations', (e: EngagementsResource) => e.calculations()],
   ])('%s throws UnexpectedResponseError for a 2xx that is not an object', async (_name, call) => {
     await expect(call(over([reply(200, [{ id: 'manual' }])]).engagements)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
     await expectRetried((transport) => resource(transport).retrieve(31), reply(200, EngagementAnswers.listed));
     await expectRetried((transport) => resource(transport).types(), reply(200, EngagementAnswers.types));
@@ -110,7 +106,7 @@ describe('P2: engagements reads', () => {
 });
 
 describe('P2: engagements list and id rules', () => {
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['s, which this route does not search', { s: 'flo' }],
     ['a misspelt filter', { programID: 2 }],
@@ -126,13 +122,13 @@ describe('P2: engagements list and id rules', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+  it('list throws UnexpectedResponseError for a 2xx that is not a list', async () => {
     await expect(over([reply(200, { error: 'Something went wrong.' })]).engagements.list()).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
   });
 
-  it.skip('retrieve refuses an id that is not a positive whole number before sending', async () => {
+  it('retrieve refuses an id that is not a positive whole number before sending', async () => {
     const { http, engagements } = over([reply(200, EngagementAnswers.listed)]);
 
     await expect(engagements.retrieve(0)).rejects.toBeInstanceOf(SirenError);
