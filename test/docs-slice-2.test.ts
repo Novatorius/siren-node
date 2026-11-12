@@ -54,7 +54,7 @@ describe('P8: README configuration', () => {
     const all = sentences(section(read('README.md'), '## Configuration'));
 
     expect(
-      all.some((s) => /\b401\b/.test(s) && /\bonce\b/.test(s) && /\brefresh/i.test(s)),
+      all.some((s) => /\b401\b/.test(s) && /\brefresh/i.test(s) && /\bresen(?:ds?|t)\b[^.]*\bonce\b/i.test(s)),
       'a sentence says a 401 is refreshed and resent once',
     ).toBe(true);
     expect(
