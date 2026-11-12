@@ -313,7 +313,7 @@ describe('P5: HoldConflictError', () => {
     }
   });
 
-  it.skip('fromConflict keeps the conflict\'s message, status, code and data, and sets it as the cause', () => {
+  it('fromConflict keeps the conflict\'s message, status, code and data, and sets it as the cause', () => {
     const conflict = new ConflictError('No credit available in USD.', {
       code: 'hold_no_credit',
       statusCode: 409,
@@ -331,32 +331,32 @@ describe('P5: HoldConflictError', () => {
     expect(error.cause).toBe(conflict);
   });
 
-  it.skip('reads the reason from the two hold codes, whatever the message says', () => {
+  it('reads the reason from the two hold codes, whatever the message says', () => {
     expect(hold('Anything.', 'hold_no_credit').reason).toBe('no_credit');
     expect(hold('Credit is held under that token.', 'hold_no_credit').reason).toBe('no_credit');
     expect(hold('Anything.', 'hold_token_in_use').reason).toBe('token_in_use');
     expect(hold('There is no credit available.', 'hold_token_in_use').reason).toBe('token_in_use');
   });
 
-  it.skip('answers null for any other code this SDK knows, whatever the message says', () => {
+  it('answers null for any other code this SDK knows, whatever the message says', () => {
     expect(hold('There is no credit available.', 'hold_currency_not_at_store').reason).toBeNull();
     expect(hold('Credit is held under that token.', 'mapping_exists').reason).toBeNull();
   });
 
-  it.skip('reads the reason from the wording when there is no code, in any case', () => {
+  it('reads the reason from the wording when there is no code, in any case', () => {
     expect(hold('Another checkout holds credit UNDER THAT TOKEN.').reason).toBe('token_in_use');
     expect(hold('There is No Credit Available in USD.').reason).toBe('no_credit');
   });
 
-  it.skip('reads the reason from the wording when the code is unknown', () => {
+  it('reads the reason from the wording when the code is unknown', () => {
     expect(hold('Another checkout holds credit under that token.', 'legacy_hold').reason).toBe('token_in_use');
   });
 
-  it.skip('checks the token wording before the credit wording', () => {
+  it('checks the token wording before the credit wording', () => {
     expect(hold('No credit available under that token.').reason).toBe('token_in_use');
   });
 
-  it.skip('answers null for other wording with no code', () => {
+  it('answers null for other wording with no code', () => {
     expect(hold('The hold was refused.').reason).toBeNull();
   });
 });

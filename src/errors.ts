@@ -481,8 +481,14 @@ export class HoldConflictError extends ConflictError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, details);
     this.name = 'HoldConflictError';
-    // Stub: slice 1 packet P5 sets this from the message and code.
-    this.reason = null;
+    const code = details.code;
+    const wording = message.toLowerCase();
+    if (code === ErrorCode.HoldTokenInUse) this.reason = HoldConflictReason.TokenInUse;
+    else if (code === ErrorCode.HoldNoCredit) this.reason = HoldConflictReason.NoCredit;
+    else if (isKnownErrorCode(code)) this.reason = null;
+    else if (wording.includes('under that token')) this.reason = HoldConflictReason.TokenInUse;
+    else if (wording.includes('no credit available')) this.reason = HoldConflictReason.NoCredit;
+    else this.reason = null;
   }
 
   /**
@@ -490,9 +496,12 @@ export class HoldConflictError extends ConflictError {
    * status, code and data, and sets it as the `cause`.
    */
   static fromConflict(conflict: ConflictError): HoldConflictError {
-    // Stub: slice 1 packet P5 implements this.
-    void conflict;
-    return new HoldConflictError('');
+    return new HoldConflictError(conflict.message, {
+      code: conflict.code,
+      statusCode: conflict.statusCode,
+      data: conflict.data,
+      cause: conflict,
+    });
   }
 }
 
