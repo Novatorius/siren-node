@@ -36,11 +36,10 @@ export const SITE_UPDATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname'] as co
 
 /**
  * The only fields `createPending()` sends besides `status: 'pending'`: the
- * ones Cloud's create route reads that a connected site may set. The route
- * also reads `trackingId`, but files that code in Cloud's own namespace,
- * outside the site's, so a site gives out codes with `aliases.create()`.
+ * ones Cloud's create route reads that a connected site may set. `trackingId`
+ * is optional, as in the PHP SDK.
  */
-export const SITE_CREATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname', 'email'] as const;
+export const SITE_CREATABLE_COLLABORATOR_FIELDS = ['fullName', 'nickname', 'email', 'trackingId'] as const;
 
 /** The keys `createPending()` refuses: the bindings and `status`, which Siren sets. */
 const PENDING_REFUSED_FIELDS: readonly string[] = [...COLLABORATOR_BINDING_FIELDS, 'status'];
@@ -150,10 +149,9 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
 
   /**
    * Creates a collaborator the way a connected site must: `POST
-   * /collaborators` with `fullName`, `nickname`, `email` and `status:
-   * 'pending'`, so the organization approves them. Enroll them afterwards
-   * with `enrollments.add()`, and give out their codes with
-   * `aliases.create()`.
+   * /collaborators` with `fullName`, `nickname`, `email`, an optional
+   * `trackingId`, and `status: 'pending'`, so the organization approves
+   * them. Enroll them afterwards with `enrollments.add()`.
    *
    * Throws `SirenError` before sending when `params` holds a binding field
    * (whatever its value, an empty list or `undefined` included) or `status`,
@@ -163,9 +161,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * before sending for any other key outside
    * {@link SITE_CREATABLE_COLLABORATOR_FIELDS}, whatever its value, with
    * exactly `createPending cannot send "{key}". A connected site sends only
-   * fullName, nickname and email, and gives out codes with aliases.create().`
-   * That covers `trackingId`, which Cloud would file outside the site's
-   * namespace, and `id`, `propertyId` or any other key Cloud does not read.
+   * fullName, nickname, email and trackingId.` That covers `id`,
+   * `propertyId` and any other key Cloud's create route does not read.
    *
    * After a lost answer, what a resend does depends on the email. For
    * someone the organization already has, Siren answers the held record it
@@ -191,7 +188,7 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
       }
       if (!creatable.includes(key)) {
         throw new SirenError(
-          `createPending cannot send "${key}". A connected site sends only fullName, nickname and email, and gives out codes with aliases.create().`,
+          `createPending cannot send "${key}". A connected site sends only fullName, nickname, email and trackingId.`,
         );
       }
     }

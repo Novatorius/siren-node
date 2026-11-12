@@ -140,14 +140,12 @@ export interface CreateCollaboratorParams {
   groups?: number[];
 }
 
-/**
- * The fields `collaborators.createPending()` sends, the way a connected site
- * must. A site gives out codes with `collaborators.aliases.create()`.
- */
+/** The fields `collaborators.createPending()` sends, the way a connected site must. */
 export interface CreatePendingCollaboratorParams {
   fullName: string;
   nickname: string;
   email: string;
+  trackingId?: string;
 }
 
 /** The fields `collaborators.update()` sends. Send only the fields to change. */

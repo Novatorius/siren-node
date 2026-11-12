@@ -258,9 +258,9 @@ const ada = await siren.collaborators.retrieve(42, { fields: ['id', 'fullName', 
 await siren.collaborators.bulk(CollaboratorBulkAction.AddToProgram, [42, 43], { programId: 7 });
 ```
 
-A connected site creates a collaborator with `createPending`, which sends `fullName`, `nickname`
-and `email` with `status: 'pending'` so the organization approves them, and throws `SirenError`
-for any other field. The site changes a collaborator only with `updateDetails`, which sends
+A connected site creates a collaborator with `createPending`, which sends `fullName`, `nickname`,
+`email` and an optional `trackingId` with `status: 'pending'` so the organization approves them,
+and throws `SirenError` for any other field. The site changes a collaborator only with `updateDetails`, which sends
 `fullName` and `nickname` and throws `SirenError` for any other key.
 
 ```ts

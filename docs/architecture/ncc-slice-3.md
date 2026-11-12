@@ -123,12 +123,11 @@ every request, since Siren answers 401 before it writes.
 A connected site's token reaches a narrower set of fields. Two methods exist
 for it, as in PHP:
 
-- `createPending` sends `fullName`, `nickname` and `email` with `status:
-  'pending'` (`SITE_CREATABLE_COLLABORATOR_FIELDS`). It refuses `programs`,
-  `distributors`, `groups` and `status` before sending, whatever their
-  value, and every other key with a second message. Cloud's create route
-  also reads `trackingId`, but files that code in Cloud's own namespace,
-  outside the site's, so a site gives out codes with `aliases.create()`.
+- `createPending` sends `fullName`, `nickname`, `email` and an optional
+  `trackingId` with `status: 'pending'` (`SITE_CREATABLE_COLLABORATOR_FIELDS`),
+  the fields Cloud's create route reads that a site may set. It refuses
+  `programs`, `distributors`, `groups` and `status` before sending, whatever
+  their value, and every other key with a second message.
 - `updateDetails` sends `fullName` and `nickname` only and refuses any other
   key, `fields` included.
 
@@ -164,7 +163,7 @@ and `failed` counts in `data`.
 | A 2xx write answer that is not an object passes through | `UnexpectedResponseError` | Matches `retrieve` and slice 5 |
 | `updateDetails` passes `fields` and `id` | refuses every key but `fullName` and `nickname` | Cloud reads `fields` on update as the custom-field map, while the site rule checks it as a list of read fields |
 | `createPending` and `updateDetails` refuse a binding key that is present, `null` included (`array_key_exists`) | the same, and a key set to `undefined` too | A key check refuses the key whatever its value, even one JSON would drop |
-| `createPending` sends every key but the bindings and `status`, `trackingId` included | sends only `fullName`, `nickname` and `email`, and refuses any other key | Cloud files a `trackingId` sent on create in its own namespace, outside the site's, and a stray key such as `id` or `propertyId` would go out unread |
+| `createPending` sends every key but the bindings and `status` | sends only `fullName`, `nickname`, `email` and `trackingId`, and refuses any other key | Cloud's create route reads no other key, so a stray `id` or `propertyId` would go out unread |
 | Any list key is sent | a key outside the route's filters throws `SirenError` | Cloud ignores an unknown key and answers every record |
 | A comma in a filter string is sent | throws `SirenError`, except in `fields` and `s` | Cloud reads a comma as "any of" |
 | An empty filter list is sent as an empty string | throws `SirenError` | Cloud would answer every record |
