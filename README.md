@@ -434,6 +434,161 @@ carry the token and the SDK hands that error to you unchanged as `cause`. Reject
 timeout. The SDK may resend those and then raises `ConnectionError`. Any other error reaches you
 unchanged and is never resent.
 
+## Connected sites
+
+A store that connects to Siren Cloud as a site, such as a Medusa store, takes its tools from the
+`@novatorius/siren/connect` entry. It registers an OAuth client, sends the merchant to Cloud's
+consent screen, exchanges the code the callback brings back, and then calls Cloud with the site's
+own access token. The SDK keeps nothing, so the store keeps the client id, the state, the verifier
+and the token pair in its own storage.
+
+### Register and connect
+
+```ts
+import {
+  ConnectorSoftware,
+  OAuthClient,
+  codeChallengeS256,
+  createCodeVerifier,
+  createState,
+} from '@novatorius/siren/connect';
+
+const oauth = new OAuthClient();
+const redirectUri = 'https://store.example/siren/callback';
+
+// Once per store. Keep client_id.
+const registration = await oauth.register({
+  clientName: 'Example Store',
+  redirectUris: [redirectUri],
+  softwareId: ConnectorSoftware.Medusa,
+});
+
+// Each time the merchant connects.
+const verifier = createCodeVerifier();
+const state = createState();
+await store.saveConnectAttempt({ verifier, state });
+const consentUrl = oauth.authorizeUrl({
+  clientId: registration.client_id,
+  redirectUri,
+  state,
+  codeChallenge: codeChallengeS256(verifier),
+});
+```
+
+`register` makes a new client every time it runs, so a store registers once and keeps
+`client_id`. `authorizeUrl` sends nothing. It builds the consent screen URL from the S256
+challenge and refuses anything else, so the verifier never reaches the merchant's browser.
+
+When the merchant approves, Cloud sends the browser back to the redirect URI with `code` and
+`state`. The store compares the callback's `state` with the one it kept, refuses a mismatch, and
+uses each `state` once. Then it exchanges the code:
+
+```ts
+const tokens = await oauth.exchangeCode({
+  clientId: registration.client_id,
+  code: callback.code,
+  redirectUri,
+  codeVerifier: attempt.verifier,
+});
+await store.saveTokens(tokens); // access_token and refresh_token, as Cloud sent them
+```
+
+A code works once. After a `ConnectionError` from `exchangeCode`, the store cannot know whether
+Cloud spent the code, so it starts the connection over with a new verifier and state.
+
+### Refresh
+
+```ts
+const pair = await oauth.refresh({
+  clientId: registration.client_id,
+  refreshToken: saved.refresh_token,
+  attemptId: createState(),
+});
+await store.saveTokens(pair);
+```
+
+Cloud rotates the refresh token on every refresh, so the store saves the new pair before anything
+else reads it. A refresh is sent exactly once and never retried by the SDK, whatever the answer.
+The store takes its own lock around each refresh, so two refreshes of one token never race. Give
+each refresh a random `attemptId`, such as one from `createState()`. After a `ConnectionError`, a
+429 or a 5xx, the store may send that refresh once more within 30 seconds of the first try, with
+the same `attemptId`, and Cloud answers with the pair it already issued. A resend more than 30
+seconds after the first try makes Cloud revoke the whole token family. A refresh refused with
+`invalid_grant` or `invalid_client` means the grant is gone, and the site connects again.
+
+### SirenConnect
+
+```ts
+import { CallbackAccessTokenSource, SirenConnect } from '@novatorius/siren/connect';
+
+const siren = new SirenConnect({
+  accessToken: new CallbackAccessTokenSource(
+    () => store.accessToken(),
+    (rejected) => store.refreshUnderLock(rejected), // answer null when the grant is gone
+  ),
+});
+
+const plan = await siren.connect.plan();
+await siren.connect.reportSiteState({ forwarding: true });
+```
+
+`SirenConnect` is the client a connected site holds once it has tokens. It takes the options
+`new Siren()` takes, with `accessToken` required and no `apiKey`. When `accessToken` is an
+`AccessTokenSource`, a 401 makes the client ask it for a fresh token once and resend once, as
+`new Siren()` does. `siren.connect` holds the `/connect/*` routes and `/ping`, and each method
+names the `ConnectScope` its route needs. `siren.events` forwards the site's events.
+
+The reads, `updateGrant` and `webhook.delete` retry like any read. The three reports, `reportSiteState`,
+`reportIntegrations` and `syncProducts`, are sent once, because the site's task queue sends them
+again. `disconnect` is sent once, because Cloud cuts the client off as it commits, so a 401 after
+a `disconnect` means the site is disconnected. A site that calls a retried route from its own
+queue builds its client with `maxRetries: 0`. `customerEmailKey` answers the key the site hashes
+customer emails with.
+
+### The site's webhook
+
+```ts
+const subscription = await siren.connect.webhook.replace({
+  targetUrl: 'https://store.example/siren/webhook',
+  events: ['conversion.approved', 'payout.paid'],
+});
+await store.saveSigningSecret(subscription.signingSecret);
+```
+
+`replace` creates or replaces the site's subscription and answers a new signing secret, which
+Cloud shows only in that answer. It is sent once, because each send rotates the secret. After a
+`ConnectionError` from `replace`, the site cannot know whether the secret rotated, so it calls
+`replace` again before it trusts the stored secret. The site verifies every delivery with
+`constructEvent` and the signing secret, as in
+[Quickstart: verify a webhook](#quickstart-verify-a-webhook), and drops any delivery that fails.
+Never log the customer email key or the signing secret, and keep both out of error reports.
+
+### Forwarding events
+
+```ts
+import { ForwardedEventSlug } from '@novatorius/siren/connect';
+
+await siren.events.forward(
+  ForwardedEventSlug.ProductDeleted,
+  {
+    version: 1,
+    eventId: row.eventId,
+    origin: 'site',
+    occurredAt: '2026-11-12T09:30:00+00:00',
+    data: { integration: 'medusa', platformId: 'prod_01', changedAt: '2026-11-12T09:30:00+00:00' },
+  },
+  { finalAttempt: row.isLastTry },
+);
+```
+
+`events.forward` sends one of the site's events in Siren's versioned envelope. Before sending, it
+refuses a slug outside `ForwardedEventSlug`, so a typo never becomes a custom event, and an
+envelope Cloud would refuse. `events.forward` is sent once and never retried, whatever
+`maxRetries` says, because the site's outbox owns redelivery. Its one resend is the transport's,
+with a refreshed token after a 401. The outbox resends a failed event with the same `eventId` and
+the same token, and Cloud answers an event it already recorded with `status: duplicate`. On the
+outbox's last try, pass `finalAttempt: true`, which adds the `X-Siren-Final-Attempt: 1` header.
+
 ## Other SDKs
 
 Siren ships official SDKs in three languages, all built against the same API:

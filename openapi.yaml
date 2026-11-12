@@ -23,6 +23,11 @@ info:
     token that holds `connect:records:read`. Each operation lists the
     credentials it takes in its `security`, and the scopes an API key needs.
 
+    A connected site registers through `/oauth/register` and gets its token
+    pair from `/oauth/token`, both public. With that token it calls the
+    `/connect/*` routes, each with the one `connect` scope it names, and
+    forwards its events to `POST /event/{eventSlug}` with `connect:ingest`.
+
     Success bodies are bare: a record is a JSON object and a reconciliation
     list is `{ items, total, page, perPage, totalPages }`. There is no
     `{ "data": ... }` wrapper. Failures send `{ "error": "message" }` or
@@ -49,6 +54,10 @@ tags:
     description: Manage API keys.
   - name: Reconciliation
     description: Read Siren's ledger to reconcile against your own records.
+  - name: OAuth
+    description: Register a connected site and get its tokens.
+  - name: Connected sites
+    description: The routes a connected site calls with its OAuth token.
 paths:
   /event/sale:
     post:
@@ -175,11 +184,20 @@ paths:
         Ingests any event type registered on the organization, including custom
         event types. The three built-in slugs are `sale`, `refund`, and
         `site-visited`. The API key needs `event:*` or `event:{eventSlug}`. The
-        events a connected WordPress site forwards, such as `sale-triggered`,
-        need their exact scope.
+        events a connected site forwards, such as `sale-triggered`, need their
+        exact scope on an API key.
+
+        A connected site forwards each event in a `ForwardedEventEnvelope`
+        with its OAuth token, which needs `connect:ingest`. The site's outbox
+        resends a failed event with the same `eventId` and the same token,
+        and Cloud answers a resend it already recorded with
+        `status: duplicate`. A 500 whose `error.context.reason` is
+        `waiting_for_record`, or a 404 `reference_not_found`, means the
+        outbox tries again later. On its last try the outbox sends the final
+        attempt header below.
       security:
         - apiKey: []
-        - connectorToken: []
+        - connectorToken: [connect:ingest]
         - dashboardSession: []
       parameters:
         - name: eventSlug
@@ -187,13 +205,23 @@ paths:
           required: true
           schema: { type: string }
           example: loyalty-points-earned
+        - name: X-Siren-Final-Attempt
+          in: header
+          required: false
+          description: |
+            `1` on the last try a connected site's outbox makes of a
+            forwarded event, so Cloud logs an event it will never record.
+            Left out on every other send.
+          schema: { type: string, enum: ['1'] }
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
+              anyOf:
+                - $ref: '#/components/schemas/ForwardedEventEnvelope'
+                - type: object
+                  additionalProperties: true
       responses:
         '200':
           description: Event accepted.
@@ -745,6 +773,460 @@ paths:
         '200': { $ref: '#/components/responses/PaginatedList' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /oauth/register:
+    post:
+      tags: [OAuth]
+      operationId: registerOAuthClient
+      summary: Register a connected site's OAuth client
+      description: |
+        RFC 7591 dynamic registration. A site registers once, before it sends
+        the merchant to the consent screen, and keeps the `client_id` it gets
+        back. Each registration makes a new client, so the SDK sends it once.
+        `scope` defaults to the connected-site scopes. A client that sends no
+        `software_id` registers as the WordPress connector.
+
+        A refusal is a 400 with the RFC 7591 error envelope, `error` and
+        `error_description`, such as `invalid_redirect_uri`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_name, redirect_uris]
+              properties:
+                client_name: { type: string, maxLength: 200, description: The store's name. Cloud names the Property after it. }
+                redirect_uris:
+                  type: array
+                  maxItems: 10
+                  description: https URIs, or http on `localhost`, `127.0.0.1` or `[::1]`.
+                  items: { type: string, format: uri }
+                scope:
+                  type: string
+                  description: Space-separated scopes.
+                  example: 'connect:* connect:webhooks connect:records:read connect:records:write'
+                software_id: { type: string, enum: [siren-wordpress, siren-medusa] }
+      responses:
+        '201':
+          description: The client is registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthClientRegistration' }
+        '400': { $ref: '#/components/responses/OAuthRefused' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /oauth/token:
+    post:
+      tags: [OAuth]
+      operationId: requestOAuthToken
+      summary: Exchange a code or refresh a token
+      description: |
+        RFC 6749 token route. With `grant_type: authorization_code` it
+        exchanges the callback's single-use code and the PKCE verifier for a
+        token pair. With `grant_type: refresh_token` it spends the refresh
+        token for a new pair, and Cloud rotates the refresh token every time.
+
+        Cloud answers a repeat of a rotated refresh token for 30 seconds. A
+        repeat that carries the same `attempt_id` gets the pair Cloud already
+        issued. A repeat after 30 seconds makes Cloud revoke the whole token
+        family. The SDK sends each call once, and the store locks its own
+        refresh.
+
+        A refusal is a 400 or 401 with the RFC 6749 error envelope, `error`
+        and `error_description`. A refresh refused with `invalid_grant` or
+        `invalid_client` means the grant is gone and the site connects again.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant_type, client_id]
+              properties:
+                grant_type: { type: string, enum: [authorization_code, refresh_token] }
+                client_id: { type: string }
+                code: { type: string, description: The callback's code. Single use. Required for `authorization_code`. }
+                redirect_uri: { type: string, format: uri, description: The redirect URI the authorization request named. Required for `authorization_code`. }
+                code_verifier: { type: string, description: The PKCE verifier whose S256 challenge the authorization request carried. Required for `authorization_code`. }
+                refresh_token: { type: string, description: Required for `refresh_token`. }
+                attempt_id: { type: string, description: A random id for one refresh, sent again unchanged on each try of it. }
+      responses:
+        '200':
+          description: A new token pair.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthToken' }
+        '400': { $ref: '#/components/responses/OAuthRefused' }
+        '401': { $ref: '#/components/responses/OAuthRefused' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /connect/plan:
+    get:
+      tags: [Connected sites]
+      operationId: getConnectPlan
+      summary: Read the organization's plan
+      description: |
+        The organization's plan, trial and capabilities. Cloud answers 503
+        with code `plan_unavailable` when it cannot read billing, and the
+        site keeps the plan it last read.
+      security:
+        - connectorToken: [connect:read]
+      responses:
+        '200':
+          description: The plan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConnectPlan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503':
+          description: Cloud could not read the plan. `error.code` is `plan_unavailable`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /connect/update-grant:
+    post:
+      tags: [Connected sites]
+      operationId: issueConnectUpdateGrant
+      summary: Sign a grant for a paid build
+      description: |
+        A short-lived signed grant the site's updater sends to fetch a paid
+        build. Each call signs a new grant and records nothing. No body.
+      security:
+        - connectorToken: [connect:read]
+      responses:
+        '200':
+          description: The grant.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grant, expiresAt, expiresIn]
+                properties:
+                  grant: { type: string }
+                  expiresAt: { type: integer, description: Unix time. }
+                  expiresIn: { type: integer, description: Seconds. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/site-state:
+    put:
+      tags: [Connected sites]
+      operationId: reportConnectedSiteState
+      summary: Report the site's forwarding and migration state
+      security:
+        - connectorToken: [connect:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [forwarding]
+              properties:
+                forwarding: { type: boolean }
+                cutOverAt: { type: [integer, 'null'], description: Unix time, 2020 or later. }
+                localDataDeletedAt: { type: [integer, 'null'], description: Unix time, 2020 or later. }
+                migrationComplete: { type: boolean, description: Closes the site's migration window. }
+      responses:
+        '200':
+          description: The state Cloud now holds.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reported, forwarding, cutOverAt, localDataDeletedAt]
+                properties:
+                  reported: { type: boolean, const: true }
+                  forwarding: { type: boolean }
+                  cutOverAt: { type: [integer, 'null'] }
+                  localDataDeletedAt: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/disconnect:
+    post:
+      tags: [Connected sites]
+      operationId: disconnectConnectedSite
+      summary: Disconnect the site
+      description: |
+        Revokes the site's client, its tokens and its webhook. No body. Cloud
+        cuts the client off as the disconnect commits, so a resend after a
+        lost answer gets 401, and the site treats that as disconnected.
+      security:
+        - connectorToken: [connect:read]
+      responses:
+        '200':
+          description: The site is disconnected.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [disconnected, clientRevoked, tokensRevoked, webhooksRemoved]
+                properties:
+                  disconnected: { type: boolean, const: true }
+                  clientRevoked: { type: boolean }
+                  tokensRevoked: { type: integer }
+                  webhooksRemoved: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/integrations:
+    put:
+      tags: [Connected sites]
+      operationId: replaceConnectedSiteIntegrations
+      summary: Report the site's integrations
+      description: The whole list, up to 50, replaces the one Cloud held.
+      security:
+        - connectorToken: [connect:records:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [integrations]
+              properties:
+                integrations:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [id]
+                    properties:
+                      id: { type: string, pattern: '^[A-Za-z0-9._-]+$' }
+                      name: { type: string }
+                      supports:
+                        type: array
+                        description: Feature values such as `coupons`, `customers` and `products`. Cloud drops values it does not know.
+                        items: { type: string }
+      responses:
+        '204':
+          description: The list is replaced. No body.
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/products:
+    put:
+      tags: [Connected sites]
+      operationId: syncConnectedStoreProducts
+      summary: Sync the store's products
+      description: |
+        Upserts and removes up to 200 products a call. To end a full sync,
+        send the `serverTime` an earlier answer gave as `pruneBefore`, and
+        Cloud removes every product the sync did not touch.
+      security:
+        - connectorToken: [connect:records:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform]
+              properties:
+                platform: { type: string, example: medusa }
+                products:
+                  type: array
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [id]
+                    properties:
+                      id: { type: [string, integer] }
+                      parentId: { type: [string, integer, 'null'] }
+                      name: { type: [string, 'null'] }
+                      sku: { type: [string, 'null'] }
+                      type: { type: [string, 'null'] }
+                      status: { type: [string, 'null'] }
+                      editUrl: { type: [string, 'null'], format: uri }
+                removed:
+                  type: array
+                  maxItems: 200
+                  items: { type: [string, integer] }
+                pruneBefore: { type: [integer, 'null'] }
+      responses:
+        '200':
+          description: What the call changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upserted, skipped, removed, pruned, serverTime]
+                properties:
+                  upserted: { type: integer }
+                  skipped: { type: integer }
+                  removed: { type: integer }
+                  pruned: { type: integer }
+                  serverTime: { type: integer, description: Unix time by Cloud's clock. }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/migration-window:
+    get:
+      tags: [Connected sites]
+      operationId: getMigrationWindow
+      summary: Read the site's migration window
+      security:
+        - connectorToken: [connect:migrate]
+      responses:
+        '200':
+          description: Whether the site may still migrate, and until when.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [open, closesAt]
+                properties:
+                  open: { type: boolean }
+                  closesAt: { type: [integer, 'null'], description: Unix time. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/customer-email-key:
+    get:
+      tags: [Connected sites]
+      operationId: getCustomerEmailKey
+      summary: Read the customer email key
+      description: |
+        The HMAC key the site hashes customer emails with. Cloud sends it
+        with `Cache-Control: no-store`. Never log it.
+      security:
+        - connectorToken: [connect:records:read]
+      responses:
+        '200':
+          description: The key.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keyId, secret]
+                properties:
+                  keyId: { type: string }
+                  secret: { type: string, contentEncoding: base64, description: At least 16 bytes, standard base64. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/webhook:
+    put:
+      tags: [Connected sites]
+      operationId: replaceConnectorWebhook
+      summary: Create or replace the site's webhook subscription
+      description: |
+        Creates the subscription (201) or replaces it (200). Either way the
+        answer carries a new signing secret, shown only here, so each call
+        rotates the secret.
+      security:
+        - connectorToken: [connect:webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUrl, events]
+              properties:
+                targetUrl: { type: string, format: uri }
+                events:
+                  type: array
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/WebhookEventType' }
+      responses:
+        '200':
+          description: The subscription is replaced.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConnectorWebhookWithSecret' }
+        '201':
+          description: The subscription is created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConnectorWebhookWithSecret' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      tags: [Connected sites]
+      operationId: getConnectorWebhook
+      summary: Read the site's webhook subscription
+      security:
+        - connectorToken: [connect:webhooks]
+      responses:
+        '200':
+          description: The subscription.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConnectorWebhook' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Connected sites]
+      operationId: deleteConnectorWebhook
+      summary: Delete the site's webhook subscription
+      description: A repeat removes nothing more.
+      security:
+        - connectorToken: [connect:webhooks]
+      responses:
+        '200':
+          description: The subscription is gone.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connect/webhook/test:
+    post:
+      tags: [Connected sites]
+      operationId: testConnectorWebhook
+      summary: Send one signed test delivery
+      description: |
+        Cloud signs one test delivery to the site and reports what the site
+        answered. Cloud allows ten tests a site an hour.
+      security:
+        - connectorToken: [connect:webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nonce]
+              properties:
+                nonce: { type: string, pattern: '^[A-Za-z0-9_-]{16,128}$' }
+      responses:
+        '200':
+          description: What the site answered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [delivered, httpStatus, error]
+                properties:
+                  delivered: { type: boolean }
+                  httpStatus: { type: [integer, 'null'] }
+                  error: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /connect/webhook/deliveries:
+    get:
+      tags: [Connected sites]
+      operationId: listConnectorWebhookDeliveries
+      summary: List deliveries to the site's subscription
+      security:
+        - connectorToken: [connect:webhooks]
+      responses:
+        '200':
+          description: The deliveries, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConnectorWebhookDelivery' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 components:
   securitySchemes:
     apiKey:
@@ -775,7 +1257,11 @@ components:
       description: |
         A connected site's OAuth access token, issued when an organization
         admin approves the site. The reconciliation routes take it when it
-        holds `connect:records:read`.
+        holds `connect:records:read`. Each `/connect/*` route names the one
+        `connect` scope it needs, and forwarded events need `connect:ingest`.
+        `connect:*` grants `connect:read`, `connect:ingest` and
+        `connect:migrate`. `connect:webhooks`, `connect:records:read` and
+        `connect:records:write` are granted only by name.
   headers:
     XSirenOID:
       description: The opportunity (tracking) id associated with the event.
@@ -1258,6 +1744,138 @@ components:
                           message: { type: string }
                           type: { type: string, example: REQUIRED }
                           context: { type: object, additionalProperties: true }
+    ForwardedEventEnvelope:
+      type: object
+      description: |
+        The versioned envelope a connected site forwards to
+        `POST /event/{eventSlug}`, as Siren's `EventWireFormat` reads it.
+        The slug is one of the 28 forwarded slugs, such as `sale-triggered`
+        or `product-deleted`, and names the shape of `data`. Cloud claims
+        each event once per Property, on its natural key or on `eventId`,
+        and answers a resend with `status: duplicate`.
+      required: [version, eventId, origin, occurredAt, data]
+      properties:
+        version: { type: integer, const: 1 }
+        eventId:
+          type: string
+          format: uuid
+          description: The site's id for this event, the same on every try of it.
+        origin: { type: string, const: site }
+        occurredAt:
+          type: [string, 'null']
+          description: ISO 8601 with a `Z` or `+hh:mm` offset, or `null`.
+          example: '2026-11-12T09:30:00+00:00'
+        data:
+          type: object
+          additionalProperties: true
+          description: The event's fields. Each slug's codec names the keys it takes.
+        optional:
+          type: object
+          additionalProperties: true
+          description: Fields a slug takes beside `data`, such as a refund's `refundKind`.
+    OAuthClientRegistration:
+      type: object
+      description: The registered client, as RFC 7591 names its fields.
+      required: [client_id]
+      properties:
+        client_id: { type: string }
+        client_name: { type: string }
+        redirect_uris:
+          type: array
+          items: { type: string, format: uri }
+        grant_types:
+          type: array
+          items: { type: string }
+        token_endpoint_auth_method: { type: string, example: none }
+        scope: { type: string }
+        software_id: { type: string, enum: [siren-wordpress, siren-medusa] }
+    OAuthToken:
+      type: object
+      description: A token pair, as RFC 6749 names its fields.
+      required: [access_token, refresh_token]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 3600 }
+        scope: { type: string }
+        refresh_token:
+          type: string
+          description: The next refresh token. Cloud rotates it on every refresh, so the one sent is spent.
+    OAuthError:
+      type: object
+      description: |
+        The RFC 6749 and RFC 7591 error envelope. A refresh refused with
+        `invalid_grant` or `invalid_client` means the grant is gone and the
+        site connects again.
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_grant
+            - invalid_client
+            - invalid_scope
+            - unsupported_grant_type
+            - invalid_client_metadata
+            - invalid_redirect_uri
+        error_description: { type: string }
+    ConnectPlan:
+      type: object
+      required: [status, capabilities, trial, paidPlan, pricingUrl]
+      properties:
+        status: { type: string, enum: [active, lapsed, none, unrestricted] }
+        capabilities:
+          type: array
+          items: { type: string }
+        trial:
+          type: object
+          required: [active, plan, endsAt, ended]
+          properties:
+            active: { type: boolean }
+            plan: { type: [string, 'null'], description: '`essentials`, `plus` or `pro` during a trial.' }
+            endsAt: { type: [string, 'null'], format: date-time }
+            ended: { type: boolean }
+        paidPlan: { type: [string, 'null'] }
+        pricingUrl: { type: string, format: uri }
+    ConnectorWebhook:
+      description: The site's own webhook subscription, with its Property.
+      allOf:
+        - { $ref: '#/components/schemas/WebhookSubscription' }
+        - type: object
+          required: [property]
+          properties:
+            property:
+              type: object
+              properties:
+                id: { type: integer }
+                siteUrl: { type: string, format: uri }
+    ConnectorWebhookWithSecret:
+      description: The subscription with its new signing secret, shown only in this answer.
+      allOf:
+        - { $ref: '#/components/schemas/ConnectorWebhook' }
+        - type: object
+          required: [signingSecret]
+          properties:
+            signingSecret: { type: string }
+    ConnectorWebhookDelivery:
+      type: object
+      description: One delivery to the site's subscription. Dates are `Y-m-d H:i:s` with no offset.
+      properties:
+        id: { type: integer }
+        webhookSubscriptionId: { type: integer }
+        eventType: { type: string }
+        eventId: { type: [string, 'null'] }
+        payload: { type: [object, 'null'], additionalProperties: true }
+        status: { type: string }
+        attemptCount: { type: integer }
+        httpStatusCode: { type: [integer, 'null'] }
+        responseBody: { type: [string, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        nextRetryAt: { type: [string, 'null'] }
+        deliveredAt: { type: [string, 'null'] }
+        dateCreated: { type: [string, 'null'] }
+        dateModified: { type: [string, 'null'] }
   responses:
     PaginatedList:
       description: |
@@ -1331,3 +1949,10 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    OAuthRefused:
+      description: |
+        Cloud refused the OAuth call, with the RFC error envelope. The SDK
+        raises it as `OAuthError`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OAuthError' }

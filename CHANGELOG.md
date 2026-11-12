@@ -68,6 +68,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `propertyId`. They throw `SirenError` before sending when the id is not a positive whole number,
   and `UnexpectedResponseError` when a 2xx body is not a JSON object.
 - `openapi.yaml` documents `GET /conversions/{id}` and `GET /transactions/{id}`.
+- `@novatorius/siren/connect`, a new entry for a store that connects to Siren Cloud as a site. It
+  holds the OAuth flow, the connected-site client and the forwarded event vocabulary, and shares
+  its classes with the main entry, so `instanceof SirenError` holds across both.
+- `OAuthClient` registers the site's client (`register`), builds the consent screen URL
+  (`authorizeUrl`), exchanges the callback's code (`exchangeCode`) and refreshes the token pair
+  (`refresh`). Each call is sent once and never retried. A refusal with the RFC error envelope
+  raises `OAuthError`, whose code is one of `OAuthErrorCode`. `ConnectorSoftware` names the
+  connector a site registers as.
+- `createCodeVerifier`, `createState` and `codeChallengeS256` make the PKCE verifier, the state and
+  the S256 challenge `authorizeUrl` takes.
+- `SirenConnect`, the client a connected site holds once it has tokens. It takes `accessToken` and
+  never `apiKey`, and exposes `connect` and `events`.
+- `ConnectResource` sends the `/connect/*` routes and `/ping`: `plan`, `updateGrant`,
+  `reportSiteState`, `reportIntegrations`, `syncProducts`, `disconnect`, `migrationWindow`,
+  `customerEmailKey` and `ping`. `ConnectWebhookResource`, at `connect.webhook`, manages the site's
+  own subscription: `replace`, `get`, `delete`, `test` and `deliveries`. `ConnectScope` names the
+  six scopes those routes need.
+- `events.forward` sends a connected site's event in Siren's versioned envelope, once and never
+  retried. It takes the slug, the envelope and `{ finalAttempt }`. `ForwardedEventSlug` names the 28 slugs it takes,
+  `ForwardedEventEnvelope` types the envelope for each, and `FORWARDED_EVENT_VERSION` is 1.
+  `finalAttempt: true` adds `X-Siren-Final-Attempt: 1`.
+- `openapi.yaml` documents `/oauth/register`, `/oauth/token`, every `/connect/*` route with the
+  scope it needs, the `ForwardedEventEnvelope` schema and the `X-Siren-Final-Attempt` header.
 
 ### Changed
 
