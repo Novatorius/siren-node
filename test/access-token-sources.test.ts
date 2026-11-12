@@ -5,12 +5,6 @@ import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src
  * Slice 2 acceptance tests for packets P1 (StaticAccessToken) and P2
  * (CallbackAccessTokenSource). Each source mirrors its PHP SDK class at
  * 59383e6 (src/Auth).
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
  */
 
 describe('P1: StaticAccessToken', () => {

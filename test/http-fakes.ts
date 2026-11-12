@@ -3,9 +3,9 @@ import type { AccessTokenSource } from '../src/auth/access-token-source';
 import type { HttpClient, HttpRequest, HttpResponse } from '../src/http';
 
 /*
- * Slice 2 test doubles. The network boundary in this slice is the SDK's
- * `HttpClient` seam, so the integration tests mock there and keep the real
- * transport and the real resources, per Integration Testing Standards (KB 568).
+ * Test doubles for the SDK's `HttpClient` seam. The seam is the network
+ * boundary, so the integration tests mock there and keep the real transport
+ * and the real resources, per Integration Testing Standards (KB 568).
  */
 
 /** An `HttpResponse` with a JSON body, or an empty body when `body` is undefined. */

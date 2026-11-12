@@ -21,15 +21,8 @@ import { jsonResponse, makeClient } from './helpers';
  * Slice 1 acceptance tests: the error classes and codes the Siren PHP SDK
  * has (src/Exception at 59383e6b) and this SDK lacked.
  *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else in this file. Tests written
- * `it(` already pass on the architecture commit and must keep passing.
- *
  * Every mapping test sends a real response through the client's transport,
  * so it asserts on the error a caller catches, not on a helper's answer.
- * These tests sit apart from test/errors.test.ts so that each packet's
- * skipped tests are in one describe block of their own.
  */
 
 afterEach(() => {

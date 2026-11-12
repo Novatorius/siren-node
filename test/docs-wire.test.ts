@@ -7,10 +7,6 @@ import { ErrorCode, WebhookEventType } from '../src/index';
  * wire change in this slice. `openapi.yaml` is the API reference this
  * repository ships, so each new field, route, event and code must appear in
  * it, and the CHANGELOG and README must name each new public method and class.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else here.
  */
 
 function read(name: string): string {

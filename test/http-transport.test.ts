@@ -23,14 +23,7 @@ import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
  * Integration shape (KB 568): the real transport and the real resources, with
  * the network mocked only at the HttpClient seam by FakeHttpClient, which
  * replays Siren Cloud answers written from Siren's source.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
  */
-
 
 /**
  * Fails any test whose request reaches the global fetch, so a transport that
