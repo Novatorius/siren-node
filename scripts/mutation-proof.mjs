@@ -10,7 +10,15 @@
  *   { "id": "drop-refund-kind", "file": "src/types.ts",
  *     "find": "exact text, present once", "replace": "the broken text",
  *     "expect": "caught" | "survives" | "refused",
- *     "failing": ["text the failure output must hold"] }
+ *     "failing": ["text the failure output must hold"],
+ *     "offline": true }
+ *
+ * `offline` marks a mutation that weakens or removes the no-network guard
+ * (test/setup/no-network.ts). A test it lets through could send a real
+ * request, so the harness refuses to score it unless this process has no
+ * network interface but loopback, as inside `unshare -rn` with `lo` up:
+ *
+ *   unshare -rn sh -c 'ip link set lo up && node scripts/mutation-proof.mjs <list>'
  *
  * For each one the harness applies the change, then:
  * 1. Refuses to score it when `find` is not in the file exactly once, or when
@@ -34,6 +42,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
 import { resolve } from 'node:path';
 
 const root = process.cwd();
@@ -65,7 +74,17 @@ function srcCompiles() {
   }
 }
 
+/** True when every network interface is loopback, so no request can leave this machine. */
+function noRouteOut() {
+  return Object.values(networkInterfaces())
+    .flat()
+    .every((entry) => entry === undefined || entry.internal);
+}
+
 function score(mutation) {
+  if (mutation.offline === true && !noRouteOut()) {
+    return { result: 'refused', why: 'an offline mutation needs a network namespace with no route out (unshare -rn)' };
+  }
   const path = resolve(root, mutation.file);
   const original = readFileSync(path, 'utf8');
   const count = original.split(mutation.find).length - 1;

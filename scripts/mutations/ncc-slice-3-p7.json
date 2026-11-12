@@ -1,0 +1,301 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members/${member}`);",
+    "replace": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members?collaboratorId=${member}`);",
+    "expect": "caught",
+    "failing": [
+      "removes one member with DELETE"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members/${member}`);",
+    "replace": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members/${String(member)}`);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members/${member}`);",
+    "replace": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members/${member}`);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members/${member}`);",
+    "replace": "    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members?collaboratorId=${member}`);",
+    "expect": "wrong-reason",
+    "failing": [
+      "P7: members.list"
+    ]
+  },
+  {
+    "id": "p7-list-group",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const group = recordId(groupId, 'list', 'groupId');",
+    "replace": "    const group = groupId;",
+    "expect": "caught",
+    "failing": [
+      "list, group is refused"
+    ]
+  },
+  {
+    "id": "p7-list-params",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "      `/collaborator-groups/${group}/members`,\n      params,",
+    "replace": "      `/collaborator-groups/${group}/members`,\n      {},",
+    "expect": "caught",
+    "failing": [
+      "reads GET /collaborator-groups/{id}/members"
+    ]
+  },
+  {
+    "id": "p7-list-filters-loose",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "      CollaboratorGroupMembersResource.LIST_FILTERS,\n",
+    "replace": "      [...CollaboratorGroupMembersResource.LIST_FILTERS, 'propertyId'],\n",
+    "expect": "caught",
+    "failing": [
+      "list refuses propertyId"
+    ]
+  },
+  {
+    "id": "p7-list-ids-dropped",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "      CollaboratorGroupMembersResource.ID_FILTERS,\n    );",
+    "replace": "    );",
+    "expect": "caught",
+    "failing": [
+      "list refuses a collaborator id of 0"
+    ]
+  },
+  {
+    "id": "p7-add-group",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const group = recordId(groupId, 'add', 'groupId');",
+    "replace": "    const group = groupId;",
+    "expect": "caught",
+    "failing": [
+      "add, group is refused"
+    ]
+  },
+  {
+    "id": "p7-set-group",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const group = recordId(groupId, 'set', 'groupId');",
+    "replace": "    const group = groupId;",
+    "expect": "caught",
+    "failing": [
+      "set, group is refused"
+    ]
+  },
+  {
+    "id": "p7-remove-group",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const group = recordId(groupId, 'remove', 'groupId');",
+    "replace": "    const group = groupId;",
+    "expect": "caught",
+    "failing": [
+      "remove, group is refused"
+    ]
+  },
+  {
+    "id": "p7-remove-member",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const member = recordId(collaboratorId, 'remove', 'collaboratorId');",
+    "replace": "    const member = collaboratorId;",
+    "expect": "caught",
+    "failing": [
+      "remove, collaborator is refused"
+    ]
+  },
+  {
+    "id": "p7-add-unchecked",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const checked = checkedMembers(members, 'add', false);",
+    "replace": "    const checked = members;",
+    "expect": "caught",
+    "failing": [
+      "add, no members",
+      "add, a bad collaborator"
+    ]
+  },
+  {
+    "id": "p7-set-unchecked",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const checked = checkedMembers(members, 'set', true);",
+    "replace": "    const checked = members;",
+    "expect": "caught",
+    "failing": [
+      "set, a bad collaborator"
+    ]
+  },
+  {
+    "id": "p7-add-allows-empty",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const checked = checkedMembers(members, 'add', false);",
+    "replace": "    const checked = checkedMembers(members, 'add', true);",
+    "expect": "caught",
+    "failing": [
+      "add, no members is refused"
+    ]
+  },
+  {
+    "id": "p7-set-refuses-empty",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    const checked = checkedMembers(members, 'set', true);",
+    "replace": "    const checked = checkedMembers(members, 'set', false);",
+    "expect": "caught",
+    "failing": [
+      "sets with PUT, an empty list included"
+    ]
+  },
+  {
+    "id": "p7-add-method",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, { members: checked });",
+    "replace": "    return writeList<CollaboratorGroupMember>(this.http, 'PUT', `/collaborator-groups/${group}/members`, { members: checked });",
+    "expect": "caught",
+    "failing": [
+      "adds with POST"
+    ]
+  },
+  {
+    "id": "p7-set-method",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return writeList<CollaboratorGroupMember>(this.http, 'PUT', `/collaborator-groups/${group}/members`, { members: checked });",
+    "replace": "    return writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, { members: checked });",
+    "expect": "caught",
+    "failing": [
+      "sets with PUT"
+    ]
+  },
+  {
+    "id": "p7-add-body",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, { members: checked });",
+    "replace": "    return writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, checked);",
+    "expect": "caught",
+    "failing": [
+      "adds with POST"
+    ]
+  },
+  {
+    "id": "p7-set-retried",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return writeList<CollaboratorGroupMember>(this.http, 'PUT', `/collaborator-groups/${group}/members`, { members: checked });",
+    "replace": "    return writeList<CollaboratorGroupMember>(this.http, 'PUT', `/collaborator-groups/${group}/members`, { members: checked }).catch(() => writeList<CollaboratorGroupMember>(this.http, 'PUT', `/collaborator-groups/${group}/members`, { members: checked }));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p7-add-retried",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    return writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, { members: checked });",
+    "replace": "    return writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, { members: checked }).catch(() => writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, { members: checked }));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p7-check-not-list",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    throw new SirenError(`${method} needs members as a list.`);",
+    "replace": "    return [];",
+    "expect": "caught",
+    "failing": [
+      "members that are not a list",
+      "checkedMembers > refuses members given as an object"
+    ]
+  },
+  {
+    "id": "p7-check-empty",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "  if (!allowEmpty && members.length === 0) {",
+    "replace": "  if (allowEmpty && members.length === 0) {",
+    "expect": "caught",
+    "failing": [
+      "add, no members",
+      "checkedMembers > accepts an empty list only when allowEmpty is true"
+    ]
+  },
+  {
+    "id": "p7-check-empty-message",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    throw new SirenError(`${method} needs at least one member.`);",
+    "replace": "    throw new SirenError('needs at least one member.');",
+    "expect": "caught",
+    "failing": [
+      "checkedMembers > accepts an empty list only when allowEmpty is true"
+    ]
+  },
+  {
+    "id": "p7-check-object",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    if (typeof member !== 'object' || member === null || Array.isArray(member)) {",
+    "replace": "    if (typeof member !== 'object') {",
+    "expect": "caught",
+    "failing": [
+      "add, a null member",
+      "checkedMembers > refuses a member that is null"
+    ]
+  },
+  {
+    "id": "p7-check-object-array",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    if (typeof member !== 'object' || member === null || Array.isArray(member)) {",
+    "replace": "    if (typeof member !== 'object' || member === null) {",
+    "expect": "caught",
+    "failing": [
+      "checkedMembers > refuses a member that is a list"
+    ]
+  },
+  {
+    "id": "p7-check-id",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    recordId((member as { collaboratorId?: unknown }).collaboratorId, method, 'collaboratorId');",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "add, a bad collaborator",
+      "checkedMembers > refuses a collaboratorId of 0"
+    ]
+  },
+  {
+    "id": "p7-check-id-field",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "    recordId((member as { collaboratorId?: unknown }).collaboratorId, method, 'collaboratorId');",
+    "replace": "    recordId((member as { collaboratorId?: unknown }).collaboratorId, method, 'id');",
+    "expect": "caught",
+    "failing": [
+      "checkedMembers > refuses a collaboratorId of a fraction"
+    ]
+  },
+  {
+    "id": "p7-check-copies",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "  return members as CollaboratorGroupMemberInput[];",
+    "replace": "  return [...members] as CollaboratorGroupMemberInput[];",
+    "expect": "caught",
+    "failing": [
+      "checkedMembers > answers the same list"
+    ]
+  }
+]

@@ -30,10 +30,6 @@ import {
  * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource, reached through a real
  * CollaboratorGroupsResource, over the real HttpTransport, with a
  * FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P7 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -44,7 +40,7 @@ function over(replies: Parameters<typeof transportOver>[0]) {
 const resource = (transport: HttpTransport) => new CollaboratorGroupMembersResource(transport);
 
 describe('P7: members.list', () => {
-  it.skip('reads GET /collaborator-groups/{id}/members with filters and paging, and answers the page', async () => {
+  it('reads GET /collaborator-groups/{id}/members with filters and paging, and answers the page', async () => {
     const { http, members } = over([reply(200, page([GroupAnswers.member], 1, 100))]);
 
     const list = await members.list(5, { collaboratorId: 42, perPage: 100 });
@@ -55,7 +51,7 @@ describe('P7: members.list', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retries like a read', async () => {
+  it('retries like a read', async () => {
     await expectRetried((transport) => resource(transport).list(5), reply(200, page([])));
   });
 });
@@ -63,7 +59,7 @@ describe('P7: members.list', () => {
 describe('P7: members writes', () => {
   const input = [{ collaboratorId: 42, metadata: { level: 'L1' } }];
 
-  it.skip('adds with POST and answers the rows Siren added', async () => {
+  it('adds with POST and answers the rows Siren added', async () => {
     const { http, members } = over([reply(200, [GroupAnswers.member])]);
 
     expect(await members.add(5, input)).toEqual([GroupAnswers.member]);
@@ -71,11 +67,11 @@ describe('P7: members writes', () => {
     expect(bodyOf(http.requests[0])).toEqual({ members: input });
   });
 
-  it.skip('answers an empty list when nobody was new', async () => {
+  it('answers an empty list when nobody was new', async () => {
     expect(await over([reply(200, [])]).members.add(5, input)).toEqual([]);
   });
 
-  it.skip('sets with PUT, an empty list included, and answers the whole set', async () => {
+  it('sets with PUT, an empty list included, and answers the whole set', async () => {
     const { http, members } = over([reply(200, [GroupAnswers.member]), reply(200, [])]);
 
     expect(await members.set(5, input)).toEqual([GroupAnswers.member]);
@@ -86,7 +82,7 @@ describe('P7: members writes', () => {
     ]);
   });
 
-  it.skip('removes one member with DELETE and answers null for the 204', async () => {
+  it('removes one member with DELETE and answers null for the 204', async () => {
     const { http, members } = over([reply(204)]);
 
     expect(await members.remove(5, 42)).toBeNull();
@@ -97,19 +93,19 @@ describe('P7: members writes', () => {
     ]);
   });
 
-  it.skip('raises the 404 for a collaborator who is not a member as NotFoundError', async () => {
+  it('raises the 404 for a collaborator who is not a member as NotFoundError', async () => {
     await expect(over([reply(404, GroupAnswers.memberNotFound)]).members.remove(5, 43)).rejects.toBeInstanceOf(
       NotFoundError,
     );
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).add(5, input), reply(200, [GroupAnswers.member]));
     await expectSentOnce((transport) => resource(transport).set(5, input), reply(200, [GroupAnswers.member]));
     await expectSentOnce((transport) => resource(transport).remove(5, 42), reply(204));
   });
 
-  it.skip.each([
+  it.each([
     ['list, group', (m: CollaboratorGroupMembersResource) => m.list(0)],
     ['add, group', (m: CollaboratorGroupMembersResource) => m.add(0, input)],
     ['add, no members', (m: CollaboratorGroupMembersResource) => m.add(5, [])],
@@ -135,7 +131,7 @@ describe('P7: members list and retrieve rules', () => {
     expect(CollaboratorGroupMembersResource.ID_FILTERS).toEqual({ many: ['collaboratorId'] });
   });
 
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
     ['an empty collaborator list', { collaboratorId: [] }],
@@ -150,7 +146,7 @@ describe('P7: members list and retrieve rules', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
+  it('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
     const { members } = over([reply(200, malformedSuccess)]);
 
     await expect(members.list(5)).rejects.toBeInstanceOf(UnexpectedResponseError);
