@@ -36,16 +36,19 @@ which merges pull request 11 (`refundId` required) first.
 - The twelve record vocabularies: the Siren PHP SDK's `src/*Status.php` and
   `src/CustomCurrencyType.php`, holding the values Siren accepts today.
 - `test/fixtures/webhook-events.json` and `test/fixtures/api-key-scopes.json`:
-  generated from Siren's source by `scripts/siren-fixtures.mjs`, which writes
-  the body each controller serves. Run it with `--check` against a Siren
-  checkout to find a fixture that no longer matches. The scopes fixture holds
-  no custom event types, which an organization adds at run time.
+  generated from Siren's source by the fixture script
+  (`scripts/siren-fixtures.mjs`), which writes the body each controller
+  serves. The slice reviewer runs it with `--check` against the pinned Siren
+  checkout before the slice merges. The scopes fixture holds no custom event
+  types, which an organization adds at run time.
+- `HoldConflictReason` and `ErrorCode` live with the error classes in
+  `src/errors.ts`, since only errors use them.
 
 ## How errors are chosen
 
-`errorFromResponse` keeps its status switch. Its 401 and 403 branches now call
-each specialized class's static `matches()` in the PHP SDK's order, where they
-used to compare `parsed.code` inline:
+`errorFromResponse` keeps its status switch. Its 401 and 403 branches call
+each specialized class's static `matches(message, code, data?)` in the PHP
+SDK's order:
 
 - 401: `SiteDisconnectedError`, then `ApiKeyNotAcceptedError`, else `AuthenticationError`.
 - 403: `MissingScopeError`, then `StoreKeyNotAllowedError`, then `PolicyError`, else `PermissionError`.
@@ -62,36 +65,51 @@ slice 3) or `HoldConflictError.fromConflict` (credit holds, slice 4).
 `CodeConflictError` takes the held code and its type as constructor arguments,
 unlike its siblings, which read their extra fields from `details.data`.
 Siren's `code_held` reply carries only a message, so the code and type can
-come only from the resource that asked for them.
+come only from the resource that asked for them. Slices 3 and 4 add those
+resources, and their tests drive a real 409 through them to the class a
+caller catches.
 
 ## Failure paths
 
+The SDK has no logger. Every failure reaches the caller as a thrown
+`SirenError` carrying the reply's `statusCode`, message, `code` and `data`,
+and the caller's own logger records it.
+
 - **A reply the SDK cannot classify.** When a 401 or 403 carries no code Siren
   defines and no wording a class looks for, the caller gets the parent class,
-  `AuthenticationError` or `PermissionError`. Every class keeps the reply's
-  status, message, `code` and `data`, so nothing Siren sent is lost when the
-  wording fallback misses.
+  `AuthenticationError` or `PermissionError`, with everything Siren sent.
 - **A catalog read with the wrong body.** `events()` and `scopes()` throw
   `UnexpectedResponseError`, an `ApiError`, when a 2xx body has the wrong
-  shape: not a list, not an object, an entry that is not an object, or a group
-  that is not a list. Its `statusCode` is the reply's status and its `data`
-  holds the body, so the caller sees what Siren sent. A wrong body never reads
-  as an empty catalog.
-- **Retries.** Slice 1 adds no retry logic. The two new reads use the shared
-  transport's existing rule, set on each request by `retriable`: a read is
-  retried on 429 and 5xx up to `maxRetries`, and nothing else is. A caller
-  that owns its own retries, such as a durable queue in the connector slices,
-  sets `maxRetries: 0`.
-- **Which refusals are final.** A 401, 403 or 409 is sent once, and a test
-  pins that with retries on. `SiteDisconnectedError` and `PolicyError` mean
-  stop: reconnect the site or change the request. `CodeConflictError` means
-  free the code or pick another. `HoldConflictError` with `no_credit` means
-  apply no credit, and with `token_in_use` means mint a new token and place a
-  new hold, never resend the same one.
-- **Sending an event twice.** Siren records each `refundId` once per order,
-  so a refund sent again is not counted twice. A caller derives `refundId`
-  from the store's own refund, never per attempt. Slice 1 does not change how
-  sales are matched.
+  shape: not a list, not an object, a group that is not a list, or an entry
+  that is not an object. Its `statusCode` is the reply's status and its `data`
+  holds the body. These two reads check their bodies because an empty catalog
+  looks like a real answer. Siren builds both from constants, so a caller
+  that sees one has a broken deployment, and the error is final.
+- **Retries.** The transport retries a request marked `retriable` on 429, 5xx
+  and a failed connection, up to `maxRetries`. The two catalog reads and the
+  event sends (`events.sale`, `events.refund`, `events.siteVisited`) are
+  marked `retriable`. A caller with a durable queue sets `maxRetries: 0`,
+  because the queue owns redelivery, and an SDK retry inside a queued attempt
+  would multiply the attempts.
+- **What each error means for a retry.**
+
+  | Error | Retry? |
+  |---|---|
+  | `RateLimitError`, 5xx `ApiError`, `ConnectionError` | Yes, later. The transport has already tried `maxRetries` times |
+  | `UnexpectedResponseError` | No. The deployment is broken |
+  | `SiteDisconnectedError` | No. Reconnect the site |
+  | `PolicyError` | No. Change the request |
+  | `CodeConflictError` | No. Free the code or pick another |
+  | `HoldConflictError` with `no_credit` | No. Apply no credit |
+  | `HoldConflictError` with `token_in_use` | Mint a new token and place a new hold. Never resend the same one |
+  | `HoldConflictError` with a `null` reason | No. Apply no credit |
+
+  A 401, 403 or 409 is sent once, and a test pins that with retries on.
+- **Sending an event twice.** Siren matches a sale by `source` and
+  `externalId` and answers a replay with the first result, so a resent sale
+  records nothing new. It records each `refundId` once per order. A caller
+  keeps both keys from the store's own order and refund, never one per
+  attempt. A `duplicate` status in the result is a success.
 
 ## What the architecture commit already holds, and why
 
@@ -110,10 +128,9 @@ Gaps 1 to 3 need no runtime change, because `events.sale`, `events.refund` and
 tests pin the JSON body at the network, so a later change to those methods
 that drops a field fails them.
 
-The three existing 401 and 403 classes keep today's code-only `matches()` in
-this commit, and the new `matches()` stubs answer `false`, so `errorFromResponse`
-classifies every reply as it does on the base branch until the packets land.
-Packet P1 adds the known-code rule and the wording fallback to them.
+The three existing 401 and 403 classes match on the code alone until packet
+P1 adds the known-code rule and the wording fallback to them. The new
+`matches()` stubs answer `false`.
 
 ## Classes and packets
 
@@ -144,7 +161,9 @@ Packet P1 adds the known-code rule and the wording fallback to them.
   generated fixtures in `test/fixtures/`.
 - `test/docs-wire.test.ts`: P8, marked `it.skip`. It reads `openapi.yaml`,
   the CHANGELOG and the README for each new field, route, event, code, method
-  and class.
+  and class. The API reference documents the wire. The record vocabularies
+  are SDK exports with no wire field of their own yet, so the CHANGELOG names
+  them and the reference does not.
 - `test/webhooks.test.ts`: the existing event count test now expects 64.
 
 These tests are the SDK's end-to-end proof for this slice. Each one sends a
@@ -160,9 +179,11 @@ exit code of `npm test && npm run typecheck`.
 `scripts/mutations/ncc-slice-1-surface.json` holds the mutations for the
 surface this commit writes in full, and reproduces on this branch with
 `node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-1-surface.json`.
-The packet mutations need an implementation to break, so they ran against the
-scratch implementation, which stays out of the repository so that it does not
-stand in for the packets. The pull request carries their output.
+The packet mutations can't be reproduced from this branch. Each one edits a
+line of the scratch implementation, which stays out of the repository so it
+can't stand in for the packets. The pull request carries their output
+unedited. The slice review re-proves each packet's tests against the real
+implementation.
 
 ## Left for later slices
 

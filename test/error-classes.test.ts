@@ -28,6 +28,8 @@ import { jsonResponse, makeClient } from './helpers';
  *
  * Every mapping test sends a real response through the client's transport,
  * so it asserts on the error a caller catches, not on a helper's answer.
+ * These tests sit apart from test/errors.test.ts so that each packet's
+ * skipped tests are in one describe block of their own.
  */
 
 afterEach(() => {
@@ -250,10 +252,10 @@ describe('P3: PolicyError', () => {
   });
 
   it.skip('answers matches() by the same rule', () => {
-    expect(PolicyError.matches('Refused.', undefined, 'report_not_allowed')).toBe(true);
-    expect(PolicyError.matches('Refused.', { param: 'status' })).toBe(true);
-    expect(PolicyError.matches('Refused.', { param: 'status' }, 'plan_required')).toBe(false);
-    expect(PolicyError.matches('Forbidden.', null)).toBe(false);
+    expect(PolicyError.matches('Refused.', 'report_not_allowed')).toBe(true);
+    expect(PolicyError.matches('Refused.', undefined, { param: 'status' })).toBe(true);
+    expect(PolicyError.matches('Refused.', 'plan_required', { param: 'status' })).toBe(false);
+    expect(PolicyError.matches('Forbidden.', undefined, null)).toBe(false);
   });
 });
 

@@ -244,9 +244,7 @@ export class ApiKeyNotAcceptedError extends AuthenticationError {
    * not accept API keys".
    */
   static matches(message: string, code?: string): boolean {
-    // Architecture commit: today's code-only rule, kept so the existing
-    // suite stays green. Slice 1 packet P1 adds the known-code rule and the
-    // wording fallback.
+    // Stub: slice 1 packet P1 adds the known-code rule and the wording fallback.
     void message;
     return code === ErrorCode.ApiKeyNotAccepted;
   }
@@ -333,8 +331,8 @@ export class MissingScopeError extends PermissionError {
    * any trailing `:` removed.
    */
   static matches(message: string, code?: string): boolean {
-    // Architecture commit: today's code-only rule. Slice 1 packet P1 adds
-    // the known-code rule, the wording fallback and the scope fallback.
+    // Stub: slice 1 packet P1 adds the known-code rule, the wording fallback
+    // and the scope fallback.
     void message;
     return code === ErrorCode.MissingScope;
   }
@@ -363,8 +361,7 @@ export class StoreKeyNotAllowedError extends PermissionError {
    * in any case.
    */
   static matches(message: string, code?: string): boolean {
-    // Architecture commit: today's code-only rule. Slice 1 packet P1 adds
-    // the known-code rule and the wording fallback.
+    // Stub: slice 1 packet P1 adds the known-code rule and the wording fallback.
     void message;
     return code === ErrorCode.StoreKeyNotAllowed;
   }
@@ -397,11 +394,11 @@ export class PolicyError extends PermissionError {
    * {@link PolicyError.DENIED_MESSAGE} in any case, or when the message
    * mentions a "connected site" or says a program does not "run on this site".
    */
-  static matches(message: string, data: unknown, code?: string): boolean {
+  static matches(message: string, code?: string, data?: unknown): boolean {
     // Stub: slice 1 packet P3 implements this.
     void message;
-    void data;
     void code;
+    void data;
     return false;
   }
 }
@@ -639,7 +636,7 @@ export function errorFromResponse(
     case 403:
       if (MissingScopeError.matches(message, parsed.code)) return new MissingScopeError(message, details);
       if (StoreKeyNotAllowedError.matches(message, parsed.code)) return new StoreKeyNotAllowedError(message, details);
-      if (PolicyError.matches(message, parsed.data, parsed.code)) return new PolicyError(message, details);
+      if (PolicyError.matches(message, parsed.code, parsed.data)) return new PolicyError(message, details);
       return new PermissionError(message, details);
     case 404:
       return new NotFoundError(message, details);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /*
- * Mutation proof for acceptance tests (KB 730, "Proving a Test Is a Contract").
+ * Mutation proof for acceptance tests, per Proving a Test Is a Contract
+ * (KB 730, https://navigator.novatori.us/r/kb/730).
  *
  * Usage: node scripts/mutation-proof.mjs <mutations.json>
  *

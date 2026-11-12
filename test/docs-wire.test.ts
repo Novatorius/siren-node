@@ -28,8 +28,21 @@ function schema(name: string): string {
   return next < 0 ? rest : rest.slice(0, next + 2);
 }
 
-function hasProperty(block: string, property: string): boolean {
-  return new RegExp(`^\\s+${property}:`, 'm').test(block);
+/**
+ * One property of a schema, from its key to the next key at the same depth.
+ * Properties sit 8 spaces in, under the schema's `properties:`, so a word in a
+ * description or an example never counts as the property.
+ */
+function property(block: string, name: string): string | null {
+  const lines = block.split('\n');
+  const start = lines.findIndex((line) => line.startsWith(`        ${name}:`));
+  if (start < 0) return null;
+  const end = lines.findIndex((line, index) => index > start && /^ {0,8}\S/.test(line));
+  return lines.slice(start, end < 0 ? undefined : end).join('\n');
+}
+
+function hasProperty(block: string, name: string): boolean {
+  return property(block, name) !== null;
 }
 
 /** The text of the `## [Unreleased]` section. */
@@ -58,7 +71,7 @@ describe('P8: openapi.yaml', () => {
   });
 
   it.skip('SiteVisitedPayload documents the tracking code form of collaboratorId', () => {
-    expect(schema('SiteVisitedPayload')).toContain('tracking:');
+    expect(property(schema('SiteVisitedPayload'), 'collaboratorId')).toContain('tracking:');
   });
 
   it.skip('WebhookEventType lists every event this SDK knows', () => {
@@ -74,9 +87,10 @@ describe('P8: openapi.yaml', () => {
     expect(openapi).toMatch(/\n {2}\/api-keys\/scopes:\n {4}get:/);
   });
 
-  it.skip('names every error code Siren sends', () => {
+  it.skip('lists every error code Siren sends in an ErrorCode schema', () => {
+    const block = schema('ErrorCode');
     for (const code of Object.values(ErrorCode)) {
-      expect(openapi, code).toContain(code);
+      expect(block.includes(`- ${code}\n`), code).toBe(true);
     }
   });
 });
