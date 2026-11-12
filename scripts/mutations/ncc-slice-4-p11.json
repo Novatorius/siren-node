@@ -1,0 +1,196 @@
+[
+  {
+    "id": "control-break",
+    "file": "README.md",
+    "find": "## Store credit, mappings and commerce records\n",
+    "replace": "## Store credit and mappings\n",
+    "expect": "caught",
+    "failing": [
+      "names each client field and the hold helpers"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "README.md",
+    "find": "const [link] = await siren.mappings.forExternal(",
+    "replace": "const [mapping] = await siren.mappings.forExternal(",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "README.md",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/client.ts",
+    "find": "    this.credits = new CreditsResource(http);",
+    "replace": "    this.credits = new CreditsResource(http);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "README.md",
+    "find": "## Store credit, mappings and commerce records\n",
+    "replace": "## Store credit and mappings\n",
+    "expect": "wrong-reason",
+    "failing": [
+      "lists the slice 4 resources and taxonomies under Unreleased, Added"
+    ]
+  },
+  {
+    "id": "p11-readme-conversions-create",
+    "file": "README.md",
+    "find": "// siren.conversions.create and siren.transactions.create write the ledger.",
+    "replace": "// conversions and transactions write the ledger.",
+    "expect": "caught",
+    "failing": [
+      "names each client field and the hold helpers"
+    ]
+  },
+  {
+    "id": "p11-readme-place-hold-replaces",
+    "file": "README.md",
+    "find": "Calling `placeHold` again",
+    "replace": "Calling placeHold again",
+    "expect": "caught",
+    "failing": [
+      "says placing a hold again for the same checkout replaces it"
+    ]
+  },
+  {
+    "id": "p11-readme-release-never",
+    "file": "README.md",
+    "find": "and never release the hold",
+    "replace": "and do not release the hold",
+    "expect": "caught",
+    "failing": [
+      "warns never to release the hold of a checkout that became an order"
+    ]
+  },
+  {
+    "id": "p11-readme-sent-once",
+    "file": "README.md",
+    "find": "Every write here is sent once,",
+    "replace": "Every write here goes out a single time,",
+    "expect": "caught",
+    "failing": [
+      "says every write is sent once and reads retry"
+    ]
+  },
+  {
+    "id": "p11-readme-reads-retry",
+    "file": "README.md",
+    "find": "Reads\nretry on",
+    "replace": "Reads\ngo again on",
+    "expect": "caught",
+    "failing": [
+      "says every write is sent once and reads retry"
+    ]
+  },
+  {
+    "id": "p11-changelog-hold-status",
+    "file": "CHANGELOG.md",
+    "find": "`DistributorBulkAction` and `CreditHoldStatus`",
+    "replace": "`DistributorBulkAction` and the hold statuses",
+    "expect": "caught",
+    "failing": [
+      "lists the slice 4 resources and taxonomies under Unreleased, Added"
+    ]
+  },
+  {
+    "id": "p11-openapi-new-route",
+    "file": "openapi.yaml",
+    "find": "\n  /credit-holds/{id}:\n",
+    "replace": "\n  /credit-holds/{holdId}:\n",
+    "expect": "caught",
+    "failing": [
+      "documents /credit-holds/{id} with each method the SDK sends"
+    ]
+  },
+  {
+    "id": "p11-openapi-added-method",
+    "file": "openapi.yaml",
+    "find": "    post:\n      tags: [Conversions]\n      operationId: createConversion",
+    "replace": "    patch:\n      tags: [Conversions]\n      operationId: createConversion",
+    "expect": "caught",
+    "failing": [
+      "documents /conversions with each method the SDK sends"
+    ]
+  },
+  {
+    "id": "p11-parity-row-missing",
+    "file": "README.md",
+    "find": "| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "has a row for every public method of the PHP SDK, once"
+    ]
+  },
+  {
+    "id": "p11-parity-row-duplicated",
+    "file": "README.md",
+    "find": "| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |\n",
+    "replace": "| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |\n| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |\n",
+    "expect": "caught",
+    "failing": [
+      "has a row for every public method of the PHP SDK, once"
+    ]
+  },
+  {
+    "id": "p11-parity-wrong-node-name",
+    "file": "README.md",
+    "find": "| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |",
+    "replace": "| `$siren->mappings->forLocal()` | `siren.mappings.forExternal()` |  |",
+    "expect": "caught",
+    "failing": [
+      "maps $siren->mappings->forLocal() to siren.mappings.forLocal()"
+    ]
+  },
+  {
+    "id": "p11-parity-php-only-node-blank",
+    "file": "README.md",
+    "find": "| `$siren->webhooks->constructEventFromHeaders()` | none | Node leaves it out. `constructEvent` takes the request headers, a Fetch `Headers` or Node's `req.headers`, as its fourth argument and reads the event and delivery from them, which is what this PHP method adds. |",
+    "replace": "| `$siren->webhooks->constructEventFromHeaders()` |  | Node leaves it out. `constructEvent` takes the request headers, a Fetch `Headers` or Node's `req.headers`, as its fourth argument and reads the event and delivery from them, which is what this PHP method adds. |",
+    "expect": "caught",
+    "failing": [
+      "shows no PHP-only row without a written difference"
+    ]
+  },
+  {
+    "id": "p11-parity-php-only-no-reason",
+    "file": "README.md",
+    "find": "| `$siren->webhooks->constructEventFromHeaders()` | none | Node leaves it out. `constructEvent` takes the request headers, a Fetch `Headers` or Node's `req.headers`, as its fourth argument and reads the event and delivery from them, which is what this PHP method adds. |",
+    "replace": "| `$siren->webhooks->constructEventFromHeaders()` | none | Not needed. |",
+    "expect": "caught",
+    "failing": [
+      "shows no PHP-only row without a written difference"
+    ]
+  },
+  {
+    "id": "p11-parity-difference-missing",
+    "file": "README.md",
+    "find": "| `$siren->credits->releaseHold()` | `siren.credits.releaseHold()` | Sent once, where PHP retries. A release is safe to repeat, so the caller's queue repeats it. |",
+    "replace": "| `$siren->credits->releaseHold()` | `siren.credits.releaseHold()` |  |",
+    "expect": "caught",
+    "failing": [
+      "writes down how $siren->credits->releaseHold() differs"
+    ]
+  },
+  {
+    "id": "p11-parity-unknown-node-method",
+    "file": "README.md",
+    "find": "| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |\n",
+    "replace": "| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |\n| `$siren->mappings->forEverything()` | `siren.mappings.forEverything()` |  |\n",
+    "expect": "caught",
+    "failing": [
+      "names only Node methods that exist"
+    ]
+  }
+]

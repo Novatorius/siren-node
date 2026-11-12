@@ -128,6 +128,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `coupon@property:5`, and checks the names and code types a caller sends.
 - `CollaboratorBulkAction`, `CollaboratorAliasType`, `ProgramBulkAction`, `ProgramGroupSorter` and
   `ProgramGroupBulkAction`, Siren's names for the record actions, code types and group sorters.
+- More record resources on the client: `siren.opportunities` (`OpportunitiesResource`),
+  `siren.engagements` (`EngagementsResource`), `siren.distributors` (`DistributorsResource`),
+  `siren.customCurrencies` (`CustomCurrenciesResource`), `siren.credits` (`CreditsResource`) for
+  store credit balances, the ledger and checkout holds, `siren.mappings` (`MappingsResource`) for
+  links to records outside Siren, and `siren.settings` (`SettingsResource`) for the settings Siren
+  shares with a connected site. Every write is sent once, and reads retry.
+- Writes on `siren.conversions` (`create`, `update`, `delete`, `bulk`, `types`) and on
+  `siren.transactions` (`details`, `create`, `bulk`, `creditCollaborator`, `sources`).
+- `CreditsResource.holdReference`, which builds the reference a checkout's credit holds carry.
+- `ConversionBulkAction`, `TransactionBulkAction`, `DistributorBulkAction` and `CreditHoldStatus`,
+  Siren's names for those bulk actions and hold statuses.
 
 ### Changed
 
