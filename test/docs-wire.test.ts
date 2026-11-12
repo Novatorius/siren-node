@@ -135,7 +135,7 @@ describe('P10: CHANGELOG and README', () => {
 
   /** A sentence that says custom events, event ingestion or events.ingest retry, with no negation. */
   function claimsIngestRetries(sentence: string): boolean {
-    const retries = /(custom events?|event ingestion|`events\.ingest`)\b[^.]*\b(auto-?)?retr(y|ies|ied|ying)\b/i;
+    const retries = /(\bcustom events?\b|\bevent ingestion\b|`events\.ingest`)[^.]*\b(auto-?)?retr(y|ies|ied|ying)\b/i;
     return retries.test(sentence) && !/\b(never|not|no longer)\b/i.test(sentence);
   }
 
