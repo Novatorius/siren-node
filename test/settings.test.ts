@@ -12,10 +12,6 @@ import { SettingAnswers } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P7 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 const NAME_MESSAGE = (field: string) => `A setting ${field} must be a name with no comma.`;
@@ -36,7 +32,7 @@ describe('P7: settings surface', () => {
 });
 
 describe('P7: settings reads', () => {
-  it.skip('reads the shared collaborator settings with type=collaborator and number=200', async () => {
+  it('reads the shared collaborator settings with type=collaborator and number=200', async () => {
     const { http, settings } = over([reply(200, page([SettingAnswers.urlReference], 1, 200))]);
 
     expect([...(await settings.collaborator())]).toEqual([SettingAnswers.urlReference]);
@@ -44,39 +40,39 @@ describe('P7: settings reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ type: 'collaborator', number: '200' });
   });
 
-  it.skip("answers one setting's value, read with all three names and number 1", async () => {
+  it("answers one setting's value, read with all three names and number 1", async () => {
     const { http, settings } = over([reply(200, page([SettingAnswers.urlReference], 1, 1))]);
 
     expect(await settings.value('collaborator', 'urlReference', 'key')).toBe('via');
     expect(queryOf(http.requests[0])).toEqual({ type: 'collaborator', subtype: 'urlReference', configKey: 'key', number: '1' });
   });
 
-  it.skip('answers null when Siren shares no such setting, or the row has no value', async () => {
+  it('answers null when Siren shares no such setting, or the row has no value', async () => {
     const { settings } = over([reply(200, page([])), reply(200, page([{ type: 'collaborator', subtype: 'urlReference', configKey: 'key' }]))]);
 
     expect(await settings.value('collaborator', 'urlReference', 'other')).toBeNull();
     expect(await settings.value('collaborator', 'urlReference', 'key')).toBeNull();
   });
 
-  it.skip('raises a type Siren does not share as BadRequestError', async () => {
+  it('raises a type Siren does not share as BadRequestError', async () => {
     await expect(over([reply(400, SettingAnswers.typeRefused)]).settings.value('program', 'x', 'y')).rejects.toBeInstanceOf(
       BadRequestError,
     );
   });
 
-  it.skip.each([
+  it.each([
     ['collaborator', (s: SettingsResource) => s.collaborator()],
     ['value', (s: SettingsResource) => s.value('collaborator', 'urlReference', 'key')],
   ])('%s throws UnexpectedResponseError for a 2xx that is not a list', async (_name, call) => {
     await expect(call(over([reply(200, { value: 'via' })]).settings)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).collaborator(), reply(200, page([])));
     await expectRetried((transport) => resource(transport).value('collaborator', 'urlReference', 'key'), reply(200, page([])));
   });
 
-  it.skip.each([
+  it.each([
     ['type', ['', 'urlReference', 'key']],
     ['subtype', ['collaborator', 'url,Reference', 'key']],
     ['configKey', ['collaborator', 'urlReference', 7]],

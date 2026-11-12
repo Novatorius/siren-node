@@ -1,5 +1,7 @@
+import { SirenError } from '../errors';
 import type { HttpTransport } from '../http';
 import type { SharedSetting } from '../record-types';
+import { listRecords } from './record-requests';
 
 /**
  * The organization settings Siren shares with a connected site
@@ -38,9 +40,8 @@ export class SettingsResource {
    * `UnexpectedResponseError`.
    */
   collaborator(): Promise<SharedSetting[]> {
-    // Stub: slice 4 packet P7
-    void this.http;
-    return Promise.resolve([]);
+    const query = { type: SettingsResource.TYPE_COLLABORATOR, number: 200 };
+    return listRecords<SharedSetting>(this.http, SettingsResource.PATH, query, SettingsResource.FILTERS);
   }
 
   /**
@@ -54,11 +55,15 @@ export class SettingsResource {
    * or holds a comma (Siren reads a comma as "any of"), with exactly `A
    * setting {field} must be a name with no comma.`
    */
-  value(type: string, subtype: string, configKey: string): Promise<unknown> {
-    // Stub: slice 4 packet P7
-    void type;
-    void subtype;
-    void configKey;
-    return Promise.resolve(null);
+  async value(type: string, subtype: string, configKey: string): Promise<unknown> {
+    const names = { type, subtype, configKey };
+    for (const [field, name] of Object.entries(names)) {
+      if (typeof name !== 'string' || name === '' || name.includes(',')) {
+        throw new SirenError(`A setting ${field} must be a name with no comma.`);
+      }
+    }
+    const query = { ...names, number: 1 };
+    const [row] = await listRecords<SharedSetting>(this.http, SettingsResource.PATH, query, SettingsResource.FILTERS);
+    return row?.value ?? null;
   }
 }
