@@ -359,16 +359,23 @@ inherits the same reads.
 Two packets implement these rules. 2b P1 is the bearer token rule and every
 place it applies, with its tests in `test/bearer-token.test.ts`. 2b P2 is the
 option checks and the own-property reads in the `Siren` constructor, with its
-tests in `test/siren-option-checks.test.ts`. Each packet's tests are
-written in full and skipped with `it.skip` or `it.skip.each`, and the
-packet's implementer deletes the `.skip` from its own tests and changes
-nothing else in them. The tests that run now guard against a check that
-refuses too much.
+tests in `test/siren-option-checks.test.ts`. Both files run in full. Some
+of their rows pin values each rule must accept, such as U+00FF in a token or
+a timeout of 1 ms, so a check that refuses too much fails as surely as one
+that refuses too little. `test/siren-option-resolvers.test.ts` adds unit
+tests for the constructor's resolvers, driven through the public
+constructor.
 
 The tests run the real client, transport and resources, mocked only at the
 `HttpClient` seam, and the real `FetchHttpClient` against a real HTTP server
 on 127.0.0.1 where fetch itself refuses a header or the default client's
 wiring matters. The change adds no surface that needs an end-to-end test
 under KB 569. The slice 2 transport tests already pin the empty, non-string
-and control-character cases on both token paths. No surface mutation list
-covers the 2b code yet, because the packets write it.
+and control-character cases on both token paths.
+
+`scripts/mutations/ncc-slice-2b-p1.json` breaks the bearer token rule at each
+place it applies and `scripts/mutations/ncc-slice-2b-p2.json` breaks each
+constructor check. Each list carries the four controls the harness asks for.
+To reproduce, run
+`node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-2b-p1.json` and
+the same for the P2 list.
