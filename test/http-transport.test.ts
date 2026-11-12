@@ -499,7 +499,8 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
     ['undefined', undefined],
     ['a number', 7],
   ])('raises the first 401 and sends nothing more when the refresh answers %s', async (_name, refreshed) => {
-    const tokens = spySource(['tok-1'], refreshed as string | null);
+    const tokens = spySource(['tok-1']);
+    tokens.refreshAccessToken.mockResolvedValue(refreshed);
     const client = new FakeHttpClient([reply(401, CloudAnswers.siteDisconnected), reply(200, [])]);
 
     const error = await rejection(new RecordsResource(transport(client, tokens), '/conversions').list());
