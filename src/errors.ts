@@ -444,9 +444,12 @@ export class CodeConflictError extends ConflictError {
    * status, code and data, and sets it as the `cause`.
    */
   static fromConflict(conflict: ConflictError, code: string, type: string): CodeConflictError {
-    // Stub: slice 1 packet P4 implements this.
-    void conflict;
-    return new CodeConflictError('', code, type);
+    return new CodeConflictError(conflict.message, code, type, {
+      code: conflict.code,
+      statusCode: conflict.statusCode,
+      data: conflict.data,
+      cause: conflict,
+    });
   }
 }
 

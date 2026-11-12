@@ -269,7 +269,7 @@ describe('P4: CodeConflictError', () => {
     expect(error.type).toBe('coupon');
   });
 
-  it.skip('fromConflict keeps the conflict\'s message, status, code and data, and sets it as the cause', () => {
+  it('fromConflict keeps the conflict\'s message, status, code and data, and sets it as the cause', () => {
     const conflict = new ConflictError('Someone already holds that code.', {
       code: 'code_held',
       statusCode: 409,
