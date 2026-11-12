@@ -4,7 +4,35 @@ import type {
   CollaboratorGroupMemberInput,
   CollaboratorGroupMemberListParams,
 } from '../record-types';
+import { SirenError } from '../errors';
 import type { SirenList } from '../types';
+import { deleteRecord, listRecords, recordId, writeList } from './record-requests';
+
+/**
+ * Returns `members` as a checked list for `add` or `set`. Throws `SirenError`
+ * before sending when `members` is not an array, when it is empty and
+ * `allowEmpty` is false, when a member is not an object, or when a member's
+ * `collaboratorId` is not a positive whole number.
+ */
+export function checkedMembers(
+  members: unknown,
+  method: string,
+  allowEmpty: boolean,
+): CollaboratorGroupMemberInput[] {
+  if (!Array.isArray(members)) {
+    throw new SirenError(`${method} needs members as a list.`);
+  }
+  if (!allowEmpty && members.length === 0) {
+    throw new SirenError(`${method} needs at least one member.`);
+  }
+  for (const member of members) {
+    if (typeof member !== 'object' || member === null || Array.isArray(member)) {
+      throw new SirenError(`${method} needs each member as an object with a collaboratorId.`);
+    }
+    recordId((member as { collaboratorId?: unknown }).collaboratorId, method, 'collaboratorId');
+  }
+  return members as CollaboratorGroupMemberInput[];
+}
 
 /**
  * The members of a collaborator group (`/collaborator-groups/{id}/members`).
@@ -34,12 +62,15 @@ export class CollaboratorGroupMembersResource {
    * and an empty filter list throw `SirenError` before sending, and a 2xx that is not a list throws
    * `UnexpectedResponseError`, never an empty page.
    */
-  list(groupId: number, params: CollaboratorGroupMemberListParams = {}): Promise<SirenList<CollaboratorGroupMember>> {
-    // Stub: slice 3 packet P7
-    void groupId;
-    void params;
-    void this.http;
-    return Promise.resolve([] as unknown as SirenList<CollaboratorGroupMember>);
+  async list(groupId: number, params: CollaboratorGroupMemberListParams = {}): Promise<SirenList<CollaboratorGroupMember>> {
+    const group = recordId(groupId, 'list', 'groupId');
+    return listRecords<CollaboratorGroupMember>(
+      this.http,
+      `/collaborator-groups/${group}/members`,
+      params,
+      CollaboratorGroupMembersResource.LIST_FILTERS,
+      CollaboratorGroupMembersResource.ID_FILTERS,
+    );
   }
 
   /**
@@ -52,11 +83,10 @@ export class CollaboratorGroupMembersResource {
    * for an empty list or a member whose `collaboratorId` is not a positive
    * whole number.
    */
-  add(groupId: number, members: readonly CollaboratorGroupMemberInput[]): Promise<CollaboratorGroupMember[]> {
-    // Stub: slice 3 packet P7
-    void groupId;
-    void members;
-    return Promise.resolve([]);
+  async add(groupId: number, members: readonly CollaboratorGroupMemberInput[]): Promise<CollaboratorGroupMember[]> {
+    const group = recordId(groupId, 'add', 'groupId');
+    const checked = checkedMembers(members, 'add', false);
+    return writeList<CollaboratorGroupMember>(this.http, 'POST', `/collaborator-groups/${group}/members`, { members: checked });
   }
 
   /**
@@ -67,11 +97,10 @@ export class CollaboratorGroupMembersResource {
    * before sending for a member whose `collaboratorId` is not a positive
    * whole number.
    */
-  set(groupId: number, members: readonly CollaboratorGroupMemberInput[]): Promise<CollaboratorGroupMember[]> {
-    // Stub: slice 3 packet P7
-    void groupId;
-    void members;
-    return Promise.resolve([]);
+  async set(groupId: number, members: readonly CollaboratorGroupMemberInput[]): Promise<CollaboratorGroupMember[]> {
+    const group = recordId(groupId, 'set', 'groupId');
+    const checked = checkedMembers(members, 'set', true);
+    return writeList<CollaboratorGroupMember>(this.http, 'PUT', `/collaborator-groups/${group}/members`, { members: checked });
   }
 
   /**
@@ -83,10 +112,9 @@ export class CollaboratorGroupMembersResource {
    * resend as the removal being done, and read the group first if the cause
    * matters.
    */
-  remove(groupId: number, collaboratorId: number): Promise<Record<string, unknown> | null> {
-    // Stub: slice 3 packet P7
-    void groupId;
-    void collaboratorId;
-    return Promise.resolve(null);
+  async remove(groupId: number, collaboratorId: number): Promise<Record<string, unknown> | null> {
+    const group = recordId(groupId, 'remove', 'groupId');
+    const member = recordId(collaboratorId, 'remove', 'collaboratorId');
+    return deleteRecord<Record<string, unknown>>(this.http, `/collaborator-groups/${group}/members/${member}`);
   }
 }
