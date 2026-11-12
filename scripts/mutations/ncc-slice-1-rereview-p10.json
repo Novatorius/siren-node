@@ -1,0 +1,125 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/event-types.ts",
+    "find": "PayoutPaid: 'payout.paid',",
+    "replace": "PayoutPaid: 'payout.payed',",
+    "expect": "caught",
+    "failing": [
+      "holds exactly the 64 events"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/events.ts",
+    "find": "   * Sent once, never retried, whatever the slug.",
+    "replace": "   * Sent once and never retried, whatever the slug.",
+    "expect": "survives"
+  },
+  {
+    "id": "control-refused",
+    "file": "src/resources/events.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused"
+  },
+  {
+    "id": "ingest-retries",
+    "file": "src/resources/events.ts",
+    "find": "return this.send(slug, payload, false);",
+    "replace": "return this.send(slug, payload, true);",
+    "expect": "caught",
+    "failing": [
+      "sends a custom event once on a 503",
+      "sends ingest('site-visited') once on a 503",
+      "sends ingest('sale') once on a 503"
+    ]
+  },
+  {
+    "id": "ingest-only-guards-site-visited",
+    "file": "src/resources/events.ts",
+    "find": "return this.send(slug, payload, false);",
+    "replace": "return this.send(slug, payload, slug !== 'site-visited');",
+    "expect": "caught",
+    "failing": [
+      "sends a custom event once on a 503",
+      "sends ingest('sale') once on a 503"
+    ]
+  },
+  {
+    "id": "sale-always-retries",
+    "file": "src/resources/events.ts",
+    "find": "params.externalId != null);",
+    "replace": "true);",
+    "expect": "caught",
+    "failing": [
+      "sends a test sale with no externalId once on a 503",
+      "sends a test sale with a null externalId once"
+    ]
+  },
+  {
+    "id": "sale-never-retries",
+    "file": "src/resources/events.ts",
+    "find": "params.externalId != null);",
+    "replace": "false);",
+    "expect": "caught",
+    "failing": [
+      "retries a test sale that carries an externalId",
+      "retries a sale on network errors"
+    ]
+  },
+  {
+    "id": "sale-null-counts-as-id",
+    "file": "src/resources/events.ts",
+    "find": "params.externalId != null);",
+    "replace": "params.externalId !== undefined);",
+    "expect": "caught",
+    "failing": [
+      "sends a test sale with a null externalId once"
+    ]
+  },
+  {
+    "id": "sale-empty-is-no-id",
+    "file": "src/resources/events.ts",
+    "find": "params.externalId != null);",
+    "replace": "Boolean(params.externalId));",
+    "expect": "caught",
+    "failing": [
+      "retries a test sale with an empty externalId"
+    ]
+  },
+  {
+    "id": "sale-keys-on-test-true",
+    "file": "src/resources/events.ts",
+    "find": "params.externalId != null);",
+    "replace": "params.test !== true || params.externalId != null);",
+    "expect": "caught",
+    "failing": [
+      "test is 1 or 'true'"
+    ]
+  },
+  {
+    "id": "refund-sent-once",
+    "file": "src/resources/events.ts",
+    "find": "return this.send(EventSlug.Refund, params, true);",
+    "replace": "return this.send(EventSlug.Refund, params, false);",
+    "expect": "caught"
+  },
+  {
+    "id": "visit-retries",
+    "file": "src/resources/events.ts",
+    "find": "return this.send(EventSlug.SiteVisited, params, false);",
+    "replace": "return this.send(EventSlug.SiteVisited, params, true);",
+    "expect": "caught"
+  },
+  {
+    "id": "changelog-claims-custom-retry",
+    "file": "CHANGELOG.md",
+    "find": "Custom events are no longer retried.",
+    "replace": "Custom events are retried.",
+    "expect": "caught",
+    "failing": [
+      "say events.ingest and a sale with no externalId are sent once"
+    ]
+  }
+]
