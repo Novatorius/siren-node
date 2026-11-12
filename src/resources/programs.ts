@@ -11,7 +11,8 @@ import type {
 } from '../record-types';
 import type { SirenList } from '../types';
 import { ProgramBulkAction } from '../taxonomy';
-import { RecordsResource } from './records';
+import { bulkRecords, deleteRecord, listRecords, readList, readObject, recordId, writeRecord } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
 
 /**
@@ -54,9 +55,7 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: ProgramListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 3 packet P8
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+    return listRecords<T>(this.http, this.path, params, ProgramsResource.LIST_FILTERS, ProgramsResource.ID_FILTERS);
   }
 
   /**
@@ -65,10 +64,7 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * unknown id.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 3 packet P8
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 
   /**
@@ -78,9 +74,7 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * second create as a new record.
    */
   create(params: CreateProgramParams): Promise<T> {
-    // Stub: slice 3 packet P8
-    void params;
-    return Promise.resolve({} as T);
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -88,11 +82,9 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * fields to change. Sending it again after a lost answer sets the same
    * values, so it is safe.
    */
-  update(id: number, params: UpdateProgramParams): Promise<T> {
-    // Stub: slice 3 packet P8
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async update(id: number, params: UpdateProgramParams): Promise<T> {
+    const program = recordId(id, 'update');
+    return writeRecord<T>(this.http, 'PUT', `${this.path}/${program}`, params);
   }
 
   /**
@@ -103,10 +95,9 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * it for good. A program with status `deleted` means the first send
    * worked, and `NotFoundError` means it is gone.
    */
-  delete(id: number): Promise<T | null> {
-    // Stub: slice 3 packet P8
-    void id;
-    return Promise.resolve(null);
+  async delete(id: number): Promise<T | null> {
+    const program = recordId(id, 'delete');
+    return deleteRecord<T>(this.http, `${this.path}/${program}`);
   }
 
   /**
@@ -116,16 +107,12 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * after a lost answer is safe, though `affected` may differ.
    */
   bulk(action: ProgramBulkAction, ids: readonly number[]): Promise<BulkResult> {
-    // Stub: slice 3 packet P8
-    void action;
-    void ids;
-    return Promise.resolve({});
+    return bulkRecords<BulkResult>(this.http, this.path, action, ids);
   }
 
   /** The program statuses Siren accepts, `{ options, tones }`, from `GET /programs/status-types`. */
   statusTypes(): Promise<StatusTypes> {
-    // Stub: slice 3 packet P8
-    return Promise.resolve({ options: {} });
+    return readObject<StatusTypes>(this.http, `${this.path}/status-types`);
   }
 
   /**
@@ -133,8 +120,7 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * from `GET /programs/incentive-types`.
    */
   incentiveTypes(): Promise<RegistryOptions> {
-    // Stub: slice 3 packet P8
-    return Promise.resolve({ options: [] });
+    return readObject<RegistryOptions>(this.http, `${this.path}/incentive-types`);
   }
 
   /**
@@ -143,7 +129,6 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * body is not a JSON array.
    */
   currencyTypes(): Promise<ProgramCurrency[]> {
-    // Stub: slice 3 packet P8
-    return Promise.resolve([]);
+    return readList<ProgramCurrency>(this.http, `${this.path}/currency-types`);
   }
 }

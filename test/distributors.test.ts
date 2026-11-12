@@ -23,10 +23,6 @@ import { DistributorAnswers, notFoundById } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P3 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -64,7 +60,7 @@ describe('P3: distributors surface', () => {
 });
 
 describe('P3: distributors reads', () => {
-  it.skip('lists GET /distributors with status, search, metric type and paging', async () => {
+  it('lists GET /distributors with status, search, metric type and paging', async () => {
     const { http, distributors } = over([reply(200, page([DistributorAnswers.listed], 1, 50))]);
 
     const list = await distributors.list({
@@ -87,7 +83,7 @@ describe('P3: distributors reads', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retrieves GET /distributors/{id} with fields', async () => {
+  it('retrieves GET /distributors/{id} with fields', async () => {
     const { http, distributors } = over([reply(200, DistributorAnswers.listed)]);
 
     expect(await distributors.retrieve(7, { fields: 'id,name' })).toEqual(DistributorAnswers.listed);
@@ -95,18 +91,18 @@ describe('P3: distributors reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,name' });
   });
 
-  it.skip('raises NotFoundError for an unknown distributor', async () => {
+  it('raises NotFoundError for an unknown distributor', async () => {
     await expect(over([reply(404, notFoundById)]).distributors.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
     await expectRetried((transport) => resource(transport).retrieve(7), reply(200, DistributorAnswers.listed));
   });
 });
 
 describe('P3: distributors writes', () => {
-  it.skip('creates with POST /distributors and answers the distributor', async () => {
+  it('creates with POST /distributors and answers the distributor', async () => {
     const { http, distributors } = over([reply(201, DistributorAnswers.created)]);
 
     expect(await distributors.create(create)).toEqual(DistributorAnswers.created);
@@ -114,7 +110,7 @@ describe('P3: distributors writes', () => {
     expect(bodyOf(http.requests[0])).toEqual(create);
   });
 
-  it.skip('updates with PUT /distributors/{id}, sending only the given fields', async () => {
+  it('updates with PUT /distributors/{id}, sending only the given fields', async () => {
     const { http, distributors } = over([reply(200, DistributorAnswers.updated)]);
 
     expect(await distributors.update(7, { status: DistributorStatus.Inactive })).toEqual(DistributorAnswers.updated);
@@ -122,7 +118,7 @@ describe('P3: distributors writes', () => {
     expect(bodyOf(http.requests[0])).toEqual({ status: 'inactive' });
   });
 
-  it.skip('deletes in two stages: the distributor marked deleted, then null', async () => {
+  it('deletes in two stages: the distributor marked deleted, then null', async () => {
     const { http, distributors } = over([reply(200, DistributorAnswers.softDeleted), reply(204)]);
 
     expect(await distributors.delete(7)).toEqual(DistributorAnswers.softDeleted);
@@ -133,7 +129,7 @@ describe('P3: distributors writes', () => {
     ]);
   });
 
-  it.skip('runs a bulk action with POST /distributors/bulk', async () => {
+  it('runs a bulk action with POST /distributors/bulk', async () => {
     const { http, distributors } = over([reply(200, DistributorAnswers.bulk)]);
 
     expect(await distributors.bulk(DistributorBulkAction.Restore, [7, 8])).toEqual(DistributorAnswers.bulk);
@@ -141,7 +137,7 @@ describe('P3: distributors writes', () => {
     expect(http.requests[0]!.body).toBe('{"action":"restore","ids":[7,8]}');
   });
 
-  it.skip('raises a blocked permanent delete as ConflictError', async () => {
+  it('raises a blocked permanent delete as ConflictError', async () => {
     const error = await over([reply(409, DistributorAnswers.permanentDeleteBlocked)])
       .distributors.bulk(DistributorBulkAction.PermanentDelete, [7])
       .catch((thrown: unknown) => thrown);
@@ -150,7 +146,7 @@ describe('P3: distributors writes', () => {
     expect((error as ConflictError).message).toBe(DistributorAnswers.permanentDeleteBlocked.error);
   });
 
-  it.skip('raises the Essentials gate as PermissionError with its code', async () => {
+  it('raises the Essentials gate as PermissionError with its code', async () => {
     const error = await over([reply(403, DistributorAnswers.planRequired)])
       .distributors.create(create)
       .catch((thrown: unknown) => thrown);
@@ -159,13 +155,13 @@ describe('P3: distributors writes', () => {
     expect((error as PermissionError).code).toBe('plan_required');
   });
 
-  it.skip('throws UnexpectedResponseError when create answers no object', async () => {
+  it('throws UnexpectedResponseError when create answers no object', async () => {
     await expect(over([reply(201, [DistributorAnswers.created])]).distributors.create(create)).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).create(create), reply(201, DistributorAnswers.created));
     await expectSentOnce((transport) => resource(transport).update(7, { name: 'x' }), reply(200, DistributorAnswers.updated));
     await expectSentOnce((transport) => resource(transport).delete(7), reply(204));
@@ -178,7 +174,7 @@ describe('P3: distributors writes', () => {
 });
 
 describe('P3: distributors creditMetric', () => {
-  it.skip('credits with POST /distributors/credit-metric and answers what was and was not credited', async () => {
+  it('credits with POST /distributors/credit-metric and answers what was and was not credited', async () => {
     const { http, distributors } = over([reply(200, DistributorAnswers.credited)]);
 
     expect(await distributors.creditMetric(4)).toEqual(DistributorAnswers.credited);
@@ -186,7 +182,7 @@ describe('P3: distributors creditMetric', () => {
     expect(http.requests[0]!.body).toBe('{"collaboratorId":4}');
   });
 
-  it.skip('sends points when they are given', async () => {
+  it('sends points when they are given', async () => {
     const { http, distributors } = over([reply(200, DistributorAnswers.credited)]);
 
     await distributors.creditMetric(4, 25);
@@ -194,7 +190,7 @@ describe('P3: distributors creditMetric', () => {
     expect(http.requests[0]!.body).toBe('{"collaboratorId":4,"points":25}');
   });
 
-  it.skip('raises nothing credited as ValidationError, and an unknown collaborator as NotFoundError', async () => {
+  it('raises nothing credited as ValidationError, and an unknown collaborator as NotFoundError', async () => {
     await expect(over([reply(422, DistributorAnswers.nothingCredited)]).distributors.creditMetric(4)).rejects.toBeInstanceOf(
       ValidationError,
     );
@@ -203,7 +199,7 @@ describe('P3: distributors creditMetric', () => {
     );
   });
 
-  it.skip.each([
+  it.each([
     ['a zero collaborator', (d: DistributorsResource) => d.creditMetric(0)],
     ['zero points', (d: DistributorsResource) => d.creditMetric(4, 0)],
     ['fractional points', (d: DistributorsResource) => d.creditMetric(4, 1.5)],
@@ -216,7 +212,7 @@ describe('P3: distributors creditMetric', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('accepts the largest points Siren takes', async () => {
+  it('accepts the largest points Siren takes', async () => {
     const { http, distributors } = over([reply(200, DistributorAnswers.credited)]);
 
     await distributors.creditMetric(4, 1_000_000_000_000);
@@ -226,7 +222,7 @@ describe('P3: distributors creditMetric', () => {
 });
 
 describe('P3: distributors list and id rules', () => {
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { metrictype: 'manual' }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
@@ -239,13 +235,13 @@ describe('P3: distributors list and id rules', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+  it('list throws UnexpectedResponseError for a 2xx that is not a list', async () => {
     await expect(over([reply(200, { error: 'Something went wrong.' })]).distributors.list()).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
   });
 
-  it.skip.each([
+  it.each([
     ['retrieve', (d: DistributorsResource) => d.retrieve(0)],
     ['update', (d: DistributorsResource) => d.update(-1, { name: 'x' })],
     ['delete', (d: DistributorsResource) => d.delete(Number.NaN)],

@@ -12,10 +12,6 @@ import { MappingAnswers } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P6 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -39,7 +35,7 @@ describe('P6: mappings surface', () => {
 });
 
 describe('P6: mappings reads', () => {
-  it.skip('lists GET /mappings and answers every row with its plain type and Property', async () => {
+  it('lists GET /mappings and answers every row with its plain type and Property', async () => {
     const { http, mappings } = over([reply(200, page([MappingAnswers.siteRow, MappingAnswers.orgRow], 2, 20))]);
 
     const list = await mappings.list({ externalType: 'wordpress_user', localType: 'collaborator', number: 20, orderBy: 'localId' });
@@ -55,7 +51,7 @@ describe('P6: mappings reads', () => {
     expect(list.estimatedCount).toBe(2);
   });
 
-  it.skip("finds an outside record's links with forExternal, the id trimmed", async () => {
+  it("finds an outside record's links with forExternal, the id trimmed", async () => {
     const { http, mappings } = over([reply(200, page([MappingAnswers.siteRow]))]);
 
     expect([...(await mappings.forExternal(' 17 ', 'wordpress_user', 'collaborator', { number: 5 }))]).toEqual([plainSiteRow]);
@@ -67,7 +63,7 @@ describe('P6: mappings reads', () => {
     });
   });
 
-  it.skip('leaves localType out of forExternal when it is not given', async () => {
+  it('leaves localType out of forExternal when it is not given', async () => {
     const { http, mappings } = over([reply(200, page([]))]);
 
     await mappings.forExternal('17', 'wordpress_user');
@@ -75,7 +71,7 @@ describe('P6: mappings reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ externalId: '17', externalType: 'wordpress_user' });
   });
 
-  it.skip("finds a Siren record's links with forLocal", async () => {
+  it("finds a Siren record's links with forLocal", async () => {
     const { http, mappings } = over([reply(200, page([MappingAnswers.siteRow]))]);
 
     expect([...(await mappings.forLocal(4, 'collaborator', 'wordpress_user', { orderBy: 'externalId' }))]).toEqual([plainSiteRow]);
@@ -87,13 +83,13 @@ describe('P6: mappings reads', () => {
     });
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).list({ externalType: 'wordpress_user' }), reply(200, page([])));
     await expectRetried((transport) => resource(transport).forExternal('17', 'wordpress_user'), reply(200, page([])));
     await expectRetried((transport) => resource(transport).forLocal(4, 'collaborator', 'wordpress_user'), reply(200, page([])));
   });
 
-  it.skip('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+  it('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
     await expect(over([reply(200, { error: 'x' })]).mappings.list({ externalType: 'wordpress_user' })).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
@@ -101,7 +97,7 @@ describe('P6: mappings reads', () => {
 });
 
 describe('P6: mappings writes', () => {
-  it.skip('links a collaborator with POST /mappings, the id trimmed, and answers the plain link', async () => {
+  it('links a collaborator with POST /mappings, the id trimmed, and answers the plain link', async () => {
     const { http, mappings } = over([reply(201, MappingAnswers.created)]);
 
     expect(await mappings.create(4, ' 17 ', 'wordpress_user')).toEqual(plainSiteRow);
@@ -109,7 +105,7 @@ describe('P6: mappings writes', () => {
     expect(http.requests[0]!.body).toBe('{"localId":4,"localType":"collaborator","externalId":"17","externalType":"wordpress_user"}');
   });
 
-  it.skip('raises an existing link as ConflictError with its code', async () => {
+  it('raises an existing link as ConflictError with its code', async () => {
     const error = await over([reply(409, MappingAnswers.exists)])
       .mappings.create(4, '17', 'wordpress_user')
       .catch((thrown: unknown) => thrown);
@@ -118,7 +114,7 @@ describe('P6: mappings writes', () => {
     expect((error as ConflictError).code).toBe('mapping_exists');
   });
 
-  it.skip("raises a site's user type as PolicyError naming the parameter", async () => {
+  it("raises a site's user type as PolicyError naming the parameter", async () => {
     const error = await over([reply(403, MappingAnswers.userTypeNotAllowed)])
       .mappings.create(4, '17', 'user')
       .catch((thrown: unknown) => thrown);
@@ -127,7 +123,7 @@ describe('P6: mappings writes', () => {
     expect((error as PolicyError).code).toBe('user_type_not_allowed');
   });
 
-  it.skip("removes a collaborator's links of one type with DELETE /mappings and no body", async () => {
+  it("removes a collaborator's links of one type with DELETE /mappings and no body", async () => {
     const { http, mappings } = over([reply(200, MappingAnswers.deleted)]);
 
     expect(await mappings.deleteForCollaborator(4, 'wordpress_user')).toEqual({ deleted: true });
@@ -136,21 +132,21 @@ describe('P6: mappings writes', () => {
     expect(http.requests[0]!.body).toBeUndefined();
   });
 
-  it.skip("removes an outside record's collaborator links, the id trimmed", async () => {
+  it("removes an outside record's collaborator links, the id trimmed", async () => {
     const { http, mappings } = over([reply(200, MappingAnswers.deleted)]);
 
     expect(await mappings.deleteForExternal(' 17 ', 'wordpress_user')).toEqual({ deleted: true });
     expect(queryOf(http.requests[0])).toEqual({ localType: 'collaborator', externalId: '17', externalType: 'wordpress_user' });
   });
 
-  it.skip.each([
+  it.each([
     ['deleteForCollaborator', (m: MappingsResource) => m.deleteForCollaborator(4, 'wordpress_user')],
     ['deleteForExternal', (m: MappingsResource) => m.deleteForExternal('17', 'wordpress_user')],
   ])('%s throws UnexpectedResponseError when a 2xx carries no object', async (_name, call) => {
     await expect(call(over([reply(204)]).mappings)).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).create(4, '17', 'wordpress_user'), reply(201, MappingAnswers.created));
     await expectSentOnce((transport) => resource(transport).deleteForCollaborator(4, 'wordpress_user'), reply(200, MappingAnswers.deleted));
     await expectSentOnce((transport) => resource(transport).deleteForExternal('17', 'wordpress_user'), reply(200, MappingAnswers.deleted));
@@ -158,7 +154,7 @@ describe('P6: mappings writes', () => {
 });
 
 describe('P6: mappings names and ids', () => {
-  it.skip('list refuses a query with no externalType, so it never lists every link', async () => {
+  it('list refuses a query with no externalType, so it never lists every link', async () => {
     const { http, mappings } = over([reply(200, page([]))]);
 
     await expect(mappings.list({ localType: 'collaborator', localId: 4 })).rejects.toBeInstanceOf(SirenError);
@@ -166,7 +162,7 @@ describe('P6: mappings names and ids', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip.each([
+  it.each([
     ['list, a qualified externalType', (m: MappingsResource) => m.list({ externalType: 'wordpress_user@property:5' })],
     ['list, an externalType with a comma', (m: MappingsResource) => m.list({ externalType: 'wordpress_user,wc_product' })],
     ['list, a localType with a comma', (m: MappingsResource) => m.list({ externalType: 'wordpress_user', localType: 'a,b' })],

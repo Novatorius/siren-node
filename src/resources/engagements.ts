@@ -1,7 +1,8 @@
 import type { HttpTransport } from '../http';
 import type { Engagement, EngagementListParams, RegistryOptions } from '../record-types';
 import type { SirenList } from '../types';
-import { RecordsResource } from './records';
+import { listRecords, readObject } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
 
 /**
@@ -38,9 +39,7 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * `listRecords` with {@link LIST_FILTERS} and {@link ID_FILTERS}.
    */
   override list(params: EngagementListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 4 packet P2
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+    return listRecords<T>(this.http, this.path, params, EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS);
   }
 
   /**
@@ -49,10 +48,7 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 4 packet P2
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 
   /**
@@ -61,8 +57,7 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * Throws `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   types(): Promise<RegistryOptions> {
-    // Stub: slice 4 packet P2
-    return Promise.resolve({ options: [] });
+    return readObject<RegistryOptions>(this.http, `${this.path}/types`);
   }
 
   /**
@@ -72,7 +67,6 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   calculations(): Promise<RegistryOptions> {
-    // Stub: slice 4 packet P2
-    return Promise.resolve({ options: [] });
+    return readObject<RegistryOptions>(this.http, `${this.path}/calculations`);
   }
 }

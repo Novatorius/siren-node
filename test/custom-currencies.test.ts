@@ -22,10 +22,6 @@ import { CustomCurrencyAnswers } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P4 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 const CODE_MESSAGE = 'Send a currency code as letters, digits, underscores and hyphens, such as STORE_CREDIT.';
@@ -55,7 +51,7 @@ describe('P4: custom currencies surface', () => {
 });
 
 describe('P4: custom currencies reads', () => {
-  it.skip('lists GET /currencies/custom with type, code and paging', async () => {
+  it('lists GET /currencies/custom with type, code and paging', async () => {
     const { http, currencies } = over([reply(200, page([CustomCurrencyAnswers.listed], 1, 20))]);
 
     const list = await currencies.list({ type: CustomCurrencyType.Internal, code: ['STORE_CREDIT', 'POINTS'], number: 20 });
@@ -66,7 +62,7 @@ describe('P4: custom currencies reads', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retrieves by code through the list route, number 1, and answers the first row', async () => {
+  it('retrieves by code through the list route, number 1, and answers the first row', async () => {
     const { http, currencies } = over([reply(200, page([CustomCurrencyAnswers.listed], 1, 1))]);
 
     expect(await currencies.retrieve('STORE_CREDIT', { fields: 'code,name' })).toEqual(CustomCurrencyAnswers.listed);
@@ -74,11 +70,11 @@ describe('P4: custom currencies reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ code: 'STORE_CREDIT', number: '1', fields: 'code,name' });
   });
 
-  it.skip('retrieve answers null when Siren holds no such code', async () => {
+  it('retrieve answers null when Siren holds no such code', async () => {
     expect(await over([reply(200, page([], 0, 1))]).currencies.retrieve('NOPE')).toBeNull();
   });
 
-  it.skip('retrieve keeps its own code and number over anything else in params', async () => {
+  it('retrieve keeps its own code and number over anything else in params', async () => {
     const { http, currencies } = over([reply(200, page([], 0, 1))]);
 
     await currencies.retrieve('STORE_CREDIT', { code: 'OTHER', number: 50 } as never);
@@ -86,14 +82,14 @@ describe('P4: custom currencies reads', () => {
     expect(queryOf(http.requests[0])).toMatchObject({ code: 'STORE_CREDIT', number: '1' });
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
     await expectRetried((transport) => resource(transport).retrieve('STORE_CREDIT'), reply(200, page([CustomCurrencyAnswers.listed])));
   });
 });
 
 describe('P4: custom currencies writes', () => {
-  it.skip('creates with POST /currencies/custom and answers the currency', async () => {
+  it('creates with POST /currencies/custom and answers the currency', async () => {
     const { http, currencies } = over([reply(201, CustomCurrencyAnswers.created)]);
 
     expect(await currencies.create(create)).toEqual(CustomCurrencyAnswers.created);
@@ -101,7 +97,7 @@ describe('P4: custom currencies writes', () => {
     expect(bodyOf(http.requests[0])).toEqual(create);
   });
 
-  it.skip('updates with PUT /currencies/custom/{code}, sending only the given fields', async () => {
+  it('updates with PUT /currencies/custom/{code}, sending only the given fields', async () => {
     const { http, currencies } = over([reply(200, CustomCurrencyAnswers.updated)]);
 
     expect(await currencies.update('STORE_CREDIT', { name: 'Shop credit' })).toEqual(CustomCurrencyAnswers.updated);
@@ -109,7 +105,7 @@ describe('P4: custom currencies writes', () => {
     expect(bodyOf(http.requests[0])).toEqual({ name: 'Shop credit' });
   });
 
-  it.skip('deletes with DELETE /currencies/custom/{code} and answers the programs it deactivated', async () => {
+  it('deletes with DELETE /currencies/custom/{code} and answers the programs it deactivated', async () => {
     const { http, currencies } = over([reply(200, CustomCurrencyAnswers.deleted)]);
 
     expect(await currencies.delete('STORE_CREDIT')).toEqual(CustomCurrencyAnswers.deleted);
@@ -118,7 +114,7 @@ describe('P4: custom currencies writes', () => {
     expect(http.requests[0]!.body).toBeUndefined();
   });
 
-  it.skip('sends wipeLedger=true only when asked', async () => {
+  it('sends wipeLedger=true only when asked', async () => {
     const { http, currencies } = over([reply(200, CustomCurrencyAnswers.deleted)]);
 
     await currencies.delete('STORE_CREDIT', true);
@@ -126,24 +122,24 @@ describe('P4: custom currencies writes', () => {
     expect(queryOf(http.requests[0])).toEqual({ wipeLedger: 'true' });
   });
 
-  it.skip('throws UnexpectedResponseError when a delete answers no object', async () => {
+  it('throws UnexpectedResponseError when a delete answers no object', async () => {
     await expect(over([reply(204)]).currencies.delete('STORE_CREDIT')).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip.each([
+  it.each([
     ['a blocked delete as ConflictError', 409, CustomCurrencyAnswers.deleteBlocked, ConflictError],
     ['an unknown code as NotFoundError', 404, CustomCurrencyAnswers.notFound, NotFoundError],
   ] as const)('raises %s', async (_label, status, body, type) => {
     await expect(over([reply(status, body)]).currencies.delete('STORE_CREDIT')).rejects.toBeInstanceOf(type);
   });
 
-  it.skip('raises a refused scale change as BadRequestError', async () => {
+  it('raises a refused scale change as BadRequestError', async () => {
     await expect(
       over([reply(400, CustomCurrencyAnswers.scaleLocked)]).currencies.update('STORE_CREDIT', { name: 'x', scale: 2 } as never),
     ).rejects.toBeInstanceOf(BadRequestError);
   });
 
-  it.skip('raises the Essentials gate as PermissionError with its code', async () => {
+  it('raises the Essentials gate as PermissionError with its code', async () => {
     const error = await over([reply(403, CustomCurrencyAnswers.planRequired)])
       .currencies.create(create)
       .catch((thrown: unknown) => thrown);
@@ -152,7 +148,7 @@ describe('P4: custom currencies writes', () => {
     expect((error as PermissionError).code).toBe('plan_required');
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).create(create), reply(201, CustomCurrencyAnswers.created));
     await expectSentOnce((transport) => resource(transport).update('STORE_CREDIT', { name: 'x' }), reply(200, CustomCurrencyAnswers.updated));
     await expectSentOnce((transport) => resource(transport).delete('STORE_CREDIT'), reply(200, CustomCurrencyAnswers.deleted));
@@ -160,7 +156,7 @@ describe('P4: custom currencies writes', () => {
 });
 
 describe('P4: custom currency codes', () => {
-  it.skip.each([
+  it.each([
     ['retrieve', (c: CustomCurrenciesResource, code: string) => c.retrieve(code)],
     ['create', (c: CustomCurrenciesResource, code: string) => c.create({ ...create, code })],
     ['update', (c: CustomCurrenciesResource, code: string) => c.update(code, { name: 'x' })],
@@ -177,7 +173,7 @@ describe('P4: custom currency codes', () => {
     }
   });
 
-  it.skip('sends a code in its own case, so Siren decides what it accepts', async () => {
+  it('sends a code in its own case, so Siren decides what it accepts', async () => {
     const { http, currencies } = over([reply(200, CustomCurrencyAnswers.updated)]);
 
     await currencies.update('store-credit', { name: 'x' });
@@ -185,7 +181,7 @@ describe('P4: custom currency codes', () => {
     expect(pathOf(http.requests[0])).toBe('/currencies/custom/store-credit');
   });
 
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { Code: 'X' }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
@@ -198,7 +194,7 @@ describe('P4: custom currency codes', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('list and retrieve throw UnexpectedResponseError for a 2xx that is not a list', async () => {
+  it('list and retrieve throw UnexpectedResponseError for a 2xx that is not a list', async () => {
     await expect(over([reply(200, { error: 'x' })]).currencies.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
     await expect(over([reply(200, { error: 'x' })]).currencies.retrieve('STORE_CREDIT')).rejects.toBeInstanceOf(
       UnexpectedResponseError,
