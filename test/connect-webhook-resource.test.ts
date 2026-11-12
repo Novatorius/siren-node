@@ -55,7 +55,7 @@ function webhookOver(...args: Parameters<typeof connectOver>) {
 }
 
 describe('P4: ConnectWebhookResource routes', () => {
-  it.skip.each(ROUTES)('%s sends %s %s once with the bearer token and answers the body as sent', async (_name, call, method, path, body, status, answer) => {
+  it.skip.each(ROUTES)('%s sends its route once with the bearer token and answers the body as sent', async (_name, call, method, path, body, status, answer) => {
     const { http, webhook } = webhookOver([reply(status, answer)]);
 
     const result = await call(webhook);
@@ -159,6 +159,7 @@ describe('P4: ConnectWebhookResource.test nonce', () => {
 
     await webhook.test(nonce);
 
+    expect(http.requests).toHaveLength(1);
     expect(bodyOf(http.requests[0]!)).toEqual({ nonce });
   });
 

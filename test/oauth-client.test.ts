@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
   BadRequestError,
@@ -38,6 +38,16 @@ import { FakeHttpClient, reply } from './http-fakes';
  * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
  * changes nothing else here.
  */
+
+/** No test here may reach the network: the global fetch fails any test that calls it. */
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => {
+      throw new Error('the global fetch must not be called');
+    }),
+  );
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -138,6 +148,7 @@ describe('P2: OAuthClient.register', () => {
 
     await oauth.register({ clientName: 'Example Store', redirectUris: [REDIRECT], scope: 'connect:*' });
 
+    expect(http.requests).toHaveLength(1);
     expect(bodyOf(http.requests[0]!)).toEqual({ client_name: 'Example Store', redirect_uris: [REDIRECT], scope: 'connect:*' });
   });
 
@@ -147,6 +158,7 @@ describe('P2: OAuthClient.register', () => {
 
     await oauth.register(registerParams);
 
+    expect(http.requests).toHaveLength(1);
     expect(http.requests[0]!.url).toBe('http://localhost:8080/siren/v1/oauth/register');
     expect(http.requests[0]!.timeout).toBe(4000);
   });
@@ -321,6 +333,7 @@ describe('P2: OAuthClient.refresh', () => {
     const tokens = await oauth.refresh(refreshParams);
 
     expect(tokens).toEqual(Cloud.tokens);
+    expect(http.requests).toHaveLength(1);
     expect(http.requests[0]!.url).toBe(`${BASE}/oauth/token`);
     expect(bodyOf(http.requests[0]!)).toEqual({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: REFRESH });
   });
@@ -330,6 +343,7 @@ describe('P2: OAuthClient.refresh', () => {
 
     await oauth.refresh({ ...refreshParams, attemptId: 'attempt-1' });
 
+    expect(http.requests).toHaveLength(1);
     expect(bodyOf(http.requests[0]!)).toEqual({
       grant_type: 'refresh_token',
       client_id: CLIENT_ID,
@@ -389,6 +403,18 @@ describe('P2: OAuthClient.refresh', () => {
     expect(error.message).toBe('invalid_grant');
   });
 
+  it.skip.each([
+    [429, RateLimitError],
+    [503, ApiError],
+  ])('raises a %i as the usual error for its status even when its body is the OAuth envelope', async (status, type) => {
+    const { oauth } = client([reply(status, { error: 'temporarily_unavailable', error_description: 'Try again later.' }, { 'Retry-After': '0' })]);
+
+    const error = await failure(oauth.refresh(refreshParams));
+
+    expect(error).toBeInstanceOf(type);
+    expect(error).not.toBeInstanceOf(OAuthError);
+  });
+
   it.skip("raises a 400 in the app's error envelope through errorFromResponse, not as OAuthError", async () => {
     const { oauth } = client([reply(400, { error: { message: 'Bad request', context: [] } })]);
 
@@ -406,6 +432,16 @@ describe('P2: OAuthClient.refresh', () => {
 
     expect(error).toBeInstanceOf(ConnectionError);
     expect(error.cause).toBe(cause);
+    expect(shown(error)).not.toContain(REFRESH);
+  });
+
+  it.skip('gives the ConnectionError no cause when the client error has none, so its message cannot leak through', async () => {
+    const { oauth } = client([new HttpClientError(`timed out sending refresh_token=${REFRESH}`)]);
+
+    const error = await failure(oauth.refresh(refreshParams));
+
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect(error.cause).toBeUndefined();
     expect(shown(error)).not.toContain(REFRESH);
   });
 

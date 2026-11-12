@@ -46,9 +46,11 @@ export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;
  *   with that code. A 3xx raises `SirenError` and is never followed. Any
  *   other status raises the error `errorFromResponse` builds for it:
  *   `RateLimitError` for 429, `ApiError` for 5xx.
- * - An `HttpClientError` raises `ConnectionError` with the client error's
- *   own `cause`, as the transport does. Any other error from the client
- *   reaches the caller unchanged.
+ * - An `HttpClientError` raises `ConnectionError` whose `cause` is the client
+ *   error's own `cause`, or nothing when it has none. Unlike the transport,
+ *   it never makes the client error itself the cause, because that error's
+ *   message may quote the grant. Any other error from the client reaches the
+ *   caller unchanged.
  * - No error message, `data` or field it raises carries a secret the call
  *   sent: the code, the verifier or the refresh token, each replaced in the
  *   client error's message.

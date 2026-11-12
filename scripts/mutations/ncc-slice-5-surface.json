@@ -1,0 +1,306 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/types.ts",
+    "find": "  InvalidGrant: 'invalid_grant',",
+    "replace": "  InvalidGrant: 'invalid-grant',",
+    "expect": "caught",
+    "failing": [
+      "names the OAuth error codes"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "/** A whole number or text id,",
+    "replace": "/** A whole number, or a text id,",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "export const FORWARDED_EVENT_VERSION = 1;",
+    "replace": "export const FORWARDED_EVENT_VERSION = = 1;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "sale-drop-customer",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  customer?: ForwardedSaleCustomer;\n}",
+    "replace": "}",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "sale-binding-optional",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  bindingId: WireIdentifier;\n  /** Such as",
+    "replace": "  bindingId?: WireIdentifier;\n  /** Such as",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "sale-allows-both",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "        opportunityId?: never;",
+    "replace": "        opportunityId?: number;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "partial-refund-extra-key",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  reason?: string | null;",
+    "replace": "  reason?: string | null;\n  note?: string;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "customer-integration-optional",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  integration: string;\n  platformId?: string | null;",
+    "replace": "  integration?: string;\n  platformId?: string | null;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "coupon-changed-at-text",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  /** Unix time, 2020 or later. */\n  changedAt: number;\n}\n\n/** `data` for `coupons-imported`.",
+    "replace": "  /** Unix time, 2020 or later. */\n  changedAt: number | string;\n}\n\n/** `data` for `coupons-imported`.",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "product-name-optional",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  /** Up to 1,000 characters. */\n  name: string;",
+    "replace": "  /** Up to 1,000 characters. */\n  name?: string;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "product-deleted-platform-optional",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  integration: string;\n  platformId: WireIdentifier;\n  /** ISO 8601 in ATOM form. */\n  changedAt?: string | null;\n}",
+    "replace": "  integration: string;\n  platformId?: WireIdentifier;\n  /** ISO 8601 in ATOM form. */\n  changedAt?: string | null;\n}",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "reference-extra-key",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  | { id: number; bindingId?: null; bindingType?: null };",
+    "replace": "  | { id: number; bindingId?: null; bindingType?: null; orderId?: string };",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "refund-line-drop-sku",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  amount?: number | null;\n  sku?: string | null;\n}",
+    "replace": "  amount?: number | null;\n}",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "detail-drop-attributes",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  attributes?: Record<string, ForwardedAttributeValue | Array<string | number | boolean>> | null;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "customer-type-any",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "export type SiteCustomerType = 'wordpress_user' | `${string}_customer`;",
+    "replace": "export type SiteCustomerType = string;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "origin-cloud",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  origin: 'site';",
+    "replace": "  origin: 'site' | 'cloud';",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "version-any-number",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  version: typeof FORWARDED_EVENT_VERSION;",
+    "replace": "  version: number;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "refund-kind-any",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  refundKind?: RefundKind;",
+    "replace": "  refundKind?: string;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "product-created-untyped",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  'product-created': ProductEventData;",
+    "replace": "  'product-created': UntypedForwardedEventData;",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "slug-dropped",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  ProductsImported: 'products-imported',\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "names the 28 slugs"
+    ]
+  },
+  {
+    "id": "products-imported-optional",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  /** Up to 500 products. */\n  products: ForwardedStoreProduct[];",
+    "replace": "  /** Up to 500 products. */\n  products?: ForwardedStoreProduct[];",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "version-two",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "export const FORWARDED_EVENT_VERSION = 1;",
+    "replace": "export const FORWARDED_EVENT_VERSION = 2;",
+    "expect": "caught",
+    "failing": [
+      "and version 1"
+    ]
+  },
+  {
+    "id": "scope-migrate",
+    "file": "src/connect/scopes.ts",
+    "find": "  Migrate: 'connect:migrate',",
+    "replace": "  Migrate: 'connect:migration',",
+    "expect": "caught",
+    "failing": [
+      "names the six operation scopes"
+    ]
+  },
+  {
+    "id": "software-medusa",
+    "file": "src/connect/types.ts",
+    "find": "  Medusa: 'siren-medusa',",
+    "replace": "  Medusa: 'medusa',",
+    "expect": "caught",
+    "failing": [
+      "names the connector software"
+    ]
+  },
+  {
+    "id": "error-code-dropped",
+    "file": "src/connect/types.ts",
+    "find": "  InvalidRedirectUri: 'invalid_redirect_uri',\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "names the OAuth error codes"
+    ]
+  },
+  {
+    "id": "consent-url",
+    "file": "src/connect/oauth.ts",
+    "find": "'https://api.sirenaffiliates.com/connect-site'",
+    "replace": "'https://api.sirenaffiliates.com/connect'",
+    "expect": "caught",
+    "failing": [
+      "defaults to Siren Cloud's consent screen"
+    ]
+  },
+  {
+    "id": "oauth-timeout",
+    "file": "src/connect/oauth.ts",
+    "find": "export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;",
+    "replace": "export const DEFAULT_OAUTH_TIMEOUT_MS = 30_000;",
+    "expect": "caught",
+    "failing": [
+      "defaults to Siren Cloud's consent screen"
+    ]
+  },
+  {
+    "id": "main-exports-connect",
+    "file": "src/index.ts",
+    "find": "export { EventsResource } from './resources/events';",
+    "replace": "export { EventsResource } from './resources/events';\nexport { SirenConnect } from './connect/siren-connect';",
+    "expect": "caught",
+    "failing": [
+      "keeps the connect classes out of the main entry"
+    ]
+  },
+  {
+    "id": "connect-drops-export",
+    "file": "src/connect/index.ts",
+    "find": "export { createCodeVerifier, createState, codeChallengeS256 } from './pkce';",
+    "replace": "export { createCodeVerifier, codeChallengeS256 } from './pkce';",
+    "expect": "caught",
+    "failing": [
+      "exports the connected-site API"
+    ]
+  },
+  {
+    "id": "export-map-types",
+    "file": "package.json",
+    "find": "\"types\": \"./dist/connect.d.cts\"",
+    "replace": "\"types\": \"./dist/connect.d.ts\"",
+    "expect": "caught",
+    "failing": [
+      "maps ./connect in package.json"
+    ]
+  }
+]

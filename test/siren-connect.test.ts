@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CallbackAccessTokenSource, Siren, SirenError } from '../src/index';
 import { ConnectResource, SirenConnect } from '../src/connect/index';
 import type { HttpRequest } from '../src/http';
@@ -25,6 +25,21 @@ import { BASE, ConnectAnswers } from './connect-fakes';
  */
 
 const KEY = 'sk_live_APIKEYSECRET_123';
+
+/** No test here may reach the network: the global fetch fails any test that calls it. */
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => {
+      throw new Error('the global fetch must not be called');
+    }),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 
 function header(request: HttpRequest, name: string): string | undefined {
   return Object.entries(request.headers).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
@@ -109,6 +124,7 @@ describe('P5: SirenConnect sends with the site token', () => {
       data: { integration: 'medusa', platformId: 'prod_01' },
     });
 
+    expect(http.requests).toHaveLength(1);
     expect(http.requests[0]!.url).toBe(`${BASE}/event/product-deleted`);
     expect(header(http.requests[0]!, 'authorization')).toBe('Bearer tok-site');
   });
@@ -171,10 +187,12 @@ describe('P5: SirenConnect options', () => {
     ['an apiKey alone', { apiKey: KEY }],
     ['an apiKey beside an accessToken', { apiKey: KEY, accessToken: 'tok' }],
     ['an empty apiKey beside an accessToken', { apiKey: '', accessToken: 'tok' }],
-  ])('refuses %s with SirenError naming accessToken, quoting no key', (_name, options) => {
+  ])('refuses %s with its own SirenError naming apiKey and accessToken, quoting no key', (_name, options) => {
     const error = caught(() => new SirenConnect(options as never));
 
     expect(error).toBeInstanceOf(SirenError);
+    expect(error.message).toMatch(/^SirenConnect: /);
+    expect(error.message).toContain('apiKey');
     expect(error.message).toContain('accessToken');
     expect(error.message).not.toContain('APIKEYSECRET');
   });
@@ -187,6 +205,7 @@ describe('P5: SirenConnect options', () => {
     const error = caught(() => new SirenConnect(options as never));
 
     expect(error).toBeInstanceOf(SirenError);
+    expect(error.message).toMatch(/^SirenConnect: /);
     expect(error.message).toMatch(/accessToken is required/);
     expect(error.message).not.toMatch(/apiKey is required/);
   });

@@ -111,7 +111,9 @@ describe block. Integration shape per
 [Integration Testing Standards (KB 568)](https://navigator.novatori.us/r/kb/568):
 real resources, the real transport, and a fake at the `HttpClient` seam,
 answered with bodies read from the cited Cloud controllers. Nobody captured
-them from a running Cloud. Slice 20 does that.
+them from a running Cloud. Slice 20 does that. No test reaches the network:
+the files that build real clients replace the global fetch with one that
+fails the test.
 
 | File | Packet |
 |---|---|
@@ -122,20 +124,22 @@ them from a running Cloud. Slice 20 does that.
 | `test/siren-connect.test.ts` | P5 |
 | `test/forwarded-events.test.ts` | P6, plus the slug vocabulary, which runs now |
 | `test/docs-connect.test.ts` | P7 |
-| `test/types/forwarded-events.ts`, `test/connect-build.test.ts` | none, they run now |
+| `test/types/forwarded-events.ts`, `test/connect-vocabulary.test.ts`, `test/connect-build.test.ts` | none, they run now |
 
 ## Stubs
 
 Each stub returns a fixed value of its type and never throws. The PKCE stubs
 answer zeros, the OAuth calls send nothing, the connect methods send nothing,
-`forward` resolves `{}`, and `SirenConnect` builds a placeholder transport.
+`forward` resolves `{}`, and `SirenConnect` builds a placeholder transport
+whose client answers every send itself.
 
 ## Proof
 
 In a separate clone, each skipped test was unskipped against the stubs and
-failed on its assertion. A scratch implementation of all seven packets
-passed the suite and was thrown away. A mutation run against it, one
-mutation per rule, with the harness's three controls, scored as expected.
+failed on its assertion, except eleven the stubs already meet. A scratch
+implementation of all seven packets passed all 723 tests and was thrown
+away. A run of 112 mutations against it, one per rule, with the harness's
+controls, scored as expected once a malformed test title was fixed.
 The packet mutation lists target that scratch code and stay in the run
 folder. `scripts/mutations/ncc-slice-5-surface.json` changes the branch's own
 vocabulary and runs here.

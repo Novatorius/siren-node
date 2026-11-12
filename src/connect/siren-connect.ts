@@ -1,4 +1,4 @@
-import { DEFAULT_BASE_URL, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS, FetchHttpClient, HttpTransport } from '../http';
+import { DEFAULT_BASE_URL, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS, HttpTransport } from '../http';
 import { StaticAccessToken } from '../auth/static-access-token';
 import { EventsResource } from '../resources/events';
 import { ConnectResource } from './connect-resource';
@@ -32,15 +32,21 @@ export class SirenConnect {
    * Takes the options `new Siren()` takes, with `accessToken` required, and
    * resolves them by the same rules, through the same code, so the two
    * clients never disagree about an option. It throws `SirenError` where
-   * `new Siren()` would, and also when `apiKey` is given, naming
-   * `accessToken`: an API key has no connected-site scope.
+   * `new Siren()` would, with the same message. Two refusals are its own,
+   * each a message that starts `SirenConnect:` and quotes no credential:
+   * `accessToken` missing or `undefined` (the message says an accessToken is
+   * required), and `apiKey` given as anything but `undefined`, an empty
+   * string included (the message names both `apiKey` and `accessToken`,
+   * since an API key has no connected-site scope). It checks those two
+   * first, reading the options as `new Siren()` reads them.
    */
   constructor(options: SirenConnectOptions) {
-    // Stub: slice 5 packet P5.
+    // Stub: slice 5 packet P5. The placeholder client answers every send
+    // itself, so the stub never reaches the network.
     void options;
     const http = new HttpTransport({
       tokens: new StaticAccessToken('stub'),
-      client: new FetchHttpClient(),
+      client: { send: async () => ({ status: 200, headers: {}, body: '{}' }) },
       baseUrl: DEFAULT_BASE_URL,
       timeout: DEFAULT_TIMEOUT_MS,
       maxRetries: DEFAULT_MAX_RETRIES,

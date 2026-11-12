@@ -124,6 +124,7 @@ describe('P3: ConnectResource routes', () => {
 
     await connect.reportIntegrations([]);
 
+    expect(http.requests).toHaveLength(1);
     expect(bodyOf(http.requests[0]!)).toEqual({ integrations: [] });
   });
 
@@ -132,6 +133,7 @@ describe('P3: ConnectResource routes', () => {
 
     await connect.reportSiteState({ forwarding: false });
 
+    expect(http.requests).toHaveLength(1);
     expect(bodyOf(http.requests[0]!)).toEqual({ forwarding: false });
   });
 
@@ -140,6 +142,7 @@ describe('P3: ConnectResource routes', () => {
 
     await connect.syncProducts({ platform: 'wc', pruneBefore: 1_762_000_123 });
 
+    expect(http.requests).toHaveLength(1);
     expect(bodyOf(http.requests[0]!)).toEqual({ platform: 'wc', pruneBefore: 1_762_000_123 });
   });
 });

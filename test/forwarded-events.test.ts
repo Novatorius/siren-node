@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ConflictError,
   ConnectionError,
@@ -35,6 +35,20 @@ import { FakeHttpClient, reply } from './http-fakes';
  * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
  * changes nothing else here.
  */
+
+/** No test here may reach the network: the global fetch fails any test that calls it. */
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => {
+      throw new Error('the global fetch must not be called');
+    }),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const BASE = 'https://api.sirenaffiliates.com/siren/v1';
 const EVENT_ID = '5f0c2b1e-9d8a-4c3f-8e7d-6c5b4a392817';
@@ -153,6 +167,7 @@ describe('P6: events.forward', () => {
 
     await client.events.forward(slug as ForwardedEventSlug, { ...productDeleted, data: {} } as never);
 
+    expect(http.requests).toHaveLength(1);
     expect(http.requests[0]!.url).toBe(`${BASE}/event/${slug}`);
   });
 
@@ -169,6 +184,7 @@ describe('P6: events.forward final attempt header', () => {
 
     await client.events.forward('product-deleted', productDeleted, { finalAttempt: true });
 
+    expect(http.requests).toHaveLength(1);
     const request = http.requests[0]!;
     expect(header(request, 'x-siren-final-attempt')).toBe('1');
     expect(header(request, 'authorization')).toBe('Bearer sk_live_test');
@@ -185,6 +201,7 @@ describe('P6: events.forward final attempt header', () => {
 
     await client.events.forward('product-deleted', productDeleted, options);
 
+    expect(http.requests).toHaveLength(1);
     expect(header(http.requests[0]!, 'x-siren-final-attempt')).toBeUndefined();
   });
 
