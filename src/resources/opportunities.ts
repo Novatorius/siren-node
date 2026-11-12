@@ -16,10 +16,12 @@ import type { RetrieveParams } from './records';
  * {@link update} is sent once, apart from the one resend after a 401 that
  * every request gets, and setting the same fields again is safe. Every id
  * must be a positive whole number, or `SirenError` is thrown before
- * sending. A connected site's
- * token reads with `connect:records:read` and must name the opportunity: by
- * id through {@link retrieve}, or by `collaboratorId` through {@link list}.
- * Without one Siren answers 403 `site_filter_required`. It cannot update.
+ * sending.
+ *
+ * A connected site's token reads with `connect:records:read` and must name
+ * the opportunity: by id through {@link retrieve}, or by `collaboratorId`
+ * through {@link list}. Without one Siren answers 403
+ * `site_filter_required`. It cannot update.
  */
 export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
   /**
@@ -60,7 +62,8 @@ export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
    * Reads one opportunity with `GET /opportunities/{id}` through
    * `retrieveRecord`, so it takes `fields`, `include` and `propertyId`.
    * Throws `NotFoundError` for an unknown id or one a connected site does
-   * not own.
+   * not own, and `UnexpectedResponseError` when a 2xx body is not a JSON
+   * object.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
     // Stub: slice 4 packet P1

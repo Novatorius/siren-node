@@ -242,7 +242,7 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
   /**
    * Updates a conversion with `PUT /conversions/{id}`, sent once. Siren
    * answers 200 with no body, so this answers `null`, and an object when a
-   * later Siren sends one. Read the conversion again with {@link retrieve}
+   * later Siren sends one. Either way, Siren took the update. Read the conversion again with {@link retrieve}
    * to see the result: setting `approved` runs Siren's approval, which
    * stores the conversion as `complete`. Throws `NotFoundError` for an
    * unknown id, and `UnexpectedResponseError` for a 2xx body that is

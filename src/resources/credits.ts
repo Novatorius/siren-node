@@ -65,7 +65,8 @@ export class CreditsResource {
   /** The filters {@link checkoutBalances} sends. */
   static readonly BALANCE_FILTERS = ['collaboratorId', 'currency', 'excludeReference'] as const;
   /**
-   * The id filters all three lists check. `collaboratorId` takes one
+   * The id filters all three lists check: {@link entries}, {@link holds}
+   * and {@link checkoutBalances}. `collaboratorId` takes one
    * positive whole number, never a list: `GET /credit-balances` reads one
    * (GetCreditBalances.php line 55), and a ledger or hold query names one
    * collaborator.
@@ -80,10 +81,13 @@ export class CreditsResource {
    * plus `description` when one is given, sent once: a second send would
    * apply the adjustment twice, and Siren takes no idempotency key for it.
    * Answers `{ success, entry }`, the ledger entry with its signed amount.
-   * Siren writes the entry with `sourceType` `adjustment`. After a lost
-   * answer, give each adjustment its own `description` and look for it with
+   * Siren writes the entry with `sourceType` `adjustment`.
+   *
+   * A caller whose queue may send it again must give each adjustment its
+   * own `description`. After a lost answer, it looks for that entry with
    * {@link entries}, `{ collaboratorId, sourceType: 'adjustment', description }`,
-   * before sending it again.
+   * before sending again. Without a unique `description`, a lost answer
+   * cannot be checked, so set the adjustment aside instead of resending it.
    *
    * Throws `SirenError` before sending when `collaboratorId` is not a
    * positive whole number, `currency` is not a non-empty string, `amount` is
@@ -152,7 +156,9 @@ export class CreditsResource {
   /**
    * One currency's checkout row: {@link checkoutBalances} with `currency`
    * sent as the filter, then the first row whose `currency` equals it, or
-   * `null` when Siren answers none.
+   * `null` when Siren answers a list with no such row. A body that is not a
+   * list throws `UnexpectedResponseError`, as {@link checkoutBalances} does,
+   * never `null`.
    */
   checkoutBalance(collaboratorId: number, currency: string, excludeReference?: string): Promise<CheckoutBalance | null> {
     // Stub: slice 4 packet P5

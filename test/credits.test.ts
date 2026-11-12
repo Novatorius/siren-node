@@ -190,6 +190,12 @@ describe('P5: credits balances', () => {
     expect(await credits.checkoutBalance(4, 'GIFT')).toBeNull();
   });
 
+  it.skip('checkoutBalance throws UnexpectedResponseError for a 2xx that is not a list, never null', async () => {
+    await expect(over([reply(200, { error: 'x' })]).credits.checkoutBalance(4, 'POINTS')).rejects.toBeInstanceOf(
+      UnexpectedResponseError,
+    );
+  });
+
   it.skip('retries every balance read', async () => {
     await expectRetried((transport) => resource(transport).balances(4), reply(200, CreditAnswers.balancesRecord));
     await expectRetried((transport) => resource(transport).checkoutBalances(4), reply(200, CreditAnswers.checkoutBalances));

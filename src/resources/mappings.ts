@@ -27,17 +27,18 @@ import { RecordsResource } from './records';
  * Every type, `localType` included, must pass `PropertyQualifier.assertName`,
  * or `SirenError` is thrown before sending. Every external id is trimmed and
  * refused when nothing is left. Every local id must be a positive whole
- * number. {@link create}, {@link deleteForCollaborator} and
- * {@link deleteForExternal} are sent once, apart from the one resend after
- * a 401 that every request gets.
+ * number.
+ *
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
  * from its own durable queue builds the client with `maxRetries: 0`.
- * A write's answer is lost when it throws `ConnectionError` or a 5xx
+ * {@link create}, {@link deleteForCollaborator} and {@link deleteForExternal}
+ * are sent once, apart from the one resend after a 401 that every request
+ * gets. A write's answer is lost when it throws `ConnectionError` or a 5xx
  * `ApiError`. Siren may have written before the answer failed, so each
  * write says how to find out before sending it again.
  *
- * Only collaborator links can be written. Siren makes the order, transaction and opportunity links as it
- * processes events.
+ * Only collaborator links can be written. Siren makes the order,
+ * transaction and opportunity links as it processes events.
  */
 export class MappingsResource extends RecordsResource<Mapping> {
   /** The Siren side of every link this resource writes. */

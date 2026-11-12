@@ -25,17 +25,17 @@ import { RecordsResource } from './records';
  * from its own durable queue builds the client with `maxRetries: 0`.
  * Every write is sent once, apart from the one resend after a 401 that
  * every request gets.
+ *
  * A write's answer is lost when it throws `ConnectionError` or a 5xx
  * `ApiError`. Siren may have written before the answer failed, so each
  * write says how to find out before sending it again.
  *
- * Writes need the Essentials plan:
- * without it Siren answers 403 `plan_required`, raised as
- * `PermissionError`. A connected site's token may read with
- * `connect:records:read` and cannot write.
+ * Writes need the Essentials plan: without it Siren answers 403
+ * `plan_required`, raised as `PermissionError`. A connected site's token
+ * may read with `connect:records:read` and cannot write.
  */
 export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResource<T> {
-  /** The filters `GET /currencies/custom` reads. {@link list} refuses any other key, `propertyId` included. */
+  /** The filters `GET /currencies/custom` reads. {@link list} refuses any other key, `propertyId` included. No filter takes an id, so there is no `ID_FILTERS`. */
   static readonly LIST_FILTERS = ['type', 'code'] as const;
 
   constructor(http: HttpTransport) {

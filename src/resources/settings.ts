@@ -12,17 +12,20 @@ import type { SharedSetting } from '../record-types';
  * and a setting Siren does not share is never in the answer.
  *
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
- * from its own durable queue builds the client with `maxRetries: 0`.
- * A connected site's token reads with
- * `connect:records:read`. Every name must be a non-empty string with no
- * comma, or `SirenError` is thrown before sending.
+ * from its own durable queue builds the client with `maxRetries: 0`. A
+ * connected site's token reads with `connect:records:read`. Every name must
+ * be a non-empty string with no comma, or `SirenError` is thrown before
+ * sending.
  */
 export class SettingsResource {
   /** The route shared settings live on. */
   static readonly PATH = '/configs';
   /** The type of the collaborator settings. */
   static readonly TYPE_COLLABORATOR = 'collaborator';
-  /** The filters the reads send. */
+  /**
+   * The filters {@link collaborator} and {@link value} send. The class has
+   * no `list`, so the name drops the `LIST_` prefix.
+   */
   static readonly FILTERS = ['type', 'subtype', 'configKey'] as const;
 
   constructor(private readonly http: HttpTransport) {}

@@ -10,7 +10,9 @@ import type { RetrieveParams } from './records';
  * resource only reads.
  *
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
- * from its own durable queue builds the client with `maxRetries: 0`.
+ * from its own durable queue builds the client with `maxRetries: 0`. Every
+ * id must be a positive whole number, or `SirenError` is thrown before
+ * sending.
  *
  * A connected site's token reads {@link list} and {@link retrieve} with
  * `connect:records:read`, limited to its own store. It cannot read
@@ -43,7 +45,8 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
 
   /**
    * Reads one engagement with `GET /engagements/{id}` through
-   * `retrieveRecord`. Throws `NotFoundError` for an unknown id.
+   * `retrieveRecord`. Throws `NotFoundError` for an unknown id, and
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
     // Stub: slice 4 packet P2

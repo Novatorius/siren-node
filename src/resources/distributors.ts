@@ -21,16 +21,17 @@ import type { RetrieveParams } from './records';
  * Every write is sent once, apart from the one resend after a 401 that
  * every request gets. Every id must be a positive whole number, or
  * `SirenError` is thrown before sending.
+ *
  * A write's answer is lost when it throws `ConnectionError` or a 5xx
  * `ApiError`. Siren may have written before the answer failed, so each
  * write says how to find out before sending it again.
- * Writes need the
- * Essentials plan: without it Siren answers 403 `plan_required`, raised as
- * `PermissionError`. A connected site's token may read with
- * `connect:records:read` and cannot write.
+ *
+ * Writes need the Essentials plan: without it Siren answers 403
+ * `plan_required`, raised as `PermissionError`. A connected site's token
+ * may read with `connect:records:read` and cannot write.
  */
 export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
-  /** The filters `GET /distributors` reads. {@link list} refuses any other key, `propertyId` included. */
+  /** The filters `GET /distributors` reads. {@link list} refuses any other key, `propertyId` included. No filter takes an id, so there is no `ID_FILTERS`. */
   static readonly LIST_FILTERS = ['status', 's', 'metricType'] as const;
 
   constructor(http: HttpTransport) {
@@ -57,7 +58,8 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * Reads one distributor with `GET /distributors/{id}` through
    * `retrieveRecord`. The answer adds `schedule`, `engagementTypes`,
    * `transactionCompilers`, `revenuePercentage` and `lineItemFilters` to the
-   * default fields. Throws `NotFoundError` for an unknown id.
+   * default fields. Throws `NotFoundError` for an unknown id, and
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
     // Stub: slice 4 packet P3
@@ -129,9 +131,10 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * that counts manual metrics, with `POST /distributors/credit-metric`,
    * body `{ collaboratorId }` plus `points` when given, sent once: a second
    * send would credit twice, since Siren adds each credit to the
-   * collaborator's metric, and Siren takes no idempotency key for it. Treat
-   * a lost answer as unknown, and check the distributor's metrics in
-   * Siren's dashboard before sending it again. `points` (a whole number from 1 to
+   * collaborator's metric, and Siren takes no idempotency key for it. No
+   * SDK read shows the metric, so do not resend after a lost answer. Set it
+   * aside for a person to check the distributor's metrics in Siren's
+   * dashboard. `points` (a whole number from 1 to
    * 1,000,000,000,000) is needed for a distributor with no point value of
    * its own. Answers `{ success, credited, notCredited }`.
    *

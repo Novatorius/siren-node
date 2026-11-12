@@ -60,11 +60,12 @@ collection. Each method sends through one of slice 3's helpers
 or `retrieveRecord`, so the shape checks, the id checks and the send-once
 rule come from one place.
 
-`writeRecordOrNothing` is the one new helper. `PUT /conversions/{id}`
-answers 200 with no body (`UpdateConversion.php` line 140), which
-`writeRecord` refuses. The helper sends once and answers the JSON object,
-`null` for no body, and `UnexpectedResponseError` with the 2xx status for
-anything else, so a later Siren that sends the record still works.
+`writeRecordOrNothing` is the one new helper. Siren answers
+`PUT /conversions/{id}` with an empty 200 (`UpdateConversion.php` line
+140), and `writeRecord` refuses that. The helper sends once. It answers the
+JSON object, or `null` for no body, so a later Siren that sends the record
+still works. Any other body raises `UnexpectedResponseError` with the 2xx
+status. `null` means Siren took the write and sent nothing back.
 
 Each list names its filters in a static `LIST_FILTERS`. A class whose
 routes are not one collection names each read's filters after that read
@@ -101,18 +102,29 @@ is a 400, raised as `BadRequestError`.
 
 ## Send-once and retries
 
-Every write goes out once, apart from the one resend after a 401 that slice
-2 makes for every request. Every read retries on a lost connection, 429 and
-5xx, inside the client's `maxRetries`. That retry comes from slice 1's
-transport. A caller that runs SDK calls from its own durable queue builds
-the client with `maxRetries: 0`, so the queue's attempts are not multiplied
+Every write goes out once. The one exception is the resend after a 401
+that slice 2 makes for every request. It sends the same request with a
+refreshed token, and it is safe because Siren answers 401 before it writes.
+
+Every read retries on a lost connection, 429 and 5xx, inside the client's
+`maxRetries`. Slice 1's transport does this, and the SDK does not log
+those attempts. A caller that runs SDK calls from its own durable queue
+builds the client with `maxRetries: 0`. Then the queue's attempts are not
+multiplied, and each attempt reaches the caller's log
 ([Retry Unification — The Durable Queue Owns Retries (KB 591)](https://navigator.novatori.us/r/kb/591)).
+A default above 0 differs from KB 591. The default lives in the client,
+which slice 5 owns, so this slice keeps it and records the difference as a
+follow-up.
 
 A write's answer is lost when it throws `ConnectionError` or a 5xx
 `ApiError`, since Siren may have written first. The caller's queue decides
 whether to send it again, and each write's doc says how to find out first.
 The table sums up what a second send does, from Cloud's source at
-`b6f7140`.
+`b6f7140`. A check before sending again narrows duplicates but cannot rule
+them out: two workers that recover the same write at once can both find
+nothing. So the caller's queue runs one recovery per record at a time.
+Siren takes no key on these writes, which this build records as a Cloud
+follow-up.
 
 | Write | A second send | Before sending again |
 |---|---|---|
@@ -120,8 +132,8 @@ The table sums up what a second send does, from Cloud's source at
 | `transactions.create` with a binding | 409, `ConflictError` | nothing. The 409 means the first worked |
 | `transactions.create` without a binding | makes a second transaction | list the transactions |
 | `transactions.creditCollaborator` | makes a second conversion per transaction | list conversions by `transactionId` |
-| `credits.adjust` | applies the amount again | `entries` by `sourceType: 'adjustment'` and the adjustment's own `description` |
-| `distributors.creditMetric` | adds the credit again (`MetricTriggerService.php` `upsertMetric`) | the distributor's metrics in Siren's dashboard |
+| `credits.adjust` | applies the amount again | `entries` by `sourceType: 'adjustment'` and a `description` unique to the attempt. Without one, set it aside |
+| `distributors.creditMetric` | adds the credit again (`MetricTriggerService.php` `upsertMetric`) | no SDK read. Set it aside for a person to check in Siren's dashboard |
 | `customCurrencies.create` | 400 for a code Siren holds | `retrieve` the code |
 | the updates, the status bulk actions, `placeHold`, `releaseHold`, the mapping deletes | the same result, or `affected` may differ | nothing |
 | `conversions.delete`, `distributors.delete` | removes for good what the first only marked deleted | `retrieve`: `deleted` means the first worked |
@@ -157,9 +169,10 @@ them through its own logger.
 | Error | What the caller does |
 |---|---|
 | `SirenError` thrown before sending | Fix the call. Sending it again fails the same way |
-| `BadRequestError`, `ValidationError`, `PermissionError`, `PolicyError`, `NotFoundError` | Set it aside. Siren answers the same until the data or the plan changes |
+| `BadRequestError`, `ValidationError`, `PermissionError`, `PolicyError`, `NotFoundError`, an `ApiError` with another 4xx status | Set it aside. Siren answers the same until the data or the plan changes |
+| `AuthenticationError` | Set it aside and fix the credential. The transport already sent once more with a refreshed token |
 | `ConflictError`, `HoldConflictError` | Read the record it names. For a create, it often means the first send worked |
-| `RateLimitError`, `ConnectionError`, a 5xx `ApiError` | Try again later. For a write, check first whether it landed, as the table above says |
+| `RateLimitError`, `ConnectionError`, a 5xx `ApiError` | Try again later, after `RateLimitError.retryAfter` seconds when Siren sent one. For a write, check first whether it landed, as the table above says |
 | `UnexpectedResponseError` | Set it aside and report it. Siren answered in a shape the SDK does not know, and for a write with a 2xx status, the write landed |
 
 ## Connected sites
@@ -203,6 +216,9 @@ marks the one PHP-only method, `webhooks->constructEventFromHeaders()`, with
 the reason Node leaves it out.
 
 ## Packets
+
+A mechanical packet copies a pattern already in the repository, with no
+rule of its own to work out.
 
 | Packet | Class | Depends on | Mechanical |
 |---|---|---|---|
@@ -253,7 +269,7 @@ fake `HttpClient` is the one seam, and each test builds its own. P10's test buil
 | P10 | `test/client-records-2.test.ts` |
 | P11 | `test/docs-records-2.test.ts`, `test/docs-parity.test.ts` |
 
-Each test is skipped until its packet lands. The surface tests (filter
+Each test stays skipped until its packet lands. The surface tests (filter
 lists, hold limits, bulk actions, hold statuses, the missing write methods
 on read-only resources) run now. The architect's proof, kept outside the
 repository, ran every test unskipped against the stubs, wrote a scratch
