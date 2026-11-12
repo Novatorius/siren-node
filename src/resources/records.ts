@@ -320,7 +320,7 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
     // Stub: slice 4 fix packet F1 (the lost-answer check). It throws, so a
     // caller can never read the stub as a recovered create.
     void params;
-    throw new SirenError('conversions.recoverCreate() is not built yet: slice 4 fix packet F1.');
+    throw new Error('conversions.recoverCreate() is not built yet: slice 4 fix packet F1.');
   }
 
   /**
@@ -610,7 +610,7 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
     void transactionIds;
     void collaboratorId;
     void type;
-    throw new SirenError('transactions.recoverCreditCollaborator() is not built yet: slice 4 fix packet F1.');
+    throw new Error('transactions.recoverCreditCollaborator() is not built yet: slice 4 fix packet F1.');
   }
 
   /**
