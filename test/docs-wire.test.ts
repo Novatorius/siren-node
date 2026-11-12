@@ -23,8 +23,9 @@ function schema(name: string): string {
   const start = openapi.indexOf(`\n    ${name}:\n`);
   expect(start, `schema ${name}`).toBeGreaterThan(-1);
   const rest = openapi.slice(start + 1);
+  // Up to and including the newline before the next schema or section.
   const next = rest.slice(1).search(/\n {2,4}\S/);
-  return next < 0 ? rest : rest.slice(0, next + 1);
+  return next < 0 ? rest : rest.slice(0, next + 2);
 }
 
 function hasProperty(block: string, property: string): boolean {
