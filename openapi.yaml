@@ -578,6 +578,57 @@ paths:
         '200': { $ref: '#/components/responses/PaginatedList' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /conversions/{id}:
+    get:
+      tags: [Reconciliation]
+      operationId: retrieveConversion
+      summary: Retrieve one conversion
+      description: |
+        Reads one conversion by id. An API key needs the `ledger:conversions:read` scope.
+        A key bound to one store reads only its own store's conversions, and
+        Siren answers 404 for another store's conversion, as it does for an id
+        it does not have. A connected site's token needs
+        `connect:records:read`.
+
+        Siren answers with its default fields (`id`, `engagementId`, `transactionId`, `obligationId`, `status`, `type`,
+        `dateCreated` and `dateModified`) unless `fields` or
+        `include` asks for others.
+      security:
+        - apiKey: ['ledger:conversions:read']
+        - dashboardSession: []
+        - connectorToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The conversion's id, a positive whole number.
+          schema: { type: integer, minimum: 1 }
+        - name: fields
+          in: query
+          description: The fields to return, comma-separated.
+          schema: { type: string }
+          example: id,status,dateCreated
+        - name: include
+          in: query
+          description: |
+            `extended` returns every field Siren can resolve for the record.
+          schema: { type: string }
+        - { $ref: '#/components/parameters/PropertyId' }
+      responses:
+        '200':
+          description: The conversion (bare object).
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            No conversion with that id, or one the credential cannot see. Siren
+            answers "No record found with that ID."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /transactions:
     get:
       tags: [Reconciliation]
@@ -601,6 +652,56 @@ paths:
         '200': { $ref: '#/components/responses/PaginatedList' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /transactions/{id}:
+    get:
+      tags: [Reconciliation]
+      operationId: retrieveTransaction
+      summary: Retrieve one transaction
+      description: |
+        Reads one transaction by id. An API key needs the `ledger:transactions:read` scope.
+        A key bound to one store reads only its own store's transactions, and
+        Siren answers 404 for another store's transaction, as it does for an id
+        it does not have. A connected site's token needs
+        `connect:records:read`.
+
+        Siren answers with its default fields (`id`, `status` and `dateCreated`) unless `fields` or
+        `include` asks for others.
+      security:
+        - apiKey: ['ledger:transactions:read']
+        - dashboardSession: []
+        - connectorToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The transaction's id, a positive whole number.
+          schema: { type: integer, minimum: 1 }
+        - name: fields
+          in: query
+          description: The fields to return, comma-separated.
+          schema: { type: string }
+          example: id,status,dateCreated
+        - name: include
+          in: query
+          description: |
+            `extended` returns every field Siren can resolve for the record.
+          schema: { type: string }
+        - { $ref: '#/components/parameters/PropertyId' }
+      responses:
+        '200':
+          description: The transaction (bare object).
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            No transaction with that id, or one the credential cannot see. Siren
+            answers "No record found with that ID."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /obligations:
     get:
       tags: [Reconciliation]
