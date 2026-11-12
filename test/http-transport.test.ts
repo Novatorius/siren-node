@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
+  ApiKeyScope,
   ApiKeysResource,
   AuthenticationError,
   ConnectionError,
@@ -80,7 +81,9 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
  * never retries them on 429, 5xx or a dropped connection (slice 1, A67). Each
  * still gets one resend after a 401, because Siren refused the credential
  * before recording anything. The list covers an event of each send-once kind
- * and a management write of each method.
+ * and both management writes. The SDK's deletes are retriable today, as in
+ * the PHP SDK, and the record writes of slices 3 and 4 take the same rule
+ * through the same `retriable: false` flag.
  */
 const SEND_ONCE: Array<[string, (http: HttpTransport) => Promise<unknown>]> = [
   ['events.siteVisited', (http) => new EventsResource(http).siteVisited({ collaboratorId: 4021 })],
@@ -91,7 +94,7 @@ const SEND_ONCE: Array<[string, (http: HttpTransport) => Promise<unknown>]> = [
     (http) =>
       new WebhooksResource(http).subscriptions.create({ targetUrl: 'https://store.test/hook', events: ['*'] }),
   ],
-  ['apiKeys.revoke (DELETE)', (http) => new ApiKeysResource(http).revoke(9)],
+  ['apiKeys.create (POST)', (http) => new ApiKeysResource(http).create({ scopes: [ApiKeyScope.AllEvents] })],
 ];
 
 describe('P4: HttpTransport sends through the HttpClient seam', () => {
@@ -176,14 +179,24 @@ describe('P4: HttpTransport sends through the HttpClient seam', () => {
     expect((melted as ApiError).statusCode).toBe(500);
   });
 
-  it.skip('turns an HttpClientError into ConnectionError with the client error as cause', async () => {
+  it.skip("turns an HttpClientError into ConnectionError whose cause is the host's own error", async () => {
+    const hostError = new TypeError('fetch failed');
+    const client = new FakeHttpClient([new HttpClientError('fetch failed', { cause: hostError })]);
+
+    const error = await rejection(new RecordsResource(transport(client), '/conversions').list());
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect((error as ConnectionError).cause).toBe(hostError);
+    expect((error as ConnectionError).message).toContain('fetch failed');
+    expect(client.requests).toHaveLength(1);
+  });
+
+  it.skip('uses the HttpClientError itself as the cause when it carries none', async () => {
     const dropped = new HttpClientError('connect ECONNREFUSED 127.0.0.1:1');
     const client = new FakeHttpClient([dropped]);
 
     const error = await rejection(new RecordsResource(transport(client), '/conversions').list());
     expect(error).toBeInstanceOf(ConnectionError);
     expect((error as ConnectionError).cause).toBe(dropped);
-    expect(client.requests).toHaveLength(1);
   });
 
   it.skip('resends a retriable request after an HttpClientError while retries are left', async () => {

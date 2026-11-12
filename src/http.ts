@@ -72,8 +72,9 @@ export interface HttpClient {
 /**
  * Thrown by an {@link HttpClient} when a request produced no HTTP response.
  * Pass the host's own error as `cause` so it stays inspectable. The SDK
- * resends where the request allows it, then raises `ConnectionError` with
- * this error as its `cause`.
+ * resends where the request allows it, then raises `ConnectionError` whose
+ * `cause` is that host error, or this error when it carries none, as the
+ * PHP SDK does and as 0.3.0 did with fetch's own error.
  */
 export class HttpClientError extends Error {
   constructor(message: string, options: { cause?: unknown } = {}) {
@@ -217,7 +218,8 @@ export class HttpTransport {
    *    `maxRetries + 2` times: its first send, `maxRetries` retries and one
    *    resend after a 401.
    * 6. With no resend left, an `HttpClientError` raises `ConnectionError`
-   *    with the client's error as `cause`, and an error reply raises the
+   *    whose `cause` is the `HttpClientError`'s own `cause`, or the
+   *    `HttpClientError` when it has none, and an error reply raises the
    *    `SirenError` that `errorFromResponse` builds. Any other error from the
    *    client, or from either token method, reaches the caller unchanged and
    *    nothing more is sent.
