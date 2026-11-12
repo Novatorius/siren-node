@@ -80,6 +80,8 @@ export type {
   ListParams,
   SirenList,
 } from './types';
+export { ForwardedEventSlug, FORWARDED_EVENT_VERSION } from './connect/forwarded-events';
+export type * from './connect/forwarded-events';
 export { EventsResource } from './resources/events';
 export { WebhooksResource, WebhookSubscriptionsResource } from './resources/webhooks';
 export { ApiKeysResource } from './resources/api-keys';

@@ -1,0 +1,196 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/structures`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/structure-types`);",
+    "expect": "caught",
+    "failing": [
+      "reads the structures"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/structures`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/${'structures'}`);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/structures`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/structures`);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/structures`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/structure-types`);",
+    "expect": "wrong-reason",
+    "failing": [
+      "P6: collaboratorGroups surface"
+    ]
+  },
+  {
+    "id": "p6-list-params",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, CollaboratorGroupsResource.LIST_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, this.path, {}, CollaboratorGroupsResource.LIST_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "lists GET /collaborator-groups with filters"
+    ]
+  },
+  {
+    "id": "p6-list-filters-loose",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, CollaboratorGroupsResource.LIST_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, this.path, params, [...CollaboratorGroupsResource.LIST_FILTERS, 'propertyId']);",
+    "expect": "caught",
+    "failing": [
+      "list refuses propertyId"
+    ]
+  },
+  {
+    "id": "p6-list-path",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, CollaboratorGroupsResource.LIST_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, '/collaborator-group', params, CollaboratorGroupsResource.LIST_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "lists GET /collaborator-groups with filters"
+    ]
+  },
+  {
+    "id": "p6-retrieve-params",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id, { fields: params.fields });",
+    "expect": "caught",
+    "failing": [
+      "retrieve sends include and propertyId"
+    ]
+  },
+  {
+    "id": "p6-retrieve-fields",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id, { ...params, fields: undefined });",
+    "expect": "caught",
+    "failing": [
+      "retrieves GET /collaborator-groups/{id} with fields"
+    ]
+  },
+  {
+    "id": "p6-retrieve-path",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, `${this.path}s`, id, params);",
+    "expect": "caught",
+    "failing": [
+      "retrieves GET /collaborator-groups/{id} with fields"
+    ]
+  },
+  {
+    "id": "p6-create-method",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "creates with POST /collaborator-groups"
+    ]
+  },
+  {
+    "id": "p6-create-body",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { name: params.name });",
+    "expect": "caught",
+    "failing": [
+      "creates with POST /collaborator-groups"
+    ]
+  },
+  {
+    "id": "p6-update-method",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', `${this.path}/${group}`, params);",
+    "expect": "caught",
+    "failing": [
+      "updates with PUT /collaborator-groups/{id}"
+    ]
+  },
+  {
+    "id": "p6-update-id",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    const group = recordId(id, 'update');",
+    "replace": "    const group = id;",
+    "expect": "caught",
+    "failing": [
+      "update refuses a bad id"
+    ]
+  },
+  {
+    "id": "p6-delete-id",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    const group = recordId(id, 'delete');",
+    "replace": "    const group = id;",
+    "expect": "caught",
+    "failing": [
+      "delete refuses a bad id"
+    ]
+  },
+  {
+    "id": "p6-delete-path",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${group}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${group}/delete`);",
+    "expect": "caught",
+    "failing": [
+      "deletes with DELETE /collaborator-groups/{id}"
+    ]
+  },
+  {
+    "id": "p6-update-retried",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params).catch(() => writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p6-delete-retried",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${group}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${group}`).catch(() => deleteRecord<T>(this.http, `${this.path}/${group}`));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p6-structures-as-list",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/structures`);",
+    "replace": "    return listRecords<RegistryOptions>(this.http, `${this.path}/structures`, {}, []) as unknown as Promise<RegistryOptions>;",
+    "expect": "caught",
+    "failing": [
+      "reads the structures"
+    ]
+  }
+]

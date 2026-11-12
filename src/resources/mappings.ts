@@ -1,7 +1,22 @@
+import { SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
+import { PropertyQualifier } from '../property-qualifier';
 import type { DeletedResult, Mapping, MappingListParams, MappingPageParams } from '../record-types';
 import type { SirenList } from '../types';
+import { deleteRecord, listRecords, recordId, writeRecord } from './record-requests';
 import { RecordsResource } from './records';
+
+/** Returns the external id trimmed. Throws `SirenError` before sending when it is not a string or nothing is left once trimmed. */
+function externalIdOf(id: unknown): string {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (trimmed === '') throw new SirenError('Send externalId as a string that is not blank.');
+  return trimmed;
+}
+
+/** The link as the caller sent it: the plain external type, with the Property beside it. */
+function plainMapping(row: Mapping | Record<string, unknown>): Mapping {
+  return PropertyQualifier.plainRecord(row as Record<string, unknown>, 'externalType') as unknown as Mapping;
+}
 
 /**
  * Mappings (`/mappings`): links between a Siren record and a record outside
@@ -68,10 +83,20 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * back through `PropertyQualifier.plainRecord(row, 'externalType')`, and
    * the list keeps Siren's `estimatedCount`.
    */
-  override list(params: MappingListParams = {}): Promise<SirenList<Mapping>> {
-    // Stub: slice 4 packet P6
-    void params;
-    return Promise.resolve([] as unknown as SirenList<Mapping>);
+  override async list(params: MappingListParams = {}): Promise<SirenList<Mapping>> {
+    const query = { ...params, externalType: PropertyQualifier.assertName(params.externalType, 'externalType') };
+    if (params.localType !== undefined) PropertyQualifier.assertName(params.localType, 'localType');
+    const rows = await listRecords<Mapping>(this.http, this.path, query, MappingsResource.LIST_FILTERS, MappingsResource.ID_FILTERS);
+    const plain = rows.map(plainMapping) as SirenList<Mapping>;
+    if (rows.estimatedCount !== undefined) {
+      Object.defineProperty(plain, 'estimatedCount', {
+        value: rows.estimatedCount,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      });
+    }
+    return plain;
   }
 
   /**
@@ -80,18 +105,13 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * `externalType` and, when given, `localType`, then the paging and
    * sorting in `params`. A `localType` of `undefined` is left out.
    */
-  forExternal(
+  async forExternal(
     externalId: string,
     externalType: string,
     localType?: string,
     params: MappingPageParams = {},
   ): Promise<SirenList<Mapping>> {
-    // Stub: slice 4 packet P6
-    void externalId;
-    void externalType;
-    void localType;
-    void params;
-    return Promise.resolve([] as unknown as SirenList<Mapping>);
+    return this.list({ externalId: externalIdOf(externalId), externalType, localType, ...params });
   }
 
   /**
@@ -99,13 +119,9 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * WordPress user a collaborator belongs to: {@link list} with `localId`,
    * `localType` and `externalType`, then the paging and sorting in `params`.
    */
-  forLocal(localId: number, localType: string, externalType: string, params: MappingPageParams = {}): Promise<SirenList<Mapping>> {
-    // Stub: slice 4 packet P6
-    void localId;
-    void localType;
-    void externalType;
-    void params;
-    return Promise.resolve([] as unknown as SirenList<Mapping>);
+  async forLocal(localId: number, localType: string, externalType: string, params: MappingPageParams = {}): Promise<SirenList<Mapping>> {
+    // list checks all three: localId through ID_FILTERS, and both types by name.
+    return this.list({ localId, localType, externalType, ...params });
   }
 
   /**
@@ -117,12 +133,14 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * asked for, so a caller whose first send lost its answer can treat it as
    * made.
    */
-  create(collaboratorId: number, externalId: string, externalType: string): Promise<Mapping> {
-    // Stub: slice 4 packet P6
-    void collaboratorId;
-    void externalId;
-    void externalType;
-    return Promise.resolve({ localId: 1, localType: '', externalId: '', externalType: '' });
+  async create(collaboratorId: number, externalId: string, externalType: string): Promise<Mapping> {
+    const body = {
+      localId: recordId(collaboratorId, 'mappings.create', 'collaboratorId'),
+      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,
+      externalId: externalIdOf(externalId),
+      externalType: PropertyQualifier.assertName(externalType, 'externalType'),
+    };
+    return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));
   }
 
   /**
@@ -132,11 +150,12 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * lost answer is safe. Answers `{ deleted: true }`, and throws
    * `UnexpectedResponseError` when a 2xx carries no object.
    */
-  deleteForCollaborator(collaboratorId: number, externalType: string): Promise<DeletedResult> {
-    // Stub: slice 4 packet P6
-    void collaboratorId;
-    void externalType;
-    return Promise.resolve({ deleted: false });
+  async deleteForCollaborator(collaboratorId: number, externalType: string): Promise<DeletedResult> {
+    return this.deleteLinks({
+      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,
+      localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),
+      externalType: PropertyQualifier.assertName(externalType, 'externalType'),
+    });
   }
 
   /**
@@ -146,10 +165,20 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * error, so a resend after a lost answer is safe. Answers `{ deleted: true }`, and throws `UnexpectedResponseError`
    * when a 2xx carries no object.
    */
-  deleteForExternal(externalId: string, externalType: string): Promise<DeletedResult> {
-    // Stub: slice 4 packet P6
-    void externalId;
-    void externalType;
-    return Promise.resolve({ deleted: false });
+  async deleteForExternal(externalId: string, externalType: string): Promise<DeletedResult> {
+    return this.deleteLinks({
+      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,
+      externalId: externalIdOf(externalId),
+      externalType: PropertyQualifier.assertName(externalType, 'externalType'),
+    });
+  }
+
+  /** Sends `DELETE /mappings` with `query` and no body, once, and requires an object back. */
+  private async deleteLinks(query: Record<string, string | number>): Promise<DeletedResult> {
+    const answer = await deleteRecord<DeletedResult>(this.http, this.path, query);
+    if (answer === null) {
+      throw new UnexpectedResponseError(`Siren answered DELETE ${this.path} with no body.`, { statusCode: 204 });
+    }
+    return answer;
   }
 }
