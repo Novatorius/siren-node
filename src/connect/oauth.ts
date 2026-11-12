@@ -1,5 +1,9 @@
 import { ConnectorScope } from '../auth/connector-scope';
-import { DEFAULT_BASE_URL } from '../http';
+import { ConnectionError, SirenError, UnexpectedResponseError, errorFromResponse } from '../errors';
+import { DEFAULT_BASE_URL, FetchHttpClient, HttpClientError } from '../http';
+import type { HttpClient, HttpResponse } from '../http';
+import { OAuthError } from './errors';
+import { ConnectorSoftware } from './types';
 import type {
   OAuthAuthorizeParams,
   OAuthClientOptions,
@@ -19,6 +23,14 @@ export const DEFAULT_CONSENT_SCREEN_URL = 'https://api.sirenaffiliates.com/conne
  * REFRESH_REUSE_GRACE_SECONDS`).
  */
 export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;
+
+/** The SDK's `User-Agent`, the one `HttpTransport` sends. */
+const USER_AGENT = 'siren-sdk-typescript/0.3.0';
+
+/** The only shape an S256 challenge has: 43 base64url characters, no padding. */
+const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
+
+const SOFTWARE_IDS: readonly string[] = Object.values(ConnectorSoftware);
 
 /**
  * Siren Cloud's OAuth provider, as a connected site calls it: register once,
@@ -59,14 +71,21 @@ export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;
  *   it.
  */
 export class OAuthClient {
+  private readonly client: HttpClient;
+  private readonly baseUrl: string;
+  private readonly consentScreenUrl: string;
+  private readonly timeout: number;
+
   /**
    * Throws `SirenError`, as `new Siren()` does, for an `httpClient` without a
    * `send` function, `null` included.
    */
   constructor(options: OAuthClientOptions = {}) {
-    // Stub: slice 5 packet P2.
-    void options;
-    void DEFAULT_BASE_URL;
+    const given: OAuthClientOptions = options ?? {};
+    this.client = resolveHttpClient(given.httpClient);
+    this.baseUrl = (given.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.consentScreenUrl = given.consentScreenUrl ?? DEFAULT_CONSENT_SCREEN_URL;
+    this.timeout = given.timeout ?? DEFAULT_OAUTH_TIMEOUT_MS;
   }
 
   /**
@@ -80,17 +99,24 @@ export class OAuthClient {
    * `ConnectorSoftware` value.
    */
   async register(params: OAuthRegisterParams): Promise<OAuthClientRegistration> {
-    // Stub: slice 5 packet P2.
-    void params;
-    void ConnectorScope;
-    return {
-      client_id: '',
-      client_name: '',
-      redirect_uris: [],
-      grant_types: [],
-      token_endpoint_auth_method: 'none',
-      scope: '',
+    const { clientName, redirectUris, scope, softwareId } = params ?? ({} as OAuthRegisterParams);
+    if (typeof clientName !== 'string' || clientName.trim() === '') {
+      throw new SirenError('Siren: register needs a clientName that is not empty.');
+    }
+    if (!Array.isArray(redirectUris) || redirectUris.length === 0 || !redirectUris.every(isFilled)) {
+      throw new SirenError('Siren: register needs redirectUris, a list of one or more non-empty strings.');
+    }
+    if (softwareId !== undefined && !SOFTWARE_IDS.includes(softwareId)) {
+      throw new SirenError(`Siren: register needs a softwareId from ConnectorSoftware (${SOFTWARE_IDS.join(', ')}).`);
+    }
+
+    const body: Record<string, unknown> = {
+      client_name: clientName,
+      redirect_uris: redirectUris,
+      scope: scope ?? ConnectorScope.CONNECTED_SITE,
     };
+    if (softwareId !== undefined) body.software_id = softwareId;
+    return this.send<OAuthClientRegistration>('/oauth/register', body, ['client_id'], []);
   }
 
   /**
@@ -108,9 +134,23 @@ export class OAuthClient {
    * quotes the value it refused.
    */
   authorizeUrl(params: OAuthAuthorizeParams): string {
-    // Stub: slice 5 packet P2.
-    void params;
-    return DEFAULT_CONSENT_SCREEN_URL;
+    const { clientId, redirectUri, state, codeChallenge, scope } = params ?? ({} as OAuthAuthorizeParams);
+    requireFilled('authorizeUrl', { clientId, redirectUri, state });
+    if (typeof codeChallenge !== 'string' || !S256_CHALLENGE.test(codeChallenge)) {
+      throw new SirenError(
+        'Siren: authorizeUrl needs codeChallenge to be codeChallengeS256(verifier), 43 characters of A-Z, a-z, 0-9, "-" and "_". Never pass the verifier itself.',
+      );
+    }
+
+    const query = new URLSearchParams();
+    query.append('client_id', clientId);
+    query.append('redirect_uri', redirectUri);
+    query.append('code_challenge', codeChallenge);
+    query.append('code_challenge_method', 'S256');
+    query.append('state', state);
+    query.append('scope', scope ?? ConnectorScope.CONNECTED_SITE);
+    const separator = this.consentScreenUrl.includes('?') ? '&' : '?';
+    return `${this.consentScreenUrl}${separator}${query.toString()}`;
   }
 
   /**
@@ -124,9 +164,21 @@ export class OAuthClient {
    * than sending the code again.
    */
   async exchangeCode(params: OAuthExchangeCodeParams): Promise<OAuthTokenResponse> {
-    // Stub: slice 5 packet P2.
-    void params;
-    return { access_token: '', token_type: 'Bearer', expires_in: 0, scope: '', refresh_token: '' };
+    const { clientId, code, redirectUri, codeVerifier } = params ?? ({} as OAuthExchangeCodeParams);
+    requireFilled('exchangeCode', { clientId, code, redirectUri, codeVerifier });
+
+    return this.send<OAuthTokenResponse>(
+      '/oauth/token',
+      {
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        code,
+        redirect_uri: redirectUri,
+        code_verifier: codeVerifier,
+      },
+      ['access_token', 'refresh_token'],
+      [code, codeVerifier],
+    );
   }
 
   /**
@@ -149,8 +201,132 @@ export class OAuthClient {
    * empty, or `attemptId` is given and empty.
    */
   async refresh(params: OAuthRefreshParams): Promise<OAuthTokenResponse> {
-    // Stub: slice 5 packet P2.
-    void params;
-    return { access_token: '', token_type: 'Bearer', expires_in: 0, scope: '', refresh_token: '' };
+    const { clientId, refreshToken, attemptId } = params ?? ({} as OAuthRefreshParams);
+    requireFilled('refresh', { clientId, refreshToken });
+    if (attemptId !== undefined) requireFilled('refresh', { attemptId });
+
+    const body: Record<string, unknown> = { grant_type: 'refresh_token', client_id: clientId, refresh_token: refreshToken };
+    const secrets = [refreshToken];
+    if (attemptId !== undefined) {
+      body.attempt_id = attemptId;
+      secrets.push(attemptId);
+    }
+    return this.send<OAuthTokenResponse>('/oauth/token', body, ['access_token', 'refresh_token'], secrets);
   }
+
+  /**
+   * Sends one JSON `POST` to `{baseUrl}{path}`, once, and maps the answer as
+   * the class comment says. `needs` names the fields a 2xx body must carry
+   * as non-empty strings. `secrets` are the values this call sent that no
+   * error may show.
+   */
+  private async send<T>(path: string, body: Record<string, unknown>, needs: readonly string[], secrets: readonly string[]): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    let reply: HttpResponse;
+    try {
+      reply = await this.client.send({
+        method: 'POST',
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent': USER_AGENT,
+        },
+        body: JSON.stringify(body),
+        timeout: this.timeout,
+      });
+    } catch (error) {
+      if (!(error instanceof HttpClientError)) throw error;
+      throw new ConnectionError(
+        `Siren: POST ${url} failed: ${redact(error.message, secrets)}`,
+        error.cause !== undefined ? { cause: error.cause } : {},
+      );
+    }
+
+    const status = reply.status;
+    const answer = parseJson(reply.body);
+
+    if (status >= 200 && status < 300) {
+      if (isJsonObject(answer) && needs.every((field) => isFilled(answer[field]))) return answer as T;
+      throw new UnexpectedResponseError(
+        `Siren: POST ${path} answered ${status} without a JSON object holding ${needs.join(' and ')}.`,
+        { statusCode: status },
+      );
+    }
+
+    if (status >= 300 && status < 400) {
+      throw new SirenError(`Siren: POST ${path} answered a redirect (${status}), which the SDK never follows.`, {
+        statusCode: status,
+      });
+    }
+
+    if ((status === 400 || status === 401) && isJsonObject(answer) && isFilled(answer.error)) {
+      const description = isFilled(answer.error_description) ? answer.error_description : answer.error;
+      throw new OAuthError(description, { code: answer.error, statusCode: status });
+    }
+
+    throw errorFromResponse(status, reply.statusText ?? '', answer, headerOf(reply, 'retry-after'));
+  }
+}
+
+/** A non-empty string. */
+function isFilled(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/** Throws `SirenError` naming the first field that is not a non-empty string, never its value. */
+function requireFilled(method: string, fields: Record<string, unknown>): void {
+  for (const [name, value] of Object.entries(fields)) {
+    if (!isFilled(value)) throw new SirenError(`Siren: ${method} needs ${name} to be a non-empty string.`);
+  }
+}
+
+/** A JSON object, not an array or `null`. */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The parsed body, or `undefined` when it is empty or not JSON. */
+function parseJson(text: string): unknown {
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A reply header, looked up in any case. */
+function headerOf(reply: HttpResponse, name: string): string | null {
+  const wanted = name.toLowerCase();
+  const found = Object.entries(reply.headers ?? {}).find(([key]) => key.toLowerCase() === wanted);
+  return found ? found[1] : null;
+}
+
+/**
+ * Replaces every occurrence of every secret in `text` in one pass, longest
+ * first, so a secret that holds another is removed whole. The same rule as
+ * the transport's token scrub.
+ */
+function redact(text: string, secrets: readonly string[]): string {
+  const filled = [...new Set(secrets.filter(isFilled))];
+  if (filled.length === 0) return text;
+  const pattern = filled
+    .sort((a, b) => b.length - a.length)
+    .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  return text.replace(new RegExp(pattern, 'g'), '[redacted]');
+}
+
+/**
+ * Answers the given `httpClient`, any object with a `send` function, or a
+ * `FetchHttpClient` that reads the global fetch at each send when the
+ * option is absent. The same rule as `new Siren()`.
+ */
+function resolveHttpClient(httpClient: unknown): HttpClient {
+  if (httpClient === undefined) return new FetchHttpClient();
+  if (typeof httpClient === 'object' && httpClient !== null && typeof (httpClient as HttpClient).send === 'function') {
+    return httpClient as HttpClient;
+  }
+  throw new SirenError('Siren: httpClient must be an object with a send function.');
 }
