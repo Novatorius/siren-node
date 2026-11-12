@@ -242,6 +242,101 @@ console.log(conversions.estimatedCount); // total across all pages, if known
 
 Pages hold up to 200 records, and Siren's default page size is 10.
 
+## Collaborators and programs
+
+The client reads and writes the records a connector works with: collaborators with their codes and
+program enrollments, collaborator groups with their members, programs and program groups. Each
+record resource takes a dashboard session's token, or a connected site's token on the routes Siren
+opens to sites.
+
+```ts
+import { CollaboratorBulkAction, Siren } from '@novatorius/siren';
+
+// siren.collaborators: list, retrieve, create, update, delete, bulk
+const active = await siren.collaborators.list({ status: 'active', perPage: 50 });
+const ada = await siren.collaborators.retrieve(42, { fields: ['id', 'fullName', 'referralCode'] });
+await siren.collaborators.bulk(CollaboratorBulkAction.AddToProgram, [42, 43], { programId: 7 });
+```
+
+A connected site creates a collaborator with `createPending`, which sends `fullName`, `nickname`,
+`email` and an optional `trackingId` with `status: 'pending'` so the organization approves them,
+and throws `SirenError` for any other field. The site changes a collaborator only with `updateDetails`, which sends
+`fullName` and `nickname` and throws `SirenError` for any other key.
+
+```ts
+const pending = await siren.collaborators.createPending({
+  fullName: 'Ada Lovelace',
+  nickname: 'ada',
+  email: 'ada@example.com',
+});
+await siren.collaborators.updateDetails(pending.id, { nickname: 'countess' });
+```
+
+`siren.collaborators.aliases` reads and gives out tracking and coupon codes. Siren files a
+connected site's codes under its Property, as in `coupon@property:5`. `query`, `findByCode`,
+`forCollaborator` and `create` answer each code with the plain type and the Property in
+`propertyId`, through `PropertyQualifier`, so send and compare plain types. `list` reads the
+collaborator record's own `aliases` field and answers each type as Siren stores it, as the PHP SDK
+does. `create` raises `CodeConflictError` when another collaborator already holds
+the code. Siren's 409 does not name the holder, so read `findByCode` before treating the code as
+someone else's.
+
+```ts
+import { CodeConflictError, CollaboratorAliasType } from '@novatorius/siren';
+
+try {
+  await siren.collaborators.aliases.create('SAVE10', CollaboratorAliasType.Coupon, 42);
+} catch (error) {
+  if (!(error instanceof CodeConflictError)) throw error;
+  const holder = await siren.collaborators.aliases.findByCode('SAVE10', CollaboratorAliasType.Coupon);
+  if (holder?.collaboratorId !== 42) throw error;
+}
+```
+
+`siren.collaborators.enrollments` enrolls collaborators in programs and reads who belongs where.
+
+```ts
+await siren.collaborators.enrollments.add(42, 7);
+const enrolled = await siren.collaborators.enrollments.programsFor(42);
+const members = await siren.collaborators.enrollments.collaboratorsIn(7, { status: 'active' });
+```
+
+`siren.collaboratorGroups` manages named sets of collaborators, and `siren.collaboratorGroups.members`
+manages who is in each one.
+
+```ts
+const group = await siren.collaboratorGroups.create({ name: 'Podcasters', structure: 'flat' });
+await siren.collaboratorGroups.members.add(group.id, [{ collaboratorId: 42 }]);
+const inGroup = await siren.collaboratorGroups.members.list(group.id);
+```
+
+`siren.programs` and `siren.programGroups` manage programs and the groups whose programs compete
+for one engagement.
+
+```ts
+import { ProgramGroupSorter } from '@novatorius/siren';
+
+const activePrograms = await siren.programs.list({ status: 'active' });
+const currencies = await siren.programs.currencyTypes();
+await siren.programGroups.create({
+  name: 'Launch partners',
+  description: 'Programs that compete for launch sales',
+  sorter: ProgramGroupSorter.NewestBindingWins,
+});
+```
+
+Every record write is sent once: create, update, delete, bulk, the enrollment and member writes,
+and the code writes. A write's answer is lost when it throws `ConnectionError` or a 5xx `ApiError`,
+and each method's doc says how to find out what Siren did before you send it again. Reads retry on
+a network error, 429 or 5xx, like the other reads. A caller that runs these calls from its own
+durable queue builds the client with `maxRetries: 0`, so the queue owns every retry.
+
+Each list sends only the filters its route reads. A list throws `SirenError` for a key its route
+does not read, before sending, because Siren ignores an unknown key and would answer every record.
+An empty filter list throws `SirenError` too, since leaving it out would also answer every record.
+A filter value holding a comma throws as well, because Siren reads a comma as "any of". Only
+`fields` and the search text `s` may hold one. Every id must be a positive whole number.
+
 ## Storefront module (browser)
 
 Siren's storefront routes are public, because a shopper's browser calls them. The

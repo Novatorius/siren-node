@@ -48,6 +48,10 @@ export function toListQuery(params: ListParams): Query {
  * `ledger:conversions:read`, or a dashboard session's access token. A key
  * bound to one store reads only its own store's conversions, transactions
  * and obligations, and is refused on payouts with a `StoreKeyNotAllowedError`.
+ *
+ * The record resources that extend it (collaborators, collaborator groups,
+ * programs and program groups) replace `list` with a stricter one that
+ * refuses a key its route does not read, and their own docs govern.
  */
 export class RecordsResource<T = Record<string, unknown>> {
   constructor(

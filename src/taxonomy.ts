@@ -6,7 +6,11 @@
  * Each one is a `const` object with a union type of the same name, as
  * `WebhookEventType` and `ApiKeyScope` are. The values match the Siren PHP
  * SDK's classes of the same names, and where the Siren service lists more
- * values than the PHP SDK, the service's list wins.
+ * values than the PHP SDK, the service's list wins. The bulk actions and
+ * alias types come from constants on the PHP SDK's resource classes instead
+ * (`Collaborators::BULK_*`, `Programs::BULK_*`, `ProgramGroups::BULK_DELETE`
+ * and `CollaboratorAliases::TYPE_*`), and `ProgramGroupSorter` matches its
+ * PHP class.
  *
  * ```ts
  * const approved = await siren.conversions.list({ status: ConversionStatus.Approved });
@@ -213,3 +217,66 @@ export const CustomCurrencyType = {
 
 /** Union of the {@link CustomCurrencyType} strings. */
 export type CustomCurrencyType = (typeof CustomCurrencyType)[keyof typeof CustomCurrencyType];
+
+/** The bulk actions `collaborators.bulk()` runs, as Siren names them. */
+export const CollaboratorBulkAction = {
+  Activate: 'activate',
+  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */
+  Reject: 'reject',
+  Deactivate: 'deactivate',
+  Restore: 'restore',
+  Delete: 'delete',
+  PermanentDelete: 'permanent_delete',
+  /** Needs `{ programId }` in `extra`. */
+  AddToProgram: 'addToProgram',
+  /** Needs `{ programId }` in `extra`. */
+  RemoveFromProgram: 'removeFromProgram',
+  /** Needs `{ distributorId }` in `extra`. */
+  AddToDistributor: 'addToDistributor',
+  /** Needs `{ distributorId }` in `extra`. */
+  RemoveFromDistributor: 'removeFromDistributor',
+  SendSignupEmail: 'sendSignupEmail',
+} as const;
+
+/** Union of the {@link CollaboratorBulkAction} strings. */
+export type CollaboratorBulkAction = (typeof CollaboratorBulkAction)[keyof typeof CollaboratorBulkAction];
+
+/** The plain code types Siren gives out. A credit coupon's type is `credit_coupon_{CURRENCY}`. */
+export const CollaboratorAliasType = {
+  Tracking: 'tracking',
+  Coupon: 'coupon',
+} as const;
+
+/** Union of the {@link CollaboratorAliasType} strings. */
+export type CollaboratorAliasType = (typeof CollaboratorAliasType)[keyof typeof CollaboratorAliasType];
+
+/** The bulk actions `programs.bulk()` runs, as Siren names them. */
+export const ProgramBulkAction = {
+  Activate: 'activate',
+  Deactivate: 'deactivate',
+  Restore: 'restore',
+  Delete: 'delete',
+  PermanentDelete: 'permanent_delete',
+} as const;
+
+/** Union of the {@link ProgramBulkAction} strings. */
+export type ProgramBulkAction = (typeof ProgramBulkAction)[keyof typeof ProgramBulkAction];
+
+/** How a program group picks the winning program when several could claim the same engagement. */
+export const ProgramGroupSorter = {
+  /** The program the opportunity was bound to first wins. */
+  OldestBindingWins: 'oldestBindingWins',
+  /** The program the opportunity was bound to most recently wins. */
+  NewestBindingWins: 'newestBindingWins',
+} as const;
+
+/** Union of the {@link ProgramGroupSorter} strings. */
+export type ProgramGroupSorter = (typeof ProgramGroupSorter)[keyof typeof ProgramGroupSorter];
+
+/** The bulk actions `programGroups.bulk()` runs, as Siren names them. */
+export const ProgramGroupBulkAction = {
+  Delete: 'delete',
+} as const;
+
+/** Union of the {@link ProgramGroupBulkAction} strings. */
+export type ProgramGroupBulkAction = (typeof ProgramGroupBulkAction)[keyof typeof ProgramGroupBulkAction];

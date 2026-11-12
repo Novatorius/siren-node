@@ -88,4 +88,28 @@ export { ApiKeysResource } from './resources/api-keys';
 export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';
 export type { RetrieveParams } from './resources/records';
 
+// Slice 3 adds these in their own block so it merges cleanly with slice 5.
+export {
+  CollaboratorBulkAction,
+  CollaboratorAliasType,
+  ProgramBulkAction,
+  ProgramGroupSorter,
+  ProgramGroupBulkAction,
+} from './taxonomy';
+export { PropertyQualifier } from './property-qualifier';
+export {
+  CollaboratorsResource,
+  COLLABORATOR_BINDING_FIELDS,
+  SITE_CREATABLE_COLLABORATOR_FIELDS,
+  SITE_UPDATABLE_COLLABORATOR_FIELDS,
+} from './resources/collaborators';
+export { CollaboratorAliasesResource } from './resources/collaborator-aliases';
+export { ProgramEnrollmentsResource } from './resources/program-enrollments';
+export { CollaboratorGroupsResource } from './resources/collaborator-groups';
+export { CollaboratorGroupMembersResource } from './resources/collaborator-group-members';
+export { ProgramsResource } from './resources/programs';
+export { ProgramGroupsResource } from './resources/program-groups';
+export { MAX_BULK_IDS } from './resources/record-requests';
+export type * from './record-types';
+
 export { Siren as default } from './client';

@@ -1,0 +1,372 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/property-qualifier.ts",
+    "find": "    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) };",
+    "replace": "    return { ...record };",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.plainRecord"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (at < 0) return null;",
+    "replace": "    if (at < 0 || at === -1) return null;",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/property-qualifier.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (at < 0) return null;",
+    "replace": "    if (at < 0) return null;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/property-qualifier.ts",
+    "find": "    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) };",
+    "replace": "    return { ...record };",
+    "expect": "wrong-reason",
+    "failing": [
+      "P2: PropertyQualifier constants"
+    ]
+  },
+  {
+    "id": "p2-property-unsafe",
+    "file": "src/property-qualifier.ts",
+    "find": "    return Number.isSafeInteger(property) ? property : null;",
+    "replace": "    return property;",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.propertyOf"
+    ]
+  },
+  {
+    "id": "p2-property-negative",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (!/^[0-9]+$/.test(digits)) return null;",
+    "replace": "    if (!/^-?[0-9]+$/.test(digits)) return null;",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.propertyOf"
+    ]
+  },
+  {
+    "id": "p2-property-empty",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (!/^[0-9]+$/.test(digits)) return null;",
+    "replace": "    if (!/^[0-9]*$/.test(digits)) return null;",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.propertyOf"
+    ]
+  },
+  {
+    "id": "p2-property-no-suffix",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (at < 0) return null;",
+    "replace": "    if (at < 0) return 0;",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.propertyOf"
+    ]
+  },
+  {
+    "id": "p2-first-separator",
+    "file": "src/property-qualifier.ts",
+    "find": "    const at = name.lastIndexOf(PropertyQualifier.SEPARATOR);",
+    "replace": "    const at = name.indexOf(PropertyQualifier.SEPARATOR);",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.unqualify"
+    ]
+  },
+  {
+    "id": "p2-unqualify-any-tail",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (PropertyQualifier.propertyOf(name) === null) return name;",
+    "replace": "    if (!name.includes(PropertyQualifier.SEPARATOR)) return name;",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.unqualify"
+    ]
+  },
+  {
+    "id": "p2-unqualify-unsafe",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (PropertyQualifier.propertyOf(name) === null) return name;",
+    "replace": "    if (!/@property:[0-9]+$/.test(name)) return name;",
+    "expect": "caught",
+    "failing": [
+      "unqualify(\"coupon@property:99999999999999999999\")",
+      "leaves a suffix that is not a safe integer on"
+    ]
+  },
+  {
+    "id": "p2-unqualify-first-cut",
+    "file": "src/property-qualifier.ts",
+    "find": "    return name.slice(0, name.lastIndexOf(PropertyQualifier.SEPARATOR));",
+    "replace": "    return name.slice(0, name.indexOf(PropertyQualifier.SEPARATOR));",
+    "expect": "caught",
+    "failing": [
+      "unqualify(\"coupon@property:5@property:6\")"
+    ]
+  },
+  {
+    "id": "p2-name-multiline",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof name === 'string' && PropertyQualifier.NAME_PATTERN.test(name);",
+    "replace": "return typeof name === 'string' && /^[A-Za-z0-9_-]+$/m.test(name);",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.isValidName"
+    ]
+  },
+  {
+    "id": "p2-name-empty",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof name === 'string' && PropertyQualifier.NAME_PATTERN.test(name);",
+    "replace": "return typeof name === 'string' && /^[A-Za-z0-9_-]*$/.test(name);",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.isValidName"
+    ]
+  },
+  {
+    "id": "p2-name-unicode",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof name === 'string' && PropertyQualifier.NAME_PATTERN.test(name);",
+    "replace": "return typeof name === 'string' && /^[\\p{L}0-9_-]+$/u.test(name);",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.isValidName"
+    ]
+  },
+  {
+    "id": "p2-name-dot",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof name === 'string' && PropertyQualifier.NAME_PATTERN.test(name);",
+    "replace": "return typeof name === 'string' && /^[A-Za-z0-9_.-]+$/.test(name);",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.isValidName"
+    ]
+  },
+  {
+    "id": "p2-name-not-string",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof name === 'string' && PropertyQualifier.NAME_PATTERN.test(name);",
+    "replace": "return PropertyQualifier.NAME_PATTERN.test(name as string);",
+    "expect": "caught",
+    "failing": [
+      "refuses a number",
+      "refuses null",
+      "refuses undefined"
+    ]
+  },
+  {
+    "id": "p2-assert-unchecked",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (!PropertyQualifier.isValidName(name)) {",
+    "replace": "    if (typeof name !== 'string') {",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.assertName > throws SirenError"
+    ]
+  },
+  {
+    "id": "p2-assert-message",
+    "file": "src/property-qualifier.ts",
+    "find": "underscores and hyphens only. Siren adds the site's Property itself.`",
+    "replace": "underscores and hyphens only. Siren adds the Property.`",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.assertName"
+    ]
+  },
+  {
+    "id": "p2-assert-field",
+    "file": "src/property-qualifier.ts",
+    "find": "`Send ${field} as letters, digits, underscores and hyphens only.",
+    "replace": "`Send the name as letters, digits, underscores and hyphens only.",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.assertName"
+    ]
+  },
+  {
+    "id": "p2-assert-returns-other",
+    "file": "src/property-qualifier.ts",
+    "find": "    return name;\n  },",
+    "replace": "    return `${name}`.toUpperCase();\n  },",
+    "expect": "caught",
+    "failing": [
+      "returns a valid name unchanged"
+    ]
+  },
+  {
+    "id": "p2-codetype-not-name",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (PropertyQualifier.isValidName(type)) return true;",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.isValidCodeType > accepts \"coupon\"",
+      "accepts \"credit_coupon_PTS\""
+    ]
+  },
+  {
+    "id": "p2-codetype-no-source",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof type === 'string' && PropertyQualifier.CODE_TYPE_PATTERN.test(type);",
+    "replace": "return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts \"coupon@source:wc\""
+    ]
+  },
+  {
+    "id": "p2-codetype-loose",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof type === 'string' && PropertyQualifier.CODE_TYPE_PATTERN.test(type);",
+    "replace": "return typeof type === 'string' && /^\\w+@source:[a-zA-Z0-9_-]{1,64}/.test(type);",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.isValidCodeType > refuses"
+    ]
+  },
+  {
+    "id": "p2-codetype-short",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof type === 'string' && PropertyQualifier.CODE_TYPE_PATTERN.test(type);",
+    "replace": "return typeof type === 'string' && /^coupon@source:[a-z0-9]{1,31}$/.test(type);",
+    "expect": "caught",
+    "failing": [
+      "accepts \"coupon@source:edd-2\"",
+      "accepts \"coupon@source:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""
+    ]
+  },
+  {
+    "id": "p2-codetype-multiline",
+    "file": "src/property-qualifier.ts",
+    "find": "return typeof type === 'string' && PropertyQualifier.CODE_TYPE_PATTERN.test(type);",
+    "replace": "return typeof type === 'string' && /^coupon@source:[a-z0-9_-]{1,32}$/m.test(type);",
+    "expect": "caught",
+    "failing": [
+      "refuses a source with a trailing newline"
+    ]
+  },
+  {
+    "id": "p2-assertcode-unchecked",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (!PropertyQualifier.isValidCodeType(type)) {",
+    "replace": "    if (typeof type !== 'string') {",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.assertCodeType > throws SirenError"
+    ]
+  },
+  {
+    "id": "p2-codetype-message",
+    "file": "src/property-qualifier.ts",
+    "find": "or as coupon@source:{integration}. Siren adds the site's Property itself.`",
+    "replace": "or as coupon@source:{integration}.`",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.assertCodeType"
+    ]
+  },
+  {
+    "id": "p2-codetype-field",
+    "file": "src/property-qualifier.ts",
+    "find": "`Send ${field} as letters, digits, underscores and hyphens, or",
+    "replace": "`Send the type as letters, digits, underscores and hyphens, or",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.assertCodeType"
+    ]
+  },
+  {
+    "id": "p2-assertcode-returns-other",
+    "file": "src/property-qualifier.ts",
+    "find": "    return type;\n  },",
+    "replace": "    return `${type}`.toUpperCase();\n  },",
+    "expect": "caught",
+    "failing": [
+      "returns \"coupon\" unchanged",
+      "returns \"coupon@source:wc\" unchanged"
+    ]
+  },
+  {
+    "id": "p2-plain-mutates",
+    "file": "src/property-qualifier.ts",
+    "find": "    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) };",
+    "replace": "    return Object.assign(record, { [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) });",
+    "expect": "caught",
+    "failing": [
+      "never changes the record passed in"
+    ]
+  },
+  {
+    "id": "p2-plain-copy-nonstring",
+    "file": "src/property-qualifier.ts",
+    "find": "    if (typeof value !== 'string') return record;",
+    "replace": "    if (typeof value !== 'string') return { ...record };",
+    "expect": "caught",
+    "failing": [
+      "as the same object"
+    ]
+  },
+  {
+    "id": "p2-plain-no-property",
+    "file": "src/property-qualifier.ts",
+    "find": "    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) };",
+    "replace": "    return { ...record, [field]: PropertyQualifier.unqualify(value) };",
+    "expect": "caught",
+    "failing": [
+      "P2: PropertyQualifier.plainRecord"
+    ]
+  },
+  {
+    "id": "p2-plain-undefined-property",
+    "file": "src/property-qualifier.ts",
+    "find": "    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) };",
+    "replace": "    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) ?? undefined };",
+    "expect": "caught",
+    "failing": [
+      "records a null Property"
+    ]
+  },
+  {
+    "id": "p2-plain-not-unqualified",
+    "file": "src/property-qualifier.ts",
+    "find": "    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) };",
+    "replace": "    return { ...record, [field]: value, propertyId: PropertyQualifier.propertyOf(value) };",
+    "expect": "caught",
+    "failing": [
+      "strips the qualifier and records the Property"
+    ]
+  },
+  {
+    "id": "p2-plain-fixed-field",
+    "file": "src/property-qualifier.ts",
+    "find": "    const value = record[field];",
+    "replace": "    const value = record.type;",
+    "expect": "caught",
+    "failing": [
+      "reads the field it is given"
+    ]
+  }
+]
