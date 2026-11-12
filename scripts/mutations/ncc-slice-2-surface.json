@@ -1,0 +1,106 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/auth/connector-scope.ts",
+    "find": "  ConnectAll: 'connect:*',",
+    "replace": "  ConnectAll: 'connect:all',",
+    "expect": "caught",
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/auth/connector-scope.ts",
+    "find": "/** One scope a connected site may hold. */",
+    "replace": "/** One scope a connected site may hold, unchanged. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/auth/connector-scope.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/auth/connector-scope.ts",
+    "find": "export const ConnectorScope = {",
+    "replace": "export const ConnectorScope = {{",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "scope-webhooks",
+    "file": "src/auth/connector-scope.ts",
+    "find": "  Webhooks: 'connect:webhooks',",
+    "replace": "  Webhooks: 'connect:webhook',",
+    "expect": "caught",
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
+  },
+  {
+    "id": "scope-records-read",
+    "file": "src/auth/connector-scope.ts",
+    "find": "  RecordsRead: 'connect:records:read',",
+    "replace": "  RecordsRead: 'connect:records:reads',",
+    "expect": "caught",
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
+  },
+  {
+    "id": "scope-records-write",
+    "file": "src/auth/connector-scope.ts",
+    "find": "  RecordsWrite: 'connect:records:write',",
+    "replace": "  RecordsWrite: 'connect:records:writes',",
+    "expect": "caught",
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
+  },
+  {
+    "id": "connected-site-missing-scope",
+    "file": "src/auth/connector-scope.ts",
+    "find": "  CONNECTED_SITE: 'connect:* connect:webhooks connect:records:read connect:records:write',",
+    "replace": "  CONNECTED_SITE: 'connect:* connect:webhooks connect:records:read',",
+    "expect": "caught",
+    "failing": [
+      "joins all four with single spaces in CONNECTED_SITE"
+    ]
+  },
+  {
+    "id": "connected-site-comma",
+    "file": "src/auth/connector-scope.ts",
+    "find": "  CONNECTED_SITE: 'connect:* connect:webhooks connect:records:read connect:records:write',",
+    "replace": "  CONNECTED_SITE: 'connect:*,connect:webhooks,connect:records:read,connect:records:write',",
+    "expect": "caught",
+    "failing": [
+      "joins all four with single spaces in CONNECTED_SITE"
+    ]
+  },
+  {
+    "id": "other-readers-gain-retrieve",
+    "file": "src/client.ts",
+    "find": "    this.obligations = new RecordsResource(http, '/obligations');",
+    "replace": "    this.obligations = new ConversionsResource(http);",
+    "expect": "caught",
+    "failing": [
+      "give obligations and payouts no retrieve"
+    ]
+  },
+  {
+    "id": "payouts-gain-retrieve",
+    "file": "src/client.ts",
+    "find": "    this.payouts = new RecordsResource(http, '/payouts');",
+    "replace": "    this.payouts = new TransactionsResource(http);",
+    "expect": "caught",
+    "failing": [
+      "give obligations and payouts no retrieve"
+    ]
+  }
+]

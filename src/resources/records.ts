@@ -1,4 +1,5 @@
-import type { HttpClient } from '../http';
+import { SirenError, UnexpectedResponseError } from '../errors';
+import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import type { ListParams, SirenList } from '../types';
 
@@ -50,8 +51,8 @@ export function toListQuery(params: ListParams): Query {
  */
 export class RecordsResource<T = Record<string, unknown>> {
   constructor(
-    private readonly http: HttpClient,
-    private readonly path: string,
+    protected readonly http: HttpTransport,
+    protected readonly path: string,
   ) {}
 
   /**
@@ -108,5 +109,124 @@ export class RecordsResource<T = Record<string, unknown>> {
     }
 
     return list;
+  }
+}
+
+/**
+ * Query parameters for reading one record by id. Siren answers with its
+ * default fields when none are named.
+ */
+export interface RetrieveParams {
+  /**
+   * The fields to return, as a list or a comma-separated string. A list is
+   * sent comma-separated, as Siren reads it.
+   */
+  fields?: string[] | string;
+  /** `extended` returns every field Siren can resolve for the record. */
+  include?: string;
+  /** Narrows an organization-wide read to one store. */
+  propertyId?: number;
+}
+
+/**
+ * Reads one record with `GET {collection}/{id}`, for every resource that has
+ * a `retrieve`, so a rule cannot reach one reader and miss another.
+ *
+ * Refuses an `id` that is not a positive safe integer, a string included,
+ * before sending, with a message that names the id it got. Sends a `fields`
+ * list comma-separated and leaves out an empty one, so Siren answers its
+ * default fields. Marks the request retriable, since it is a read. Throws
+ * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+ *
+ * @internal
+ */
+export async function retrieveRecord<T>(
+  http: Pick<HttpTransport, 'request'>,
+  collection: string,
+  id: unknown,
+  params: RetrieveParams = {},
+): Promise<T> {
+  if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1) {
+    const shown = typeof id === 'string' ? JSON.stringify(id) : String(id);
+    throw new SirenError(`retrieve needs a positive whole number id, and got ${shown}.`);
+  }
+
+  const path = `${collection}/${id}`;
+  const { fields, include, propertyId } = params;
+  const query: Query = {
+    fields: Array.isArray(fields) ? (fields.length > 0 ? fields.join(',') : undefined) : fields,
+    include,
+    propertyId,
+  };
+
+  const response = await http.request({ method: 'GET', path, query, retriable: true });
+  const body = await parseJsonBody(response);
+
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new UnexpectedResponseError(
+      `Siren answered GET ${path} with a body that is not a JSON object.`,
+      { statusCode: response.status, data: body },
+    );
+  }
+
+  return body as T;
+}
+
+/**
+ * Conversions (`/conversions`): an engagement that turned into a reward.
+ *
+ * `list()` reads one page, and `retrieve(id)` reads one conversion. Both take
+ * an API key that holds `ledger:conversions:read`, a dashboard session's
+ * token, or a connected site's token with `connect:records:read`.
+ */
+export class ConversionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
+  constructor(http: HttpTransport) {
+    super(http, '/conversions');
+  }
+
+  /**
+   * Read one conversion with `GET /conversions/{id}`.
+   *
+   * Siren's default fields are `id`, `engagementId`, `transactionId`,
+   * `obligationId`, `status`, `type`, `dateCreated` and `dateModified`.
+   * `fields` and `include` choose others.
+   *
+   * Retried on a network error, 429 or 5xx like any read. Throws `SirenError`
+   * before sending when `id` is not a positive whole number, `NotFoundError`
+   * when Siren has no such conversion or the credential cannot see it (a key
+   * bound to one store gets this for another store's conversion), and
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   */
+  async retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
+    return retrieveRecord<T>(this.http, this.path, id, params);
+  }
+}
+
+/**
+ * Transactions (`/transactions`): a sale or other value event a store
+ * recorded.
+ *
+ * `list()` reads one page, and `retrieve(id)` reads one transaction. Both take
+ * an API key that holds `ledger:transactions:read`, a dashboard session's
+ * token, or a connected site's token with `connect:records:read`.
+ */
+export class TransactionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
+  constructor(http: HttpTransport) {
+    super(http, '/transactions');
+  }
+
+  /**
+   * Read one transaction with `GET /transactions/{id}`.
+   *
+   * Siren's default fields are `id`, `status` and `dateCreated`. `fields` and
+   * `include` choose others, such as `details`, `totalValue` and `currency`.
+   *
+   * Retried on a network error, 429 or 5xx like any read. Throws `SirenError`
+   * before sending when `id` is not a positive whole number, `NotFoundError`
+   * when Siren has no such transaction or the credential cannot see it, and
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   */
+  async retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 }

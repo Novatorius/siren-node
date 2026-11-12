@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { SignatureVerificationError, UnexpectedResponseError } from '../errors';
-import { parseJsonBody, type HttpClient } from '../http';
+import { parseJsonBody, type HttpTransport } from '../http';
 import type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
@@ -78,7 +78,7 @@ function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
  * to one store gets a `StoreKeyNotAllowedError`.
  */
 export class WebhookSubscriptionsResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(private readonly http: HttpTransport) {}
 
   /**
    * Register a URL to receive event callbacks.
@@ -154,7 +154,7 @@ export class WebhookSubscriptionsResource {
 export class WebhooksResource {
   readonly subscriptions: WebhookSubscriptionsResource;
 
-  constructor(http: HttpClient) {
+  constructor(http: HttpTransport) {
     this.subscriptions = new WebhookSubscriptionsResource(http);
   }
 

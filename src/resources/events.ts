@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import { EventSlug } from '../taxonomy';
 import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '../types';
@@ -22,7 +22,7 @@ import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '.
  * gives a random id when it is a test and refuses when it is not.
  */
 export class EventsResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(private readonly http: HttpTransport) {}
 
   /**
    * Record a completed sale so conversions and payouts compute.

@@ -1,11 +1,11 @@
 import type { ApiKeyScope } from './api-key-scopes';
 import type { WebhookEventType } from './event-types';
 import type { RefundKind } from './taxonomy';
+import type { AccessTokenSource } from './auth/access-token-source';
+import type { HttpClient } from './http';
 
-/** Options accepted by `new Siren({...})`. */
-export interface SirenOptions {
-  /** Your Siren API key (`sk_live_...`). Required. */
-  apiKey: string;
+/** Options every `Siren` client takes, whichever credential it uses. */
+export interface SirenBaseOptions {
   /**
    * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
    * Point this at staging or a local dev server as needed.
@@ -15,11 +15,46 @@ export interface SirenOptions {
   timeout?: number;
   /**
    * Retry count for network errors and 429/5xx responses on idempotent
-   * operations (reads and event ingestion). Management writes (create API
-   * key, create webhook subscription) are never auto-retried. Defaults to 2.
+   * operations (reads, and sales and refunds that Siren can match). Site
+   * visits, custom events, sales with no `externalId` and management writes
+   * are never auto-retried. Defaults to 2. A caller with a durable queue sets
+   * 0, because the queue owns redelivery.
+   *
+   * The one resend after a 401 with a refreshed token is not a retry and
+   * happens whatever this says.
    */
   maxRetries?: number;
+  /**
+   * The HTTP stack to send requests through. Defaults to `FetchHttpClient`
+   * over the global `fetch`. A value without a `send` function throws
+   * `SirenError` at construction.
+   */
+  httpClient?: HttpClient;
 }
+
+/** A client that sends a fixed API key. */
+export interface SirenApiKeyOptions extends SirenBaseOptions {
+  /** Your Siren API key (`sk_live_...`). */
+  apiKey: string;
+  accessToken?: never;
+}
+
+/** A client that sends an OAuth access token, such as a connected store's. */
+export interface SirenAccessTokenOptions extends SirenBaseOptions {
+  /**
+   * A fixed token, or an `AccessTokenSource` that supplies the token and a
+   * fresh one after a 401. An empty string throws `SirenError` at
+   * construction.
+   */
+  accessToken: string | AccessTokenSource;
+  apiKey?: never;
+}
+
+/**
+ * Options for `new Siren()`. Pass `apiKey` or `accessToken`, never both:
+ * both, neither, or an empty one throws `SirenError` at construction.
+ */
+export type SirenOptions = SirenApiKeyOptions | SirenAccessTokenOptions;
 
 /** Result of every event-ingestion call. */
 export interface EventResult {
