@@ -113,6 +113,50 @@ describe('OAuthClient review fix: errors built from an answer that quotes a secr
     expect(shown(error)).not.toMatch(/QNEW/);
   });
 
+  it('removes a secret used as a key in the data of a failed answer', async () => {
+    const error = await refreshFailing(reply(400, { error: { message: 'refresh failed', data: { attempts: { [ATTEMPT]: 'failed' } } } }));
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    expect((error as BadRequestError).data).toEqual({ attempts: { '[redacted]': 'failed' } });
+    expect(shown(error)).not.toContain(ATTEMPT);
+  });
+
+  it('replaces token fields named in camel case too', async () => {
+    const error = await refreshFailing(
+      reply(503, { error: { message: 'down', data: { refreshToken: 'rt_QNEWREFRESHQ_8', accessToken: 'at_QNEWACCESSQ_8', 'id-token': 'id_QNEWIDQ_8' } } }),
+    );
+
+    expect((error as ApiError).data).toEqual({ refreshToken: '[redacted]', accessToken: '[redacted]', 'id-token': '[redacted]' });
+    expect(shown(error)).not.toMatch(/QNEW/);
+  });
+
+  it('keeps a __proto__ key in the data as an own field, not a prototype', async () => {
+    const error = await refreshFailing({
+      status: 500,
+      headers: {},
+      body: `{"error":{"message":"odd","data":{"__proto__":{"note":"${ATTEMPT}"}}}}`,
+    });
+
+    const data = (error as ApiError).data as Record<string, unknown>;
+    expect(Object.getPrototypeOf(data)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(data, '__proto__')).toBe(true);
+    expect(shown(error)).not.toContain(ATTEMPT);
+  });
+
+  it('raises the usual SirenError for an answer nested far deeper than any real one, with the deep part replaced', async () => {
+    const depth = 100_000;
+    const error = await refreshFailing({
+      status: 500,
+      headers: {},
+      body: `{"error":{"message":"deep","data":${'['.repeat(depth)}"${ATTEMPT}"${']'.repeat(depth)}}}`,
+    });
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.message).toBe('deep');
+    expect(JSON.stringify((error as ApiError).data)).toContain('[redacted]');
+    expect(JSON.stringify((error as ApiError).data)).not.toContain(ATTEMPT);
+  });
+
   it('leaves an answer that quotes no secret as Cloud sent it', async () => {
     const error = await refreshFailing(
       reply(400, { error: 'invalid_grant', error_description: 'The refresh token is invalid, expired or revoked.' }),

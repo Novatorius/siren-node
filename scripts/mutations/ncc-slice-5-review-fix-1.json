@@ -5,13 +5,15 @@
     "find": "    const shown = scrub(answer, secrets);",
     "replace": "    const shown = answer;",
     "expect": "caught",
-    "failing": ["removes the refresh token and attemptId from an OAuth error_description"]
+    "failing": [
+      "removes the refresh token and attemptId from an OAuth error_description"
+    ]
   },
   {
     "id": "control-harmless",
     "file": "src/connect/oauth.ts",
-    "find": "const TOKEN_FIELDS: ReadonlySet<string> = new Set(['access_token', 'refresh_token', 'id_token']);",
-    "replace": "const TOKEN_FIELDS: ReadonlySet<string> = new Set(['id_token', 'refresh_token', 'access_token']);",
+    "find": "new Set(['accesstoken', 'refreshtoken', 'idtoken'])",
+    "replace": "new Set(['idtoken', 'refreshtoken', 'accesstoken'])",
     "expect": "survives",
     "failing": []
   },
@@ -37,7 +39,9 @@
     "find": "  if (typeof value === 'string') return redact(value, secrets);",
     "replace": "  if (typeof value === 'string') return value;",
     "expect": "wrong-reason",
-    "failing": ["leaves an answer that quotes no secret as Cloud sent it"]
+    "failing": [
+      "leaves an answer that quotes no secret as Cloud sent it"
+    ]
   },
   {
     "id": "strings-kept",
@@ -54,34 +58,42 @@
   {
     "id": "lists-kept",
     "file": "src/connect/oauth.ts",
-    "find": "  if (Array.isArray(value)) return value.map((item) => scrub(item, secrets));",
+    "find": "  if (Array.isArray(value)) return value.map((item) => scrub(item, secrets, depth + 1));",
     "replace": "  if (Array.isArray(value)) return value;",
     "expect": "caught",
-    "failing": ["removes the attemptId from a list in a 429"]
+    "failing": [
+      "removes the attemptId from a list in a 429"
+    ]
   },
   {
     "id": "nested-kept",
     "file": "src/connect/oauth.ts",
-    "find": "TOKEN_FIELDS.has(key) ? '[redacted]' : scrub(item, secrets);",
-    "replace": "TOKEN_FIELDS.has(key) ? '[redacted]' : item;",
+    "find": "isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),",
+    "replace": "isTokenField(key) ? '[redacted]' : item,",
     "expect": "caught",
-    "failing": ["removes the verifier from the app's error envelope"]
+    "failing": [
+      "removes the verifier from the app's error envelope"
+    ]
   },
   {
     "id": "token-fields-kept",
     "file": "src/connect/oauth.ts",
-    "find": "TOKEN_FIELDS.has(key) ? '[redacted]' : scrub(item, secrets);",
-    "replace": "scrub(item, secrets);",
+    "find": "isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),",
+    "replace": "scrub(item, secrets, depth + 1),",
     "expect": "caught",
-    "failing": ["replaces the value of each token field"]
+    "failing": [
+      "replaces the value of each token field"
+    ]
   },
   {
     "id": "id-token-kept",
     "file": "src/connect/oauth.ts",
-    "find": "new Set(['access_token', 'refresh_token', 'id_token'])",
-    "replace": "new Set(['access_token', 'refresh_token'])",
+    "find": "new Set(['accesstoken', 'refreshtoken', 'idtoken'])",
+    "replace": "new Set(['accesstoken', 'refreshtoken'])",
     "expect": "caught",
-    "failing": ["replaces the value of each token field"]
+    "failing": [
+      "replaces the value of each token field"
+    ]
   },
   {
     "id": "status-text-kept",
@@ -89,15 +101,20 @@
     "find": "redact(reply.statusText ?? '', secrets)",
     "replace": "(reply.statusText ?? '')",
     "expect": "caught",
-    "failing": ["removes the refresh token from the status text"]
+    "failing": [
+      "removes the refresh token from the status text"
+    ]
   },
   {
     "id": "oauth-error-reads-raw-answer",
     "file": "src/connect/oauth.ts",
     "find": "      const description = isFilled(shown.error_description) ? shown.error_description : shown.error;\n      throw new OAuthError(description, { code: shown.error, statusCode: status });",
-    "replace": "      const description = isFilled((answer as Record<string, unknown>).error_description) ? ((answer as Record<string, unknown>).error_description as string) : shown.error;\n      throw new OAuthError(description, { code: (answer as Record<string, string>).error, statusCode: status });",
+    "replace": "      const raw = answer as Record<string, string>;\n      const description = isFilled(raw.error_description) ? raw.error_description : raw.error;\n      throw new OAuthError(description, { code: raw.error, statusCode: status });",
     "expect": "caught",
-    "failing": ["removes the refresh token and attemptId from an OAuth error_description", "removes the authorization code from an OAuth error code"]
+    "failing": [
+      "removes the refresh token and attemptId from an OAuth error_description",
+      "removes the authorization code from an OAuth error code"
+    ]
   },
   {
     "id": "error-mapper-reads-raw-answer",
@@ -105,7 +122,11 @@
     "find": "redact(reply.statusText ?? '', secrets), shown, headerOf",
     "replace": "redact(reply.statusText ?? '', secrets), answer, headerOf",
     "expect": "caught",
-    "failing": ["removes the verifier from the app's error envelope", "removes the attemptId from a list in a 429", "replaces the value of each token field"]
+    "failing": [
+      "removes the verifier from the app's error envelope",
+      "removes the attemptId from a list in a 429",
+      "replaces the value of each token field"
+    ]
   },
   {
     "id": "two-xx-returns-scrubbed",
@@ -114,5 +135,45 @@
     "replace": "needs.every((field) => isFilled(answer[field]))) return scrub(answer, needs as string[]) as T;",
     "expect": "caught",
     "failing": []
+  },
+  {
+    "id": "keys-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "Object.defineProperty(copy, redact(key, secrets), {",
+    "replace": "Object.defineProperty(copy, key, {",
+    "expect": "caught",
+    "failing": [
+      "removes a secret used as a key"
+    ]
+  },
+  {
+    "id": "token-names-exact-only",
+    "file": "src/connect/oauth.ts",
+    "find": "return TOKEN_FIELDS.has(key.toLowerCase().replace(/[_-]/g, ''));",
+    "replace": "return TOKEN_FIELDS.has(key.replace(/_/g, ''));",
+    "expect": "caught",
+    "failing": [
+      "replaces token fields named in camel case too"
+    ]
+  },
+  {
+    "id": "proto-key-assigned",
+    "file": "src/connect/oauth.ts",
+    "find": "    Object.defineProperty(copy, redact(key, secrets), {\n      value: isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),\n      enumerable: true,\n      writable: true,\n      configurable: true,\n    });",
+    "replace": "    copy[redact(key, secrets)] = isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1);",
+    "expect": "caught",
+    "failing": [
+      "keeps a __proto__ key in the data as an own field"
+    ]
+  },
+  {
+    "id": "no-depth-cap",
+    "file": "src/connect/oauth.ts",
+    "find": "  if (depth >= MAX_SCRUB_DEPTH) return '[redacted]';\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "raises the usual SirenError for an answer nested far deeper"
+    ]
   }
 ]
