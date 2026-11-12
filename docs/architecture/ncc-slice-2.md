@@ -313,7 +313,10 @@ that `maxRetries` is not negative, and its `timeout` is in seconds.
   scheme and no user name or password, because it decides where the token
   goes. Fetch refuses a URL with no scheme or with a user name, and the
   transport would read that refusal as a lost connection, resend it and
-  raise a `ConnectionError` that quotes the URL.
+  raise a `ConnectionError` that quotes the URL. It also holds no `?`, `#`,
+  space or control character. The transport joins each path onto the string
+  as given, so a query or fragment would swallow every path, and `new URL`
+  drops spaces and line breaks that a host client would still receive.
 - `timeout` is a number from 1 to 2147483647 milliseconds, fractions
   allowed, for each send. A Node timer above 2147483647 fires after 1 ms. A
   call can make up to `maxRetries + 2` sends, each with its own timeout,

@@ -87,7 +87,9 @@ export class Siren {
    * other choice. No message carries a credential.
    *
    * Also throws `SirenError` when `baseUrl` is not an http or https URL
-   * with no user name or password in it (a string `new URL` parses),
+   * with no user name or password in it (a string `new URL` parses), or
+   * holds a `?`, a `#`, a space or a control character, so the string the
+   * transport joins paths onto is the string that was checked,
    * `timeout` is not a number from 1 to 2147483647 (the longest wait a
    * timer holds), or `maxRetries` is not a whole number of 0 or more, with
    * no ceiling. NaN, Infinity, `null` and any value of the wrong type are

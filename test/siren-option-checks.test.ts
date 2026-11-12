@@ -194,6 +194,14 @@ describe('2b P2: Siren baseUrl check', () => {
     ['a javascript URL', 'javascript:alert(1)'],
     ['a URL with a user name and password', 'https://sk_secret_user:sk_secret_pass@cloud.test/siren/v1'],
     ['a URL with a user name only', 'https://sk_secret_user@cloud.test/siren/v1'],
+    ['a URL with a password and no user name', 'https://:sk_secret_pass@cloud.test/siren/v1'],
+    ['a scheme with no host', 'https://'],
+    ['a URL whose port is out of range', 'https://cloud.test:99999/siren/v1'],
+    ['a URL with a leading space', ' https://cloud.test/siren/v1'],
+    ['a URL with a line feed inside the host', 'https://cloud.te\nst/siren/v1'],
+    ['a URL that ends in CR LF', 'https://cloud.test/siren/v1\r\n'],
+    ['a URL with a query', 'https://cloud.test/siren/v1?x=1'],
+    ['a URL with an empty fragment', 'https://cloud.test/siren/v1#'],
   ])('refuses a baseUrl that is %s, naming the option and what it got', (_name, baseUrl) => {
     const error = constructorError({ baseUrl });
 
@@ -451,6 +459,15 @@ describe('2b P2: Siren reads only its own options', () => {
     pollute(method, async () => 'attacker-credential');
 
     expect(() => new Siren({ accessToken: new Source() } as unknown as SirenOptions)).toThrow(/accessToken/);
+  });
+
+  it('accepts a client whose send sits on a base class two prototypes up', async () => {
+    class MyClient extends FakeHttpClient {}
+    const httpClient = new MyClient([reply(200, [])]);
+
+    await new Siren({ apiKey: KEY, httpClient }).payouts.list();
+
+    expect(httpClient.requests).toHaveLength(1);
   });
 
   it('accepts a token source and a client whose methods sit on their class prototypes', async () => {

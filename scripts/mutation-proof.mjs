@@ -19,12 +19,17 @@
  * 2. Otherwise runs this repository's verification, `npm test` and then
  *    `npm run typecheck` (navigator.yaml ci.test and ci.lint), and scores the
  *    mutation `caught` when either exits non-zero, else `survives`.
- * 3. For a caught mutation, checks that the output holds every `failing`
- *    text, so a test that went red for another reason does not count.
+ * 3. For a caught mutation, checks that the failure lines hold every
+ *    `failing` text, so a test that went red for another reason does not
+ *    count. The failure lines are the ones that mark a failed test or a type
+ *    error (`FAIL`, `×` or `error TS`), never the names of tests that passed.
+ *    A text may name a test or the describe it sits in.
  * 4. Restores the file, whatever happened.
  *
- * Include three controls every run: one break the suite must catch, one
- * harmless change it must not, and one malformed mutation it must refuse.
+ * Include four controls every run: one break the suite must catch, one
+ * harmless change it must not, one malformed mutation it must refuse, and
+ * one break whose `failing` text names a test that stays green, which must
+ * score `wrong-reason`.
  * The run exits non-zero when any result differs from its `expect`.
  */
 import { spawnSync } from 'node:child_process';
@@ -73,15 +78,15 @@ function score(mutation) {
     const typecheck = test.status === 0 ? run('npm', ['run', 'typecheck', '--silent']) : { status: 0, output: '' };
     const output = test.output + typecheck.output;
     if (test.status === 0 && typecheck.status === 0) return { result: 'survives', why: 'verification passed' };
-    const missing = (mutation.failing ?? []).filter((text) => !output.includes(text));
-    if (missing.length > 0) {
-      return { result: 'wrong-reason', why: `output lacks: ${missing.join(' | ')}`, output };
-    }
-    const failed = output
+    const failures = output
       .split('\n')
       .filter((line) => /FAIL|error TS|×/.test(line))
-      .map((line) => line.trim())
-      .slice(0, 6);
+      .map((line) => line.trim());
+    const missing = (mutation.failing ?? []).filter((text) => !failures.some((line) => line.includes(text)));
+    if (missing.length > 0) {
+      return { result: 'wrong-reason', why: `failure lines lack: ${missing.join(' | ')}`, output };
+    }
+    const failed = failures.slice(0, 6);
     return { result: 'caught', why: failed.join(' / ') };
   } finally {
     writeFileSync(path, original);

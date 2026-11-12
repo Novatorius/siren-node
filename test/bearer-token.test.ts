@@ -91,6 +91,9 @@ const ABOVE_FF: Array<[string, string]> = [
 const CONTROL: Array<[string, string]> = [
   ['a line break', 'sk_secret_first\r\nX-Injected: sk_secret_last'],
   ['a NUL', 'sk_secret_first\u0000sk_secret_last'],
+  ['U+0001, the first C0 control after NUL', 'sk_secret_first\u0001sk_secret_last'],
+  ['a tab (U+0009), which fetch would send', 'sk_secret_first\u0009sk_secret_last'],
+  ['U+001F, the last C0 control', 'sk_secret_first\u001fsk_secret_last'],
   ['a DEL (U+007F)', 'sk_secret_first\u007fsk_secret_last'],
   ['U+0080, the first C1 control', 'sk_secret_first\u0080sk_secret_last'],
   ['U+0085, the C1 next-line control', 'sk_secret_first\u0085sk_secret_last'],

@@ -9,8 +9,9 @@ export interface SirenBaseOptions {
   /**
    * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
    * Point this at staging or a local dev server as needed. Any value but an
-   * http or https URL with no user name or password in it throws
-   * `SirenError` at construction.
+   * http or https URL with no user name or password in it, and no query,
+   * fragment, space or control character, throws `SirenError` at
+   * construction.
    */
   baseUrl?: string;
   /**
