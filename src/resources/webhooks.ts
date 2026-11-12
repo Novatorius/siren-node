@@ -98,8 +98,10 @@ export class WebhookSubscriptionsResource {
   /**
    * The event types a subscription can name, from `GET /webhooks/events`.
    * This is the live set Siren delivers, so it can hold an event that
-   * `WebhookEventType` lacks yet. Entries that are not objects are dropped.
-   * A read, so it retries like `list()`.
+   * `WebhookEventType` lacks yet. It throws `UnexpectedResponseError`
+   * when the body is not a list or an entry is not an object. It goes through
+   * the shared transport as a retriable read, like `list()`, and adds no
+   * retry logic of its own.
    */
   async events(): Promise<WebhookCatalogEntry[]> {
     // Stub: slice 1 packet P6 implements this.

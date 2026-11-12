@@ -40,6 +40,7 @@ export {
   ValidationError,
   RateLimitError,
   ApiError,
+  UnexpectedResponseError,
   ConnectionError,
   SignatureVerificationError,
 } from './errors';

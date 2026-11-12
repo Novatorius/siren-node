@@ -14,6 +14,7 @@
  * | 422             | ValidationError        |
  * | 429             | RateLimitError         |
  * | 5xx             | ApiError               |
+ * | 2xx, wrong body | UnexpectedResponseError, an ApiError, from a read that checks its body |
  * | network/timeout | ConnectionError        |
  *
  * `SignatureVerificationError` is thrown by webhook verification and carries
@@ -469,9 +470,21 @@ export type HoldConflictReason = (typeof HoldConflictReason)[keyof typeof HoldCo
  * {@link ConflictError} Siren answered with, through {@link HoldConflictError.fromConflict}.
  */
 export class HoldConflictError extends ConflictError {
+  /**
+   * `no_credit` for the `hold_no_credit` code, `token_in_use` for
+   * `hold_token_in_use`, and `null` for any other code this SDK knows. With
+   * no code, or one this SDK does not know, it reads Siren's wording:
+   * "under that token" means `token_in_use`, "no credit available" means
+   * `no_credit`, in any case, and anything else is `null`. Set once, from the
+   * message and code the error is built with.
+   */
+  readonly reason: HoldConflictReason | null;
+
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, details);
     this.name = 'HoldConflictError';
+    // Stub: slice 1 packet P5 sets this from the message and code.
+    this.reason = null;
   }
 
   /**
@@ -482,18 +495,6 @@ export class HoldConflictError extends ConflictError {
     // Stub: slice 1 packet P5 implements this.
     void conflict;
     return new HoldConflictError('');
-  }
-
-  /**
-   * `no_credit` for the `hold_no_credit` code, `token_in_use` for
-   * `hold_token_in_use`, and `null` for any other code this SDK knows. With
-   * no code, or one this SDK does not know, it reads Siren's wording:
-   * "under that token" means `token_in_use`, "no credit available" means
-   * `no_credit`, in any case, and anything else is `null`.
-   */
-  get reason(): HoldConflictReason | null {
-    // Stub: slice 1 packet P5 implements this.
-    return null;
   }
 }
 
@@ -531,6 +532,19 @@ export class ApiError extends SirenError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, details);
     this.name = 'ApiError';
+  }
+}
+
+/**
+ * Siren answered with a success status, but the body does not have the shape
+ * the route documents, such as an object where a list belongs. The SDK throws
+ * this rather than guess, so a broken reply never reads as an empty answer.
+ * `statusCode` is the reply's status and `data` holds the body as parsed.
+ */
+export class UnexpectedResponseError extends ApiError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'UnexpectedResponseError';
   }
 }
 

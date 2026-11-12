@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiKeyNotAcceptedError, MissingScopeError } from '../src/index';
+import { ApiKeyNotAcceptedError, MissingScopeError, UnexpectedResponseError } from '../src/index';
 import { jsonResponse, makeClient } from './helpers';
 
 /*
@@ -8,7 +8,9 @@ import { jsonResponse, makeClient } from './helpers';
  * this SDK lacked, `webhooks.subscriptions.events()` and `apiKeys.scopes()`.
  *
  * The fixtures hold Siren's answers as its controllers build them at
- * bb49b7d. Each fixture's `_source` names the files it came from.
+ * bb49b7d. `scripts/siren-fixtures.mjs` generates both from Siren's source
+ * and, with `--check`, reports a fixture that no longer matches it. Each
+ * fixture's `_source` names the files it came from.
  *
  * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
  * its describe block. That packet's implementer turns `it.skip(` into `it(`
@@ -48,18 +50,31 @@ describe('P6: webhooks.subscriptions.events()', () => {
     expect(await ctx.client.webhooks.subscriptions.events()).toEqual([future]);
   });
 
-  it.skip('drops entries that are not objects', async () => {
+  it.skip('throws UnexpectedResponseError when an entry is not an object', async () => {
     const entry = catalog[0]!;
-    const ctx = makeClient([jsonResponse(200, ['sale.created', null, 7, ['x'], entry])]);
-    expect(await ctx.client.webhooks.subscriptions.events()).toEqual([entry]);
+    for (const bad of ['sale.created', null, 7, ['x']]) {
+      const body = [entry, bad];
+      const ctx = makeClient([jsonResponse(200, body)]);
+      const error = await ctx.client.webhooks.subscriptions.events().catch((e: unknown) => e);
+      expect(error, JSON.stringify(bad)).toBeInstanceOf(UnexpectedResponseError);
+      expect((error as UnexpectedResponseError).statusCode).toBe(200);
+      expect((error as UnexpectedResponseError).data).toEqual(body);
+      expect((error as UnexpectedResponseError).message).toContain('/webhooks/events');
+    }
   });
 
-  it.skip('answers an empty list when the body is not a list', async () => {
-    const ctx = makeClient([jsonResponse(200, { events: catalog })]);
-    expect(await ctx.client.webhooks.subscriptions.events()).toEqual([]);
+  it.skip('throws UnexpectedResponseError when the body is not a list', async () => {
+    for (const body of [{ events: catalog }, null, 'events']) {
+      const ctx = makeClient([jsonResponse(200, body)]);
+      const error = await ctx.client.webhooks.subscriptions.events().catch((e: unknown) => e);
+      expect(error, JSON.stringify(body)).toBeInstanceOf(UnexpectedResponseError);
+      expect((error as UnexpectedResponseError).statusCode).toBe(200);
+      expect((error as UnexpectedResponseError).data).toEqual(body);
+      expect((error as UnexpectedResponseError).message).toContain('/webhooks/events');
+    }
   });
 
-  it.skip('retries a 503 like the other reads', async () => {
+  it.skip('goes through the shared transport retry for a 503, like list()', async () => {
     const ctx = makeClient(
       [jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' }), jsonResponse(200, catalog)],
       { maxRetries: 1 },
@@ -101,6 +116,13 @@ describe('P7: apiKeys.scopes()', () => {
     expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/api-keys/scopes');
     expect(call.rawBody).toBeUndefined();
     expect(scopes).toEqual(groups);
+    expect(scopes.events).toHaveLength(31);
+    expect(scopes.events?.[1]).toEqual({
+      scope: 'event:site-visited',
+      resource: 'events',
+      action: 'site-visited',
+      label: 'Site Visited',
+    });
     expect(scopes.ledger?.map((entry) => entry.scope)).toContain('ledger:conversions:read');
     expect(scopes['webhook-subscriptions']?.map((entry) => entry.scope)).toEqual([
       'webhook-subscriptions:read',
@@ -114,14 +136,18 @@ describe('P7: apiKeys.scopes()', () => {
     });
   });
 
-  it.skip('answers an empty object when the body is not an object', async () => {
-    for (const body of [[groups], null, 'scopes']) {
+  it.skip('throws UnexpectedResponseError when the body is not an object or a group is not a list', async () => {
+    for (const body of [[groups], null, 'scopes', { ...groups, events: 'event:sale' }]) {
       const ctx = makeClient([jsonResponse(200, body)]);
-      expect(await ctx.client.apiKeys.scopes()).toEqual({});
+      const error = await ctx.client.apiKeys.scopes().catch((e: unknown) => e);
+      expect(error, JSON.stringify(body).slice(0, 40)).toBeInstanceOf(UnexpectedResponseError);
+      expect((error as UnexpectedResponseError).statusCode).toBe(200);
+      expect((error as UnexpectedResponseError).data).toEqual(body);
+      expect((error as UnexpectedResponseError).message).toContain('/api-keys/scopes');
     }
   });
 
-  it.skip('retries a 503 like the other reads', async () => {
+  it.skip('goes through the shared transport retry for a 503, like list()', async () => {
     const ctx = makeClient(
       [jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' }), jsonResponse(200, groups)],
       { maxRetries: 1 },

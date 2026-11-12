@@ -44,9 +44,9 @@ function catalogEvents(): string[] {
 }
 
 describe('WebhookEventType', () => {
-  // Siren lib/Webhooks/Service/Services/WebhookCatalog.php EVENTS, captured in
-  // test/fixtures/webhook-events.json. A unit test in Siren keeps that list
-  // equal to the events its dispatchers send.
+  // Siren lib/Webhooks/Service/Services/WebhookCatalog.php EVENTS, generated
+  // into test/fixtures/webhook-events.json by scripts/siren-fixtures.mjs. A
+  // unit test in Siren keeps that list equal to the events its dispatchers send.
   it('holds exactly the 64 events Siren delivers, plus "*"', () => {
     const values = Object.values(WebhookEventType).filter((value) => value !== '*');
     expect(values.slice().sort()).toEqual(catalogEvents().sort());
@@ -102,8 +102,7 @@ describe('WebhookEventType', () => {
 });
 
 describe('ErrorCode', () => {
-  // Siren lib/Core/Service/Rest/ApiErrorCode.php, every live code. The
-  // retired `hold_limit` is left out, as Siren no longer sends it.
+  // Siren lib/Core/Service/Rest/ApiErrorCode.php, every code it defines.
   it('holds exactly the codes Siren sends', () => {
     expect(ErrorCode).toEqual({
       SiteDisconnected: 'site_disconnected',
@@ -157,8 +156,7 @@ describe('ErrorCode', () => {
 
 describe('status taxonomies', () => {
   // Siren PHP SDK src/*Status.php and src/CustomCurrencyType.php, one class
-  // each. ObligationStatus leaves out FULFILLED, which the PHP SDK keeps only
-  // for old callers and Siren no longer accepts.
+  // each, holding the values Siren accepts today.
   const cases: Array<[string, object, Record<string, string>]> = [
     [
       'ConversionStatus',

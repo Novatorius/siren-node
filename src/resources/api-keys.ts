@@ -47,7 +47,10 @@ export class ApiKeysResource {
    * `GET /api-keys/scopes`, such as `events`, `ledger` and
    * `webhook-subscriptions`, each a list of `{ scope, resource, action, label }`.
    * Siren answers it for a signed-in dashboard session only, like every
-   * `/api-keys` route. A read, so it retries like `list()`.
+   * `/api-keys` route. It throws `UnexpectedResponseError` when the
+   * body is not an object or a group is not a list. It goes through the
+   * shared transport as a retriable read, like `list()`, and adds no retry
+   * logic of its own.
    */
   async scopes(): Promise<ApiKeyScopeGroups> {
     // Stub: slice 1 packet P7 implements this.

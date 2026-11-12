@@ -51,8 +51,8 @@ describe('P1: the known-code rule (isKnownErrorCode and the existing 401 and 403
     }
   });
 
-  it.skip('isKnownErrorCode refuses a missing, empty, retired or foreign code', () => {
-    for (const code of [undefined, null, '', 'hold_limit', 'VALIDATION_FAILED', 'code_403', 'MISSING_SCOPE']) {
+  it.skip('isKnownErrorCode refuses a missing, empty or unknown code', () => {
+    for (const code of [undefined, null, '', 'not_a_code', 'VALIDATION_FAILED', 'code_403', 'MISSING_SCOPE']) {
       expect(isKnownErrorCode(code)).toBe(false);
     }
   });
@@ -292,11 +292,23 @@ describe('P5: HoldConflictError', () => {
     return HoldConflictError.fromConflict(new ConflictError(message, { code, statusCode: 409 }));
   }
 
-  it('the transport keeps a 409 with a hold code a plain ConflictError, as the PHP SDK does', async () => {
-    const error = await thrownBy(409, err('No credit available.', 'hold_no_credit'));
-    expect(error).toBeInstanceOf(ConflictError);
-    expect(error).not.toBeInstanceOf(HoldConflictError);
-    expect(error).not.toBeInstanceOf(CodeConflictError);
+  it('the transport keeps every 409 a plain ConflictError, as the PHP SDK does', async () => {
+    // Siren lib/Core/Service/Rest/ApiErrorCode.php, every code it sends with a 409.
+    const codes = [
+      ErrorCode.CodeHeld,
+      ErrorCode.MappingExists,
+      ErrorCode.HoldNoCredit,
+      ErrorCode.HoldTokenInUse,
+      ErrorCode.HoldCurrencyNotAtStore,
+      ErrorCode.CurrencyResolutionRequired,
+    ];
+    for (const code of codes) {
+      const error = await thrownBy(409, err('No credit available under that token.', code));
+      expect(error, code).toBeInstanceOf(ConflictError);
+      expect(error, code).not.toBeInstanceOf(HoldConflictError);
+      expect(error, code).not.toBeInstanceOf(CodeConflictError);
+      expect((error as ConflictError).code, code).toBe(code);
+    }
   });
 
   it.skip('fromConflict keeps the conflict\'s message, status, code and data, and sets it as the cause', () => {
@@ -344,5 +356,29 @@ describe('P5: HoldConflictError', () => {
 
   it.skip('answers null for other wording with no code', () => {
     expect(hold('The hold was refused.').reason).toBeNull();
+  });
+});
+
+describe('retry class: a 401, 403 or 409 is final', () => {
+  // The new classes are refusals that come back the same on every attempt,
+  // so the transport sends each request once, even with retries on.
+  const cases: Array<[number, unknown]> = [
+    [401, err('This site is no longer connected.', ErrorCode.SiteDisconnected)],
+    [403, err("You don't have permission to do that.", ErrorCode.NotPermitted, { param: 'status' })],
+    [409, err('That code is already held for this type.', ErrorCode.CodeHeld)],
+    [409, err('Another checkout already holds credit under that token.', ErrorCode.HoldTokenInUse)],
+  ];
+
+  it('sends each refusal once with maxRetries 2', async () => {
+    for (const [status, body] of cases) {
+      const ctx = makeClient(
+        [jsonResponse(status, body), jsonResponse(status, body), jsonResponse(status, body)],
+        { maxRetries: 2 },
+      );
+      const error = await ctx.client.conversions.list().catch((e: unknown) => e);
+      expect(error, String(status)).toBeInstanceOf(SirenError);
+      expect((error as SirenError).statusCode, String(status)).toBe(status);
+      expect(ctx.calls(), String(status)).toHaveLength(1);
+    }
   });
 });
