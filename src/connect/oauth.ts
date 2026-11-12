@@ -1,6 +1,7 @@
 import { ConnectorScope } from '../auth/connector-scope';
+import { ownOption, resolveBaseUrl, resolveHttpClient, resolveTimeout } from '../client';
 import { ConnectionError, SirenError, UnexpectedResponseError, errorFromResponse } from '../errors';
-import { DEFAULT_BASE_URL, FetchHttpClient, HttpClientError } from '../http';
+import { HttpClientError } from '../http';
 import type { HttpClient, HttpResponse } from '../http';
 import { OAuthError } from './errors';
 import { ConnectorSoftware } from './types';
@@ -87,15 +88,37 @@ export class OAuthClient {
   private readonly timeout: number;
 
   /**
-   * Throws `SirenError`, as `new Siren()` does, for an `httpClient` without a
-   * `send` function, `null` included.
+   * Reads `httpClient`, `baseUrl`, `consentScreenUrl` and `timeout` only
+   * when the options object holds them itself, once each, so an inherited
+   * value counts as absent and a getter runs a single time. An option given
+   * as `undefined` is absent too.
+   *
+   * Checks them with the functions `new Siren()` uses, so it throws
+   * `SirenError` with Siren's own message for what Siren refuses: an
+   * `httpClient` without a `send` function of its own or of a prototype
+   * other than `Object.prototype`, `null` included; a `baseUrl` that is not
+   * an http or https URL of visible ASCII, U+0021 to U+007E, that starts
+   * with `http://` or `https://` and a host with no `%`, or that holds a
+   * user name, password, query, fragment, backslash or `@`; and a `timeout`
+   * that is not a number from 1 to 2147483647. `consentScreenUrl` takes the
+   * `baseUrl` rule in full, `?` and `#` included, because the consent link's
+   * query is the SDK's alone, and its message names `consentScreenUrl`. No
+   * message quotes a refused string, and no error carries a `cause`.
+   *
+   * Absent, `httpClient` is a `FetchHttpClient` that reads the global fetch
+   * at each send, `baseUrl` is `DEFAULT_BASE_URL`, `consentScreenUrl` is
+   * `DEFAULT_CONSENT_SCREEN_URL` and `timeout` is
+   * `DEFAULT_OAUTH_TIMEOUT_MS`. A trailing slash is trimmed from `baseUrl`,
+   * and the consent link is built on `consentScreenUrl` as given.
    */
   constructor(options: OAuthClientOptions = {}) {
-    const given: OAuthClientOptions = options ?? {};
-    this.client = resolveHttpClient(given.httpClient);
-    this.baseUrl = (given.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-    this.consentScreenUrl = given.consentScreenUrl ?? DEFAULT_CONSENT_SCREEN_URL;
-    this.timeout = given.timeout ?? DEFAULT_OAUTH_TIMEOUT_MS;
+    const given: unknown = options ?? {};
+    this.client = resolveHttpClient(ownOption(given, 'httpClient'));
+    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\/+$/, '');
+    const consentScreenUrl = ownOption(given, 'consentScreenUrl');
+    this.consentScreenUrl =
+      consentScreenUrl === undefined ? DEFAULT_CONSENT_SCREEN_URL : resolveBaseUrl(consentScreenUrl, 'consentScreenUrl');
+    this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);
   }
 
   /**
@@ -159,8 +182,7 @@ export class OAuthClient {
     query.append('code_challenge_method', 'S256');
     query.append('state', state);
     query.append('scope', scope ?? ConnectorScope.CONNECTED_SITE);
-    const separator = this.consentScreenUrl.includes('?') ? '&' : '?';
-    return `${this.consentScreenUrl}${separator}${query.toString()}`;
+    return `${this.consentScreenUrl}?${query.toString()}`;
   }
 
   /**
@@ -365,17 +387,4 @@ function scrub(value: unknown, secrets: readonly string[], depth = 0): unknown {
 /** A token field's name, in any case, with or without `_` or `-`. */
 function isTokenField(key: string): boolean {
   return TOKEN_FIELDS.has(key.toLowerCase().replace(/[_-]/g, ''));
-}
-
-/**
- * Answers the given `httpClient`, any object with a `send` function, or a
- * `FetchHttpClient` that reads the global fetch at each send when the
- * option is absent. The same rule as `new Siren()`.
- */
-function resolveHttpClient(httpClient: unknown): HttpClient {
-  if (httpClient === undefined) return new FetchHttpClient();
-  if (typeof httpClient === 'object' && httpClient !== null && typeof (httpClient as HttpClient).send === 'function') {
-    return httpClient as HttpClient;
-  }
-  throw new SirenError('Siren: httpClient must be an object with a send function.');
 }
