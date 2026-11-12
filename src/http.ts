@@ -200,7 +200,17 @@ export interface SirenRequest {
    * so each new write route must keep it. See {@link HttpTransport.request}.
    */
   retriable: boolean;
+  /**
+   * Extra headers for every send of this request, the resend after a 401
+   * included. They go beneath the SDK's own, so a name that matches
+   * `Authorization`, `Accept`, `User-Agent` or `Content-Type` in any case is
+   * dropped.
+   */
+  headers?: Record<string, string>;
 }
+
+/** The headers the SDK sets itself, in lower case. A request's own headers never replace them. */
+const SDK_HEADERS: ReadonlySet<string> = new Set(['authorization', 'accept', 'user-agent', 'content-type']);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -313,7 +323,7 @@ export class HttpTransport {
     for (;;) {
       let reply: HttpResponse;
       try {
-        reply = await this.client.send(this.buildRequest(req.method, url, token, body));
+        reply = await this.client.send(this.buildRequest(req.method, url, token, body, req.headers));
       } catch (error) {
         if (!(error instanceof HttpClientError)) throw error;
         if (req.retriable && retries < this.maxRetries) {
@@ -377,12 +387,20 @@ export class HttpTransport {
   }
 
   /** Builds a new request, headers included, for one send. */
-  private buildRequest(method: HttpMethod, url: string, token: string, body: string | undefined): HttpRequest {
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-      'User-Agent': 'siren-sdk-typescript/0.3.0',
-    };
+  private buildRequest(
+    method: HttpMethod,
+    url: string,
+    token: string,
+    body: string | undefined,
+    extra: Readonly<Record<string, string>> = {},
+  ): HttpRequest {
+    const headers: Record<string, string> = {};
+    for (const [name, value] of Object.entries(extra)) {
+      if (!SDK_HEADERS.has(name.toLowerCase())) headers[name] = value;
+    }
+    headers.Authorization = `Bearer ${token}`;
+    headers.Accept = 'application/json';
+    headers['User-Agent'] = 'siren-sdk-typescript/0.3.0';
     if (body === undefined) return { method, url, headers, timeout: this.timeout };
     headers['Content-Type'] = 'application/json';
     return { method, url, headers, body, timeout: this.timeout };
