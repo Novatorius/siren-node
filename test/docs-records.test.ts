@@ -6,10 +6,6 @@ import { describe, expect, it } from 'vitest';
  * record resources. Slice 5 edits README.md, CHANGELOG.md and openapi.yaml,
  * so P11 starts only after slice 5 merges into feat/node-commerce-connectors,
  * and after P10, since the README names the client fields P10 adds.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P11 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function read(name: string): string {
@@ -65,7 +61,7 @@ const ROUTES: Array<[string, string[]]> = [
 ];
 
 describe('P11: README records section', () => {
-  it.skip('names each client field and the nested resources', () => {
+  it('names each client field and the nested resources', () => {
     const records = section(read('README.md'), '## Collaborators and programs');
 
     for (const name of [
@@ -83,7 +79,7 @@ describe('P11: README records section', () => {
     }
   });
 
-  it.skip('says record writes are sent once and reads retry', () => {
+  it('says record writes are sent once and reads retry', () => {
     const all = sentences(section(read('README.md'), '## Collaborators and programs'));
 
     expect(
@@ -96,7 +92,7 @@ describe('P11: README records section', () => {
     ).toBe(true);
   });
 
-  it.skip('tells a caller with its own durable queue to build the client with maxRetries: 0', () => {
+  it('tells a caller with its own durable queue to build the client with maxRetries: 0', () => {
     const all = sentences(section(read('README.md'), '## Collaborators and programs'));
 
     expect(
@@ -105,7 +101,7 @@ describe('P11: README records section', () => {
     ).toBe(true);
   });
 
-  it.skip('says a connected site may change only the name and nickname, with updateDetails', () => {
+  it('says a connected site may change only the name and nickname, with updateDetails', () => {
     const all = sentences(section(read('README.md'), '## Collaborators and programs'));
 
     expect(
@@ -116,7 +112,7 @@ describe('P11: README records section', () => {
 });
 
 describe('P11: README list rules', () => {
-  it.skip('says a record list refuses a key Siren would ignore, before sending', () => {
+  it('says a record list refuses a key Siren would ignore, before sending', () => {
     const all = sentences(section(read('README.md'), '## Collaborators and programs'));
 
     expect(
@@ -125,7 +121,7 @@ describe('P11: README list rules', () => {
     ).toBe(true);
   });
 
-  it.skip('says an empty filter list throws rather than answer every record', () => {
+  it('says an empty filter list throws rather than answer every record', () => {
     const all = sentences(section(read('README.md'), '## Collaborators and programs'));
 
     expect(
@@ -136,7 +132,7 @@ describe('P11: README list rules', () => {
 });
 
 describe('P11: CHANGELOG', () => {
-  it.skip('lists the record resources under Unreleased, Added', () => {
+  it('lists the record resources under Unreleased, Added', () => {
     const added = section(section(read('CHANGELOG.md'), '## [Unreleased]'), '### Added');
 
     for (const name of [
@@ -155,7 +151,7 @@ describe('P11: CHANGELOG', () => {
 });
 
 describe('P11: openapi.yaml', () => {
-  it.skip.each(ROUTES)('documents %s with each method the SDK sends', (key, methods) => {
+  it.each(ROUTES)('documents %s with each method the SDK sends', (key, methods) => {
     const block = path(read('openapi.yaml'), key);
 
     for (const method of methods) {
