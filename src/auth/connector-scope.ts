@@ -1,3 +1,17 @@
+const SCOPES = {
+  /** Every `connect:` operation a wildcard grants: read status, ingest events, run a migration. */
+  ConnectAll: 'connect:*',
+  /** Manage the webhook subscription that sends the site's own events back to it. Explicit only. */
+  Webhooks: 'connect:webhooks',
+  /** Read the organization's records through the record routes. Explicit only. */
+  RecordsRead: 'connect:records:read',
+  /** Change the records a person manages: collaborators, codes, enrollments, mappings, credit holds. Explicit only. */
+  RecordsWrite: 'connect:records:write',
+} as const;
+
+/** One scope a connected site may hold. */
+export type ConnectorScope = (typeof SCOPES)[keyof typeof SCOPES];
+
 /**
  * The OAuth scopes a connected site asks Siren Cloud for.
  *
@@ -10,20 +24,17 @@
  * answers its record calls with a 403 raised as `MissingScopeError`. The fix
  * is to reconnect.
  *
+ * The object carries the four scopes, the joined `CONNECTED_SITE` value and
+ * `forConnectedSite()`, as the PHP SDK's ConnectorScope class carries its
+ * constants and static method together.
+ *
  * ```ts
  * const url = new URL('/oauth/authorize', cloudAppUrl);
  * url.searchParams.set('scope', ConnectorScope.CONNECTED_SITE);
  * ```
  */
 export const ConnectorScope = {
-  /** Every `connect:` operation a wildcard grants: read status, ingest events, run a migration. */
-  ConnectAll: 'connect:*',
-  /** Manage the webhook subscription that sends the site's own events back to it. Explicit only. */
-  Webhooks: 'connect:webhooks',
-  /** Read the organization's records through the record routes. Explicit only. */
-  RecordsRead: 'connect:records:read',
-  /** Change the records a person manages: collaborators, codes, enrollments, mappings, credit holds. Explicit only. */
-  RecordsWrite: 'connect:records:write',
+  ...SCOPES,
   /** The space-separated `scope` value a connected site asks for: all four, in this order. */
   CONNECTED_SITE: 'connect:* connect:webhooks connect:records:read connect:records:write',
 
@@ -33,6 +44,3 @@ export const ConnectorScope = {
     return [];
   },
 } as const;
-
-/** One scope a connected site may hold. */
-export type ConnectorScope = 'connect:*' | 'connect:webhooks' | 'connect:records:read' | 'connect:records:write';

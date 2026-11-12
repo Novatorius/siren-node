@@ -10,10 +10,11 @@ import {
   NotFoundError,
   RateLimitError,
   RecordsResource,
+  SirenError,
   SiteDisconnectedError,
   WebhooksResource,
 } from '../src/index';
-import { HttpTransport, type HttpTransportOptions } from '../src/http';
+import { HttpTransport, type HttpResponse, type HttpTransportOptions } from '../src/http';
 import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
 
 /*
@@ -85,16 +86,29 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
  * the PHP SDK, and the record writes of slices 3 and 4 take the same rule
  * through the same `retriable: false` flag.
  */
-const SEND_ONCE: Array<[string, (http: HttpTransport) => Promise<unknown>]> = [
-  ['events.siteVisited', (http) => new EventsResource(http).siteVisited({ collaboratorId: 4021 })],
-  ['events.ingest', (http) => new EventsResource(http).ingest('newsletter-signup', { email: 'a@b.test' })],
-  ['events.sale with no externalId', (http) => new EventsResource(http).sale({ test: true })],
+const SEND_ONCE: Array<[string, (http: HttpTransport) => Promise<unknown>, unknown]> = [
+  [
+    'events.siteVisited',
+    (http) => new EventsResource(http).siteVisited({ collaboratorId: 4021 }),
+    CloudAnswers.eventTokenRefused,
+  ],
+  [
+    'events.ingest',
+    (http) => new EventsResource(http).ingest('newsletter-signup', { email: 'a@b.test' }),
+    CloudAnswers.eventTokenRefused,
+  ],
+  ['events.sale with no externalId', (http) => new EventsResource(http).sale({ test: true }), CloudAnswers.eventTokenRefused],
   [
     'webhooks.subscriptions.create (POST)',
     (http) =>
       new WebhooksResource(http).subscriptions.create({ targetUrl: 'https://store.test/hook', events: ['*'] }),
+    CloudAnswers.authenticationRequired,
   ],
-  ['apiKeys.create (POST)', (http) => new ApiKeysResource(http).create({ scopes: [ApiKeyScope.AllEvents] })],
+  [
+    'apiKeys.create (POST)',
+    (http) => new ApiKeysResource(http).create({ scopes: [ApiKeyScope.AllEvents] }),
+    CloudAnswers.authenticationRequired,
+  ],
 ];
 
 describe('P4: HttpTransport sends through the HttpClient seam', () => {
@@ -179,6 +193,19 @@ describe('P4: HttpTransport sends through the HttpClient seam', () => {
     expect((melted as ApiError).statusCode).toBe(500);
   });
 
+  it.skip('raises a 3xx reply as SirenError with its status and never sends again', async () => {
+    const client = new FakeHttpClient([
+      reply(307, undefined, { Location: 'https://elsewhere.test/collect' }, 'Temporary Redirect'),
+      reply(200, []),
+    ]);
+
+    const error = await rejection(new RecordsResource(transport(client, spySource(), { maxRetries: 2 }), '/conversions').list());
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).statusCode).toBe(307);
+    expect(client.requests).toHaveLength(1);
+  });
+
   it.skip("turns an HttpClientError into ConnectionError whose cause is the host's own error", async () => {
     const hostError = new TypeError('fetch failed');
     const client = new FakeHttpClient([new HttpClientError('fetch failed', { cause: hostError })]);
@@ -217,6 +244,35 @@ describe('P4: HttpTransport sends through the HttpClient seam', () => {
     expect(error).toBe(bug);
     expect(client.requests).toHaveLength(1);
   });
+
+  it.skip.each([
+    ['a 503', () => reply(503, undefined)],
+    ['a 429 with Retry-After', () => reply(429, { error: { message: 'Slow down.', context: [] } }, { 'Retry-After': '30' })],
+    ['an HttpClientError', () => new HttpClientError('socket hang up')],
+  ])('sends a retriable read exactly once at maxRetries 0 when it gets %s, with no wait', async (_name, answer) => {
+    vi.useFakeTimers();
+    const client = new FakeHttpClient([answer(), reply(200, [])]);
+
+    const error = await rejection(new RecordsResource(transport(client, spySource(), { maxRetries: 0 }), '/conversions').list());
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect(client.requests).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.skip('sends a retriable read exactly twice at maxRetries 0 when the resend after a 401 gets a 503', async () => {
+    const client = new FakeHttpClient([
+      reply(401, CloudAnswers.authenticationRequired),
+      reply(503, undefined),
+      reply(200, []),
+    ]);
+
+    const error = await rejection(new RecordsResource(transport(client, spySource(), { maxRetries: 0 }), '/conversions').list());
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).statusCode).toBe(503);
+    expect(client.bearers()).toEqual(['Bearer tok-1', 'Bearer tok-2']);
+  });
 });
 
 describe('P4: HttpTransport reads the token from the AccessTokenSource', () => {
@@ -233,6 +289,19 @@ describe('P4: HttpTransport reads the token from the AccessTokenSource', () => {
     expect(tokens.refreshAccessToken).not.toHaveBeenCalled();
   });
 
+  it.skip('reads the token once per call: a retry carries the same token without asking again', async () => {
+    vi.useFakeTimers();
+    const tokens = spySource(['tok-A', 'tok-B']);
+    const client = new FakeHttpClient([reply(503, undefined), reply(200, [])]);
+
+    const pending = new RecordsResource(transport(client, tokens, { maxRetries: 1 }), '/conversions').list();
+    await vi.runAllTimersAsync();
+    await pending;
+
+    expect(client.bearers()).toEqual(['Bearer tok-A', 'Bearer tok-A']);
+    expect(tokens.getAccessToken).toHaveBeenCalledTimes(1);
+  });
+
   it.skip('lets an error from getAccessToken through unchanged and sends nothing', async () => {
     const broken = new Error('token store offline');
     const tokens = spySource();
@@ -241,6 +310,23 @@ describe('P4: HttpTransport reads the token from the AccessTokenSource', () => {
 
     const error = await rejection(new RecordsResource(transport(client, tokens), '/conversions').list());
     expect(error).toBe(broken);
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it.skip.each([
+    ['an empty string', ''],
+    ['undefined', undefined],
+    ['null', null],
+    ['a number', 42],
+  ])('refuses a token that is %s with SirenError and sends nothing', async (_name, token) => {
+    const tokens = spySource();
+    tokens.getAccessToken.mockResolvedValueOnce(token);
+    const client = new FakeHttpClient([reply(200, [])]);
+
+    const error = await rejection(new RecordsResource(transport(client, tokens), '/conversions').list());
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toMatch(/getAccessToken/);
     expect(client.requests).toHaveLength(0);
   });
 });
@@ -264,9 +350,9 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
 
   it.skip.each(SEND_ONCE)(
     'resends %s once after a 401, writes included, and sends it exactly twice',
-    async (_name, call) => {
+    async (_name, call, refusal) => {
       const tokens = spySource(['tok-1'], 'tok-2');
-      const client = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), reply(200, { id: 1 })]);
+      const client = new FakeHttpClient([reply(401, refusal), reply(200, { id: 1 })]);
 
       await call(transport(client, tokens, { maxRetries: 2 }));
 
@@ -277,31 +363,46 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
   );
 
   it.skip.each(SEND_ONCE)(
-    'never sends %s a third time: a 503 after the resend surfaces at once with retries on',
-    async (_name, call) => {
-      const client = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), reply(503, undefined)]);
+    'never sends %s a third time, whatever the resend gets, with retries on',
+    async (_name, call, refusal) => {
+      vi.useFakeTimers();
+      const afterResend: Array<[HttpResponse | Error, new (...args: never[]) => Error]> = [
+        [reply(503, undefined), ApiError],
+        [reply(429, { error: { message: 'Slow down.', context: [] } }, { 'Retry-After': '1' }), RateLimitError],
+        [new HttpClientError('socket hang up'), ConnectionError],
+        [reply(401, CloudAnswers.siteDisconnected), SiteDisconnectedError],
+      ];
+      for (const [answer, raised] of afterResend) {
+        const tokens = spySource(['tok-1'], 'tok-2');
+        const client = new FakeHttpClient([reply(401, refusal), answer, reply(200, { id: 1 })]);
 
-      const error = await rejection(call(transport(client, spySource(), { maxRetries: 2 })));
+        const pending = rejection(call(transport(client, tokens, { maxRetries: 2 })));
+        await vi.runAllTimersAsync();
+        const error = await pending;
 
-      expect(error).toBeInstanceOf(ApiError);
-      expect((error as ApiError).statusCode).toBe(503);
-      expect(client.requests).toHaveLength(2);
+        expect(error).toBeInstanceOf(raised);
+        expect(client.requests).toHaveLength(2);
+        expect(tokens.refreshAccessToken).toHaveBeenCalledTimes(1);
+      }
     },
   );
 
-  it.skip('never sends a send-once request a third time when the resend loses its connection', async () => {
-    const client = new FakeHttpClient([
-      reply(401, CloudAnswers.authenticationRequired),
-      new HttpClientError('socket hang up'),
-    ]);
+  it.skip.each(SEND_ONCE)(
+    'never retries %s when its first send loses the connection or gets a 503, with retries on',
+    async (_name, call) => {
+      vi.useFakeTimers();
+      for (const answer of [new HttpClientError('socket hang up'), reply(503, undefined)]) {
+        const client = new FakeHttpClient([answer, reply(200, { id: 1 })]);
 
-    const error = await rejection(
-      new EventsResource(transport(client, spySource(), { maxRetries: 2 })).siteVisited({ collaboratorId: 4021 }),
-    );
+        const pending = rejection(call(transport(client, spySource(), { maxRetries: 2 })));
+        await vi.runAllTimersAsync();
+        const error = await pending;
 
-    expect(error).toBeInstanceOf(ConnectionError);
-    expect(client.requests).toHaveLength(2);
-  });
+        expect(error).toBeInstanceOf(answer instanceof Error ? ConnectionError : ApiError);
+        expect(client.requests).toHaveLength(1);
+      }
+    },
+  );
 
   it.skip('surfaces SiteDisconnectedError when the resend gets a second 401 for a revoked site', async () => {
     const tokens = spySource(['tok-1'], 'tok-2');
@@ -334,10 +435,71 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
   });
 
   it.skip.each([
+    ['a 403 missing_scope', () => reply(403, { error: { message: 'Missing scope.', code: 'missing_scope', context: [] } })],
+    ['a 409', () => reply(409, { error: { message: 'Already exists.', context: [] } })],
+    ['a 404', () => reply(404, CloudAnswers.notFound)],
+  ])('never refreshes on %s: it is sent once and raised', async (_name, answer) => {
+    const tokens = spySource(['tok-1'], 'tok-2');
+    const client = new FakeHttpClient([answer(), reply(200, [])]);
+
+    const error = await rejection(new RecordsResource(transport(client, tokens, { maxRetries: 2 }), '/conversions').list());
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect(tokens.refreshAccessToken).not.toHaveBeenCalled();
+    expect(client.requests).toHaveLength(1);
+  });
+
+  it.skip('sends the resend at once, with no wait', async () => {
+    vi.useFakeTimers();
+    const client = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), reply(200, [])]);
+
+    const pending = new RecordsResource(transport(client, spySource(), { maxRetries: 2 }), '/conversions').list();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(client.requests).toHaveLength(2);
+    expect(await pending).toEqual([]);
+  });
+
+  it.skip('refreshes only once per call even when a retry comes between two 401s', async () => {
+    vi.useFakeTimers();
+    const tokens = spySource(['tok-1'], 'tok-2');
+    const client = new FakeHttpClient([
+      reply(401, CloudAnswers.authenticationRequired),
+      reply(503, undefined),
+      reply(401, CloudAnswers.authenticationRequired),
+      reply(200, []),
+    ]);
+
+    const pending = rejection(new RecordsResource(transport(client, tokens, { maxRetries: 1 }), '/conversions').list());
+    await vi.runAllTimersAsync();
+    const error = await pending;
+
+    expect(error).toBeInstanceOf(AuthenticationError);
+    expect(tokens.refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(client.requests).toHaveLength(3);
+  });
+
+  it.skip("raises Siren's event-route revoked-site answer as AuthenticationError with its message after the resend", async () => {
+    const client = new FakeHttpClient([
+      reply(401, CloudAnswers.eventTokenRefused),
+      reply(401, CloudAnswers.eventSiteRevoked),
+    ]);
+
+    const error = await rejection(new EventsResource(transport(client)).siteVisited({ collaboratorId: 4021 }));
+
+    expect(error).toBeInstanceOf(AuthenticationError);
+    expect(error).not.toBeInstanceOf(SiteDisconnectedError);
+    expect((error as AuthenticationError).message).toBe(CloudAnswers.eventSiteRevoked.error.message);
+    expect(client.requests).toHaveLength(2);
+  });
+
+  it.skip.each([
     ['null', null],
     ['an empty string', ''],
+    ['undefined', undefined],
+    ['a number', 7],
   ])('raises the first 401 and sends nothing more when the refresh answers %s', async (_name, refreshed) => {
-    const tokens = spySource(['tok-1'], refreshed);
+    const tokens = spySource(['tok-1'], refreshed as string | null);
     const client = new FakeHttpClient([reply(401, CloudAnswers.siteDisconnected), reply(200, [])]);
 
     const error = await rejection(new RecordsResource(transport(client, tokens), '/conversions').list());
@@ -359,16 +521,44 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
     expect(client.requests).toHaveLength(1);
   });
 
-  it.skip('keeps the refused and the fresh token out of the error it raises', async () => {
-    const tokens = spySource(['sk_secret_first'], 'sk_secret_second');
-    const client = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired)]);
+  it.skip.each([
+    ['a second 401', [reply(401, CloudAnswers.authenticationRequired)]],
+    ['a 503 after the resend', [reply(401, CloudAnswers.authenticationRequired), reply(503, undefined)]],
+    ['a 429 after the resend', [reply(401, CloudAnswers.authenticationRequired), reply(429, undefined, { 'Retry-After': '1' })]],
+    ['a lost connection after the resend', [reply(401, CloudAnswers.authenticationRequired), new HttpClientError('socket hang up')]],
+  ] as Array<[string, Array<HttpResponse | Error>]>)(
+    'keeps the refused and the fresh token out of the error it raises on %s',
+    async (_name, answers) => {
+      const tokens = spySource(['sk_secret_first'], 'sk_secret_second');
+      const client = new FakeHttpClient(answers);
 
-    const error = (await rejection(new RecordsResource(transport(client, tokens), '/conversions').list())) as Error;
+      const error = (await rejection(new RecordsResource(transport(client, tokens), '/conversions').list())) as SirenError;
 
-    expect(client.requests).toHaveLength(2);
-    const seen = `${error.message} ${error.stack ?? ''} ${JSON.stringify(error)} ${String(error.cause ?? '')}`;
-    expect(seen).not.toContain('sk_secret_first');
-    expect(seen).not.toContain('sk_secret_second');
+      expect(client.requests).toHaveLength(2);
+      const seen = [
+        error.message,
+        error.stack ?? '',
+        JSON.stringify(error),
+        String(error.cause ?? ''),
+        JSON.stringify(error.data ?? null),
+      ].join(' ');
+      expect(seen).not.toContain('sk_secret_first');
+      expect(seen).not.toContain('sk_secret_second');
+    },
+  );
+
+  it.skip("removes the token from a client error's message when it builds ConnectionError, and keeps the client error as it is", async () => {
+    const leaky = new HttpClientError('POST https://cloud.test failed, Authorization: Bearer sk_secret_first');
+    const client = new FakeHttpClient([leaky]);
+
+    const error = await rejection(
+      new RecordsResource(transport(client, spySource(['sk_secret_first'])), '/conversions').list(),
+    );
+
+    expect(error).toBeInstanceOf(ConnectionError);
+    expect((error as ConnectionError).message).not.toContain('sk_secret_first');
+    expect((error as ConnectionError).message).toContain('Authorization: Bearer');
+    expect((error as ConnectionError).cause).toBe(leaky);
   });
 
   it.skip('does not count the resend as a retry: a retriable request still gets its retries after a refresh', async () => {

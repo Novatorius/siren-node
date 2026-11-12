@@ -93,6 +93,29 @@ export const CloudAnswers = {
    */
   authenticationRequired: { error: { message: 'Authentication required.', context: [] } },
   /**
+   * An expired or unknown token on the event routes. ApiKeyAuthMiddleware
+   * (saas/Auth/ApiKeyAuthMiddleware.php line 228) answers 401 with this body
+   * and no code after the token fails and no key matches it.
+   */
+  eventTokenRefused: {
+    error: {
+      message: 'Invalid API key. Copy the key from Siren again, or make a new one under API keys.',
+      context: [],
+    },
+  },
+  /**
+   * A revoked or inactive connected site on the event routes.
+   * ApiKeyAuthMiddleware lines 384 and 394 answer 401 with this body and no
+   * code, so the SDK raises AuthenticationError, not SiteDisconnectedError
+   * (A137).
+   */
+  eventSiteRevoked: {
+    error: {
+      message: "This site's connection to Siren Cloud was revoked. Reconnect it from the plugin.",
+      context: [],
+    },
+  },
+  /**
    * A revoked, cut-off or closed site. ConnectorTokenMiddleware::refuseInactive
    * throws ConnectorRefusedException with ApiErrorCode::SITE_DISCONNECTED.
    */

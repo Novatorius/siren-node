@@ -20,7 +20,11 @@
  * which means the grant itself is gone and the site needs to reconnect.
  *
  * Either method may answer with a value or a promise. An error either one
- * throws reaches the caller unchanged, and nothing more is sent.
+ * throws reaches the caller unchanged, and nothing more is sent. That error
+ * replaces the 401, `SiteDisconnectedError` included, so a refresh that Siren
+ * refuses because the grant is gone answers `null` rather than throwing, and
+ * the caller still sees the disconnect. Throw only for a fault, such as an
+ * unreachable token store.
  *
  * The SDK does not share one refresh between calls that fail at the same
  * time. Each call refreshes at most once, so a source used by concurrent
@@ -28,7 +32,11 @@
  * caller already rotated it.
  */
 export interface AccessTokenSource {
-  /** The token to send as `Authorization: Bearer <token>`. */
+  /**
+   * The token to send as `Authorization: Bearer <token>`. It must be a
+   * non-empty string. The SDK raises `SirenError` and sends nothing when it
+   * is not.
+   */
   getAccessToken(): string | Promise<string>;
 
   /**
@@ -38,7 +46,8 @@ export interface AccessTokenSource {
    * because later calls read it through {@link getAccessToken}. If another
    * caller already rotated the token, return the stored one instead of
    * refreshing again. Return `null` when no refresh is possible, and the SDK
-   * raises the 401 it received.
+   * raises the 401 it received. The SDK reads any answer but a non-empty
+   * string as `null`.
    */
   refreshAccessToken(rejectedToken: string): string | null | Promise<string | null>;
 }

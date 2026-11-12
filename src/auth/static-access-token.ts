@@ -23,7 +23,8 @@ export class StaticAccessToken implements AccessTokenSource {
 
   /** Always `null`: a fixed token has nothing to refresh to. */
   refreshAccessToken(_rejectedToken: string): string | null {
-    // Stub: slice 2 packet P1.
+    // Stub: slice 2 packet P1. It answers an empty string, not the documented
+    // null, so the null tests fail against the stub.
     return '';
   }
 }

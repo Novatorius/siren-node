@@ -54,6 +54,12 @@ export interface HttpResponse {
  *
  * - Send the request exactly as given: method, URL, headers and body. Honor
  *   `timeout` where the host can.
+ * - Never follow a redirect. Resolve with the 3xx reply as it is. A followed
+ *   redirect would send the bearer token to another host and could turn a
+ *   write into a bodiless GET. The SDK raises a 3xx as `SirenError`.
+ * - Keep the request's headers out of every error the client throws. They
+ *   carry a live credential, and the SDK hands the client's error to the
+ *   caller as `cause` without changing it.
  * - Resolve with an {@link HttpResponse} for every HTTP status, 4xx and 5xx
  *   included. The SDK maps error statuses to its own errors and decides what
  *   to resend.
@@ -70,11 +76,11 @@ export interface HttpClient {
 }
 
 /**
- * Thrown by an {@link HttpClient} when a request produced no HTTP response.
- * Pass the host's own error as `cause` so it stays inspectable. The SDK
- * resends where the request allows it, then raises `ConnectionError` whose
- * `cause` is that host error, or this error when it carries none, as the
- * PHP SDK does and as 0.3.0 did with fetch's own error.
+ * Thrown by an {@link HttpClient} when a request produced no complete HTTP
+ * response. Pass the host's own error as `cause` so it stays inspectable. The
+ * SDK resends where the request allows it, then raises `ConnectionError`
+ * whose `cause` is that host error, or this error when it carries none, as
+ * the PHP SDK does.
  */
 export class HttpClientError extends Error {
   constructor(message: string, options: { cause?: unknown } = {}) {
@@ -88,10 +94,12 @@ export class HttpClientError extends Error {
  * provide.
  *
  * It sends the request's method, URL, headers (as the same plain object) and
- * body, and aborts the request when `timeout` runs out. It resolves with the
- * status, the status text, every header under its lower-case name, and the
- * body as text, for every status. It rejects with {@link HttpClientError},
- * carrying fetch's error as `cause`, when fetch rejects or the timeout
+ * body with `redirect: 'manual'`, so it never follows a redirect, and aborts
+ * the request when `timeout` runs out, the body read included. It resolves
+ * with the status, the status text, every header under its lower-case name,
+ * and the body as text, for every status, 3xx included. It rejects with
+ * {@link HttpClientError}, carrying fetch's error as `cause`, when fetch
+ * rejects, the connection drops while the body is read, or the timeout
  * aborts the request.
  */
 export class FetchHttpClient implements HttpClient {
@@ -197,14 +205,20 @@ export class HttpTransport {
    *
    * 1. Reads the token once, from `tokens.getAccessToken()`, before the first
    *    send. Every send of this call carries it until a refresh replaces it.
-   * 2. Sends through `client.send()`.
-   * 3. A 2xx reply is returned.
+   *    A token that is not a non-empty string raises `SirenError`, naming
+   *    `getAccessToken`, and nothing is sent.
+   * 2. Sends through `client.send()`, building a new `HttpRequest`, headers
+   *    included, for each send.
+   * 3. A 2xx reply is returned. Any other reply that is not a 401 is never
+   *    refreshed. A 3xx raises `SirenError` with its status and is never
+   *    followed or sent again.
    * 4. The first 401 of the call asks `tokens.refreshAccessToken(sent)` for a
    *    new token, passing the token that was refused. A non-empty string is
-   *    sent at once in a new request, with no wait. `null` or an empty string
-   *    raises the 401. A second 401 in the same call never refreshes again
-   *    and raises through `errorFromResponse`, so Siren's revoked-site answer
-   *    surfaces as `SiteDisconnectedError`.
+   *    sent at once in a new request, with no wait. Any other answer raises
+   *    the 401. A later 401 in the same call, with or without retries in
+   *    between, never refreshes again and raises through
+   *    `errorFromResponse`, so Siren's revoked-site answer surfaces as
+   *    `SiteDisconnectedError`.
    *
    *    The resend after a 401 applies to every request, retriable or not,
    *    and does not use up a retry. Siren answers 401 from its
@@ -219,15 +233,16 @@ export class HttpTransport {
    *    resend after a 401.
    * 6. With no resend left, an `HttpClientError` raises `ConnectionError`
    *    whose `cause` is the `HttpClientError`'s own `cause`, or the
-   *    `HttpClientError` when it has none, and an error reply raises the
-   *    `SirenError` that `errorFromResponse` builds. Any other error from the
-   *    client, or from either token method, reaches the caller unchanged and
-   *    nothing more is sent.
+   *    `HttpClientError` when it has none. Its message carries the client
+   *    error's message with every token this call sent replaced. An error
+   *    reply raises the `SirenError` that `errorFromResponse` builds. Any
+   *    other error from the client, or from either token method, reaches the
+   *    caller unchanged and nothing more is sent.
    */
   async request(req: SirenRequest): Promise<ApiResponse> {
     // Stub: slice 2 packet P4. Until P4 lands, the transport sends through
-    // the global fetch as 0.3.0 did, reads the token once, ignores `client`
-    // and never refreshes.
+    // the global fetch, reads the token once, ignores `client` and never
+    // refreshes. P4 deletes this body.
     const url = this.buildUrl(req);
     const token = await this.tokens.getAccessToken();
     const init = this.buildInit(req, token);

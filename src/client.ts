@@ -60,8 +60,11 @@ export class Siren {
    * Throws `SirenError` when the options pass both `apiKey` and
    * `accessToken`, neither, an empty one, an `accessToken` that is neither a
    * string nor an `AccessTokenSource`, or an `httpClient` without a `send`
-   * function. The message for a missing credential says an apiKey is
-   * required and names `accessToken` as the other choice.
+   * function, `null` included. An option given as `undefined` counts as
+   * absent, and an empty string counts as given, so an empty `apiKey` beside
+   * an `accessToken` is refused as both. The message for a missing
+   * credential says an apiKey is required and names `accessToken` as the
+   * other choice. No message carries a credential.
    *
    * `apiKey` and a string `accessToken` become a `StaticAccessToken`. An
    * `AccessTokenSource` is used as given. Requests go through `httpClient`,
@@ -69,7 +72,7 @@ export class Siren {
    */
   constructor(options: SirenOptions) {
     // Stub: slice 2 packet P5. Until P5 lands, the client takes an apiKey
-    // only and sends it as 0.3.0 did.
+    // only and sends it through FetchHttpClient. P5 replaces this block.
     if (!options || typeof options.apiKey !== 'string' || options.apiKey.length === 0) {
       throw new SirenError(
         'Siren: an apiKey is required. Mint one in the Siren dashboard (Settings > API Keys).',

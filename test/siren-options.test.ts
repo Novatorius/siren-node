@@ -1,7 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthenticationError,
   CallbackAccessTokenSource,
+  FetchHttpClient,
   Siren,
   SirenError,
   SiteDisconnectedError,
@@ -13,14 +16,18 @@ import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
  * Slice 2 acceptance tests for packet P5: the Siren constructor's options.
  *
  * Integration shape (KB 568): the real Siren client, transport and resources,
- * with the network mocked only at the HttpClient seam. The last describe
- * block proves the slice's done condition through the whole public stack.
+ * with the network mocked only at the HttpClient seam. The last two describe
+ * blocks prove the slice's done condition: once at the seam, and once through
+ * the real FetchHttpClient against a real HTTP server on 127.0.0.1.
  *
  * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
  * its describe block. That packet's implementer turns `it.skip(` into `it(`
  * for its own tests and changes nothing else here.
  */
 
+
+/** The real fetch, kept before the tripwire replaces the global one. */
+const realFetch = globalThis.fetch;
 
 /**
  * Fails any test whose request reaches the global fetch, so a transport that
@@ -95,6 +102,43 @@ describe('P5: Siren credentials', () => {
     expect(() => new Siren({ accessToken } as unknown as SirenOptions)).toThrow(SirenError);
   });
 
+  it.skip.each([
+    ['an empty apiKey beside an accessToken', { apiKey: '', accessToken: 'oauth-access-1' }],
+    ['an apiKey beside an empty accessToken', { apiKey: KEY, accessToken: '' }],
+  ])('refuses %s as both', (_name, options) => {
+    expect(() => new Siren(options as unknown as SirenOptions)).toThrow(/either apiKey or accessToken/i);
+  });
+
+  it.skip('reads an accessToken given as undefined as absent', async () => {
+    const httpClient = new FakeHttpClient([reply(200, [])]);
+    const siren = new Siren({ apiKey: KEY, accessToken: undefined, httpClient } as unknown as SirenOptions);
+
+    await siren.payouts.list();
+
+    expect(httpClient.bearers()).toEqual([`Bearer ${KEY}`]);
+  });
+
+  it.skip('keeps the credentials out of the error it raises', () => {
+    const secret = `sk_live_${'s'.repeat(64)}`;
+    const errors = [
+      { apiKey: secret, accessToken: 'oauth-secret-1' },
+      { accessToken: { getAccessToken: () => 'oauth-secret-1' } },
+    ].map((options) => {
+      try {
+        new Siren(options as unknown as SirenOptions);
+      } catch (caught) {
+        return caught as Error;
+      }
+      throw new Error('expected the constructor to throw');
+    });
+
+    for (const error of errors) {
+      const seen = `${error.message} ${error.stack ?? ''} ${JSON.stringify(error)}`;
+      expect(seen).not.toContain(secret);
+      expect(seen).not.toContain('oauth-secret-1');
+    }
+  });
+
   it.skip('still refuses an empty apiKey', () => {
     expect(() => new Siren({ apiKey: '' })).toThrow(/apiKey is required/);
   });
@@ -119,15 +163,17 @@ describe('P5: Siren httpClient', () => {
     ['an object with no send', {}],
     ['a function', () => undefined],
     ['a string', 'fetch'],
+    ['null', null],
   ])('refuses an httpClient that is %s', (_name, httpClient) => {
     expect(() => new Siren({ apiKey: KEY, httpClient } as unknown as SirenOptions)).toThrow(SirenError);
   });
 
   it.skip('defaults to the global fetch when no client is given', async () => {
+    const siren = new Siren({ accessToken: 'oauth-access-1' });
     const fetchSpy = vi.fn(async () => new Response('[]', { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
 
-    await new Siren({ accessToken: 'oauth-access-1' }).transactions.list();
+    await siren.transactions.list();
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
@@ -135,11 +181,11 @@ describe('P5: Siren httpClient', () => {
   });
 });
 
-describe('P5: done condition through the whole stack', () => {
+describe('P5: done condition at the HttpClient seam', () => {
   it.skip('refreshes once and resends a send-once write, then answers', async () => {
     const refresh = vi.fn(async (_rejected: string) => 'oauth-access-2');
     const httpClient = new FakeHttpClient([
-      reply(401, CloudAnswers.authenticationRequired),
+      reply(401, CloudAnswers.eventTokenRefused),
       reply(200, { status: 'recorded' }),
     ]);
     const siren = new Siren({
@@ -160,7 +206,7 @@ describe('P5: done condition through the whole stack', () => {
   it.skip('surfaces SiteDisconnectedError when the resend gets a second 401, after one refresh and two sends', async () => {
     const refresh = vi.fn(async (_rejected: string) => 'oauth-access-2');
     const httpClient = new FakeHttpClient([
-      reply(401, CloudAnswers.authenticationRequired),
+      reply(401, CloudAnswers.eventTokenRefused),
       reply(401, CloudAnswers.siteDisconnected),
     ]);
     const siren = new Siren({
@@ -174,5 +220,54 @@ describe('P5: done condition through the whole stack', () => {
     );
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(httpClient.bearers()).toEqual(['Bearer oauth-access-1', 'Bearer oauth-access-2']);
+  });
+});
+
+describe('P5: done condition over a real socket', () => {
+  interface Received {
+    authorization: string | undefined;
+    body: string;
+  }
+
+  let server: Server;
+  let base: string;
+  const received: Received[] = [];
+
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        received.push({ authorization: req.headers.authorization, body: Buffer.concat(chunks).toString('utf8') });
+        const first = received.length === 1;
+        res.writeHead(first ? 401 : 200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(first ? CloudAnswers.eventTokenRefused : { status: 'recorded' }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/siren/v1`;
+  });
+
+  afterAll(async () => {
+    server.closeAllConnections?.();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it.skip('refreshes once and resends a send-once write with the same body through FetchHttpClient', async () => {
+    const refresh = vi.fn(async (_rejected: string) => 'oauth-access-2');
+    const siren = new Siren({
+      accessToken: new CallbackAccessTokenSource(() => 'oauth-access-1', refresh),
+      httpClient: new FetchHttpClient(realFetch),
+      baseUrl: base,
+      maxRetries: 2,
+    });
+
+    const result = await siren.events.ingest('newsletter-signup', { email: 'a@b.test' });
+
+    expect(result.status).toBe('recorded');
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(received.map((r) => r.authorization)).toEqual(['Bearer oauth-access-1', 'Bearer oauth-access-2']);
+    expect(received[0]!.body).not.toBe('');
+    expect(received[1]!.body).toBe(received[0]!.body);
   });
 });

@@ -126,6 +126,32 @@ describe('P3: FetchHttpClient', () => {
     expect(unavailable.headers['retry-after']).toBe('3');
   });
 
+  it.skip('never follows a redirect: it answers the 3xx as it is and sends nothing to the Location', async () => {
+    const elsewhere: string[] = [];
+    const other = createServer((req, res) => {
+      elsewhere.push(`${req.method} ${req.url} ${req.headers.authorization ?? ''}`);
+      res.end('{}');
+    });
+    await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
+    const location = `http://127.0.0.1:${(other.address() as AddressInfo).port}/collect`;
+    handler = (_req, res) => {
+      res.writeHead(307, { Location: location });
+      res.end();
+    };
+
+    try {
+      const response = await new FetchHttpClient().send(request());
+
+      expect(response.status).toBe(307);
+      expect(response.headers.location).toBe(location);
+      expect(received).toHaveLength(1);
+      expect(elsewhere).toEqual([]);
+    } finally {
+      other.closeAllConnections?.();
+      await new Promise<void>((resolve) => other.close(() => resolve()));
+    }
+  });
+
   it.skip('answers an empty body as an empty string', async () => {
     handler = (_req, res) => {
       res.writeHead(204);
@@ -155,9 +181,47 @@ describe('P3: FetchHttpClient', () => {
     expect((error as HttpClientError).cause).toBeInstanceOf(Error);
   });
 
+  it.skip('rejects with HttpClientError when the connection drops while the body is read', async () => {
+    handler = (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '100' });
+      res.write('{"id":');
+      setTimeout(() => res.destroy(), 20).unref();
+    };
+
+    const error = await new FetchHttpClient()
+      .send(request())
+      .then(
+        () => undefined,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(HttpClientError);
+    expect((error as HttpClientError).cause).toBeInstanceOf(Error);
+  });
+
   it.skip('rejects with HttpClientError when the timeout runs out', async () => {
     handler = (_req, res) => {
       setTimeout(() => res.end('late'), 2_000).unref();
+    };
+
+    const started = Date.now();
+    const error = await new FetchHttpClient()
+      .send(request({ timeout: 100 }))
+      .then(
+        () => undefined,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(HttpClientError);
+    expect((error as HttpClientError).cause).toBeInstanceOf(Error);
+    expect(Date.now() - started).toBeLessThan(1_500);
+  });
+
+  it.skip('counts the body read in the timeout', async () => {
+    handler = (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.write('[');
+      setTimeout(() => res.end(']'), 2_000).unref();
     };
 
     const started = Date.now();

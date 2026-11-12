@@ -5,7 +5,9 @@
     "find": "  ConnectAll: 'connect:*',",
     "replace": "  ConnectAll: 'connect:all',",
     "expect": "caught",
-    "failing": ["names the four scopes a connected site asks for"]
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
   },
   {
     "id": "control-harmless",
@@ -37,7 +39,9 @@
     "find": "  Webhooks: 'connect:webhooks',",
     "replace": "  Webhooks: 'connect:webhook',",
     "expect": "caught",
-    "failing": ["names the four scopes a connected site asks for"]
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
   },
   {
     "id": "scope-records-read",
@@ -45,7 +49,9 @@
     "find": "  RecordsRead: 'connect:records:read',",
     "replace": "  RecordsRead: 'connect:records:reads',",
     "expect": "caught",
-    "failing": ["names the four scopes a connected site asks for"]
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
   },
   {
     "id": "scope-records-write",
@@ -53,7 +59,9 @@
     "find": "  RecordsWrite: 'connect:records:write',",
     "replace": "  RecordsWrite: 'connect:records:writes',",
     "expect": "caught",
-    "failing": ["names the four scopes a connected site asks for"]
+    "failing": [
+      "names the four scopes a connected site asks for"
+    ]
   },
   {
     "id": "connected-site-missing-scope",
@@ -61,7 +69,9 @@
     "find": "  CONNECTED_SITE: 'connect:* connect:webhooks connect:records:read connect:records:write',",
     "replace": "  CONNECTED_SITE: 'connect:* connect:webhooks connect:records:read',",
     "expect": "caught",
-    "failing": ["joins all four with single spaces in CONNECTED_SITE"]
+    "failing": [
+      "joins all four with single spaces in CONNECTED_SITE"
+    ]
   },
   {
     "id": "connected-site-comma",
@@ -69,7 +79,9 @@
     "find": "  CONNECTED_SITE: 'connect:* connect:webhooks connect:records:read connect:records:write',",
     "replace": "  CONNECTED_SITE: 'connect:*,connect:webhooks,connect:records:read,connect:records:write',",
     "expect": "caught",
-    "failing": ["joins all four with single spaces in CONNECTED_SITE"]
+    "failing": [
+      "joins all four with single spaces in CONNECTED_SITE"
+    ]
   },
   {
     "id": "other-readers-gain-retrieve",
@@ -77,6 +89,18 @@
     "find": "    this.obligations = new RecordsResource(http, '/obligations');",
     "replace": "    this.obligations = new ConversionsResource(http);",
     "expect": "caught",
-    "failing": ["give obligations and payouts no retrieve"]
+    "failing": [
+      "give obligations and payouts no retrieve"
+    ]
+  },
+  {
+    "id": "payouts-gain-retrieve",
+    "file": "src/client.ts",
+    "find": "    this.payouts = new RecordsResource(http, '/payouts');",
+    "replace": "    this.payouts = new TransactionsResource(http);",
+    "expect": "caught",
+    "failing": [
+      "give obligations and payouts no retrieve"
+    ]
   }
 ]

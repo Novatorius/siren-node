@@ -27,6 +27,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** The body as the SDK parses it: JSON when it parses, else undefined, as apiKeys.scopes() reports it. */
+function parsed(text: string): unknown {
+  try {
+    return text === '' ? undefined : (JSON.parse(text) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
 type Retrieve = (client: Siren, id: number, params?: RetrieveParams) => Promise<Record<string, unknown>>;
 
 const RESOURCES: Array<[string, string, Retrieve, Record<string, unknown>]> = [
@@ -38,12 +47,13 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
   it.skip('reads one record with GET {path}/{id} and answers the body', async () => {
     const ctx = makeClient([jsonResponse(200, record)]);
 
-    const found = await retrieve(ctx.client, 7);
+    const id = record.id as number;
+    const found = await retrieve(ctx.client, id);
 
     expect(found).toEqual(record);
     expect(ctx.calls()).toHaveLength(1);
     expect(ctx.lastCall().method).toBe('GET');
-    expect(ctx.lastCall().url).toBe(`https://api.sirenaffiliates.com/siren/v1${path}/7`);
+    expect(ctx.lastCall().url).toBe(`https://api.sirenaffiliates.com/siren/v1${path}/${id}`);
     expect(ctx.lastCall().body).toBeUndefined();
   });
 
@@ -90,7 +100,11 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
   ])('refuses %s with SirenError before sending', async (_label, id) => {
     const ctx = makeClient([jsonResponse(200, record)]);
 
-    await expect(retrieve(ctx.client, id)).rejects.toBeInstanceOf(SirenError);
+    const error = await retrieve(ctx.client, id).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toMatch(/\bid\b/);
+    expect((error as SirenError).message).toContain(String(id));
     expect(ctx.fetchMock).not.toHaveBeenCalled();
   });
 
@@ -99,7 +113,8 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
     ['an empty body', () => emptyResponse(200)],
     ['a string', () => jsonResponse(200, 'ok')],
     ['null', () => jsonResponse(200, null)],
-  ])('raises UnexpectedResponseError with the status and body when Siren answers %s', async (_label, answer) => {
+    ['text that is not JSON', () => new Response('<html>Gateway login</html>', { status: 200 })],
+  ])('raises UnexpectedResponseError with the status and parsed body when Siren answers %s', async (_label, answer) => {
     const response = answer();
     const sent = await response.clone().text();
     const ctx = makeClient([response]);
@@ -108,7 +123,8 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
 
     expect(error).toBeInstanceOf(UnexpectedResponseError);
     expect((error as UnexpectedResponseError).statusCode).toBe(200);
-    expect((error as UnexpectedResponseError).data).toEqual(sent === '' ? undefined : JSON.parse(sent));
+    expect((error as UnexpectedResponseError).message).toContain(`${path}/7`);
+    expect((error as UnexpectedResponseError).data).toEqual(parsed(sent));
   });
 });
 
