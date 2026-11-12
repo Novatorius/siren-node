@@ -62,6 +62,11 @@ paths:
         otherwise `total` is treated as one line. The opportunity id is returned
         in the `X-Siren-OID` response header. Sending the same `source` and
         `externalId` again records nothing and answers `status: duplicate`.
+
+        A test sale sends `test: true` to check an integration, and needs no
+        other field. Siren marks it as a test, counts it toward nothing,
+        ignores `trackingId` so a real visit is never spent, and reads a
+        repeat as a pass. Its answer carries `test: true`.
       security:
         - apiKey: []
         - dashboardSession: []
@@ -89,8 +94,18 @@ paths:
       operationId: recordRefund
       summary: Record a refund
       description: |
-        Reverses a previously recorded sale, matched by `(externalId, source)`.
-        Returns 404 if no matching sale transaction exists.
+        Records a refund of a previously recorded sale, matched by
+        `(externalId, source)`, and named by `refundId`, the store's own id for
+        this refund. Siren records each refund id once per order, so sending
+        the same refund again is safe. Returns 404 if no matching sale
+        transaction exists.
+
+        Siren refunds the whole order when `whole` is `true`, or when neither
+        `amount` nor `lines` is sent. `kind` then says how the order ended.
+        Anything else refunds part of the order: `amount` is the money
+        refunded, and `lines` names each refunded line by the sale item's
+        `lineId` or by `sku`. A partial refund that leaves the order worth
+        nothing counts as a whole refund.
       security:
         - apiKey: []
         - dashboardSession: []
@@ -116,8 +131,13 @@ paths:
       summary: Record a referred visit
       description: |
         Records a referred visit and opens an opportunity attributed to the
-        given collaborator. A collaborator who does not exist or is not
-        active gets nothing written and `status: not_attributed`.
+        given collaborator. `collaboratorId` takes the collaborator's numeric
+        id, or one of their tracking codes as `tracking:{code}`, which Siren
+        resolves to its collaborator. A collaborator who does not exist or is
+        not active gets nothing written and `status: not_attributed`.
+
+        Siren records every visit it receives, so send a visit once. A visit
+        sent again after a lost reply is recorded twice.
       security:
         - apiKey: []
         - connectorToken: []
@@ -482,6 +502,39 @@ paths:
                         description: Plaintext key. Returned once.
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api-keys/scopes:
+    get:
+      tags: [API Keys]
+      operationId: listApiKeyScopes
+      summary: List the scopes a new API key may be given
+      description: |
+        The scopes `createApiKey` takes, grouped by resource. Siren lists the
+        event scopes under `events`, the ledger read scopes under `ledger`,
+        the webhook scopes under `webhook-subscriptions`, and the record
+        scopes under one `records:*` group each, such as `records:programs`.
+        It leaves out a group with no scopes. The event scopes include each
+        custom event type the organization has added.
+
+        Takes a signed-in dashboard session. No API key scope reaches this
+        route, and Siren answers an API key with 401 `api_key_not_accepted`.
+      security:
+        - dashboardSession: []
+      responses:
+        '200':
+          description: Scopes grouped by resource (bare object).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: { $ref: '#/components/schemas/ApiKeyScopeEntry' }
+                example:
+                  events:
+                    - { scope: 'event:sale', resource: events, action: sale, label: Sale }
+                  ledger:
+                    - { scope: 'ledger:conversions:read', resource: ledger, action: 'conversions:read', label: Read conversions }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api-keys/{id}:
     delete:
       tags: [API Keys]
@@ -656,7 +709,9 @@ components:
   schemas:
     SalePayload:
       type: object
-      required: [source, externalId, total, trackingId]
+      description: |
+        A real sale requires `source`, `externalId`, `total` and `trackingId`.
+        A test sale sends `test: true` and needs no other field.
       properties:
         source:
           type: string
@@ -692,10 +747,32 @@ components:
           type: array
           maxItems: 500
           items: { $ref: '#/components/schemas/LineItem' }
+        test:
+          type: boolean
+          default: false
+          description: |
+            `true` records a test sale, to check an integration. Siren needs no
+            other field, marks the sale as a test, counts it toward nothing and
+            ignores `trackingId`. A repeat of a test reads as a pass.
+      if:
+        required: [test]
+        properties:
+          test: { const: true }
+      else:
+        required: [source, externalId, total, trackingId]
     LineItem:
       type: object
       required: [amount]
       properties:
+        lineId:
+          type: [string, number]
+          minLength: 1
+          maxLength: 191
+          description: |
+            Your id for this order line. Siren keeps it on the line, so a later
+            refund can name the line by it in `RefundLine.lineId`. Siren stores
+            a number as text.
+          example: line-1
         externalId: { type: [string, number], maxLength: 255, description: 'Text, or a number that Siren stores as text.' }
         name: { type: [string, number], maxLength: 255, description: 'Text, or a number that Siren stores as text.', example: Pro Plan (annual) }
         quantity: { type: integer, minimum: 1, maximum: 1000000, default: 1 }
@@ -721,6 +798,7 @@ components:
               id: { type: integer }
               status: { type: string }
         message: { type: string }
+        test: { type: boolean, const: true, description: Sent only on a test sale. }
         reason:
           type: string
           description: Why a recorded sale earned nothing.
@@ -756,11 +834,75 @@ components:
           minLength: 1
           maxLength: 191
           example: re_3Nf8a2
+        amount:
+          type: number
+          minimum: 0
+          maximum: 999999999.99
+          description: Money refunded, in major currency units (9.99 = $9.99). Sending it makes the refund partial unless `whole` is `true`.
+          example: 20
+        currency:
+          type: string
+          description: |
+            A currency code the organization uses, for the amounts. When it is
+            left out, Siren reads them in the sale's own currency, or else the
+            organization's default.
+          example: USD
+        lines:
+          type: array
+          maxItems: 500
+          description: The refunded order lines. Sending them makes the refund partial unless `whole` is `true`.
+          items: { $ref: '#/components/schemas/RefundLine' }
+        whole:
+          type: boolean
+          description: |
+            `true` refunds the whole order, whatever else is sent. A refund
+            with neither `amount` nor `lines` is also a whole refund.
+        kind:
+          type: string
+          enum: [refund, cancelled, voided]
+          default: refund
+          description: How the whole order ended. Siren reads `refund` when it is left out.
+    RefundLine:
+      type: object
+      description: |
+        One refunded order line. Name the line by `lineId`, as the sale's item
+        sent it, or by `sku`. Siren refuses a line that names neither.
+      properties:
+        lineId:
+          type: [string, number]
+          minLength: 1
+          maxLength: 191
+          description: The sale line's `lineId`. Siren stores a number as text.
+          example: line-1
+        sku:
+          type: [string, number]
+          minLength: 1
+          maxLength: 191
+          description: The product SKU of the line, when the sale sent no `lineId`.
+        quantity:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          description: Units returned.
+        amount:
+          type: number
+          minimum: 0
+          maximum: 999999999.99
+          description: Money refunded for this line, in major currency units.
+          example: 20
     SiteVisitedPayload:
       type: object
       required: [collaboratorId]
       properties:
-        collaboratorId: { type: integer, example: 88 }
+        collaboratorId:
+          description: |
+            The collaborator to attribute the visit to: their numeric id, or
+            one of their tracking codes as `tracking:{code}`, such as
+            `tracking:summer-sale`. Siren resolves the code to its collaborator.
+          oneOf:
+            - { type: integer }
+            - { type: string, pattern: '^tracking:.+' }
+          example: 88
         userId: { type: integer, example: 12345 }
     WebhookSubscription:
       type: object
@@ -792,12 +934,24 @@ components:
         description: { type: string }
     WebhookEventType:
       type: string
-      description: A subscribable event type. Use `*` to subscribe to all.
+      description: |
+        A subscribable event type. Use `*` to subscribe to all. The list matches
+        Siren's webhook catalog, which `GET /webhooks/events` serves, and Siren
+        may add an event there before this list has it.
       enum:
         - '*'
         - allocation.completed
+        - collaborator.applied
         - collaborator.created
         - collaborator.deactivated
+        - collaborator.declined
+        - collaborator.deleted
+        - collaborator_group.created
+        - collaborator_group.deleted
+        - collaborator_group.member_added
+        - collaborator_group.member_removed
+        - collaborator_group.updated
+        - collaborator.joined
         - collaborator.registered
         - collaborator.updated
         - conversion.approved
@@ -805,11 +959,17 @@ components:
         - conversion.rejected
         - conversion.renewed
         - coupon.applied
+        - coupon.linked
+        - coupon.merged
+        - coupon.unlinked
         - credit.issued
         - credit.redeemed
         - currency.created
         - currency.deleted
         - distribution.completed
+        - distributor.created
+        - distributor.deleted
+        - distributor.updated
         - engagement.awarded
         - engagement.completed
         - engagement.created
@@ -817,16 +977,31 @@ components:
         - fulfillment.updated
         - lead.created
         - metrics.updated
+        - obligation.approved
         - obligation.completed
         - obligation.created
+        - obligation.rejected
+        - obligation.superseded
         - opportunity.created
         - opportunity.invalidated
         - payout.created
+        - payout.failed
         - payout.paid
+        - payout.waiting
+        - product.merged
         - program.created
+        - program.deleted
+        - program_group.created
+        - program_group.deleted
+        - program_group.updated
+        - program.status_changed
+        - program.updated
         - refund.created
+        - refund.recorded
         - renewal.created
         - sale.created
+        - store.connected
+        - store.disconnected
         - transaction.completed
         - transaction.created
     ApiKey:
@@ -879,6 +1054,69 @@ components:
             it on the key's events, the key reads only that store's
             conversions, transactions and obligations, and it is refused on
             payouts and webhook subscriptions with 403 `store_key_not_allowed`.
+    ApiKeyScopeEntry:
+      type: object
+      description: One scope a new API key may be given, as `GET /api-keys/scopes` lists it.
+      properties:
+        scope: { type: string, description: The scope string to pass to `createApiKey`., example: 'ledger:conversions:read' }
+        resource: { type: string, description: The group the scope belongs to., example: ledger }
+        action: { type: string, description: What the scope allows within its group., example: 'conversions:read' }
+        label: { type: string, example: Read conversions }
+    ErrorCode:
+      type: string
+      description: |
+        The machine-readable `error.code` Siren sends beside a refusal's
+        message. Branch on the code, not the message, which can change. A
+        reply from an older or newer Siren deployment may carry no code, or a
+        code this list lacks.
+
+        401: `site_disconnected` when the organization revoked or deleted the
+        connected site's connection, and `api_key_not_accepted` when the route
+        takes a dashboard session and not an API key.
+
+        403: `missing_scope` and `store_key_not_allowed` refuse an API key.
+        `field_not_allowed`, `pending_status_required`, `user_type_not_allowed`,
+        `program_not_on_site`, `collaborator_not_on_site`,
+        `site_filter_required`, `report_not_allowed` and `not_permitted` mean
+        Siren's policy refused the request, so sending it again fails again.
+        `migration_closed`, `plan_required`, `admin_required` and
+        `email_confirmation_required` lift once the organization changes.
+
+        409: `code_held` when someone already holds a tracking or coupon code,
+        `mapping_exists`, `hold_no_credit` and `hold_token_in_use` when Siren
+        refuses a store credit hold, `hold_currency_not_at_store` and
+        `currency_resolution_required`.
+
+        422: `invalid_currency_resolution`, `collaborator_deletion_refused` and
+        `reserved_address`. 503: `plan_unavailable` when Siren could not read
+        the organization's plan.
+      enum:
+        - site_disconnected
+        - api_key_not_accepted
+        - missing_scope
+        - store_key_not_allowed
+        - field_not_allowed
+        - pending_status_required
+        - user_type_not_allowed
+        - program_not_on_site
+        - collaborator_not_on_site
+        - site_filter_required
+        - report_not_allowed
+        - not_permitted
+        - migration_closed
+        - plan_required
+        - admin_required
+        - email_confirmation_required
+        - code_held
+        - mapping_exists
+        - hold_no_credit
+        - hold_token_in_use
+        - hold_currency_not_at_store
+        - currency_resolution_required
+        - invalid_currency_resolution
+        - collaborator_deletion_refused
+        - reserved_address
+        - plan_unavailable
     Error:
       type: object
       description: |
@@ -902,7 +1140,9 @@ components:
             - type: object
               properties:
                 message: { type: string }
-                code: { type: string }
+                code:
+                  type: string
+                  description: A stable code, one of the `ErrorCode` values when Siren sends one this document lists.
                 context:
                   type: [object, array]
                   description: Extra detail. PHP sends an empty context as `[]`.
@@ -947,7 +1187,8 @@ components:
       description: |
         Missing, invalid, expired or revoked credential. A valid API key sent
         to a route that takes a session gets `error.code`
-        `api_key_not_accepted`.
+        `api_key_not_accepted`. A connected site whose connection the
+        organization revoked or deleted gets `site_disconnected`.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -958,7 +1199,10 @@ components:
         `error.context.scope` names one and `error.context.anyOf` lists every
         scope that opens the route. `store_key_not_allowed` means a key bound
         to one store asked for payouts or webhook subscriptions, which are
-        not kept by store.
+        not kept by store. A policy code, such as `field_not_allowed` with
+        `error.context.param` naming the field, means Siren refuses the
+        request itself, so sending it again fails again. `ErrorCode` lists
+        every code.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

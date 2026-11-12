@@ -54,12 +54,12 @@ function unreleased(): string {
 }
 
 describe('P8: openapi.yaml', () => {
-  it.skip('SalePayload documents the test flag and LineItem documents lineId', () => {
+  it('SalePayload documents the test flag and LineItem documents lineId', () => {
     expect(hasProperty(schema('SalePayload'), 'test')).toBe(true);
     expect(hasProperty(schema('LineItem'), 'lineId')).toBe(true);
   });
 
-  it.skip('RefundPayload documents amount, currency, lines, whole and kind, and RefundLine its four fields', () => {
+  it('RefundPayload documents amount, currency, lines, whole and kind, and RefundLine its four fields', () => {
     const refund = schema('RefundPayload');
     for (const property of ['refundId', 'amount', 'currency', 'lines', 'whole', 'kind']) {
       expect(hasProperty(refund, property), property).toBe(true);
@@ -70,11 +70,11 @@ describe('P8: openapi.yaml', () => {
     }
   });
 
-  it.skip('SiteVisitedPayload documents the tracking code form of collaboratorId', () => {
+  it('SiteVisitedPayload documents the tracking code form of collaboratorId', () => {
     expect(property(schema('SiteVisitedPayload'), 'collaboratorId')).toContain('tracking:');
   });
 
-  it.skip('WebhookEventType lists every event this SDK knows', () => {
+  it('WebhookEventType lists every event this SDK knows', () => {
     const block = schema('WebhookEventType');
     for (const value of Object.values(WebhookEventType)) {
       const listed = block.includes(`- ${value}\n`) || block.includes(`- '${value}'\n`);
@@ -82,12 +82,12 @@ describe('P8: openapi.yaml', () => {
     }
   });
 
-  it.skip('documents GET /webhooks/events and GET /api-keys/scopes', () => {
+  it('documents GET /webhooks/events and GET /api-keys/scopes', () => {
     expect(openapi).toMatch(/\n {2}\/webhooks\/events:\n {4}get:/);
     expect(openapi).toMatch(/\n {2}\/api-keys\/scopes:\n {4}get:/);
   });
 
-  it.skip('lists every error code Siren sends in an ErrorCode schema', () => {
+  it('lists every error code Siren sends in an ErrorCode schema', () => {
     const block = schema('ErrorCode');
     for (const code of Object.values(ErrorCode)) {
       expect(block.includes(`- ${code}\n`), code).toBe(true);
@@ -96,7 +96,7 @@ describe('P8: openapi.yaml', () => {
 });
 
 describe('P8: CHANGELOG and README', () => {
-  it.skip('the Unreleased section names each new public method, class and field', () => {
+  it('the Unreleased section names each new public method, class and field', () => {
     const section = unreleased();
     for (const name of [
       'subscriptions.events()',
@@ -117,7 +117,7 @@ describe('P8: CHANGELOG and README', () => {
     }
   });
 
-  it.skip('the README shows a test sale, a partial refund and both catalog reads', () => {
+  it('the README shows a test sale, a partial refund and both catalog reads', () => {
     const readme = read('README.md');
     expect(readme).toMatch(/test:\s*true/);
     expect(readme).toMatch(/lines:\s*\[/);
