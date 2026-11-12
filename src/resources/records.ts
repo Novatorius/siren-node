@@ -1,6 +1,15 @@
 import { SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
+import type {
+  BulkResult,
+  CreateConversionParams,
+  CreateTransactionParams,
+  RegistryOptions,
+  TransactionDetailRecord,
+  UpdateConversionParams,
+} from '../record-types';
+import type { ConversionBulkAction, TransactionBulkAction } from '../taxonomy';
 import type { ListParams, SirenList } from '../types';
 
 /** The largest page Siren serves. Siren lowers a larger `number` to this. */
@@ -200,6 +209,71 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
   async retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
     return retrieveRecord<T>(this.http, this.path, id, params);
   }
+
+  /**
+   * Creates a conversion with `POST /conversions`, sent once, and answers it,
+   * status 201. Required: `engagementId`, `type` and `status` (`pending`,
+   * `approved`, `rejected` or `expired`). Optional: `transactionId` and
+   * `obligationId`. Siren writes the status as sent and runs no approval.
+   * Throws `SirenError` before sending when `engagementId`, or a
+   * `transactionId` or `obligationId` that is present, is not a positive
+   * whole number. A connected site's token cannot write conversions.
+   */
+  create(params: CreateConversionParams): Promise<T> {
+    // Stub: slice 4 packet P8
+    void params;
+    return Promise.resolve({} as T);
+  }
+
+  /**
+   * Updates a conversion with `PUT /conversions/{id}`, sent once. Siren
+   * answers 200 with no body, so this answers `null`, and an object when a
+   * later Siren sends one. Read the conversion again with {@link retrieve}
+   * to see the result: setting `approved` runs Siren's approval, which
+   * stores the conversion as `complete`. Throws `NotFoundError` for an
+   * unknown id, and `UnexpectedResponseError` for a 2xx body that is
+   * neither empty nor a JSON object.
+   */
+  update(id: number, params: UpdateConversionParams): Promise<T | null> {
+    // Stub: slice 4 packet P8
+    void id;
+    void params;
+    return Promise.resolve(null);
+  }
+
+  /**
+   * Deletes a conversion with `DELETE /conversions/{id}`, sent once. The
+   * first call marks it `deleted` and answers it, and a second call removes
+   * it and answers `null`. Siren answers 409, raised as `ConflictError`, when
+   * an obligation it issued still blocks the removal.
+   */
+  delete(id: number): Promise<T | null> {
+    // Stub: slice 4 packet P8
+    void id;
+    return Promise.resolve(null);
+  }
+
+  /**
+   * Runs a bulk action with `POST /conversions/bulk`, sent once. Takes 1 to
+   * 500 ids. `approve` stores each conversion as `complete`.
+   */
+  bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {
+    // Stub: slice 4 packet P8
+    void action;
+    void ids;
+    return Promise.resolve({});
+  }
+
+  /**
+   * The conversion types Siren knows, `{ options: [{ id, name,
+   * supportedIncentives }] }`, from `GET /conversions/types`, such as `sale`
+   * and `lead`. Throws `UnexpectedResponseError` when a 2xx body is not a
+   * JSON object.
+   */
+  types(): Promise<RegistryOptions> {
+    // Stub: slice 4 packet P8
+    return Promise.resolve({ options: [] });
+  }
 }
 
 /**
@@ -228,5 +302,85 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    */
   async retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
     return retrieveRecord<T>(this.http, this.path, id, params);
+  }
+
+  /**
+   * A transaction's line items, read from its `details` field with
+   * `GET /transactions/{id}?fields=id,details`. Each line carries `id`,
+   * `transactionId`, `name`, `description`, `type`, `value` (minor units,
+   * per unit), `quantity` and `units`. Siren always sends a field it was
+   * asked for, so a record with no `details` list, or with a line that is
+   * not an object, throws `UnexpectedResponseError`, never an empty answer.
+   */
+  details(id: number): Promise<TransactionDetailRecord[]> {
+    // Stub: slice 4 packet P9
+    void id;
+    return Promise.resolve([]);
+  }
+
+  /**
+   * Records a transaction with its lines with `POST /transactions`, sent
+   * once, and answers it, status 201. `details` holds one to 500 lines, each
+   * `{ name, value, quantity?, type?, description?, units?, attributes? }`
+   * with `value` in minor units. `bindingId` and `bindingDataType` name an
+   * outside record Siren stores as a mapping, so the transaction can be
+   * found again, and a second transaction for the same binding answers 409,
+   * raised as `ConflictError`.
+   *
+   * Commerce sales go through `events.sale()` instead, which runs
+   * attribution. This call records a transaction directly.
+   *
+   * Throws `SirenError` before sending, with exactly `transactions.create()
+   * needs details: a list of 1 to 500 lines.`, when `details` is missing, not
+   * an array, empty or longer than 500, or holds a line that is not an
+   * object.
+   */
+  create(params: CreateTransactionParams): Promise<T> {
+    // Stub: slice 4 packet P9
+    void params;
+    return Promise.resolve({} as T);
+  }
+
+  /**
+   * Runs a bulk action with `POST /transactions/bulk`, sent once. Takes 1 to
+   * 500 ids. `cancel` and `refund` set the status, and `delete` removes the
+   * transactions at once.
+   */
+  bulk(action: TransactionBulkAction, ids: readonly number[]): Promise<BulkResult> {
+    // Stub: slice 4 packet P9
+    void action;
+    void ids;
+    return Promise.resolve({});
+  }
+
+  /**
+   * Credits transactions to a collaborator with
+   * `POST /transactions/credit-collaborator`, body `{ transactionIds,
+   * collaboratorId }` plus `type` when given, sent once, which makes a
+   * conversion for each. `type` sets the conversion type, `sale` when it is
+   * left out. Answers `{ success, affected }`.
+   *
+   * Throws `SirenError` before sending when `transactionIds` is not a
+   * non-empty array of at most 500 positive whole numbers, `collaboratorId`
+   * is not a positive whole number, or `type` is given and is not a
+   * non-empty string. Siren answers 404, raised as `NotFoundError`, when it
+   * has no such collaborator.
+   */
+  creditCollaborator(transactionIds: readonly number[], collaboratorId: number, type?: string): Promise<BulkResult> {
+    // Stub: slice 4 packet P9
+    void transactionIds;
+    void collaboratorId;
+    void type;
+    return Promise.resolve({});
+  }
+
+  /**
+   * The transaction sources Siren knows, `{ options: [{ id, name }] }`, from
+   * `GET /transactions/sources`, such as `wc_order` and `medusa_order`.
+   * Throws `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   */
+  sources(): Promise<RegistryOptions> {
+    // Stub: slice 4 packet P9
+    return Promise.resolve({ options: [] });
   }
 }

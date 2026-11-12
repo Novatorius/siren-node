@@ -1,0 +1,168 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/taxonomy.ts",
+    "find": "export const DistributorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const DistributorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanentDelete',\n} as const;",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors surface"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/taxonomy.ts",
+    "find": "export const DistributorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const DistributorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'res' + 'tore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/credits.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/taxonomy.ts",
+    "find": "export const ConversionBulkAction = {\n  Approve: 'approve',\n  Reject: 'reject',\n  MarkPending: 'markPending',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ConversionBulkAction = {\n  Approve: 'approve',\n  Reject: 'reject',\n  MarkPending: 'mark_pending',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "expect": "wrong-reason",
+    "failing": [
+      "P9: transaction writes surface"
+    ]
+  },
+  {
+    "id": "conversion-bulk-action-renamed",
+    "file": "src/taxonomy.ts",
+    "find": "export const ConversionBulkAction = {\n  Approve: 'approve',\n  Reject: 'reject',\n  MarkPending: 'markPending',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "replace": "export const ConversionBulkAction = {\n  Approve: 'approve',\n  Reject: 'reject',\n  MarkPending: 'mark_pending',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
+    "expect": "caught",
+    "failing": [
+      "P8: conversion writes surface"
+    ]
+  },
+  {
+    "id": "transaction-bulk-action-renamed",
+    "file": "src/taxonomy.ts",
+    "find": "export const TransactionBulkAction = {\n  Cancel: 'cancel',\n  Refund: 'refund',\n  Delete: 'delete',\n} as const;",
+    "replace": "export const TransactionBulkAction = {\n  Cancel: 'cancel',\n  Refund: 'refunded',\n  Delete: 'delete',\n} as const;",
+    "expect": "caught",
+    "failing": [
+      "P9: transaction writes surface"
+    ]
+  },
+  {
+    "id": "hold-status-renamed",
+    "file": "src/taxonomy.ts",
+    "find": "export const CreditHoldStatus = {\n  Active: 'active',\n  Settled: 'settled',\n  Released: 'released',\n  Expired: 'expired',\n} as const;",
+    "replace": "export const CreditHoldStatus = {\n  Active: 'active',\n  Settled: 'settle',\n  Released: 'released',\n  Expired: 'expired',\n} as const;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits surface"
+    ]
+  },
+  {
+    "id": "opportunities-list-reads-id",
+    "file": "src/resources/opportunities.ts",
+    "find": "static readonly LIST_FILTERS = ['status', 'collaboratorId'] as const;",
+    "replace": "static readonly LIST_FILTERS = ['status', 'collaboratorId', 'id'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities surface"
+    ]
+  },
+  {
+    "id": "opportunities-gains-create",
+    "file": "src/resources/opportunities.ts",
+    "find": "  update(id: number, params: UpdateOpportunityParams): Promise<T> {",
+    "replace": "  create(): Promise<T> {\n    return Promise.resolve({} as T);\n  }\n\n  update(id: number, params: UpdateOpportunityParams): Promise<T> {",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities surface"
+    ]
+  },
+  {
+    "id": "engagements-drop-day-range",
+    "file": "src/resources/engagements.ts",
+    "find": "static readonly LIST_FILTERS = ['status', 'collaboratorId', 'programId', 'opportunityId', 'from', 'to'] as const;",
+    "replace": "static readonly LIST_FILTERS = ['status', 'collaboratorId', 'programId', 'opportunityId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements surface"
+    ]
+  },
+  {
+    "id": "engagements-gains-delete",
+    "file": "src/resources/engagements.ts",
+    "find": "  calculations(): Promise<RegistryOptions> {",
+    "replace": "  delete(): Promise<null> {\n    return Promise.resolve(null);\n  }\n\n  calculations(): Promise<RegistryOptions> {",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements surface"
+    ]
+  },
+  {
+    "id": "distributors-list-reads-property",
+    "file": "src/resources/distributors.ts",
+    "find": "static readonly LIST_FILTERS = ['status', 's', 'metricType'] as const;",
+    "replace": "static readonly LIST_FILTERS = ['status', 's', 'metricType', 'propertyId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P3: distributors surface"
+    ]
+  },
+  {
+    "id": "currencies-drop-code-filter",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "static readonly LIST_FILTERS = ['type', 'code'] as const;",
+    "replace": "static readonly LIST_FILTERS = ['type'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P4: custom currencies surface"
+    ]
+  },
+  {
+    "id": "credits-hold-ttl-cap",
+    "file": "src/resources/credits.ts",
+    "find": "static readonly HOLD_MAX_TTL = 3600;",
+    "replace": "static readonly HOLD_MAX_TTL = 7200;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits surface"
+    ]
+  },
+  {
+    "id": "credits-holds-drop-reference",
+    "file": "src/resources/credits.ts",
+    "find": "static readonly HOLD_FILTERS = ['collaboratorId', 'currency', 'status', 'reference', 'idempotencyKey'] as const;",
+    "replace": "static readonly HOLD_FILTERS = ['collaboratorId', 'currency', 'status', 'idempotencyKey'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits surface"
+    ]
+  },
+  {
+    "id": "mappings-wordpress-type",
+    "file": "src/resources/mappings.ts",
+    "find": "static readonly EXTERNAL_TYPE_WORDPRESS_USER = 'wordpress_user';",
+    "replace": "static readonly EXTERNAL_TYPE_WORDPRESS_USER = 'user';",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings surface"
+    ]
+  },
+  {
+    "id": "settings-path",
+    "file": "src/resources/settings.ts",
+    "find": "static readonly PATH = '/configs';",
+    "replace": "static readonly PATH = '/config';",
+    "expect": "caught",
+    "failing": [
+      "P7: settings surface"
+    ]
+  }
+]

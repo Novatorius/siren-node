@@ -274,3 +274,52 @@ export const ProgramGroupBulkAction = {
 
 /** Union of the {@link ProgramGroupBulkAction} strings. */
 export type ProgramGroupBulkAction = (typeof ProgramGroupBulkAction)[keyof typeof ProgramGroupBulkAction];
+
+/** The bulk actions `conversions.bulk()` runs, as Siren names them. */
+export const ConversionBulkAction = {
+  Approve: 'approve',
+  Reject: 'reject',
+  MarkPending: 'markPending',
+  Delete: 'delete',
+  PermanentDelete: 'permanent_delete',
+} as const;
+
+/** Union of the {@link ConversionBulkAction} strings. */
+export type ConversionBulkAction = (typeof ConversionBulkAction)[keyof typeof ConversionBulkAction];
+
+/** The bulk actions `transactions.bulk()` runs, as Siren names them. */
+export const TransactionBulkAction = {
+  Cancel: 'cancel',
+  Refund: 'refund',
+  Delete: 'delete',
+} as const;
+
+/** Union of the {@link TransactionBulkAction} strings. */
+export type TransactionBulkAction = (typeof TransactionBulkAction)[keyof typeof TransactionBulkAction];
+
+/** The bulk actions `distributors.bulk()` runs, as Siren names them. */
+export const DistributorBulkAction = {
+  Activate: 'activate',
+  Deactivate: 'deactivate',
+  Restore: 'restore',
+  Delete: 'delete',
+  PermanentDelete: 'permanent_delete',
+} as const;
+
+/** Union of the {@link DistributorBulkAction} strings. */
+export type DistributorBulkAction = (typeof DistributorBulkAction)[keyof typeof DistributorBulkAction];
+
+/**
+ * The statuses a store credit hold can hold. A hold is `active` until its
+ * `ttl` runs out (`expired`), the site gives it back (`released`), or Siren
+ * spends it from the order's redemption (`settled`).
+ */
+export const CreditHoldStatus = {
+  Active: 'active',
+  Settled: 'settled',
+  Released: 'released',
+  Expired: 'expired',
+} as const;
+
+/** Union of the {@link CreditHoldStatus} strings. */
+export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHoldStatus];
