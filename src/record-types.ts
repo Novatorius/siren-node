@@ -189,9 +189,10 @@ export interface CollaboratorAlias {
   [field: string]: unknown;
 }
 
-/** One entry of a collaborator record's `aliases` field. */
+/** One entry of a collaborator record's `aliases` field, as Siren stores it. */
 export interface CollaboratorAliasEntry {
   code: string;
+  /** The type as Siren stores it, so a connected site's code reads `coupon@property:5`. */
   type: string;
   issuedDate?: string;
   [field: string]: unknown;

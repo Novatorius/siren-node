@@ -258,10 +258,10 @@ const ada = await siren.collaborators.retrieve(42, { fields: ['id', 'fullName', 
 await siren.collaborators.bulk(CollaboratorBulkAction.AddToProgram, [42, 43], { programId: 7 });
 ```
 
-A connected site creates a collaborator with `createPending`, which posts `status: 'pending'` so
-the organization approves them, and refuses `programs`, `distributors`, `groups` and `status`
-before sending. The site changes a collaborator only with `updateDetails`, which sends `fullName`
-and `nickname` and throws `SirenError` for any other key.
+A connected site creates a collaborator with `createPending`, which sends `fullName`, `nickname`,
+`email` and an optional `trackingId` with `status: 'pending'` so the organization approves them,
+and throws `SirenError` for any other field. The site changes a collaborator only with `updateDetails`, which sends
+`fullName` and `nickname` and throws `SirenError` for any other key.
 
 ```ts
 const pending = await siren.collaborators.createPending({
@@ -273,9 +273,11 @@ await siren.collaborators.updateDetails(pending.id, { nickname: 'countess' });
 ```
 
 `siren.collaborators.aliases` reads and gives out tracking and coupon codes. Siren files a
-connected site's codes under its Property, as in `coupon@property:5`. The SDK answers each code
-with the plain type and the Property in `propertyId`, through `PropertyQualifier`, so send and
-compare plain types. `create` raises `CodeConflictError` when another collaborator already holds
+connected site's codes under its Property, as in `coupon@property:5`. `query`, `findByCode`,
+`forCollaborator` and `create` answer each code with the plain type and the Property in
+`propertyId`, through `PropertyQualifier`, so send and compare plain types. `list` reads the
+collaborator record's own `aliases` field and answers each type as Siren stores it, as the PHP SDK
+does. `create` raises `CodeConflictError` when another collaborator already holds
 the code. Siren's 409 does not name the holder, so read `findByCode` before treating the code as
 someone else's.
 

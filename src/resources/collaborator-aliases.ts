@@ -60,10 +60,12 @@ export function plainAlias(row: Record<string, unknown>): CollaboratorAlias {
  *
  * Send the plain type. Siren Cloud files a connected site's codes under the
  * site's Property (`coupon@property:5`), and every read matches the plain
- * type in every namespace, so this resource answers each code with the plain
- * type and the Property in `propertyId` (`null` for a code in no site's
- * namespace), through `PropertyQualifier.plainRecord`. A code has one holder
- * per type across all namespaces.
+ * type in every namespace, so {@link findByCode}, {@link forCollaborator},
+ * {@link query} and {@link create} answer each code with the plain type and
+ * the Property in `propertyId` (`null` for a code in no site's namespace),
+ * through `PropertyQualifier.plainRecord`. {@link list} answers the record's
+ * `aliases` field as Cloud stores it, as PHP does. A code has one holder per
+ * type across all namespaces.
  *
  * Every method that takes a type throws `SirenError` before sending when it
  * is neither letters, digits, underscores and hyphens nor one integration's
@@ -99,7 +101,12 @@ export class CollaboratorAliasesResource {
 
   /**
    * A collaborator's aliases, each `{ code, type, issuedDate }`, read with
-   * `GET /collaborators/{id}?fields=id,aliases`. Siren always sends the
+   * `GET /collaborators/{id}?fields=id,aliases`. Each entry comes back as
+   * Cloud stores it, as PHP's `list` answers it, so a code a connected site
+   * filed reads `coupon@property:5`, with no `propertyId`. Read the plain
+   * type and the Property with `PropertyQualifier.unqualify` and
+   * `PropertyQualifier.propertyOf`, or use {@link query} with
+   * `collaboratorId`, which answers plain types. Siren always sends the
    * field it was asked for, so a record with no `aliases` list, or with an
    * entry that is not an object, throws `UnexpectedResponseError` with the
    * status Siren sent and a message naming `aliases` and the collaborator id,
