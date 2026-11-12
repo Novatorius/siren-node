@@ -1,0 +1,178 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/pkce.ts",
+    "find": "createHash('sha256').update(verifier, 'ascii').digest('base64url')",
+    "replace": "createHash('sha256').update(verifier, 'ascii').digest('hex').slice(0, 43)",
+    "expect": "caught",
+    "failing": ["gives the S256 challenge for RFC 7636 Appendix B"]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/pkce.ts",
+    "find": "const VERIFIER = /",
+    "replace": "const VERIFIER: RegExp = /",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/pkce.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/pkce.ts",
+    "find": "export function createState(): string {",
+    "replace": "export function createState(): string {{",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "verifier-31-bytes",
+    "file": "src/connect/pkce.ts",
+    "find": "return randomBytes(32)",
+    "replace": "return randomBytes(31)",
+    "expect": "caught",
+    "failing": ["answers 64 lower-case hex digits", "is exactly the 32 bytes node:crypto's randomBytes gives"]
+  },
+  {
+    "id": "verifier-base64url",
+    "file": "src/connect/pkce.ts",
+    "find": "randomBytes(32).toString('hex')",
+    "replace": "randomBytes(32).toString('base64url')",
+    "expect": "caught",
+    "failing": ["answers 64 lower-case hex digits"]
+  },
+  {
+    "id": "verifier-math-random",
+    "file": "src/connect/pkce.ts",
+    "find": "  return randomBytes(32).toString('hex');",
+    "replace": "  return Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');",
+    "expect": "caught",
+    "failing": ["never from Math.random"]
+  },
+  {
+    "id": "verifier-from-clock",
+    "file": "src/connect/pkce.ts",
+    "find": "  return randomBytes(32).toString('hex');",
+    "replace": "  return createHash('sha256').update(`${Date.now()}:${process.hrtime.bigint()}`).digest('hex');",
+    "expect": "caught",
+    "failing": ["is exactly the 32 bytes node:crypto's randomBytes gives"]
+  },
+  {
+    "id": "state-15-bytes",
+    "file": "src/connect/pkce.ts",
+    "find": "return randomBytes(16)",
+    "replace": "return randomBytes(15)",
+    "expect": "caught",
+    "failing": ["answers 32 lower-case hex digits", "is exactly the 16 bytes node:crypto's randomBytes gives"]
+  },
+  {
+    "id": "state-base64url",
+    "file": "src/connect/pkce.ts",
+    "find": "randomBytes(16).toString('hex')",
+    "replace": "randomBytes(24).toString('base64url')",
+    "expect": "caught",
+    "failing": ["answers 32 lower-case hex digits"]
+  },
+  {
+    "id": "state-math-random",
+    "file": "src/connect/pkce.ts",
+    "find": "  return randomBytes(16).toString('hex');",
+    "replace": "  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');",
+    "expect": "caught",
+    "failing": ["never from Math.random"]
+  },
+  {
+    "id": "state-from-clock",
+    "file": "src/connect/pkce.ts",
+    "find": "  return randomBytes(16).toString('hex');",
+    "replace": "  return createHash('sha256').update(`${Date.now()}:${process.hrtime.bigint()}`).digest('hex').slice(0, 32);",
+    "expect": "caught",
+    "failing": ["is exactly the 16 bytes node:crypto's randomBytes gives"]
+  },
+  {
+    "id": "challenge-padded-base64",
+    "file": "src/connect/pkce.ts",
+    "find": ".digest('base64url')",
+    "replace": ".digest('base64').replace(/=+$/, '')",
+    "expect": "caught",
+    "failing": ["gives the S256 challenge for RFC 7636 Appendix B"]
+  },
+  {
+    "id": "challenge-sha512",
+    "file": "src/connect/pkce.ts",
+    "find": "createHash('sha256')",
+    "replace": "createHash('sha512')",
+    "expect": "caught",
+    "failing": ["gives the S256 challenge for RFC 7636 Appendix B"]
+  },
+  {
+    "id": "verifier-min-42",
+    "file": "src/connect/pkce.ts",
+    "find": "{43,128}",
+    "replace": "{42,128}",
+    "expect": "caught",
+    "failing": ["refuses a verifier with 42 characters"]
+  },
+  {
+    "id": "verifier-max-129",
+    "file": "src/connect/pkce.ts",
+    "find": "{43,128}",
+    "replace": "{43,129}",
+    "expect": "caught",
+    "failing": ["refuses a verifier with 129 characters"]
+  },
+  {
+    "id": "verifier-allows-plus",
+    "file": "src/connect/pkce.ts",
+    "find": "[A-Za-z0-9\\-._~]",
+    "replace": "[A-Za-z0-9\\-._~+]",
+    "expect": "caught",
+    "failing": ["refuses a verifier with a plus sign"]
+  },
+  {
+    "id": "verifier-unanchored",
+    "file": "src/connect/pkce.ts",
+    "find": "/^[A-Za-z0-9\\-._~]{43,128}$/",
+    "replace": "/[A-Za-z0-9\\-._~]{43,128}/",
+    "expect": "caught",
+    "failing": ["refuses a verifier with 129 characters"]
+  },
+  {
+    "id": "verifier-quoted-in-message",
+    "file": "src/connect/pkce.ts",
+    "find": "      'Siren: codeChallengeS256 needs a verifier",
+    "replace": "      String(verifier) + 'Siren: codeChallengeS256 needs a verifier",
+    "expect": "caught",
+    "failing": ["without quoting it"]
+  },
+  {
+    "id": "verifier-in-data",
+    "file": "src/connect/pkce.ts",
+    "find": "(RFC 7636 section 4.1).',",
+    "replace": "(RFC 7636 section 4.1).', { data: verifier },",
+    "expect": "caught",
+    "failing": ["without quoting it"]
+  },
+  {
+    "id": "verifier-in-cause",
+    "file": "src/connect/pkce.ts",
+    "find": "(RFC 7636 section 4.1).',",
+    "replace": "(RFC 7636 section 4.1).', { cause: new Error(String(verifier)) },",
+    "expect": "caught",
+    "failing": ["without quoting it"]
+  },
+  {
+    "id": "verifier-typeof-dropped",
+    "file": "src/connect/pkce.ts",
+    "find": "typeof verifier !== 'string' || ",
+    "replace": "",
+    "expect": "caught",
+    "failing": ["which is not a string"]
+  }
+]

@@ -23,12 +23,6 @@ vi.mock('node:crypto', async (importOriginal) => {
  * The randomness tests replace `node:crypto`'s `randomBytes` with a spy over
  * the real one, so they can check that each value is exactly the bytes the
  * secure source gave, in hex.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`. The packet that removes the last
- * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 afterEach(() => {
@@ -38,14 +32,14 @@ afterEach(() => {
 const HEX_VERIFIER = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 describe('P1: codeChallengeS256', () => {
-  it.skip.each([
+  it.each([
     ['RFC 7636 Appendix B', 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk', 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'],
     ['a hex verifier as Siren makes one', HEX_VERIFIER, 'qK5ubukpq-o6_PxSWMjM1vhSc-DUYm0mxyefMlD3fI4'],
   ])('gives the S256 challenge for %s', (_name, verifier, challenge) => {
     expect(codeChallengeS256(verifier)).toBe(challenge);
   });
 
-  it.skip.each([
+  it.each([
     ['43 characters, the shortest RFC 7636 allows', 'a'.repeat(43)],
     ['128 characters, the longest', 'Z'.repeat(128)],
     ['every unreserved character', 'AZaz09-._~'.repeat(5)],
@@ -53,7 +47,7 @@ describe('P1: codeChallengeS256', () => {
     expect(codeChallengeS256(verifier)).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it.skip.each([
+  it.each([
     ['42 characters', 'S3CRETverifier'.padEnd(42, 'q')],
     ['129 characters', 'S3CRETverifier'.padEnd(129, 'q')],
     ['a plus sign', 'S3CRETverifier+'.padEnd(43, 'q')],
@@ -73,20 +67,20 @@ describe('P1: codeChallengeS256', () => {
     expect(shown(caught)).not.toContain('S3CRET');
   });
 
-  it.skip.each([[undefined], [null], [43], [['a'.repeat(43)]]])('refuses %j, which is not a string', (value) => {
+  it.each([[undefined], [null], [43], [['a'.repeat(43)]]])('refuses %j, which is not a string', (value) => {
     expect(() => codeChallengeS256(value as unknown as string)).toThrow(SirenError);
   });
 });
 
 describe('P1: createCodeVerifier', () => {
-  it.skip('answers 64 lower-case hex digits, 32 random bytes, whose challenge is an S256 challenge', () => {
+  it('answers 64 lower-case hex digits, 32 random bytes, whose challenge is an S256 challenge', () => {
     const verifier = createCodeVerifier();
 
     expect(verifier).toMatch(/^[0-9a-f]{64}$/);
     expect(codeChallengeS256(verifier)).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it.skip("is exactly the 32 bytes node:crypto's randomBytes gives, in hex", () => {
+  it("is exactly the 32 bytes node:crypto's randomBytes gives, in hex", () => {
     const bytes = Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 37 + 11) % 256));
     vi.mocked(randomBytes).mockReturnValueOnce(bytes as never);
 
@@ -94,7 +88,7 @@ describe('P1: createCodeVerifier', () => {
     expect(vi.mocked(randomBytes)).toHaveBeenCalledWith(32);
   });
 
-  it.skip('answers a new value every call, from every hex digit, never from Math.random', () => {
+  it('answers a new value every call, from every hex digit, never from Math.random', () => {
     const random = vi.spyOn(Math, 'random');
     const verifiers = Array.from({ length: 200 }, () => createCodeVerifier());
 
@@ -105,11 +99,11 @@ describe('P1: createCodeVerifier', () => {
 });
 
 describe('P1: createState', () => {
-  it.skip('answers 32 lower-case hex digits, 16 random bytes', () => {
+  it('answers 32 lower-case hex digits, 16 random bytes', () => {
     expect(createState()).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it.skip("is exactly the 16 bytes node:crypto's randomBytes gives, in hex", () => {
+  it("is exactly the 16 bytes node:crypto's randomBytes gives, in hex", () => {
     const bytes = Buffer.from(Array.from({ length: 16 }, (_, i) => (i * 53 + 7) % 256));
     vi.mocked(randomBytes).mockReturnValueOnce(bytes as never);
 
@@ -117,7 +111,7 @@ describe('P1: createState', () => {
     expect(vi.mocked(randomBytes)).toHaveBeenCalledWith(16);
   });
 
-  it.skip('answers a new value every call, from every hex digit, never from Math.random', () => {
+  it('answers a new value every call, from every hex digit, never from Math.random', () => {
     const random = vi.spyOn(Math, 'random');
     const states = Array.from({ length: 200 }, () => createState());
 

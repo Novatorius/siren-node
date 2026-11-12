@@ -9,6 +9,12 @@
  * 'node:crypto'`, the exact specifier its tests intercept.
  */
 
+import { createHash, randomBytes } from 'node:crypto';
+import { SirenError } from '../errors';
+
+/** RFC 7636 section 4.1: 43 to 128 unreserved characters. */
+const VERIFIER = /^[A-Za-z0-9\-._~]{43,128}$/;
+
 /**
  * A new code verifier: 64 lower-case hex digits from 32 bytes of the
  * operating system's secure random source, `randomBytes(32)` from
@@ -17,8 +23,7 @@
  * characters.
  */
 export function createCodeVerifier(): string {
-  // Stub: slice 5 packet P1.
-  return '0'.repeat(64);
+  return randomBytes(32).toString('hex');
 }
 
 /**
@@ -28,8 +33,7 @@ export function createCodeVerifier(): string {
  * `bin2hex(random_bytes(16))`.
  */
 export function createState(): string {
-  // Stub: slice 5 packet P1.
-  return '0'.repeat(32);
+  return randomBytes(16).toString('hex');
 }
 
 /**
@@ -42,7 +46,10 @@ export function createState(): string {
  * 4.1, and never quotes the verifier in the message.
  */
 export function codeChallengeS256(verifier: string): string {
-  // Stub: slice 5 packet P1.
-  void verifier;
-  return 'A'.repeat(43);
+  if (typeof verifier !== 'string' || !VERIFIER.test(verifier)) {
+    throw new SirenError(
+      'Siren: codeChallengeS256 needs a verifier of 43 to 128 characters from A-Z, a-z, 0-9, "-", ".", "_" and "~" (RFC 7636 section 4.1).',
+    );
+  }
+  return createHash('sha256').update(verifier, 'ascii').digest('base64url');
 }
