@@ -182,14 +182,14 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
    * collaborator and deletes it, so look them up again by email after that.
    */
   async createPending(params: CreatePendingCollaboratorParams): Promise<T> {
-    const allowed: readonly string[] = SITE_CREATABLE_COLLABORATOR_FIELDS;
+    const creatable: readonly string[] = SITE_CREATABLE_COLLABORATOR_FIELDS;
     for (const key of Object.keys(params)) {
       if (PENDING_REFUSED_FIELDS.includes(key)) {
         throw new SirenError(
           `createPending cannot send "${key}". Siren sets a pending collaborator's status, and a site enrolls them with enrollments.add() afterwards.`,
         );
       }
-      if (!allowed.includes(key)) {
+      if (!creatable.includes(key)) {
         throw new SirenError(
           `createPending cannot send "${key}". A connected site sends only fullName, nickname and email, and gives out codes with aliases.create().`,
         );

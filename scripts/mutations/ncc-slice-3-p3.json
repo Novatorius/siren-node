@@ -500,7 +500,7 @@
   {
     "id": "p3-pending-deny-list",
     "file": "src/resources/collaborators.ts",
-    "find": "      if (!allowed.includes(key)) {\n        throw new SirenError(\n          `createPending cannot send \"${key}\". A connected site sends only fullName, nickname and email, and gives out codes with aliases.create().`,\n        );\n      }\n",
+    "find": "      if (!creatable.includes(key)) {\n        throw new SirenError(\n          `createPending cannot send \"${key}\". A connected site sends only fullName, nickname and email, and gives out codes with aliases.create().`,\n        );\n      }\n",
     "replace": "",
     "expect": "caught",
     "failing": [
