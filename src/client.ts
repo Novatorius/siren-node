@@ -7,7 +7,11 @@ import {
   HttpTransport,
 } from './http';
 import { ApiKeysResource } from './resources/api-keys';
+import { CollaboratorGroupsResource } from './resources/collaborator-groups';
+import { CollaboratorsResource } from './resources/collaborators';
 import { EventsResource } from './resources/events';
+import { ProgramGroupsResource } from './resources/program-groups';
+import { ProgramsResource } from './resources/programs';
 import { ConversionsResource, RecordsResource, TransactionsResource } from './resources/records';
 import { WebhooksResource } from './resources/webhooks';
 import type { AccessTokenSource } from './auth/access-token-source';
@@ -61,6 +65,14 @@ export class Siren {
   readonly obligations: RecordsResource;
   /** Reconciliation reader for payouts. An API key needs `ledger:payouts:read`. */
   readonly payouts: RecordsResource;
+  /** Collaborators, with their codes at `aliases` and program enrollments at `enrollments`. */
+  readonly collaborators: CollaboratorsResource;
+  /** Collaborator groups, with their members at `members`. */
+  readonly collaboratorGroups: CollaboratorGroupsResource;
+  /** Programs, and the status, incentive and currency vocabularies they use. */
+  readonly programs: ProgramsResource;
+  /** Program groups, the sets of programs that compete for one engagement. */
+  readonly programGroups: ProgramGroupsResource;
 
   /**
    * Reads only the options object's own properties: `apiKey`,
@@ -120,6 +132,10 @@ export class Siren {
     this.transactions = new TransactionsResource(http);
     this.obligations = new RecordsResource(http, '/obligations');
     this.payouts = new RecordsResource(http, '/payouts');
+    this.collaborators = new CollaboratorsResource(http);
+    this.collaboratorGroups = new CollaboratorGroupsResource(http);
+    this.programs = new ProgramsResource(http);
+    this.programGroups = new ProgramGroupsResource(http);
   }
 }
 

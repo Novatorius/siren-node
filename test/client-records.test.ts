@@ -21,10 +21,6 @@ import { BASE, CollaboratorAnswers, page, pathOf } from './record-fakes';
  *
  * The fields are read with Reflect.get so this file compiles before P10 adds
  * them to the Siren class.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P10 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 beforeEach(failOnGlobalFetch);
@@ -37,7 +33,7 @@ function client(http: FakeHttpClient): Siren {
 }
 
 describe('P10: the Siren client carries the record resources', () => {
-  it.skip.each([
+  it.each([
     ['collaborators', 'CollaboratorsResource', CollaboratorsResource],
     ['collaboratorGroups', 'CollaboratorGroupsResource', CollaboratorGroupsResource],
     ['programs', 'ProgramsResource', ProgramsResource],
@@ -46,7 +42,7 @@ describe('P10: the Siren client carries the record resources', () => {
     expect(Reflect.get(client(new FakeHttpClient([reply(200, {})])), field)).toBeInstanceOf(type);
   });
 
-  it.skip('sends a read from every record resource, nested ones included, through the client the caller gave, with its key', async () => {
+  it('sends a read from every record resource, nested ones included, through the client the caller gave, with its key', async () => {
     const http = new FakeHttpClient([reply(200, page([]))]);
     const siren = client(http);
     const collaborators = Reflect.get(siren, 'collaborators') as CollaboratorsResource;
