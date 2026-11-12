@@ -111,21 +111,7 @@ export class Siren {
    * or a `FetchHttpClient` when there is none.
    */
   constructor(options: SirenOptions) {
-    const given: unknown = options ?? {};
-    const apiKey = ownOption(given, 'apiKey');
-    const accessToken = ownOption(given, 'accessToken');
-    const httpClient = ownOption(given, 'httpClient');
-    const baseUrl = ownOption(given, 'baseUrl');
-    const timeout = ownOption(given, 'timeout');
-    const maxRetries = ownOption(given, 'maxRetries');
-
-    const http = new HttpTransport({
-      tokens: resolveTokens(apiKey, accessToken),
-      client: resolveHttpClient(httpClient),
-      baseUrl: resolveBaseUrl(baseUrl),
-      timeout: resolveTimeout(timeout),
-      maxRetries: resolveMaxRetries(maxRetries),
-    });
+    const http = createHttpTransport(options);
 
     this.events = new EventsResource(http);
     this.webhooks = new WebhooksResource(http);
@@ -135,6 +121,31 @@ export class Siren {
     this.obligations = new RecordsResource(http, '/obligations');
     this.payouts = new RecordsResource(http, '/payouts');
   }
+}
+
+/**
+ * Builds the transport a client sends through, from the options `new Siren()`
+ * takes, by the rules its constructor documents. `Siren` and `SirenConnect`
+ * both call it, so the two clients never disagree about an option.
+ *
+ * @internal
+ */
+export function createHttpTransport(options: SirenOptions): HttpTransport {
+  const given: unknown = options ?? {};
+  const apiKey = ownOption(given, 'apiKey');
+  const accessToken = ownOption(given, 'accessToken');
+  const httpClient = ownOption(given, 'httpClient');
+  const baseUrl = ownOption(given, 'baseUrl');
+  const timeout = ownOption(given, 'timeout');
+  const maxRetries = ownOption(given, 'maxRetries');
+
+  return new HttpTransport({
+    tokens: resolveTokens(apiKey, accessToken),
+    client: resolveHttpClient(httpClient),
+    baseUrl: resolveBaseUrl(baseUrl),
+    timeout: resolveTimeout(timeout),
+    maxRetries: resolveMaxRetries(maxRetries),
+  });
 }
 
 /**
@@ -166,8 +177,10 @@ function resolveTokens(apiKey: unknown, accessToken: unknown): AccessTokenSource
  * `undefined`. It never reads an inherited value, and it reads an own value
  * once, so a getter runs a single time. It works on an object with no
  * prototype, since it calls `hasOwnProperty` from `Object.prototype`.
+ *
+ * @internal
  */
-function ownOption(options: unknown, name: string): unknown {
+export function ownOption(options: unknown, name: string): unknown {
   if (!Object.prototype.hasOwnProperty.call(options, name)) return undefined;
   return (options as Record<string, unknown>)[name];
 }

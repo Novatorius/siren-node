@@ -1,7 +1,8 @@
-import { DEFAULT_BASE_URL, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS, HttpTransport } from '../http';
-import { StaticAccessToken } from '../auth/static-access-token';
+import { createHttpTransport, ownOption } from '../client';
+import { SirenError } from '../errors';
 import { EventsResource } from '../resources/events';
 import { ConnectResource } from './connect-resource';
+import type { SirenOptions } from '../types';
 import type { SirenConnectOptions } from './types';
 
 /**
@@ -41,16 +42,30 @@ export class SirenConnect {
    * first, reading the options as `new Siren()` reads them.
    */
   constructor(options: SirenConnectOptions) {
-    // Stub: slice 5 packet P5. The placeholder client answers every send
-    // itself, so the stub never reaches the network.
-    void options;
-    const http = new HttpTransport({
-      tokens: new StaticAccessToken('stub'),
-      client: { send: async () => ({ status: 200, headers: {}, body: '{}' }) },
-      baseUrl: DEFAULT_BASE_URL,
-      timeout: DEFAULT_TIMEOUT_MS,
-      maxRetries: DEFAULT_MAX_RETRIES,
-    });
+    // Read each option once, as `new Siren()` reads it, and hand that one
+    // reading on, so a getter cannot pass these checks with one value and
+    // reach the transport with another.
+    const given: unknown = options ?? {};
+    const read = {
+      apiKey: ownOption(given, 'apiKey'),
+      accessToken: ownOption(given, 'accessToken'),
+      httpClient: ownOption(given, 'httpClient'),
+      baseUrl: ownOption(given, 'baseUrl'),
+      timeout: ownOption(given, 'timeout'),
+      maxRetries: ownOption(given, 'maxRetries'),
+    };
+    if (read.apiKey !== undefined) {
+      throw new SirenError(
+        "SirenConnect: an apiKey has no connected-site scope. Pass the site's OAuth accessToken instead, and no apiKey.",
+      );
+    }
+    if (read.accessToken === undefined) {
+      throw new SirenError(
+        "SirenConnect: an accessToken is required. Pass the site's OAuth access token, or an AccessTokenSource that refreshes it.",
+      );
+    }
+
+    const http = createHttpTransport(read as SirenOptions);
     this.connect = new ConnectResource(http);
     this.events = new EventsResource(http);
   }
