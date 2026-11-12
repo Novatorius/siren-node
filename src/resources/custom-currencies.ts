@@ -118,6 +118,9 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    * and propertyIds.`
    */
   async create(params: CreateCustomCurrencyParams): Promise<T> {
+    // Each own key read once, so the code check and the body see the same
+    // value and no inherited key reaches either.
+    params = { ...params };
     currencyCode(params.code);
     const body = pickFields(
       params,

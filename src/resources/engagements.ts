@@ -64,6 +64,9 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * `String()`. `undefined` counts as not given.
    */
   override async list(params: EngagementListParams = {}): Promise<SirenList<T>> {
+    // Each own key read once, so the day check and the query see the same
+    // values and no inherited key reaches either.
+    params = { ...params };
     for (const key of ['from', 'to'] as const) {
       const value: unknown = (params as Record<string, unknown>)[key];
       if (value === undefined) continue;

@@ -258,7 +258,9 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * `conversions.create() cannot send "{key}". Siren's create route reads
    * only engagementId, type, status, transactionId and obligationId.`, and
    * when `engagementId`, or a `transactionId` or `obligationId` that is
-   * present, is not a positive whole number.
+   * present, is not a positive whole number. It reads each own key of
+   * `params` once and no inherited key, so the checks and the body see the
+   * same values.
    *
    * Siren takes a second create as a new conversion. After a lost answer,
    * send it again through {@link recoverCreate}, which sends it only when
@@ -267,6 +269,9 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * one.
    */
   async create(params: CreateConversionParams): Promise<T> {
+    // Each own key read once, so the checks and the body see the same values
+    // and no inherited key reaches either.
+    params = { ...params };
     recordId(params?.engagementId, 'conversions.create', 'engagementId');
     if (params?.transactionId !== undefined) recordId(params.transactionId, 'conversions.create', 'transactionId');
     if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');
@@ -316,7 +321,9 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * transactionId to find the first send. Without one, Siren cannot tell
    * whether the create landed.`, and when `engagementId` or `transactionId` is not a positive
    * whole number. Throws `SirenError` before sending the create for every
-   * other reason {@link create} gives.
+   * other reason {@link create} gives. Like {@link create}, it reads each own
+   * key of `params` once and no inherited key, so the read and the create it
+   * sends ask about the same conversion.
    *
    * The read and the create are two requests, so two workers that recover
    * the same create at once can both find nothing. Run one recovery per
@@ -325,6 +332,9 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * back to this method on its own.
    */
   async recoverCreate(params: CreateConversionParams): Promise<RecoveredConversion<T>> {
+    // Each own key read once, so the checks and the body see the same values
+    // and no inherited key reaches either.
+    params = { ...params };
     if (params?.transactionId === undefined) {
       throw new SirenError(
         'conversions.recoverCreate() needs a transactionId to find the first send. Without one, Siren cannot tell whether the create landed.',
@@ -530,8 +540,15 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * needs details: a list of 1 to 500 lines.`, when `details` is missing, not
    * an array, empty or longer than 500, or holds a line that is not an
    * object. That check runs first.
+   *
+   * Every check reads the same own keys the body is built from, each read
+   * once, so a binding the check saw is the binding Siren gets. An inherited
+   * key counts as not given.
    */
   async create(params: CreateTransactionParams): Promise<T> {
+    // Each own key read once, so the checks and the body see the same values
+    // and no inherited key reaches either.
+    params = { ...params };
     const details: unknown = params?.details;
     if (
       !Array.isArray(details) ||
