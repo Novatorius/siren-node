@@ -1,0 +1,146 @@
+[
+  {
+    "id": "control-break",
+    "file": "README.md",
+    "find": "## Collaborators and programs\n",
+    "replace": "## Collaborators and Programs\n",
+    "expect": "caught",
+    "failing": [
+      "names each client field and the nested resources"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "README.md",
+    "find": "const inGroup = await siren.collaboratorGroups.members.list(group.id);",
+    "replace": "const groupMembers = await siren.collaboratorGroups.members.list(group.id);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "README.md",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/client.ts",
+    "find": "    this.programs = new ProgramsResource(http);",
+    "replace": "    this.programs = new ProgramsResource(http);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "README.md",
+    "find": "## Collaborators and programs\n",
+    "replace": "## Collaborators and Programs\n",
+    "expect": "wrong-reason",
+    "failing": [
+      "lists the record resources under Unreleased, Added"
+    ]
+  },
+  {
+    "id": "p11-readme-property-qualifier",
+    "file": "README.md",
+    "find": "through `PropertyQualifier`,",
+    "replace": "through the qualifier helper,",
+    "expect": "caught",
+    "failing": [
+      "names each client field and the nested resources"
+    ]
+  },
+  {
+    "id": "p11-readme-sent-once",
+    "file": "README.md",
+    "find": "Every record write is sent once:",
+    "replace": "Every record write goes out a single time:",
+    "expect": "caught",
+    "failing": [
+      "says record writes are sent once and reads retry"
+    ]
+  },
+  {
+    "id": "p11-readme-reads-retry",
+    "file": "README.md",
+    "find": "Reads retry on",
+    "replace": "Reads go again on",
+    "expect": "caught",
+    "failing": [
+      "says record writes are sent once and reads retry"
+    ]
+  },
+  {
+    "id": "p11-readme-queue-max-retries",
+    "file": "README.md",
+    "find": "builds the client with `maxRetries: 0`",
+    "replace": "builds the client with no retries",
+    "expect": "caught",
+    "failing": [
+      "tells a caller with its own durable queue to build the client with maxRetries: 0"
+    ]
+  },
+  {
+    "id": "p11-readme-update-details",
+    "file": "README.md",
+    "find": "only with `updateDetails`",
+    "replace": "only with updateDetails",
+    "expect": "caught",
+    "failing": [
+      "says a connected site may change only the name and nickname, with updateDetails"
+    ]
+  },
+  {
+    "id": "p11-readme-unknown-key",
+    "file": "README.md",
+    "find": "A list throws `SirenError` for a key",
+    "replace": "A list throws an error for a key",
+    "expect": "caught",
+    "failing": [
+      "says a record list refuses a key Siren would ignore, before sending"
+    ]
+  },
+  {
+    "id": "p11-readme-empty-list",
+    "file": "README.md",
+    "find": "An empty filter list throws `SirenError` too",
+    "replace": "An empty filter list throws too",
+    "expect": "caught",
+    "failing": [
+      "says an empty filter list throws rather than answer every record"
+    ]
+  },
+  {
+    "id": "p11-changelog-program-groups",
+    "file": "CHANGELOG.md",
+    "find": "(`ProgramGroupsResource`)",
+    "replace": "(the program group resource)",
+    "expect": "caught",
+    "failing": [
+      "lists the record resources under Unreleased, Added"
+    ]
+  },
+  {
+    "id": "p11-openapi-route",
+    "file": "openapi.yaml",
+    "find": "\n  /program-groups/bulk:\n",
+    "replace": "\n  /program-groups/bulk-actions:\n",
+    "expect": "caught",
+    "failing": [
+      "documents /program-groups/bulk with each method the SDK sends"
+    ]
+  },
+  {
+    "id": "p11-openapi-method",
+    "file": "openapi.yaml",
+    "find": "    put:\n      tags: [Collaborator Groups]\n      operationId: setCollaboratorGroupMembers",
+    "replace": "    patch:\n      tags: [Collaborator Groups]\n      operationId: setCollaboratorGroupMembers",
+    "expect": "caught",
+    "failing": [
+      "documents /collaborator-groups/{id}/members with each method the SDK sends"
+    ]
+  }
+]
