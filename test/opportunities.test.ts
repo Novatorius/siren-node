@@ -20,10 +20,6 @@ import { OpportunityAnswers, notFoundById } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P1 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -52,7 +48,7 @@ describe('P1: opportunities surface', () => {
 });
 
 describe('P1: opportunities reads', () => {
-  it.skip('lists GET /opportunities with status, collaboratorId and paging', async () => {
+  it('lists GET /opportunities with status, collaboratorId and paging', async () => {
     const { http, opportunities } = over([reply(200, page([OpportunityAnswers.listed], 1, 20))]);
 
     const list = await opportunities.list({
@@ -75,7 +71,7 @@ describe('P1: opportunities reads', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retrieves GET /opportunities/{id} with fields', async () => {
+  it('retrieves GET /opportunities/{id} with fields', async () => {
     const { http, opportunities } = over([reply(200, OpportunityAnswers.listed)]);
 
     expect(await opportunities.retrieve(21, { fields: 'id,status' })).toEqual(OpportunityAnswers.listed);
@@ -83,11 +79,11 @@ describe('P1: opportunities reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,status' });
   });
 
-  it.skip('raises NotFoundError for an unknown opportunity', async () => {
+  it('raises NotFoundError for an unknown opportunity', async () => {
     await expect(over([reply(404, notFoundById)]).opportunities.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it.skip("raises a connected site's unfiltered list as PolicyError", async () => {
+  it("raises a connected site's unfiltered list as PolicyError", async () => {
     const error = await over([reply(403, OpportunityAnswers.siteFilterRequired)])
       .opportunities.list()
       .catch((thrown: unknown) => thrown);
@@ -96,14 +92,14 @@ describe('P1: opportunities reads', () => {
     expect((error as PolicyError).code).toBe('site_filter_required');
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
     await expectRetried((transport) => resource(transport).retrieve(21), reply(200, OpportunityAnswers.listed));
   });
 });
 
 describe('P1: opportunities update', () => {
-  it.skip('updates with PUT /opportunities/{id}, sending only the given fields, and answers the stored record', async () => {
+  it('updates with PUT /opportunities/{id}, sending only the given fields, and answers the stored record', async () => {
     const { http, opportunities } = over([reply(200, OpportunityAnswers.updated)]);
 
     expect(await opportunities.update(21, { status: 'inactive' })).toEqual(OpportunityAnswers.updated);
@@ -111,17 +107,17 @@ describe('P1: opportunities update', () => {
     expect(bodyOf(http.requests[0])).toEqual({ status: 'inactive' });
   });
 
-  it.skip('raises NotFoundError for an unknown opportunity on update', async () => {
+  it('raises NotFoundError for an unknown opportunity on update', async () => {
     await expect(over([reply(404, notFoundById)]).opportunities.update(99, { status: 'active' })).rejects.toBeInstanceOf(
       NotFoundError,
     );
   });
 
-  it.skip('sends update once', async () => {
+  it('sends update once', async () => {
     await expectSentOnce((transport) => resource(transport).update(21, { status: 'active' }), reply(200, OpportunityAnswers.updated));
   });
 
-  it.skip('throws UnexpectedResponseError when an update answers no object', async () => {
+  it('throws UnexpectedResponseError when an update answers no object', async () => {
     await expect(over([reply(200, [OpportunityAnswers.updated])]).opportunities.update(21, { status: 'active' })).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
@@ -129,7 +125,7 @@ describe('P1: opportunities update', () => {
 });
 
 describe('P1: opportunities list and id rules', () => {
-  it.skip.each([
+  it.each([
     ['id, which Siren ignores for an organization', { id: 21 }],
     ['s, which Siren ignores for an organization', { s: 'flo' }],
     ['propertyId', { propertyId: 5 }],
@@ -147,13 +143,13 @@ describe('P1: opportunities list and id rules', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
+  it('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
     await expect(over([reply(200, { error: 'Something went wrong.' })]).opportunities.list()).rejects.toBeInstanceOf(
       UnexpectedResponseError,
     );
   });
 
-  it.skip.each([
+  it.each([
     ['retrieve', (o: OpportunitiesResource) => o.retrieve(0)],
     ['update', (o: OpportunitiesResource) => o.update(-1, { status: 'active' })],
     ['update, a fraction', (o: OpportunitiesResource) => o.update(1.5, { status: 'active' })],
