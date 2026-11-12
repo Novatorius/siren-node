@@ -33,10 +33,6 @@ import {
  * Integration shape, per "Integration Testing Standards — Introduction"
  * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P6 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 function over(replies: Parameters<typeof transportOver>[0]) {
@@ -53,7 +49,7 @@ describe('P6: collaboratorGroups surface', () => {
 });
 
 describe('P6: collaboratorGroups reads', () => {
-  it.skip('lists GET /collaborator-groups with filters and answers the page', async () => {
+  it('lists GET /collaborator-groups with filters and answers the page', async () => {
     const { http, groups } = over([reply(200, page([GroupAnswers.listed], 1))]);
 
     const list = await groups.list({ structure: 'flat', s: 'vip', orderBy: 'name', order: 'ASC' });
@@ -65,7 +61,7 @@ describe('P6: collaboratorGroups reads', () => {
     expect(list.estimatedCount).toBe(1);
   });
 
-  it.skip('retrieves GET /collaborator-groups/{id} with fields', async () => {
+  it('retrieves GET /collaborator-groups/{id} with fields', async () => {
     const { http, groups } = over([reply(200, GroupAnswers.listed)]);
 
     expect(await groups.retrieve(7, { fields: ['id', 'memberCount'] })).toEqual(GroupAnswers.listed);
@@ -73,18 +69,18 @@ describe('P6: collaboratorGroups reads', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id,memberCount' });
   });
 
-  it.skip('raises NotFoundError for the empty 404 of an unknown group', async () => {
+  it('raises NotFoundError for the empty 404 of an unknown group', async () => {
     await expect(over([emptyNotFound()]).groups.retrieve(99)).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it.skip('reads the structures', async () => {
+  it('reads the structures', async () => {
     const { http, groups } = over([reply(200, GroupAnswers.structures)]);
 
     expect(await groups.structures()).toEqual(GroupAnswers.structures);
     expect([http.requests[0]!.method, pathOf(http.requests[0])]).toEqual(['GET', '/collaborator-groups/structures']);
   });
 
-  it.skip('retries every read', async () => {
+  it('retries every read', async () => {
     await expectRetried((transport) => resource(transport).list(), reply(200, page([])));
     await expectRetried((transport) => resource(transport).retrieve(7), reply(200, GroupAnswers.listed));
     await expectRetried((transport) => resource(transport).structures(), reply(200, GroupAnswers.structures));
@@ -94,7 +90,7 @@ describe('P6: collaboratorGroups reads', () => {
 describe('P6: collaboratorGroups writes', () => {
   const create = { name: 'Sales Team', structure: 'flat', members: [{ collaboratorId: 8 }] };
 
-  it.skip('creates with POST /collaborator-groups and answers the group', async () => {
+  it('creates with POST /collaborator-groups and answers the group', async () => {
     const { http, groups } = over([reply(201, GroupAnswers.created)]);
 
     expect(await groups.create(create)).toEqual(GroupAnswers.created);
@@ -102,7 +98,7 @@ describe('P6: collaboratorGroups writes', () => {
     expect(bodyOf(http.requests[0])).toEqual(create);
   });
 
-  it.skip('updates with PUT /collaborator-groups/{id} and answers the group', async () => {
+  it('updates with PUT /collaborator-groups/{id} and answers the group', async () => {
     const { http, groups } = over([reply(200, GroupAnswers.updated)]);
 
     expect(await groups.update(7, { name: 'Sales Reps' })).toEqual(GroupAnswers.updated);
@@ -110,7 +106,7 @@ describe('P6: collaboratorGroups writes', () => {
     expect(bodyOf(http.requests[0])).toEqual({ name: 'Sales Reps' });
   });
 
-  it.skip('deletes with DELETE /collaborator-groups/{id} and answers null for the 204', async () => {
+  it('deletes with DELETE /collaborator-groups/{id} and answers null for the 204', async () => {
     const { http, groups } = over([reply(204)]);
 
     expect(await groups.delete(7)).toBeNull();
@@ -121,7 +117,7 @@ describe('P6: collaboratorGroups writes', () => {
     ]);
   });
 
-  it.skip('raises the plan gate as a PermissionError that is not a PolicyError', async () => {
+  it('raises the plan gate as a PermissionError that is not a PolicyError', async () => {
     const error = await over([reply(403, GroupAnswers.planRequired)])
       .groups.create(create)
       .catch((thrown: unknown) => thrown);
@@ -131,13 +127,13 @@ describe('P6: collaboratorGroups writes', () => {
     expect((error as PermissionError).code).toBe(ErrorCode.PlanRequired);
   });
 
-  it.skip('sends every write once', async () => {
+  it('sends every write once', async () => {
     await expectSentOnce((transport) => resource(transport).create(create), reply(201, GroupAnswers.created));
     await expectSentOnce((transport) => resource(transport).update(7, { name: 'x' }), reply(200, GroupAnswers.updated));
     await expectSentOnce((transport) => resource(transport).delete(7), reply(204));
   });
 
-  it.skip.each([
+  it.each([
     ['retrieve', (g: CollaboratorGroupsResource) => g.retrieve(0)],
     ['update', (g: CollaboratorGroupsResource) => g.update(-1, { name: 'x' })],
     ['delete', (g: CollaboratorGroupsResource) => g.delete(1.5)],
@@ -154,7 +150,7 @@ describe('P6: collaboratorGroups list and retrieve rules', () => {
     expect(CollaboratorGroupsResource.LIST_FILTERS).toEqual(['structure', 's']);
   });
 
-  it.skip.each([
+  it.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
     ['an empty structure list', { structure: [] }],
@@ -168,13 +164,13 @@ describe('P6: collaboratorGroups list and retrieve rules', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
+  it('list throws UnexpectedResponseError for a 2xx that is not a list, never an empty page', async () => {
     const { groups } = over([reply(200, malformedSuccess)]);
 
     await expect(groups.list()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 
-  it.skip('retrieve sends include and propertyId the way every retrieve does', async () => {
+  it('retrieve sends include and propertyId the way every retrieve does', async () => {
     const { http, groups } = over([reply(200, GroupAnswers.listed)]);
 
     await groups.retrieve(7, { fields: 'id', include: 'extended', propertyId: 3 });
@@ -182,7 +178,7 @@ describe('P6: collaboratorGroups list and retrieve rules', () => {
     expect(queryOf(http.requests[0])).toEqual({ fields: 'id', include: 'extended', propertyId: '3' });
   });
 
-  it.skip('retrieve throws UnexpectedResponseError for a 2xx that is not an object', async () => {
+  it('retrieve throws UnexpectedResponseError for a 2xx that is not an object', async () => {
     const { groups } = over([reply(200, [GroupAnswers.listed])]);
 
     await expect(groups.retrieve(7)).rejects.toBeInstanceOf(UnexpectedResponseError);

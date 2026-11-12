@@ -8,7 +8,8 @@ import type {
 } from '../record-types';
 import type { SirenList } from '../types';
 import { CollaboratorGroupMembersResource } from './collaborator-group-members';
-import { RecordsResource } from './records';
+import { deleteRecord, listRecords, readObject, recordId, writeRecord } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
 
 /**
@@ -45,9 +46,7 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
    * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: CollaboratorGroupListParams = {}): Promise<SirenList<T>> {
-    // Stub: slice 3 packet P6
-    void params;
-    return Promise.resolve([] as unknown as SirenList<T>);
+    return listRecords<T>(this.http, this.path, params, CollaboratorGroupsResource.LIST_FILTERS);
   }
 
   /**
@@ -56,10 +55,7 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
    * unknown id.
    */
   retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
-    // Stub: slice 3 packet P6
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+    return retrieveRecord<T>(this.http, this.path, id, params);
   }
 
   /**
@@ -69,9 +65,7 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
    * second create as a new record.
    */
   create(params: CreateCollaboratorGroupParams): Promise<T> {
-    // Stub: slice 3 packet P6
-    void params;
-    return Promise.resolve({} as T);
+    return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
   /**
@@ -79,11 +73,9 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
    * /collaborator-groups/{id}`, sent once. Sending it again after a lost answer
    * sets the same values, so it is safe.
    */
-  update(id: number, params: UpdateCollaboratorGroupParams): Promise<T> {
-    // Stub: slice 3 packet P6
-    void id;
-    void params;
-    return Promise.resolve({} as T);
+  async update(id: number, params: UpdateCollaboratorGroupParams): Promise<T> {
+    const group = recordId(id, 'update');
+    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params);
   }
 
   /**
@@ -92,10 +84,9 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
    * answer raises `NotFoundError` once the group is gone, whoever removed
    * it, so treat that as done and `retrieve` first if the cause matters.
    */
-  delete(id: number): Promise<T | null> {
-    // Stub: slice 3 packet P6
-    void id;
-    return Promise.resolve(null);
+  async delete(id: number): Promise<T | null> {
+    const group = recordId(id, 'delete');
+    return deleteRecord<T>(this.http, `${this.path}/${group}`);
   }
 
   /**
@@ -104,7 +95,6 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
    * /collaborator-groups/structures`.
    */
   structures(): Promise<RegistryOptions> {
-    // Stub: slice 3 packet P6
-    return Promise.resolve({ options: [] });
+    return readObject<RegistryOptions>(this.http, `${this.path}/structures`);
   }
 }
