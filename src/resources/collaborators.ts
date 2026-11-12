@@ -262,12 +262,8 @@ export class CollaboratorsResource<T = Collaborator> extends RecordsResource<T> 
         throw new SirenError(`bulk ${action} cannot send "${key}". It takes ${needs === undefined ? 'no extra' : `only ${needs}`}.`);
       }
     }
-    if (needs !== undefined) {
-      if (!(needs in extra)) {
-        throw new SirenError(`bulk ${action} needs ${needs} in extra.`);
-      }
-      recordId(extra[needs], 'bulk', needs);
-    }
+    // A missing extra reaches recordId as undefined, which refuses it by name.
+    if (needs !== undefined) recordId(extra[needs], 'bulk', needs);
     return bulkRecords<BulkResult>(this.http, this.path, action, ids, extra);
   }
 

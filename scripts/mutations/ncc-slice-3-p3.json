@@ -372,12 +372,13 @@
   {
     "id": "p3-bulk-extra-unchecked",
     "file": "src/resources/collaborators.ts",
-    "find": "      recordId(extra[needs], 'bulk', needs);\n",
+    "find": "    if (needs !== undefined) recordId(extra[needs], 'bulk', needs);\n",
     "replace": "",
     "expect": "caught",
     "failing": [
       "refuses extra.programId",
-      "refuses extra.distributorId"
+      "refuses extra.distributorId",
+      "refuses addToProgram without a programId"
     ]
   },
   {
@@ -417,18 +418,8 @@
   {
     "id": "p3-bulk-extra-missing-ok",
     "file": "src/resources/collaborators.ts",
-    "find": "      if (!(needs in extra)) {",
-    "replace": "      if (needs === '__never__') {",
-    "expect": "caught",
-    "failing": [
-      "refuses addToProgram without a programId"
-    ]
-  },
-  {
-    "id": "p3-bulk-missing-unnamed",
-    "file": "src/resources/collaborators.ts",
-    "find": "        throw new SirenError(`bulk ${action} needs ${needs} in extra.`);",
-    "replace": "        throw new SirenError(`bulk ${action} needs its extra.`);",
+    "find": "    if (needs !== undefined) recordId(extra[needs], 'bulk', needs);",
+    "replace": "    if (needs !== undefined && needs in extra) recordId(extra[needs], 'bulk', needs);",
     "expect": "caught",
     "failing": [
       "refuses addToProgram without a programId"
