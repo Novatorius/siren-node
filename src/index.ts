@@ -86,4 +86,20 @@ export { ApiKeysResource } from './resources/api-keys';
 export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';
 export type { RetrieveParams } from './resources/records';
 
+export { PropertyQualifier } from './property-qualifier';
+export {
+  CollaboratorsResource,
+  CollaboratorBulkAction,
+  COLLABORATOR_BINDING_FIELDS,
+  SITE_UPDATABLE_COLLABORATOR_FIELDS,
+} from './resources/collaborators';
+export { CollaboratorAliasesResource, CollaboratorAliasType } from './resources/collaborator-aliases';
+export { ProgramEnrollmentsResource } from './resources/program-enrollments';
+export { CollaboratorGroupsResource } from './resources/collaborator-groups';
+export { CollaboratorGroupMembersResource } from './resources/collaborator-group-members';
+export { ProgramsResource, ProgramBulkAction } from './resources/programs';
+export { ProgramGroupsResource, ProgramGroupSorter, ProgramGroupBulkAction } from './resources/program-groups';
+export { MAX_BULK_IDS } from './resources/record-requests';
+export type * from './record-types';
+
 export { Siren as default } from './client';

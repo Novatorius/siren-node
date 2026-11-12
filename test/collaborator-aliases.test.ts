@@ -1,0 +1,347 @@
+import { describe, expect, it } from 'vitest';
+import {
+  BadRequestError,
+  CodeConflictError,
+  CollaboratorAliasesResource,
+  CollaboratorAliasType,
+  CollaboratorsResource,
+  ConflictError,
+  ErrorCode,
+  PolicyError,
+  SirenError,
+} from '../src/index';
+import type { HttpTransport } from '../src/http';
+import { reply } from './http-fakes';
+import {
+  CollaboratorAnswers,
+  bodyOf,
+  expectRetried,
+  expectSentOnce,
+  page,
+  pathOf,
+  queryOf,
+  transportOver,
+} from './record-fakes';
+
+/*
+ * Slice 3 acceptance tests for packet P4: CollaboratorAliasesResource, the
+ * `/collaborator-aliases` routes and the collaborator record's own code
+ * fields. Cases follow the Siren PHP SDK's CollaboratorAliasRoutesTest and
+ * CollaboratorAliasesTest at 59383e6, with Cloud's answers from
+ * test/record-fakes.ts.
+ *
+ * Integration shape (KB 568): the real resource, reached through a real
+ * CollaboratorsResource, over the real HttpTransport, with a FakeHttpClient
+ * at the HttpClient seam.
+ *
+ * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
+ * incomplete marker. The P4 implementer turns each into `it` and deletes this
+ * paragraph.
+ */
+
+function over(replies: Parameters<typeof transportOver>[0]) {
+  const built = transportOver(replies);
+  return { ...built, aliases: new CollaboratorsResource(built.transport).aliases };
+}
+
+const resource = (transport: HttpTransport) => new CollaboratorAliasesResource(transport);
+
+describe('P4: aliases surface', () => {
+  it('names the route and the plain code types', () => {
+    expect(CollaboratorAliasesResource.PATH).toBe('/collaborator-aliases');
+    expect(CollaboratorAliasType).toEqual({ Tracking: 'tracking', Coupon: 'coupon' });
+  });
+});
+
+describe('P4: aliases.query', () => {
+  it.skip('reads GET /collaborator-aliases with filters, sorting and paging, and answers plain records', async () => {
+    const { http, aliases } = over([
+      reply(200, page([CollaboratorAnswers.alias, CollaboratorAnswers.dashboardAlias], 2, 20, 20)),
+    ]);
+
+    const list = await aliases.query({
+      code: 'SAVE10',
+      type: ['coupon', 'tracking'],
+      collaboratorId: 4,
+      orderBy: 'code',
+      order: 'ASC',
+      page: 2,
+      perPage: 20,
+    });
+
+    expect(http.requests[0]!.method).toBe('GET');
+    expect(pathOf(http.requests[0])).toBe('/collaborator-aliases');
+    expect(queryOf(http.requests[0])).toEqual({
+      code: 'SAVE10',
+      type: 'coupon,tracking',
+      collaboratorId: '4',
+      orderBy: 'code',
+      order: 'ASC',
+      number: '20',
+      offset: '20',
+    });
+    expect([...list]).toEqual([
+      { code: 'SAVE10', type: 'coupon', collaboratorId: 4, dateIssued: '2026-10-16 12:00:00', propertyId: 5 },
+      { code: 'FLO', type: 'tracking', collaboratorId: 4, dateIssued: '2026-01-15 10:30:00', propertyId: null },
+    ]);
+    expect(list.estimatedCount).toBe(2);
+  });
+
+  it.skip('retries like a read', async () => {
+    await expectRetried((transport) => resource(transport).query(), reply(200, page([CollaboratorAnswers.alias])));
+  });
+});
+
+describe('P4: aliases.findByCode and forCollaborator', () => {
+  it.skip('asks for the newest holder of the code under the plain type', async () => {
+    const { http, aliases } = over([reply(200, page([CollaboratorAnswers.alias], 1, 1))]);
+
+    expect(await aliases.findByCode(' SAVE10 ', 'coupon')).toEqual({
+      code: 'SAVE10',
+      type: 'coupon',
+      collaboratorId: 4,
+      dateIssued: '2026-10-16 12:00:00',
+      propertyId: 5,
+    });
+    expect(pathOf(http.requests[0])).toBe('/collaborator-aliases');
+    expect(queryOf(http.requests[0])).toEqual({
+      code: 'SAVE10',
+      type: 'coupon',
+      number: '1',
+      orderBy: 'dateIssued',
+      order: 'DESC',
+    });
+  });
+
+  it.skip('asks for a collaborator newest code of one type', async () => {
+    const { http, aliases } = over([reply(200, page([CollaboratorAnswers.dashboardAlias], 1, 1))]);
+
+    expect(await aliases.forCollaborator(4, CollaboratorAliasType.Tracking)).toEqual({
+      code: 'FLO',
+      type: 'tracking',
+      collaboratorId: 4,
+      dateIssued: '2026-01-15 10:30:00',
+      propertyId: null,
+    });
+    expect(queryOf(http.requests[0])).toEqual({
+      collaboratorId: '4',
+      type: 'tracking',
+      number: '1',
+      orderBy: 'dateIssued',
+      order: 'DESC',
+    });
+  });
+
+  it.skip('answers null when nobody holds the code', async () => {
+    const { aliases } = over([reply(200, page([]))]);
+
+    expect(await aliases.findByCode('NOPE', 'coupon')).toBeNull();
+    expect(await aliases.forCollaborator(4, 'coupon')).toBeNull();
+  });
+
+  it.skip('retries both like reads', async () => {
+    await expectRetried((transport) => resource(transport).findByCode('SAVE10', 'coupon'), reply(200, page([])));
+    await expectRetried((transport) => resource(transport).forCollaborator(4, 'coupon'), reply(200, page([])));
+  });
+});
+
+describe('P4: aliases.create', () => {
+  it.skip('posts the trimmed code and the plain type, and answers the plain record', async () => {
+    const { http, aliases } = over([reply(201, CollaboratorAnswers.alias)]);
+
+    expect(await aliases.create(' SAVE10 ', 'coupon', 4)).toEqual({
+      code: 'SAVE10',
+      type: 'coupon',
+      collaboratorId: 4,
+      dateIssued: '2026-10-16 12:00:00',
+      propertyId: 5,
+    });
+    expect(http.requests[0]!.method).toBe('POST');
+    expect(pathOf(http.requests[0])).toBe('/collaborator-aliases');
+    expect(bodyOf(http.requests[0])).toEqual({ code: 'SAVE10', type: 'coupon', collaboratorId: 4 });
+  });
+
+  it.skip('raises CodeConflictError from the 409 Siren answers for a held code, after one send', async () => {
+    const { http, aliases } = over([reply(409, CollaboratorAnswers.codeHeld), reply(201, CollaboratorAnswers.alias)]);
+
+    const error = await aliases.create(' SAVE10 ', 'coupon', 4).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(CodeConflictError);
+    expect(error).toBeInstanceOf(ConflictError);
+    const conflict = error as CodeConflictError;
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.code).toBe(ErrorCode.CodeHeld);
+    expect(conflict.message).toBe('That code is already held for this type.');
+    expect(conflict.conflictingCode).toBe('SAVE10');
+    expect(conflict.type).toBe('coupon');
+    expect(conflict.cause).toBeInstanceOf(ConflictError);
+    expect(conflict.cause).not.toBeInstanceOf(CodeConflictError);
+    expect(http.requests).toHaveLength(1);
+  });
+
+  it.skip('passes a refusal that is not a conflict through unchanged', async () => {
+    const { aliases } = over([reply(403, CollaboratorAnswers.programNotOnSite)]);
+
+    const error = await aliases.create('SAVE10', 'coupon', 4).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(PolicyError);
+    expect(error).not.toBeInstanceOf(CodeConflictError);
+  });
+
+  it.skip('is sent once', async () => {
+    await expectSentOnce((transport) => resource(transport).create('SAVE10', 'coupon', 4), reply(201, CollaboratorAnswers.alias));
+  });
+});
+
+describe('P4: aliases.free', () => {
+  it.skip('deletes one code of one type by query, with no body', async () => {
+    const { http, aliases } = over([reply(200, CollaboratorAnswers.freed)]);
+
+    expect(await aliases.free(' SAVE10 ', 'coupon')).toEqual({ deleted: true });
+    expect(http.requests[0]!.method).toBe('DELETE');
+    expect(pathOf(http.requests[0])).toBe('/collaborator-aliases');
+    expect(queryOf(http.requests[0])).toEqual({ code: 'SAVE10', type: 'coupon' });
+    expect(http.requests[0]!.body).toBeUndefined();
+  });
+
+  it.skip('raises a site refusal as PolicyError', async () => {
+    const { aliases } = over([
+      reply(403, {
+        error: {
+          message: 'A connected site may not use the user type, which names a Cloud account. Use wordpress_user.',
+          code: 'user_type_not_allowed',
+          context: { param: 'type' },
+        },
+      }),
+    ]);
+
+    const error = await aliases.free('SAVE10', 'user').catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(PolicyError);
+    expect((error as PolicyError).param).toBe('type');
+  });
+
+  it.skip('is sent once', async () => {
+    await expectSentOnce((transport) => resource(transport).free('SAVE10', 'coupon'), reply(200, CollaboratorAnswers.freed));
+  });
+});
+
+describe('P4: aliases on the collaborator record', () => {
+  it.skip('lists the record aliases field, skipping entries that are not objects', async () => {
+    const entries = [
+      { code: 'FLO', type: 'tracking', issuedDate: '2026-01-15T10:30:00+00:00' },
+      'junk',
+      { code: 'SAVE10', type: 'coupon', issuedDate: '2026-10-16T12:00:00+00:00' },
+    ];
+    const { http, aliases } = over([reply(200, { id: 4, aliases: entries })]);
+
+    expect(await aliases.list(4)).toEqual([entries[0], entries[2]]);
+    expect(http.requests[0]!.method).toBe('GET');
+    expect(pathOf(http.requests[0])).toBe('/collaborators/4');
+    expect(queryOf(http.requests[0])).toEqual({ fields: 'id,aliases' });
+  });
+
+  it.skip('answers an empty list when the record has no aliases field', async () => {
+    const { aliases } = over([reply(200, { id: 4 })]);
+
+    expect(await aliases.list(4)).toEqual([]);
+  });
+
+  it.skip('reads the referral code, or null when there is none', async () => {
+    const { http, aliases } = over([
+      reply(200, { id: 4, referralCode: 'FLO' }),
+      reply(200, { id: 4, referralCode: null }),
+      reply(200, { id: 4, referralCode: '' }),
+      reply(200, { id: 4 }),
+    ]);
+
+    expect(await aliases.trackingCode(4)).toBe('FLO');
+    expect(await aliases.trackingCode(4)).toBeNull();
+    expect(await aliases.trackingCode(4)).toBeNull();
+    expect(await aliases.trackingCode(4)).toBeNull();
+    expect(queryOf(http.requests[0])).toEqual({ fields: 'id,referralCode' });
+    expect(pathOf(http.requests[0])).toBe('/collaborators/4');
+  });
+
+  it.skip('puts a new tracking code as trackingId and answers the collaborator', async () => {
+    const { http, aliases } = over([reply(200, CollaboratorAnswers.updated)]);
+
+    expect(await aliases.setTrackingCode(4, 'ADA2')).toEqual(CollaboratorAnswers.updated);
+    expect(http.requests[0]!.method).toBe('PUT');
+    expect(pathOf(http.requests[0])).toBe('/collaborators/4');
+    expect(bodyOf(http.requests[0])).toEqual({ trackingId: 'ADA2' });
+  });
+
+  it.skip('raises the 400 for a code another collaborator holds as BadRequestError', async () => {
+    const { aliases } = over([
+      reply(400, {
+        error: {
+          message: 'Validations failed.',
+          context: {
+            type: 'VALIDATION_FAILED',
+            failedValidations: [{ field: 'trackingId', message: 'trackingId is not available.', type: 'UNAVAILABLE' }],
+          },
+        },
+      }),
+    ]);
+
+    await expect(aliases.setTrackingCode(4, 'TAKEN')).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it.skip('retries the reads and sends setTrackingCode once', async () => {
+    await expectRetried((transport) => resource(transport).list(4), reply(200, { id: 4, aliases: [] }));
+    await expectRetried((transport) => resource(transport).trackingCode(4), reply(200, { id: 4, referralCode: 'FLO' }));
+    await expectSentOnce((transport) => resource(transport).setTrackingCode(4, 'ADA2'), reply(200, CollaboratorAnswers.updated));
+  });
+});
+
+describe('P4: aliases refuse bad input before sending', () => {
+  const malformed = ['', 'coupon@property:5', 'coupon,tracking', 'coupon ', 'coupon\n', 'cupón'];
+
+  it.skip.each(malformed)('every method that takes a type refuses %j', async (type) => {
+    const { http, aliases } = over([reply(200, page([]))]);
+    const calls: Array<() => Promise<unknown>> = [
+      () => aliases.findByCode('SAVE10', type),
+      () => aliases.forCollaborator(4, type),
+      () => aliases.query({ type }),
+      () => aliases.query({ type: ['coupon', type] }),
+      () => aliases.create('SAVE10', type, 4),
+      () => aliases.free('SAVE10', type),
+    ];
+
+    for (const call of calls) {
+      const error = await call().catch((thrown: unknown) => thrown);
+      expect(error).toBeInstanceOf(SirenError);
+    }
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('refuses an empty type list and a type that is not a string', async () => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    await expect(aliases.query({ type: [] })).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.query({ type: 5 } as never)).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip.each(['', '   '])('every method that takes a code refuses %j', async (code) => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    await expect(aliases.findByCode(code, 'coupon')).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.create(code, 'coupon', 4)).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.free(code, 'coupon')).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.setTrackingCode(4, code)).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('every method that takes a collaborator id refuses one below 1', async () => {
+    const { http, aliases } = over([reply(200, page([]))]);
+
+    await expect(aliases.list(0)).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.trackingCode(-1)).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.setTrackingCode(0, 'ADA')).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.forCollaborator(1.5, 'coupon')).rejects.toBeInstanceOf(SirenError);
+    await expect(aliases.create('SAVE10', 'coupon', 0)).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
+  });
+});
