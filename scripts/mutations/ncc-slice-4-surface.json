@@ -26,6 +26,14 @@
     "failing": []
   },
   {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/engagements.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/calculations`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/calculations`);;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
     "id": "control-wrong-reason",
     "file": "src/taxonomy.ts",
     "find": "export const ConversionBulkAction = {\n  Approve: 'approve',\n  Reject: 'reject',\n  MarkPending: 'markPending',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
@@ -78,8 +86,8 @@
   {
     "id": "opportunities-gains-create",
     "file": "src/resources/opportunities.ts",
-    "find": "  update(id: number, params: UpdateOpportunityParams): Promise<T> {",
-    "replace": "  create(): Promise<T> {\n    return Promise.resolve({} as T);\n  }\n\n  update(id: number, params: UpdateOpportunityParams): Promise<T> {",
+    "find": "  async update(id: number, params: UpdateOpportunityParams): Promise<T> {",
+    "replace": "  create(): Promise<T> {\n    return Promise.resolve({} as T);\n  }\n\n  async update(id: number, params: UpdateOpportunityParams): Promise<T> {",
     "expect": "caught",
     "failing": [
       "P1: opportunities surface"
