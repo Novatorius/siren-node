@@ -71,7 +71,7 @@ function request(overrides: Partial<HttpRequest> = {}): HttpRequest {
 }
 
 describe('P3: FetchHttpClient', () => {
-  it.skip('sends the method, URL, headers and body as given', async () => {
+  it('sends the method, URL, headers and body as given', async () => {
     await new FetchHttpClient().send(request());
 
     expect(received).toHaveLength(1);
@@ -85,7 +85,7 @@ describe('P3: FetchHttpClient', () => {
     expect(got.body).toBe('{"source":"medusa","externalId":"order_1"}');
   });
 
-  it.skip('sends a GET with no body', async () => {
+  it('sends a GET with no body', async () => {
     await new FetchHttpClient().send(
       request({ method: 'GET', url: `${base}/siren/v1/conversions/7`, body: undefined }),
     );
@@ -95,7 +95,7 @@ describe('P3: FetchHttpClient', () => {
     expect(received[0]!.body).toBe('');
   });
 
-  it.skip('answers with the status, status text, lower-case headers and body text', async () => {
+  it('answers with the status, status text, lower-case headers and body text', async () => {
     handler = (_req, res) => {
       res.writeHead(201, 'Made It', { 'X-Siren-OID': '42', 'Content-Type': 'application/json' });
       res.end('{"status":"created"}');
@@ -110,7 +110,7 @@ describe('P3: FetchHttpClient', () => {
     expect(response.body).toBe('{"status":"created"}');
   });
 
-  it.skip('answers 4xx and 5xx replies instead of rejecting', async () => {
+  it('answers 4xx and 5xx replies instead of rejecting', async () => {
     let status = 401;
     handler = (_req, res) => {
       res.writeHead(status, { 'Retry-After': '3' });
@@ -128,7 +128,7 @@ describe('P3: FetchHttpClient', () => {
     expect(unavailable.headers['retry-after']).toBe('3');
   });
 
-  it.skip('never follows a redirect: it answers the 3xx as it is and sends nothing to the Location', async () => {
+  it('never follows a redirect: it answers the 3xx as it is and sends nothing to the Location', async () => {
     const elsewhere: string[] = [];
     const other = createServer((req, res) => {
       elsewhere.push(`${req.method} ${req.url} ${req.headers.authorization ?? ''}`);
@@ -154,7 +154,7 @@ describe('P3: FetchHttpClient', () => {
     }
   });
 
-  it.skip('answers an empty body as an empty string', async () => {
+  it('answers an empty body as an empty string', async () => {
     handler = (_req, res) => {
       res.writeHead(204);
       res.end();
@@ -166,7 +166,7 @@ describe('P3: FetchHttpClient', () => {
     expect(response.body).toBe('');
   });
 
-  it.skip('rejects with HttpClientError, carrying the fetch error as cause, when nothing answers', async () => {
+  it('rejects with HttpClientError, carrying the fetch error as cause, when nothing answers', async () => {
     const closed = createServer();
     await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
     const port = (closed.address() as AddressInfo).port;
@@ -183,7 +183,7 @@ describe('P3: FetchHttpClient', () => {
     expect((error as HttpClientError).cause).toBeInstanceOf(Error);
   });
 
-  it.skip('rejects with HttpClientError when the connection drops while the body is read', async () => {
+  it('rejects with HttpClientError when the connection drops while the body is read', async () => {
     handler = (_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '100' });
       res.write('{"id":');
@@ -201,7 +201,7 @@ describe('P3: FetchHttpClient', () => {
     expect((error as HttpClientError).cause).toBeInstanceOf(Error);
   });
 
-  it.skip('rejects with HttpClientError when the timeout runs out', async () => {
+  it('rejects with HttpClientError when the timeout runs out', async () => {
     handler = (_req, res) => {
       setTimeout(() => res.end('late'), 2_000).unref();
     };
@@ -219,7 +219,7 @@ describe('P3: FetchHttpClient', () => {
     expect(Date.now() - started).toBeLessThan(1_500);
   });
 
-  it.skip('counts the body read in the timeout', async () => {
+  it('counts the body read in the timeout', async () => {
     handler = (_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.write('[');
@@ -238,7 +238,7 @@ describe('P3: FetchHttpClient', () => {
     expect(Date.now() - started).toBeLessThan(1_500);
   });
 
-  it.skip('calls the fetch it was given, with the headers as the same plain object', async () => {
+  it('calls the fetch it was given, with the headers as the same plain object', async () => {
     const given = vi.fn(async () => new Response('{"ok":true}', { status: 200 }));
     const built = request();
 
@@ -255,7 +255,7 @@ describe('P3: FetchHttpClient', () => {
     expect(received).toHaveLength(0);
   });
 
-  it.skip('reads the global fetch at send time when none was given', async () => {
+  it('reads the global fetch at send time when none was given', async () => {
     const client = new FetchHttpClient();
     const replaced = vi.fn(async () => new Response('late-bound', { status: 200 }));
     vi.stubGlobal('fetch', replaced);

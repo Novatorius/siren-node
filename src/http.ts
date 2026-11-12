@@ -109,10 +109,64 @@ export class FetchHttpClient implements HttpClient {
    */
   constructor(private readonly fetchFn?: typeof fetch) {}
 
-  async send(_request: HttpRequest): Promise<HttpResponse> {
-    // Stub: slice 2 packet P3.
-    return { status: 200, headers: {}, body: '' };
+  async send(request: HttpRequest): Promise<HttpResponse> {
+    const fetchFn = this.fetchFn ?? globalThis.fetch;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), request.timeout);
+    try {
+      const init: RequestInit = {
+        method: request.method,
+        headers: request.headers,
+        redirect: 'manual',
+        signal: controller.signal,
+      };
+      if (request.body !== undefined) init.body = request.body;
+
+      let response: Response;
+      try {
+        response = await fetchFn(request.url, init);
+      } catch (cause) {
+        throw clientError('Request failed', cause);
+      }
+
+      let body: string;
+      try {
+        body = await response.text();
+      } catch (cause) {
+        throw clientError('Reading the response body failed', cause);
+      }
+
+      return {
+        status: response.status,
+        statusText: response.statusText,
+        headers: lowerCaseHeaders(response.headers),
+        body,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   }
+}
+
+/**
+ * Wraps a fetch failure in {@link HttpClientError}. The message names what
+ * failed and fetch's own message, never the request's headers.
+ */
+function clientError(what: string, cause: unknown): HttpClientError {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  return new HttpClientError(`${what}: ${detail}`, { cause });
+}
+
+/**
+ * Copies reply headers into a plain object. A Fetch `Headers` already yields
+ * every name in lower case.
+ */
+function lowerCaseHeaders(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, name) => {
+    out[name] = value;
+  });
+  return out;
 }
 
 /**
