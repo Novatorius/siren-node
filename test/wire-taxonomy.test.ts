@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ApiKeyScope,
   ApiKeyStatus,
+  CollaboratorAliasType,
+  CollaboratorBulkAction,
   CollaboratorStatus,
   ConversionStatus,
   CustomCurrencyType,
@@ -17,6 +19,9 @@ import {
   OpportunityStatus,
   POLICY_ERROR_CODES,
   PayoutStatus,
+  ProgramBulkAction,
+  ProgramGroupBulkAction,
+  ProgramGroupSorter,
   ProgramStatus,
   RefundKind,
   TransactionStatus,
@@ -253,5 +258,64 @@ describe('event vocabulary', () => {
       CollaboratorNotActive: 'collaborator_not_active',
       SiteCheckNotFound: 'site_check_not_found',
     });
+  });
+});
+
+describe('record vocabulary', () => {
+  // Slice 3. Siren Cloud at b6f7140: the IsAny list in
+  // lib/Collaborators/Rest/Service/CollaboratorBulkAction.php line 261. The
+  // PHP SDK's Collaborators::BULK_* constants (src/Resources/Collaborators.php
+  // lines 20 to 29) lack `reject`, which Cloud accepts, so Cloud's list wins.
+  it('CollaboratorBulkAction holds every action Siren runs on collaborators', () => {
+    expect(CollaboratorBulkAction).toEqual({
+      Activate: 'activate',
+      Reject: 'reject',
+      Deactivate: 'deactivate',
+      Restore: 'restore',
+      Delete: 'delete',
+      PermanentDelete: 'permanent_delete',
+      AddToProgram: 'addToProgram',
+      RemoveFromProgram: 'removeFromProgram',
+      AddToDistributor: 'addToDistributor',
+      RemoveFromDistributor: 'removeFromDistributor',
+      SendSignupEmail: 'sendSignupEmail',
+    });
+  });
+
+  // The PHP SDK's CollaboratorAliases::TYPE_* constants
+  // (src/Resources/CollaboratorAliases.php lines 36 and 37), and the
+  // generateUniqueAlias('tracking') call in Cloud's
+  // lib/Collaborators/Rest/Service/GenerateReferralCode.php line 73.
+  it('CollaboratorAliasType holds the plain code types', () => {
+    expect(CollaboratorAliasType).toEqual({ Tracking: 'tracking', Coupon: 'coupon' });
+  });
+
+  // Cloud's IsAny list in lib/Programs/Rest/Service/ProgramBulkAction.php
+  // line 200, and the PHP SDK's Programs::BULK_* constants
+  // (src/Resources/Programs.php lines 16 to 20).
+  it('ProgramBulkAction holds every action Siren runs on programs', () => {
+    expect(ProgramBulkAction).toEqual({
+      Activate: 'activate',
+      Deactivate: 'deactivate',
+      Restore: 'restore',
+      Delete: 'delete',
+      PermanentDelete: 'permanent_delete',
+    });
+  });
+
+  // Cloud's IsOneOf list in lib/ProgramGroups/Rest/Service/UpdateProgramGroup.php
+  // line 257, and the PHP SDK's src/ProgramGroupSorter.php lines 14 and 17.
+  it('ProgramGroupSorter holds the two sorters a program group takes', () => {
+    expect(ProgramGroupSorter).toEqual({
+      OldestBindingWins: 'oldestBindingWins',
+      NewestBindingWins: 'newestBindingWins',
+    });
+  });
+
+  // Cloud's IsAny list in lib/ProgramGroups/Rest/Service/ProgramGroupBulkAction.php
+  // line 163, and the PHP SDK's ProgramGroups::BULK_DELETE
+  // (src/Resources/ProgramGroups.php line 16).
+  it('ProgramGroupBulkAction holds the one action Siren runs on program groups', () => {
+    expect(ProgramGroupBulkAction).toEqual({ Delete: 'delete' });
   });
 });

@@ -7,7 +7,9 @@ import { FakeHttpClient, reply, spySource } from './http-fakes';
 /*
  * Slice 3 test doubles for the record resources. The network boundary is the
  * SDK's `HttpClient` seam, so these tests keep the real transport and the
- * real resources, and answer at that seam (KB 568). No test here builds a
+ * real resources, and answer at that seam, per
+ * "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568). No test here builds a
  * `Siren` client or reaches the global fetch, so nothing can leave the
  * machine.
  */
@@ -27,7 +29,11 @@ export function transportOver(replies: Array<HttpResponse | Error>, maxRetries =
   return { http, tokens, transport };
 }
 
-/** A 503 Siren answers when it is down, with `Retry-After: 0` so a retry is instant. */
+/**
+ * A 503 from the gateway in front of Siren while Siren is down. Siren does not
+ * write this body, so any body may come with it. `Retry-After: 0` makes a
+ * retry instant.
+ */
 export function unavailable(): HttpResponse {
   return reply(503, { error: { message: 'Service unavailable.', context: [] } }, { 'Retry-After': '0' });
 }
@@ -232,6 +238,18 @@ export const CollaboratorAnswers = {
     },
   },
   /** CollaboratorBulkAction.php lines 181 to 190 and describeSignupEmailFailure at line 202, two of three signup emails sent. Status 502. */
+  /**
+   * saas/Auth/ConnectorRequestRules.php line 1081, with the code from
+   * lib/Core/Service/Rest/ApiErrorCode.php line 43. Status 403, the default
+   * in saas/Auth/ConnectorRefusedException.php line 19.
+   */
+  userTypeNotAllowed: {
+    error: {
+      message: 'A connected site may not use the user type, which names a Cloud account. Use wordpress_user.',
+      code: 'user_type_not_allowed',
+      context: { param: 'type' },
+    },
+  },
   signupEmailFailed: {
     error: {
       message: 'Signup email sent to 2 collaborator(s). 1 could not be sent. Please try again or contact support.',
@@ -240,9 +258,18 @@ export const CollaboratorAnswers = {
   },
 } as const;
 
-/** saas/Auth/RateLimitMiddleware.php lines 123 to 127. Status 429, sent with `Retry-After`. */
+/**
+ * saas/Auth/OrgRateLimitMiddleware.php lines 137 to 141, which
+ * saas/public/index.php registers at line 316. Status 429, sent with
+ * `Retry-After`.
+ */
 export const rateLimited = {
   error: { message: 'Too many requests. Please try again later.', context: { retryAfter: 0 } },
+} as const;
+
+/** saas/Strategies/RestStrategy.php line 330, the answer for an error nothing else caught. Status 500. */
+export const unexpectedFailure = {
+  error: { message: 'An unexpected error occurred. Sorry, that is all I know.' },
 } as const;
 
 /*

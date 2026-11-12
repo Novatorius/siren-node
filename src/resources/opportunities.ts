@@ -24,6 +24,12 @@ export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
    * route and would answer every opportunity.
    */
   static readonly LIST_FILTERS = ['status', 'collaboratorId'] as const;
+  /**
+   * The id filters {@link list} checks. Siren casts `collaboratorId` to one
+   * whole number (GetOpportunities.php line 138), so it takes one positive
+   * whole number, never a list.
+   */
+  static readonly ID_FILTERS = { one: ['collaboratorId'] } as const;
 
   constructor(http: HttpTransport) {
     super(http, '/opportunities');
@@ -35,8 +41,10 @@ export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
    * opportunities a collaborator owns, a positive whole number). Sort with
    * `orderBy` (`id`, `status`, `lastTriggered`, `dateCreated`,
    * `dateModified`) and `order`. Sends through `listRecords` with
-   * {@link LIST_FILTERS}: any other key throws `SirenError` before sending,
-   * and a 2xx that is not a list throws `UnexpectedResponseError`.
+   * {@link LIST_FILTERS} and {@link ID_FILTERS}: any other key, and a
+   * `collaboratorId` that is not one positive whole number, throws
+   * `SirenError` before sending, and a 2xx that is not a list throws
+   * `UnexpectedResponseError`.
    */
   override list(params: OpportunityListParams = {}): Promise<SirenList<T>> {
     // Stub: slice 4 packet P1

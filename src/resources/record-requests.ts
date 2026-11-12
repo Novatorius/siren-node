@@ -48,12 +48,35 @@ export function recordId(id: unknown, method: string, what = 'id'): number {
 export const LIST_CONTROL_KEYS = ['page', 'perPage', 'number', 'offset', 'orderBy', 'order', 'fields'] as const;
 
 /**
+ * The id filters a list route reads, by how Cloud reads them. `one` names
+ * keys Cloud casts to a single whole number, such as `programId` on
+ * `/collaborators`, so a list or `'3abc'` would quietly narrow to one id.
+ * `many` names keys Cloud matches as a column, where a list means "any of".
+ *
+ * @internal
+ */
+export interface ListIdFilters {
+  /** Keys that take one positive whole number, never a list. */
+  readonly one?: readonly string[];
+  /** Keys that take a positive whole number or a non-empty list of them. */
+  readonly many?: readonly string[];
+}
+
+/**
  * Turns a record list's params into the query a list route reads. Pages
  * with `page`/`perPage` the way `toListQuery` does. A list value, such as
  * `status: ['active', 'pending']` or `fields: ['id', 'email']`, is sent
  * comma-separated, which Siren reads as "any of" for a filter and as the
- * field list for `fields`. An empty list is left out. A boolean is sent as
- * `true` or `false`. `undefined` is left out.
+ * field list for `fields`. An empty `fields` list is left out, so Siren
+ * answers its default fields. An empty list on any other key throws
+ * `SirenError` naming it, since leaving the filter out would answer every
+ * record where the caller asked for none. A boolean is sent as `true` or
+ * `false`. `undefined` is left out.
+ *
+ * `ids` names the route's id filters (see {@link ListIdFilters}). A key in
+ * `ids.one` must be one positive safe integer, and a key in `ids.many` a
+ * positive safe integer or a list of them, or `SirenError` names the key
+ * before sending.
  *
  * `filters` names the filter keys the route reads. Siren ignores a key it
  * does not read and answers every record, so a key that is neither one of
@@ -73,23 +96,25 @@ export const LIST_CONTROL_KEYS = ['page', 'perPage', 'number', 'offset', 'orderB
 export function recordListQuery(
   params: object,
   filters: readonly string[],
+  ids: ListIdFilters = {},
 ): Record<string, string | number | boolean | undefined> {
   // Stub: slice 3 packet P1
   void params;
   void filters;
+  void ids;
   return {};
 }
 
 /**
  * Reads one page of a record list with `GET {path}`, retriable, through
- * {@link recordListQuery} with the route's `filters`. Answers a real array,
- * with Siren's `total` as the non-enumerable `estimatedCount`, or the
- * `x-siren-estimated-count` header for a bare array.
+ * {@link recordListQuery} with the route's `filters` and `ids`. Answers a
+ * real array, with Siren's `total` as the non-enumerable `estimatedCount`,
+ * or the `x-siren-estimated-count` header for a bare array.
  *
  * Throws `UnexpectedResponseError` with the status Siren sent when a 2xx
  * body is neither a JSON array nor an object whose `items` is an array, an
- * empty body included. `RecordsResource.list()` reads such a body as an
- * empty page. A record list never does, since "nobody holds this code" must
+ * empty body included, or when any row is not a JSON object.
+ * `RecordsResource.list()` reads such a body as an empty page. A record list never does, since "nobody holds this code" must
  * not stand in for a broken answer.
  *
  * @internal
@@ -99,19 +124,27 @@ export async function listRecords<T>(
   path: string,
   params: object,
   filters: readonly string[],
+  ids: ListIdFilters = {},
 ): Promise<SirenList<T>> {
   // Stub: slice 3 packet P1
   void http;
   void path;
   void params;
   void filters;
+  void ids;
   return [] as unknown as SirenList<T>;
 }
 
 /**
  * Reads a JSON object with `GET {path}`, retriable, such as a collaborator
  * read for one field or a route's status types. Throws
- * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+ * `UnexpectedResponseError` with the status Siren sent when a 2xx body is
+ * not a JSON object.
+ *
+ * `check`, when given, runs on the object. When it answers a message,
+ * `readObject` throws `UnexpectedResponseError` with that message, the
+ * status Siren sent and the body as `data`, so a field read can fail with
+ * the same detail as any other broken answer.
  *
  * @internal
  */
@@ -119,11 +152,13 @@ export async function readObject<T>(
   http: Transport,
   path: string,
   query: Record<string, string | number | boolean | undefined> = {},
+  check?: (body: Record<string, unknown>) => string | undefined,
 ): Promise<T> {
   // Stub: slice 3 packet P1
   void http;
   void path;
   void query;
+  void check;
   return {} as T;
 }
 
@@ -189,10 +224,11 @@ export async function writeList<T>(
 /**
  * Sends a DELETE once, `retriable: false`, with `query` in the query
  * string and no body. Answers the JSON object Siren sends back, such as a
- * record marked `deleted` or `{ deleted: true }`, and `null` when Siren
- * answers with no body (a 204, or a 200 with an empty body), as it does when
- * it removes a record for good. Throws `UnexpectedResponseError` for any
- * other 2xx body.
+ * record marked `deleted` or `{ deleted: true }`, and `null` for a 204, as
+ * Siren answers when it removes a record for good. Throws
+ * `UnexpectedResponseError` with the status for any other 2xx body, an
+ * empty 200 included, since a cut-off answer must not read as "removed for
+ * good".
  *
  * @internal
  */

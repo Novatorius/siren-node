@@ -56,6 +56,13 @@ export class CreditsResource {
   static readonly HOLD_FILTERS = ['collaboratorId', 'currency', 'status', 'reference', 'idempotencyKey'] as const;
   /** The filters {@link checkoutBalances} sends. */
   static readonly BALANCE_FILTERS = ['collaboratorId', 'currency', 'excludeReference'] as const;
+  /**
+   * The id filters all three lists check. `collaboratorId` takes one
+   * positive whole number, never a list: `GET /credit-balances` reads one
+   * (GetCreditBalances.php line 55), and a ledger or hold query names one
+   * collaborator.
+   */
+  static readonly ID_FILTERS = { one: ['collaboratorId'] } as const;
 
   constructor(private readonly http: HttpTransport) {}
 
@@ -91,7 +98,9 @@ export class CreditsResource {
    *
    * Siren always sends a field it was asked for, so a record with no
    * `creditBalances` list, or with an entry that is not an object, throws
-   * `UnexpectedResponseError`, never an empty answer. A connected site's
+   * `UnexpectedResponseError` with the status Siren sent, never an empty
+   * answer. The read goes through `readObject` with a `check`, as slice 3's
+   * field reads do. A connected site's
    * token cannot read this field (403 `field_not_allowed`), so a checkout
    * uses {@link checkoutBalances}.
    */
@@ -116,7 +125,8 @@ export class CreditsResource {
    * as hold:{platform}:{token}. Build it with CreditsResource.holdReference().`
    *
    * Siren answers `{ items }` with no paging. Sent through `listRecords`
-   * with {@link BALANCE_FILTERS}, so a 2xx that is not a list throws
+   * with {@link BALANCE_FILTERS} and {@link ID_FILTERS}, so a 2xx that is
+   * not a list, or a row that is not an object, throws
    * `UnexpectedResponseError`.
    */
   checkoutBalances(collaboratorId: number, currency?: string, excludeReference?: string): Promise<CheckoutBalance[]> {
@@ -153,8 +163,8 @@ export class CreditsResource {
    * `idempotencyKey`, counts as not sent. Other filters, each an exact
    * match: `currency`, `sourceType`, `sourceId`
    * and `description`. Sort with `orderBy` (`id`, `dateCreated`, `amount`)
-   * and `order`. Sent through `listRecords` with {@link ENTRY_FILTERS}, so
-   * any other key throws `SirenError`.
+   * and `order`. Sent through `listRecords` with {@link ENTRY_FILTERS} and
+   * {@link ID_FILTERS}, so any other key throws `SirenError`.
    */
   entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {
     // Stub: slice 4 packet P5
@@ -179,7 +189,7 @@ export class CreditsResource {
    * `expiresAt`). A connected site reads only the holds its own checkouts
    * placed, and their references come back as Siren stores them, with the
    * site's Property (`hold:woocommerce@property:5:{token}`). Sent through
-   * `listRecords` with {@link HOLD_FILTERS}.
+   * `listRecords` with {@link HOLD_FILTERS} and {@link ID_FILTERS}.
    */
   holds(params: CreditHoldListParams): Promise<SirenList<CreditHold>> {
     // Stub: slice 4 packet P5

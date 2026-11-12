@@ -18,12 +18,19 @@ import type { RetrieveParams } from './records';
  * Programs (`/programs`): the incentive rules that turn engagements into
  * rewards.
  *
- * Reads retry. Every write and delete is sent once. Every id must be a
- * positive whole number, and a bad one throws `SirenError` before sending.
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * Every write and delete is sent once. Every id must be a positive whole
+ * number, and a bad one throws `SirenError` before sending.
+ * A write's answer is lost when it throws `ConnectionError` or a 5xx
+ * `ApiError`. Siren may have written before the answer failed, so each
+ * write says how to find out before sending it again.
  */
 export class ProgramsResource<T = Program> extends RecordsResource<T> {
   /** The filters `GET /programs` reads. {@link list} refuses any other key, `propertyId` included. */
   static readonly LIST_FILTERS = ['status', 'incentiveType', 'incentiveResolverType', 'units', 's', 'programGroupId'] as const;
+  /** The id filters its list reads, checked before sending: `programGroupId` takes one id, each a positive whole number. */
+  static readonly ID_FILTERS = { one: ['programGroupId'] } as const;
 
   constructor(http: HttpTransport) {
     super(http, '/programs');
@@ -34,8 +41,8 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * `incentiveType`, `incentiveResolverType`, `units` (exact match, a list
    * means "any of"), `s` (search name and description) and
    * `programGroupId`. Sort with `orderBy` and `order`.
-   * Sends through `listRecords` with {@link LIST_FILTERS}: any other key
-   * throws `SirenError` before sending, and a 2xx that is not a list throws
+   * Sends through `listRecords` with {@link LIST_FILTERS} and {@link ID_FILTERS}: any other key
+   * and an empty filter list throw `SirenError` before sending, and a 2xx that is not a list throws
    * `UnexpectedResponseError`, never an empty page.
    */
   override list(params: ProgramListParams = {}): Promise<SirenList<T>> {
@@ -56,7 +63,12 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
     return Promise.resolve({} as T);
   }
 
-  /** Creates a program with `POST /programs`, sent once, and answers it. */
+  /**
+   * Creates a program with `POST /programs`, sent once, and answers it.
+   * After a lost answer, search
+   * with `list({ s })` for the name before sending again, since Siren takes a
+   * second create as a new record.
+   */
   create(params: CreateProgramParams): Promise<T> {
     // Stub: slice 3 packet P8
     void params;
@@ -74,7 +86,9 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
   /**
    * Deletes a program with `DELETE /programs/{id}`, sent once. The first
    * call marks it `deleted` and answers it, and a second call removes it and
-   * answers `null`.
+   * answers `null`. After a lost answer, `retrieve` the program before sending
+   * again: a second delete of a program the first one marked deleted removes
+   * it for good.
    */
   delete(id: number): Promise<T | null> {
     // Stub: slice 3 packet P8

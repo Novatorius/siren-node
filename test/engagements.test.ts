@@ -30,6 +30,10 @@ describe('P2: engagements surface', () => {
     expect(EngagementsResource.LIST_FILTERS).toEqual(['status', 'collaboratorId', 'programId', 'opportunityId', 'from', 'to']);
   });
 
+  it('checks the three id filters, each one id or a list', () => {
+    expect(EngagementsResource.ID_FILTERS).toEqual({ many: ['collaboratorId', 'programId', 'opportunityId'] });
+  });
+
   it('only reads', () => {
     const engagements = new EngagementsResource(transportOver([reply(200, {})]).transport) as unknown as Record<string, unknown>;
 
@@ -110,6 +114,8 @@ describe('P2: engagements list and id rules', () => {
     ['propertyId', { propertyId: 5 }],
     ['s, which this route does not search', { s: 'flo' }],
     ['a misspelt filter', { programID: 2 }],
+    ['a programId that is not a whole number', { programId: '2' }],
+    ['a list holding a zero opportunityId', { opportunityId: [21, 0] }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, engagements } = over([reply(200, page([]))]);
 

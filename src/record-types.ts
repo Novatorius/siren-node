@@ -8,6 +8,7 @@ import type {
   ProgramGroupSorter,
   ProgramStatus,
 } from './taxonomy';
+import type { ListParams } from './types';
 
 /*
  * Wire types for the record resources: collaborators, their
@@ -20,9 +21,6 @@ import type {
  * this SDK does not name yet.
  */
 
-/** One value of a list filter, or a list Siren reads as "any of", sent comma-separated. */
-export type RecordFilterValue = string | number | boolean | ReadonlyArray<string | number> | undefined;
-
 /** Sort direction for a record list. */
 export type RecordSortOrder = 'ASC' | 'DESC';
 
@@ -32,17 +30,10 @@ export type RecordSortOrder = 'ASC' | 'DESC';
  * `offset` yourself. `fields` picks the returned fields, as a list or a
  * comma-separated string. Each resource's own params add the filters its
  * route reads, and a list value is sent comma-separated, which Siren reads
- * as "any of". A key the route does not read throws `SirenError`.
+ * as "any of". A key the route does not read, and an empty filter list,
+ * throw `SirenError`.
  */
-export interface RecordListParams {
-  /** Page number, starting at 1. */
-  page?: number;
-  /** Page size, 1 to 200. Siren's default is 10. A larger value is lowered to 200. */
-  perPage?: number;
-  /** Siren's own page size parameter, 1 to 200. */
-  number?: number;
-  /** Siren's own first-row parameter, 0 or greater. */
-  offset?: number;
+export interface RecordListParams extends Pick<ListParams, 'page' | 'perPage' | 'number' | 'offset'> {
   /** The column to sort by. Each resource names the columns its route accepts. */
   orderBy?: string;
   /** `ASC` or `DESC`. */
@@ -134,9 +125,9 @@ export interface CollaboratorListParams extends RecordListParams {
   email?: string | ReadonlyArray<string>;
   /** Searches name, nickname, email and tracking codes. */
   s?: string;
-  /** Collaborators enrolled in this program. */
+  /** Collaborators enrolled in this program: one id, never a list, since Siren reads it as one whole number. */
   programId?: number;
-  /** Collaborators this distributor covers. */
+  /** Collaborators this distributor covers: one id, never a list. */
   distributorId?: number;
   orderBy?: 'id' | 'status' | 'fullName' | 'nickname' | 'email' | 'dateCreated' | 'dateModified';
 }
@@ -340,6 +331,7 @@ export interface ProgramListParams extends RecordListParams {
   units?: string | ReadonlyArray<string>;
   /** Searches name and description. */
   s?: string;
+  /** Programs in this program group: one id, never a list, since Siren reads it as one whole number. */
   programGroupId?: number;
   orderBy?:
     | 'id'
@@ -736,7 +728,7 @@ export interface Mapping {
 export interface MappingListParams extends RecordListParams {
   externalType?: string;
   localType?: string;
-  localId?: number;
+  localId?: number | ReadonlyArray<number>;
   externalId?: string;
   orderBy?: 'localId' | 'externalId' | 'localType' | 'externalType';
 }

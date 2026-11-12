@@ -31,8 +31,14 @@ import type { SirenList } from '../types';
  * throws `SirenError` before sending when nothing is left or it holds a
  * comma, since Siren reads a comma in a filter as "any of". Every id, a
  * `query({ collaboratorId })` and its list members included, must be a
- * positive whole number. Reads retry. {@link create}, {@link free} and
- * {@link setTrackingCode} are sent once.
+ * positive whole number.
+ *
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * {@link create}, {@link free} and {@link setTrackingCode} are sent once.
+ * A write's answer is lost when it throws `ConnectionError` or a 5xx
+ * `ApiError`. Siren may have written before the answer failed, so each
+ * write says how to find out before sending it again.
  *
  * {@link list}, {@link trackingCode} and {@link setTrackingCode} read and
  * write the collaborator record's own `aliases`, `referralCode` and
@@ -44,6 +50,8 @@ export class CollaboratorAliasesResource {
 
   /** The filters {@link query} sends. It refuses any other key. */
   static readonly QUERY_FILTERS = ['code', 'type', 'collaboratorId'] as const;
+  /** The id filters its list reads, checked before sending: `collaboratorId` takes one id or a list, each a positive whole number. */
+  static readonly ID_FILTERS = { many: ['collaboratorId'] } as const;
 
   constructor(private readonly http: HttpTransport) {}
 
@@ -51,8 +59,9 @@ export class CollaboratorAliasesResource {
    * A collaborator's aliases, each `{ code, type, issuedDate }`, read with
    * `GET /collaborators/{id}?fields=id,aliases`. Siren always sends the
    * field it was asked for, so a record with no `aliases` list, or with an
-   * entry that is not an object, throws `UnexpectedResponseError`, never an
-   * empty answer.
+   * entry that is not an object, throws `UnexpectedResponseError` with the
+   * status Siren sent and a message naming `aliases` and the collaborator id,
+   * never an empty answer. It reads through `readObject` with a `check`.
    */
   list(collaboratorId: number): Promise<CollaboratorAliasEntry[]> {
     // Stub: slice 3 packet P4
@@ -66,7 +75,8 @@ export class CollaboratorAliasesResource {
    * /collaborators/{id}?fields=id,referralCode`, or `null` when they have
    * none (`referralCode` is `null` or empty). A missing `referralCode`, or
    * one that is neither a string nor `null`, throws
-   * `UnexpectedResponseError`.
+   * `UnexpectedResponseError` with the status Siren sent and a message
+   * naming `referralCode` and the collaborator id.
    */
   trackingCode(collaboratorId: number): Promise<string | null> {
     // Stub: slice 3 packet P4
@@ -94,8 +104,9 @@ export class CollaboratorAliasesResource {
    * Who holds a code: the newest alias with this code and plain type, or
    * `null` when nobody does. Reads `GET /collaborator-aliases` with `code`,
    * `type`, `number: 1`, `orderBy: 'dateIssued'` and `order: 'DESC'`, so the
-   * one row Siren answers is the newest. A list answer of the wrong shape
-   * throws `UnexpectedResponseError`, never `null`.
+   * one row Siren answers is the newest. A list answer of the wrong shape,
+   * or a row whose `type` is not a string, throws `UnexpectedResponseError`,
+   * never `null` or a holder read from a broken row.
    */
   findByCode(code: string, type: string): Promise<CollaboratorAlias | null> {
     // Stub: slice 3 packet P4
@@ -126,8 +137,9 @@ export class CollaboratorAliasesResource {
    * paging and sorting keys throws `SirenError`. An empty `type` or `code`
    * list throws too. Each record comes back through
    * `PropertyQualifier.plainRecord(record, 'type')`, and the list keeps
-   * `estimatedCount`. A 2xx that is not a list throws
-   * `UnexpectedResponseError`.
+   * `estimatedCount`. Sends through `listRecords` with {@link QUERY_FILTERS}
+   * and {@link ID_FILTERS}. A 2xx that is not a list, or a row whose `type`
+   * is not a string, throws `UnexpectedResponseError`.
    */
   query(params: CollaboratorAliasQueryParams = {}): Promise<SirenList<CollaboratorAlias>> {
     // Stub: slice 3 packet P4
@@ -147,7 +159,7 @@ export class CollaboratorAliasesResource {
    *
    * Siren's 409 does not name the holder, and that holder may be this same
    * collaborator: a send whose answer was lost, sent again, meets the code
-   * the first send placed. After a `ConnectionError` or a
+   * the first send placed. After a `ConnectionError`, a 5xx `ApiError` or a
    * `CodeConflictError`, call {@link findByCode} and compare its
    * `collaboratorId` before treating the code as someone else's.
    */

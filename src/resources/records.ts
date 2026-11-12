@@ -310,7 +310,9 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * `transactionId`, `name`, `description`, `type`, `value` (minor units,
    * per unit), `quantity` and `units`. Siren always sends a field it was
    * asked for, so a record with no `details` list, or with a line that is
-   * not an object, throws `UnexpectedResponseError`, never an empty answer.
+   * not an object, throws `UnexpectedResponseError` with the status Siren
+   * sent, never an empty answer. The read goes through `readObject` with a
+   * `check`.
    */
   details(id: number): Promise<TransactionDetailRecord[]> {
     // Stub: slice 4 packet P9

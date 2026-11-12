@@ -34,6 +34,7 @@ describe('P6: mappings surface', () => {
     expect(MappingsResource.LOCAL_TYPE_COLLABORATOR).toBe('collaborator');
     expect(MappingsResource.EXTERNAL_TYPE_WORDPRESS_USER).toBe('wordpress_user');
     expect(MappingsResource.LIST_FILTERS).toEqual(['localId', 'localType', 'externalId', 'externalType']);
+    expect(MappingsResource.ID_FILTERS).toEqual({ many: ['localId'] });
   });
 });
 
@@ -170,6 +171,7 @@ describe('P6: mappings names and ids', () => {
     ['list, an externalType with a comma', (m: MappingsResource) => m.list({ externalType: 'wordpress_user,wc_product' })],
     ['list, a localType with a comma', (m: MappingsResource) => m.list({ externalType: 'wordpress_user', localType: 'a,b' })],
     ['list, a zero localId', (m: MappingsResource) => m.list({ externalType: 'wordpress_user', localId: 0 })],
+    ['list, a localId list with a string', (m: MappingsResource) => m.list({ externalType: 'wordpress_user', localId: [4, '5'] as never })],
     ['list, propertyId', (m: MappingsResource) => m.list({ externalType: 'wordpress_user', propertyId: 5 } as never)],
     ['forExternal, a blank id', (m: MappingsResource) => m.forExternal('   ', 'wordpress_user')],
     ['forExternal, an empty type', (m: MappingsResource) => m.forExternal('17', '')],

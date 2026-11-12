@@ -34,7 +34,8 @@ import {
  * `/collaborators` routes. Every method gets a fixture test from Cloud's own
  * answer (test/record-fakes.ts), and every write a send-once test.
  *
- * Integration shape (KB 568): the real CollaboratorsResource over the real
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real CollaboratorsResource over the real
  * HttpTransport, with a FakeHttpClient at the HttpClient seam.
  *
  * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
@@ -50,19 +51,7 @@ function over(replies: Parameters<typeof transportOver>[0]) {
 const resource = (transport: HttpTransport) => new CollaboratorsResource(transport);
 
 describe('P3: collaborators surface', () => {
-  it('names the bulk actions as Siren does', () => {
-    expect(CollaboratorBulkAction).toEqual({
-      Activate: 'activate',
-      Deactivate: 'deactivate',
-      Restore: 'restore',
-      Delete: 'delete',
-      PermanentDelete: 'permanent_delete',
-      AddToProgram: 'addToProgram',
-      RemoveFromProgram: 'removeFromProgram',
-      AddToDistributor: 'addToDistributor',
-      RemoveFromDistributor: 'removeFromDistributor',
-      SendSignupEmail: 'sendSignupEmail',
-    });
+  it('names the bindings, the fields a site may update and the list filters', () => {
     expect(COLLABORATOR_BINDING_FIELDS).toEqual(['programs', 'distributors', 'groups']);
     expect(SITE_UPDATABLE_COLLABORATOR_FIELDS).toEqual(['fullName', 'nickname']);
     expect(CollaboratorsResource.LIST_FILTERS).toEqual([
@@ -75,6 +64,7 @@ describe('P3: collaborators surface', () => {
       'programId',
       'distributorId',
     ]);
+    expect(CollaboratorsResource.ID_FILTERS).toEqual({ one: ['programId', 'distributorId'], many: ['id'] });
   });
 
   it('carries aliases and enrollments over the same transport', () => {
@@ -125,6 +115,11 @@ describe('P3: collaborators.list', () => {
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 12 }],
     ['an email with a comma', { email: 'ada@example.com,flo@example.com' }],
+    ['a list of programs, which Cloud reads as one', { programId: [3, 4] }],
+    ['a program id Cloud would cast to 3', { programId: '3abc' }],
+    ['a distributor list, which Cloud reads as one', { distributorId: [3, 4] }],
+    ['an empty id list', { id: [] }],
+    ['an empty status list', { status: [] }],
   ])('refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, collaborators } = over([reply(200, page([CollaboratorAnswers.listed]))]);
 

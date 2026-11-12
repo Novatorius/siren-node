@@ -96,6 +96,15 @@ describe('P11: README records section', () => {
     ).toBe(true);
   });
 
+  it.skip('tells a caller with its own durable queue to build the client with maxRetries: 0', () => {
+    const all = sentences(section(read('README.md'), '## Collaborators and programs'));
+
+    expect(
+      all.some((s) => /\bqueue\b/i.test(s) && /`maxRetries: 0`/.test(s)),
+      'a sentence names the queue and maxRetries: 0',
+    ).toBe(true);
+  });
+
   it.skip('says a connected site may change only the name and nickname, with updateDetails', () => {
     const all = sentences(section(read('README.md'), '## Collaborators and programs'));
 
@@ -113,6 +122,15 @@ describe('P11: README list rules', () => {
     expect(
       all.some((s) => /\blists?\b/i.test(s) && /\bkeys?\b/i.test(s) && /`SirenError`/.test(s)),
       'a sentence says a list throws SirenError for a key it does not send',
+    ).toBe(true);
+  });
+
+  it.skip('says an empty filter list throws rather than answer every record', () => {
+    const all = sentences(section(read('README.md'), '## Collaborators and programs'));
+
+    expect(
+      all.some((s) => /\bempty\b/i.test(s) && /\blists?\b/i.test(s) && /`SirenError`/.test(s)),
+      'a sentence says an empty filter list throws SirenError',
     ).toBe(true);
   });
 });

@@ -39,6 +39,8 @@ export class MappingsResource extends RecordsResource<Mapping> {
   static readonly EXTERNAL_TYPE_WORDPRESS_USER = 'wordpress_user';
   /** The filters `GET /mappings` reads. {@link list} refuses any other key. */
   static readonly LIST_FILTERS = ['localId', 'localType', 'externalId', 'externalType'] as const;
+  /** The id filters {@link list} checks. Siren matches `localId` as a column, so it takes one positive whole number or a list of them. */
+  static readonly ID_FILTERS = { many: ['localId'] } as const;
 
   constructor(http: HttpTransport) {
     super(http, '/mappings');
@@ -46,12 +48,13 @@ export class MappingsResource extends RecordsResource<Mapping> {
 
   /**
    * Lists links with `GET /mappings`, through `listRecords` with
-   * {@link LIST_FILTERS}.
+   * {@link LIST_FILTERS} and {@link ID_FILTERS}.
    *
    * `externalType` is required and must be one plain type, or `SirenError`
    * is thrown before sending, so a query never lists every link of the
    * organization. `localType`, when present and not `undefined`, must be a
-   * plain type too, and `localId` a positive whole number. Other filters,
+   * plain type too, and `localId` a positive whole number or a list of
+   * them. Other filters,
    * each an exact match: `externalId`. Sort with `orderBy` (`localId`,
    * `externalId`, `localType`, `externalType`) and `order`. Every row comes
    * back through `PropertyQualifier.plainRecord(row, 'externalType')`, and

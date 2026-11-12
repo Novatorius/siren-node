@@ -19,7 +19,8 @@ import { GroupAnswers, bodyOf, expectRetried, expectSentOnce, page, pathOf, quer
  * CollaboratorGroupsTest at 59383e6, with Cloud's answers from
  * test/record-fakes.ts.
  *
- * Integration shape (KB 568): the real resource over the real HttpTransport,
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam.
  *
  * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
@@ -145,6 +146,7 @@ describe('P6: collaboratorGroups list and retrieve rules', () => {
   it.skip.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
+    ['an empty structure list', { structure: [] }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, groups } = over([reply(200, page([]))]);
 

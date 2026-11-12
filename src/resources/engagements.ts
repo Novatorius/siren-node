@@ -16,6 +16,8 @@ import type { RetrieveParams } from './records';
 export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
   /** The filters `GET /engagements` reads. {@link list} refuses any other key, `propertyId` included. */
   static readonly LIST_FILTERS = ['status', 'collaboratorId', 'programId', 'opportunityId', 'from', 'to'] as const;
+  /** The id filters {@link list} checks. Siren matches each as a column, so each takes one positive whole number or a list of them. */
+  static readonly ID_FILTERS = { many: ['collaboratorId', 'programId', 'opportunityId'] } as const;
 
   constructor(http: HttpTransport) {
     super(http, '/engagements');
@@ -28,7 +30,7 @@ export class EngagementsResource<T = Engagement> extends RecordsResource<T> {
    * (days, `YYYY-MM-DD`, by `dateCreated`). Sort with `orderBy` (`id`,
    * `opportunityId`, `programId`, `collaboratorId`, `score`, `status`,
    * `source`, `dateCreated`, `dateModified`) and `order`. Sends through
-   * `listRecords` with {@link LIST_FILTERS}.
+   * `listRecords` with {@link LIST_FILTERS} and {@link ID_FILTERS}.
    */
   override list(params: EngagementListParams = {}): Promise<SirenList<T>> {
     // Stub: slice 4 packet P2

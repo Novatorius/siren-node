@@ -65,8 +65,13 @@ describe('P9: transactions details', () => {
     ['no details field', { id: 71 }],
     ['a field that is not a list', { id: 71, details: null }],
     ['a line that is not an object', { id: 71, details: [7] }],
-  ])('throws UnexpectedResponseError for %s, never an empty answer', async (_label, body) => {
-    await expect(over([reply(200, body)]).transactions.details(71)).rejects.toBeInstanceOf(UnexpectedResponseError);
+  ])('throws UnexpectedResponseError with the status for %s, never an empty answer', async (_label, body) => {
+    const error = await over([reply(200, body)])
+      .transactions.details(71)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 
   it.skip('retries, and refuses an id that is not a positive whole number before sending', async () => {

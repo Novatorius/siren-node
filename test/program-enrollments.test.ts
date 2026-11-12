@@ -27,7 +27,8 @@ import {
  * and ProgramEnrollmentsTest at 59383e6, with Cloud's answers from
  * test/record-fakes.ts.
  *
- * Integration shape (KB 568): the real resource, reached through a real
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real resource, reached through a real
  * CollaboratorsResource, over the real HttpTransport, with a FakeHttpClient
  * at the HttpClient seam.
  *
@@ -47,6 +48,7 @@ describe('P5: enrollments surface', () => {
   it('names the route', () => {
     expect(ProgramEnrollmentsResource.PATH).toBe('/collaborator-programs');
     expect(ProgramEnrollmentsResource.LIST_FILTERS).toEqual(['collaboratorId', 'programId']);
+    expect(ProgramEnrollmentsResource.ID_FILTERS).toEqual({ many: ['collaboratorId', 'programId'] });
   });
 });
 
@@ -70,6 +72,8 @@ describe('P5: enrollments.list', () => {
   it.skip.each([
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { programID: 2 }],
+    ['an empty collaborator list', { collaboratorId: [] }],
+    ['a text program id', { programId: '2' }],
   ])('refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, enrollments } = over([reply(200, page([]))]);
 
@@ -156,20 +160,36 @@ describe('P5: enrollments through the collaborator record', () => {
   ])('programsFor throws UnexpectedResponseError for %s, never a shorter list', async (_label, body) => {
     const { enrollments } = over([reply(200, body)]);
 
-    await expect(enrollments.programsFor(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
+    const error = await enrollments.programsFor(4).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    expect((error as UnexpectedResponseError).message).toContain('programs');
+    expect((error as UnexpectedResponseError).message).toContain('4');
   });
 
   it.skip('collaboratorsIn refuses a key collaborators.list refuses, and sends nothing', async () => {
     const { http, enrollments } = over([reply(200, page([]))]);
 
     await expect(enrollments.collaboratorsIn(12, { propertyId: 5 } as never)).rejects.toBeInstanceOf(SirenError);
+    await expect(enrollments.collaboratorsIn(12, { distributorId: [3, 4] } as never)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('lists the collaborators in a program, the argument winning over params', async () => {
+  it.skip('collaboratorsIn refuses a programId in params rather than lose it to the argument, and sends nothing', async () => {
+    const { http, enrollments } = over([reply(200, page([]))]);
+
+    const error = await enrollments.collaboratorsIn(12, { programId: 99 } as never).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain('programId');
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it.skip('lists the collaborators in a program', async () => {
     const { http, enrollments } = over([reply(200, page([CollaboratorAnswers.listed], 1))]);
 
-    const list = await enrollments.collaboratorsIn(12, { status: 'active', programId: 99, perPage: 20 } as never);
+    const list = await enrollments.collaboratorsIn(12, { status: 'active', perPage: 20 });
 
     expect(pathOf(http.requests[0])).toBe('/collaborators');
     expect(queryOf(http.requests[0])).toEqual({ programId: '12', status: 'active', number: '20' });

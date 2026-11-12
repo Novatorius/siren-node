@@ -38,6 +38,10 @@ describe('P1: opportunities surface', () => {
     expect(OpportunitiesResource.LIST_FILTERS).toEqual(['status', 'collaboratorId']);
   });
 
+  it('takes one collaboratorId, as Siren reads only one', () => {
+    expect(OpportunitiesResource.ID_FILTERS).toEqual({ one: ['collaboratorId'] });
+  });
+
   it('has no create, delete or bulk call, since Siren opens opportunities itself', () => {
     const opportunities = new OpportunitiesResource(transportOver([reply(200, {})]).transport) as unknown as Record<string, unknown>;
 
@@ -130,6 +134,9 @@ describe('P1: opportunities list and id rules', () => {
     ['s, which Siren ignores for an organization', { s: 'flo' }],
     ['propertyId', { propertyId: 5 }],
     ['a misspelt filter', { collaboratorID: 4 }],
+    ['a list of collaborators, which Siren would read as the first', { collaboratorId: [4, 5] }],
+    ['a collaboratorId that is not a whole number', { collaboratorId: '4abc' }],
+    ['an empty status list', { status: [] }],
   ])('list refuses %s with SirenError naming the key, and sends nothing', async (_label, params) => {
     const { http, opportunities } = over([reply(200, page([]))]);
 

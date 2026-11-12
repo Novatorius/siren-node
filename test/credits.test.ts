@@ -58,6 +58,7 @@ describe('P5: credits surface', () => {
     expect(CreditsResource.ENTRY_FILTERS).toEqual(['collaboratorId', 'currency', 'sourceType', 'sourceId', 'description', 'idempotencyKey']);
     expect(CreditsResource.HOLD_FILTERS).toEqual(['collaboratorId', 'currency', 'status', 'reference', 'idempotencyKey']);
     expect(CreditsResource.BALANCE_FILTERS).toEqual(['collaboratorId', 'currency', 'excludeReference']);
+    expect(CreditsResource.ID_FILTERS).toEqual({ one: ['collaboratorId'] });
   });
 
   it('names the hold statuses as Siren does', () => {
@@ -123,8 +124,13 @@ describe('P5: credits balances', () => {
     ['no creditBalances field', { id: 4 }],
     ['a field that is not a list', { id: 4, creditBalances: {} }],
     ['an entry that is not an object', { id: 4, creditBalances: ['STORE_CREDIT'] }],
-  ])('throws UnexpectedResponseError for %s, never an empty answer', async (_label, body) => {
-    await expect(over([reply(200, body)]).credits.balances(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
+  ])('throws UnexpectedResponseError with the status for %s, never an empty answer', async (_label, body) => {
+    const error = await over([reply(200, body)])
+      .credits.balances(4)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 
   it.skip("raises a connected site's refused field as PolicyError", async () => {
@@ -169,8 +175,11 @@ describe('P5: credits balances', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  it.skip('checkoutBalances throws UnexpectedResponseError for a 2xx that is not a list', async () => {
+  it.skip('checkoutBalances throws UnexpectedResponseError for a 2xx that is not a list, or a row that is not an object', async () => {
     await expect(over([reply(200, { error: 'x' })]).credits.checkoutBalances(4)).rejects.toBeInstanceOf(UnexpectedResponseError);
+    await expect(over([reply(200, { items: ['STORE_CREDIT'] })]).credits.checkoutBalances(4)).rejects.toBeInstanceOf(
+      UnexpectedResponseError,
+    );
   });
 
   it.skip("answers one currency's checkout row, or null when Siren sends none", async () => {
@@ -271,6 +280,8 @@ describe('P5: credits ledger and hold lists', () => {
 
   it.skip.each([
     ['entries', (c: CreditsResource) => c.entries({ collaboratorId: 4, sourceID: 'x' } as never), 'sourceID'],
+    ['entries, a list of collaborators', (c: CreditsResource) => c.entries({ idempotencyKey: 'order-91', collaboratorId: [4, 5] } as never), 'collaboratorId'],
+    ['holds, an empty status list', (c: CreditsResource) => c.holds({ collaboratorId: 4, status: [] }), 'status'],
     ['holds', (c: CreditsResource) => c.holds({ collaboratorId: 4, propertyId: 5 } as never), 'propertyId'],
   ])('%s refuses a key it does not send, naming it', async (_name, call, key) => {
     const { http, credits } = over([reply(200, page([]))]);

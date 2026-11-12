@@ -14,14 +14,25 @@ import {
   writeRecord,
 } from '../src/resources/record-requests';
 import { reply } from './http-fakes';
-import { bodyOf, expectRetried, expectSentOnce, pathOf, queryOf, rateLimited, transportOver } from './record-fakes';
+import {
+  bodyOf,
+  expectRetried,
+  expectSentOnce,
+  pathOf,
+  queryOf,
+  rateLimited,
+  transportOver,
+  unexpectedFailure,
+} from './record-fakes';
 
 /*
  * Slice 3 acceptance tests for packet P1: the internal request helpers every
  * record resource sends through, so the id rule, the list query, the
  * send-once rule for writes and the answer checks hold for all of them.
  *
- * Integration shape (KB 568): the real HttpTransport over a FakeHttpClient
+ * Integration shape, per "Integration Testing Standards — Introduction"
+ * (KB 568, https://navigator.novatori.us/r/kb/568): the real HttpTransport
+ * over a FakeHttpClient
  * at the HttpClient seam. The list envelope is the one Cloud's
  * ListResponseWrapperInterceptor builds (lib/Core/Service/Interceptors at
  * b6f7140).
@@ -86,10 +97,10 @@ describe('P1: recordListQuery', () => {
     ).toEqual({ status: 'active,pending', id: '4,9', fields: 'id,email', programId: 12 });
   });
 
-  it.skip('leaves out an empty list and undefined, and keeps a boolean, a string and a number as they are', () => {
+  it.skip('leaves out undefined and an empty fields list, and keeps a boolean, a string and a number as they are', () => {
     expect(
-      recordListQuery({ status: [], s: undefined, fields: 'id,email', orderBy: 'id', active: false }, filters),
-    ).toEqual({ fields: 'id,email', orderBy: 'id', active: false });
+      recordListQuery({ fields: [], s: undefined, email: 'a@example.com', programId: 12, active: false }, filters),
+    ).toEqual({ email: 'a@example.com', programId: 12, active: false });
   });
 
   it.skip('allows a comma only in fields and in the search text', () => {
@@ -118,8 +129,33 @@ describe('P1: recordListQuery', () => {
     ['a function', { s: () => 'x' }],
     ['a key the route does not read', { propertyId: 5 }],
     ['a misspelt filter', { programID: 5 }],
+    ['an empty filter list', { status: [] }],
+    ['an empty id list', { id: [] }],
   ])('refuses %s with SirenError naming the key', (_label, params) => {
     const error = caught(() => recordListQuery(params, filters));
+
+    expect(error).toBeInstanceOf(SirenError);
+    expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
+  });
+
+  const ids = { one: ['programId'], many: ['id'] } as const;
+
+  it.skip('takes one id for a key in ids.one, and an id or a list of ids for a key in ids.many', () => {
+    expect(recordListQuery({ programId: 3, id: [4, 9] }, filters, ids)).toEqual({ programId: 3, id: '4,9' });
+    expect(recordListQuery({ id: 4 }, filters, ids)).toEqual({ id: 4 });
+  });
+
+  it.skip.each([
+    ['a list for a single-id filter', { programId: [3, 4] }],
+    ['a text id for a single-id filter', { programId: '3' }],
+    ['0 for a single-id filter', { programId: 0 }],
+    ['a fraction for a single-id filter', { programId: 1.5 }],
+    ['an id Cloud would cast to 3', { id: '3abc' }],
+    ['a text id in an id list', { id: [1, '2'] }],
+    ['0 in an id list', { id: [4, 0] }],
+    ['a negative id', { id: -1 }],
+  ])('refuses %s with SirenError naming the key', (_label, params) => {
+    const error = caught(() => recordListQuery(params, filters, ids));
 
     expect(error).toBeInstanceOf(SirenError);
     expect((error as SirenError).message).toContain(Object.keys(params)[0]!);
@@ -176,12 +212,24 @@ describe('P1: listRecords', () => {
     expect(http.requests).toHaveLength(0);
   });
 
+  it.skip('sends nothing for an id filter it refuses', async () => {
+    const { http, transport } = transportOver([reply(200, envelope)]);
+
+    await expect(
+      listRecords(transport, '/programs', { programGroupId: [1, 2] }, ['programGroupId'], { one: ['programGroupId'] }),
+    ).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
+  });
+
   it.skip.each([
     ['an error object', reply(200, { error: 'Something went wrong.' })],
     ['items that are not a list', reply(200, { items: { id: 1 }, total: 1 })],
     ['a JSON null', reply(200, null)],
     ['a string', reply(200, 'ok')],
     ['an empty body', reply(200)],
+    ['an items row that is not an object', reply(200, { items: [{ id: 1 }, 5], total: 2 })],
+    ['a bare array holding null', reply(200, [null])],
+    ['a bare array holding a list', reply(200, [[{ id: 1 }]])],
   ])('throws UnexpectedResponseError with the status for %s, never an empty page', async (_label, answer) => {
     const { transport } = transportOver([answer]);
 
@@ -219,6 +267,48 @@ describe('P1: readObject', () => {
 
     expect(error).toBeInstanceOf(UnexpectedResponseError);
     expect((error as UnexpectedResponseError).statusCode).toBe(200);
+  });
+
+  const aliasesAreAList = (body: Record<string, unknown>) =>
+    Array.isArray(body.aliases) ? undefined : 'Siren answered collaborator 4 without an aliases list.';
+
+  it.skip('answers the object when the check passes, and hands the check the body', async () => {
+    const answer = { id: 4, aliases: [] };
+    const seen: unknown[] = [];
+    const { transport } = transportOver([reply(200, answer)]);
+
+    const read = await readObject(transport, '/collaborators/4', {}, (body) => {
+      seen.push(body);
+      return aliasesAreAList(body);
+    });
+
+    expect(read).toEqual(answer);
+    expect(seen).toEqual([answer]);
+  });
+
+  it.skip('throws UnexpectedResponseError with the check\'s message, the status and the body when the check fails', async () => {
+    const { http, transport } = transportOver([reply(200, { id: 4 }), reply(200, { id: 4, aliases: [] })]);
+
+    const error = await readObject(transport, '/collaborators/4', {}, aliasesAreAList).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).message).toBe('Siren answered collaborator 4 without an aliases list.');
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    expect((error as UnexpectedResponseError).data).toEqual({ id: 4 });
+    expect(http.requests).toHaveLength(1);
+  });
+
+  it.skip('throws for a body that is not an object before running the check', async () => {
+    let ran = false;
+    const { transport } = transportOver([reply(200, [{ id: 4 }])]);
+
+    const error = await readObject(transport, '/collaborators/4', {}, () => {
+      ran = true;
+      return undefined;
+    }).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect(ran).toBe(false);
   });
 });
 
@@ -331,13 +421,19 @@ describe('P1: deleteRecord', () => {
     expect(http.requests[0]!.body).toBeUndefined();
   });
 
-  it.skip.each([
-    ['a 204', reply(204)],
-    ['a 200 with no body', reply(200)],
-  ])('answers null for %s', async (_label, answer) => {
-    const { transport } = transportOver([answer]);
+  it.skip('answers null for a 204', async () => {
+    const { transport } = transportOver([reply(204)]);
 
     expect(await deleteRecord(transport, '/collaborators/9')).toBeNull();
+  });
+
+  it.skip('throws UnexpectedResponseError with the status for a 200 with no body, never null', async () => {
+    const { transport } = transportOver([reply(200)]);
+
+    const error = await deleteRecord(transport, '/collaborators/9').catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
   });
 
   it.skip.each([
@@ -414,12 +510,13 @@ describe('P1: bulkRecords', () => {
   });
 
   it.skip('raises the error Siren answers with, after one send', async () => {
-    const { http, transport } = transportOver([reply(500, { error: 'Something went wrong.' }), reply(200, done)]);
+    const { http, transport } = transportOver([reply(500, unexpectedFailure), reply(200, done)]);
 
     const error = await bulkRecords(transport, '/programs', 'delete', [1]).catch((thrown: unknown) => thrown);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).not.toBeInstanceOf(ConnectionError);
+    expect((error as ApiError).message).toBe(unexpectedFailure.error.message);
     expect(http.requests).toHaveLength(1);
   });
 });

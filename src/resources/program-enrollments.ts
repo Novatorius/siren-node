@@ -25,8 +25,13 @@ import type { SirenList } from '../types';
  * {@link unenroll} and {@link replace} go through the collaborator record and
  * its bulk actions instead, which Siren refuses from a connected site.
  *
- * Reads retry. Every write is sent once. Every id must be a positive whole
- * number, and a bad one throws `SirenError` before sending.
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * Every write is sent once. Every id must be a positive whole number, and a
+ * bad one throws `SirenError` before sending.
+ * A write's answer is lost when it throws `ConnectionError` or a 5xx
+ * `ApiError`. Siren may have written before the answer failed, so each
+ * write says how to find out before sending it again.
  */
 export class ProgramEnrollmentsResource {
   /** The route enrollments live on. */
@@ -34,6 +39,8 @@ export class ProgramEnrollmentsResource {
 
   /** The filters {@link list} sends. It refuses any other key. */
   static readonly LIST_FILTERS = ['collaboratorId', 'programId'] as const;
+  /** The id filters its list reads, checked before sending: `collaboratorId` and `programId` take one id or a list, each a positive whole number. */
+  static readonly ID_FILTERS = { many: ['collaboratorId', 'programId'] } as const;
 
   constructor(private readonly http: HttpTransport) {}
 
@@ -41,8 +48,10 @@ export class ProgramEnrollmentsResource {
    * The programs a collaborator is enrolled in, each `{ id, name }`, read
    * with `GET /collaborators/{id}?fields=id,programs`. Siren always sends
    * the field it was asked for, so a record with no `programs` list, or
-   * with an entry that is not an object, throws `UnexpectedResponseError`,
-   * never an empty answer.
+   * with an entry that is not an object, throws `UnexpectedResponseError`
+   * with the status Siren sent and a message naming `programs` and the
+   * collaborator id, never an empty answer. It reads through `readObject`
+   * with a `check`.
    */
   programsFor(collaboratorId: number): Promise<EnrolledProgram[]> {
     // Stub: slice 3 packet P5
@@ -54,8 +63,9 @@ export class ProgramEnrollmentsResource {
   /**
    * A page of the collaborators enrolled in a program, read with `GET
    * /collaborators` and `programId`. Takes the same parameters as
-   * `collaborators.list()`, and refuses the same keys. The `programId`
-   * argument wins over one in `params`.
+   * `collaborators.list()` but `programId`, and refuses the same keys, so a
+   * `programId` in `params` throws `SirenError` before sending instead of
+   * losing quietly to the argument.
    */
   collaboratorsIn(
     programId: number,
@@ -70,7 +80,9 @@ export class ProgramEnrollmentsResource {
   /**
    * Enrolls collaborators in a program, keeping their other enrollments,
    * with the `addToProgram` bulk action: `POST /collaborators/bulk` and
-   * body `{ action, ids, programId }`, sent once. Takes 1 to 500 ids.
+   * body `{ action, ids, programId }`, sent once. Takes 1 to 500 ids. Siren skips an id it cannot find or
+   * change and still answers 200, so an `affected` lower than the number of
+   * ids sent means some were skipped.
    */
   enroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
     // Stub: slice 3 packet P5
@@ -81,7 +93,9 @@ export class ProgramEnrollmentsResource {
 
   /**
    * Removes collaborators from a program, keeping their other enrollments,
-   * with the `removeFromProgram` bulk action, sent once. Takes 1 to 500 ids.
+   * with the `removeFromProgram` bulk action, sent once. Takes 1 to 500 ids. Siren skips an id it cannot find or
+   * change and still answers 200, so an `affected` lower than the number of
+   * ids sent means some were skipped.
    */
   unenroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
     // Stub: slice 3 packet P5
@@ -108,8 +122,8 @@ export class ProgramEnrollmentsResource {
    * `{ collaboratorId, programId }` per enrollment. Filters, each an exact
    * match: `collaboratorId` and `programId`. A list value matches any of its
    * values. Sort with `orderBy` and `order`.
-   * Sends through `listRecords` with {@link LIST_FILTERS}: any other key
-   * throws `SirenError` before sending, and a 2xx that is not a list throws
+   * Sends through `listRecords` with {@link LIST_FILTERS} and {@link ID_FILTERS}: any other key
+   * and an empty filter list throw `SirenError` before sending, and a 2xx that is not a list throws
    * `UnexpectedResponseError`, never an empty page.
    */
   list(params: ProgramEnrollmentListParams = {}): Promise<SirenList<ProgramEnrollment>> {
