@@ -69,8 +69,10 @@
     "file": "src/errors.ts",
     "find": "    return new HoldConflictError(conflict.message, {\n      code: conflict.code,\n      statusCode: conflict.statusCode,\n",
     "replace": "    return new HoldConflictError(conflict.message, {\n      code: conflict.code,\n",
-    "expect": "survives",
-    "failing": []
+    "expect": "caught",
+    "failing": [
+      "copies the status into a HoldConflictError"
+    ]
   },
   {
     "id": "reason-drop-token-code",

@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyResponse, jsonResponse, makeClient } from './helpers';
 
 /*
- * Packet P9 makes events.siteVisited send once. events.ingest keeps the retry
- * rule it had before, so a custom event is still resent on a 503. This pins
- * that the change to send() did not reach ingest.
+ * events.ingest retries a 503 up to maxRetries, unlike events.siteVisited,
+ * which is sent once.
  */
 
 afterEach(() => {
