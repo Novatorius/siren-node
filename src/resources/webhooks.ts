@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { SignatureVerificationError } from '../errors';
-import type { HttpClient } from '../http';
+import { SignatureVerificationError, UnexpectedResponseError } from '../errors';
+import { parseJsonBody, type HttpClient } from '../http';
 import type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
@@ -104,8 +104,18 @@ export class WebhookSubscriptionsResource {
    * up to `maxRetries`.
    */
   async events(): Promise<WebhookCatalogEntry[]> {
-    // Stub: slice 1 packet P6 implements this.
-    return [];
+    const path = '/webhooks/events';
+    const response = await this.http.request({ method: 'GET', path, retriable: true });
+    const body = await parseJsonBody(response);
+    const isEntry = (entry: unknown): boolean =>
+      typeof entry === 'object' && entry !== null && !Array.isArray(entry);
+    if (!Array.isArray(body) || !body.every(isEntry)) {
+      throw new UnexpectedResponseError(
+        `Siren answered GET ${path} with a body that is not a list of event objects.`,
+        { statusCode: response.status, data: body },
+      );
+    }
+    return body as WebhookCatalogEntry[];
   }
 
   /** List webhook subscriptions. */
