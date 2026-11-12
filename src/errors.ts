@@ -382,7 +382,8 @@ export class PolicyError extends PermissionError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, details);
     this.name = 'PolicyError';
-    // Stub: slice 1 packet P3 reads `param` from the context.
+    const param = contextOf(details.data).param;
+    if (typeof param === 'string') this.param = param;
   }
 
   /**
@@ -393,11 +394,14 @@ export class PolicyError extends PermissionError {
    * mentions a "connected site" or says a program does not "run on this site".
    */
   static matches(message: string, code?: string, data?: unknown): boolean {
-    // Stub: slice 1 packet P3 implements this.
-    void message;
-    void code;
-    void data;
-    return false;
+    if (isKnownErrorCode(code)) return POLICY_ERROR_CODES.includes(code);
+    if (typeof contextOf(data).param === 'string') return true;
+    const wording = message.toLowerCase();
+    return (
+      wording === PolicyError.DENIED_MESSAGE.toLowerCase() ||
+      wording.includes('connected site') ||
+      wording.includes('run on this site')
+    );
   }
 }
 
