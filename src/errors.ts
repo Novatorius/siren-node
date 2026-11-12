@@ -269,10 +269,8 @@ export class SiteDisconnectedError extends AuthenticationError {
    * message that says the site is "no longer connected", in any case.
    */
   static matches(message: string, code?: string): boolean {
-    // Stub: slice 1 packet P2 implements this.
-    void message;
-    void code;
-    return false;
+    if (isKnownErrorCode(code)) return code === ErrorCode.SiteDisconnected;
+    return message.toLowerCase().includes('no longer connected');
   }
 }
 
