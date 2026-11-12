@@ -484,6 +484,7 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
     const error = await pending;
 
     expect(error).toBeInstanceOf(AuthenticationError);
+    expect(error).not.toBeInstanceOf(SiteDisconnectedError);
     expect(tokens.refreshAccessToken).toHaveBeenCalledTimes(1);
     expect(client.requests).toHaveLength(3);
   });
@@ -520,6 +521,7 @@ describe('P4: HttpTransport refreshes once on a 401 and resends', () => {
       const error = await rejection(new RecordsResource(transport(client, tokens), '/conversions').list());
 
       expect(error).toBeInstanceOf(raised);
+      expect(error instanceof SiteDisconnectedError).toBe(raised === SiteDisconnectedError);
       expect((error as SirenError).statusCode).toBe(401);
       expect(tokens.refreshAccessToken).toHaveBeenCalledTimes(1);
       expect(client.requests).toHaveLength(1);
