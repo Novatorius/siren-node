@@ -34,6 +34,16 @@
     "failing": []
   },
   {
+    "id": "control-wrong-reason",
+    "file": "src/event-types.ts",
+    "find": "PayoutPaid: 'payout.paid',",
+    "replace": "PayoutPaid: 'payout.payed',",
+    "expect": "wrong-reason",
+    "failing": [
+      "P7: conversions.retrieve"
+    ]
+  },
+  {
     "id": "webhook-drop-event",
     "file": "src/event-types.ts",
     "find": "  StoreDisconnected: 'store.disconnected',\n",
