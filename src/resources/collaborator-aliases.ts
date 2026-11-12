@@ -6,7 +6,49 @@ import type {
   CollaboratorAliasQueryParams,
   DeletedResult,
 } from '../record-types';
+import { CodeConflictError, ConflictError, SirenError, UnexpectedResponseError } from '../errors';
+import { PropertyQualifier } from '../property-qualifier';
 import type { SirenList } from '../types';
+import { deleteRecord, isJsonObject, listRecords, readObject, recordId, writeRecord } from './record-requests';
+
+/** The newest row first, one row: how {@link CollaboratorAliasesResource.findByCode} and `forCollaborator` read. */
+const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'DESC' } as const;
+
+/**
+ * Returns `code` trimmed. Throws `SirenError` naming `method` before
+ * anything is sent when `code` is not a string, is empty once trimmed, or
+ * holds a comma, which Siren reads as "any of" in a filter.
+ *
+ * @internal
+ */
+export function aliasCode(code: unknown, method: string): string {
+  if (typeof code !== 'string') {
+    throw new SirenError(`${method} needs each code as a string.`);
+  }
+  const trimmed = code.trim();
+  if (trimmed === '') {
+    throw new SirenError(`${method} needs a code that is not empty once trimmed.`);
+  }
+  if (trimmed.includes(',')) {
+    throw new SirenError(`${method} cannot send a code that holds a comma, which Siren reads as "any of".`);
+  }
+  return trimmed;
+}
+
+/**
+ * A code row with its plain type and `propertyId`, through
+ * `PropertyQualifier.plainRecord(row, 'type')`. Throws
+ * `UnexpectedResponseError` with the row as `data` when its `type` is not a
+ * string, so a broken row never reads as a holder.
+ *
+ * @internal
+ */
+export function plainAlias(row: Record<string, unknown>): CollaboratorAlias {
+  if (typeof row.type !== 'string') {
+    throw new UnexpectedResponseError('Siren answered a code row whose type is not a string.', { data: row });
+  }
+  return PropertyQualifier.plainRecord(row, 'type') as CollaboratorAlias;
+}
 
 /**
  * A collaborator's aliases: the tracking codes and coupon codes that
@@ -63,11 +105,18 @@ export class CollaboratorAliasesResource {
    * status Siren sent and a message naming `aliases` and the collaborator id,
    * never an empty answer. It reads through `readObject` with a `check`.
    */
-  list(collaboratorId: number): Promise<CollaboratorAliasEntry[]> {
-    // Stub: slice 3 packet P4
-    void collaboratorId;
-    void this.http;
-    return Promise.resolve([]);
+  async list(collaboratorId: number): Promise<CollaboratorAliasEntry[]> {
+    const id = recordId(collaboratorId, 'list', 'collaboratorId');
+    const record = await readObject<{ aliases: CollaboratorAliasEntry[] }>(
+      this.http,
+      `/collaborators/${id}`,
+      { fields: 'id,aliases' },
+      (body) =>
+        Array.isArray(body.aliases) && body.aliases.every(isJsonObject)
+          ? undefined
+          : `Siren answered collaborator ${id} without an aliases list of objects.`,
+    );
+    return record.aliases;
   }
 
   /**
@@ -78,10 +127,18 @@ export class CollaboratorAliasesResource {
    * `UnexpectedResponseError` with the status Siren sent and a message
    * naming `referralCode` and the collaborator id.
    */
-  trackingCode(collaboratorId: number): Promise<string | null> {
-    // Stub: slice 3 packet P4
-    void collaboratorId;
-    return Promise.resolve(null);
+  async trackingCode(collaboratorId: number): Promise<string | null> {
+    const id = recordId(collaboratorId, 'trackingCode', 'collaboratorId');
+    const record = await readObject<{ referralCode: string | null }>(
+      this.http,
+      `/collaborators/${id}`,
+      { fields: 'id,referralCode' },
+      (body) =>
+        typeof body.referralCode === 'string' || body.referralCode === null
+          ? undefined
+          : `Siren answered collaborator ${id} without a referralCode that is a string or null.`,
+    );
+    return record.referralCode === '' ? null : record.referralCode;
   }
 
   /**
@@ -94,11 +151,10 @@ export class CollaboratorAliasesResource {
    * 403. Sending it again after a lost answer is safe, since Siren refuses a
    * code only when another collaborator holds it.
    */
-  setTrackingCode(collaboratorId: number, code: string): Promise<Collaborator> {
-    // Stub: slice 3 packet P4
-    void collaboratorId;
-    void code;
-    return Promise.resolve({ id: 1 });
+  async setTrackingCode(collaboratorId: number, code: string): Promise<Collaborator> {
+    const id = recordId(collaboratorId, 'setTrackingCode', 'collaboratorId');
+    const trackingId = aliasCode(code, 'setTrackingCode');
+    return writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { trackingId });
   }
 
   /**
@@ -109,11 +165,11 @@ export class CollaboratorAliasesResource {
    * or a row whose `type` is not a string, throws `UnexpectedResponseError`,
    * never `null` or a holder read from a broken row.
    */
-  findByCode(code: string, type: string): Promise<CollaboratorAlias | null> {
-    // Stub: slice 3 packet P4
-    void code;
-    void type;
-    return Promise.resolve(null);
+  async findByCode(code: string, type: string): Promise<CollaboratorAlias | null> {
+    const trimmed = aliasCode(code, 'findByCode');
+    const plainType = PropertyQualifier.assertCodeType(type, 'type');
+    const rows = await this.query({ code: trimmed, type: plainType, ...NEWEST });
+    return rows[0] ?? null;
   }
 
   /**
@@ -122,11 +178,11 @@ export class CollaboratorAliasesResource {
    * with `collaboratorId`, `type`, `number: 1`, `orderBy: 'dateIssued'` and
    * `order: 'DESC'`.
    */
-  forCollaborator(collaboratorId: number, type: string): Promise<CollaboratorAlias | null> {
-    // Stub: slice 3 packet P4
-    void collaboratorId;
-    void type;
-    return Promise.resolve(null);
+  async forCollaborator(collaboratorId: number, type: string): Promise<CollaboratorAlias | null> {
+    const id = recordId(collaboratorId, 'forCollaborator', 'collaboratorId');
+    const plainType = PropertyQualifier.assertCodeType(type, 'type');
+    const rows = await this.query({ collaboratorId: id, type: plainType, ...NEWEST });
+    return rows[0] ?? null;
   }
 
   /**
@@ -142,10 +198,35 @@ export class CollaboratorAliasesResource {
    * and {@link ID_FILTERS}. A 2xx that is not a list, or a row whose `type`
    * is not a string, throws `UnexpectedResponseError`.
    */
-  query(params: CollaboratorAliasQueryParams = {}): Promise<SirenList<CollaboratorAlias>> {
-    // Stub: slice 3 packet P4
-    void params;
-    return Promise.resolve([] as unknown as SirenList<CollaboratorAlias>);
+  async query(params: CollaboratorAliasQueryParams = {}): Promise<SirenList<CollaboratorAlias>> {
+    const sent: Record<string, unknown> = { ...params };
+    const { code, type } = params as { code?: unknown; type?: unknown };
+    if (code !== undefined) {
+      sent.code = Array.isArray(code) ? code.map((member: unknown) => aliasCode(member, 'query')) : aliasCode(code, 'query');
+    }
+    if (type !== undefined) {
+      sent.type = Array.isArray(type)
+        ? type.map((member: unknown) => PropertyQualifier.assertCodeType(member, 'type'))
+        : PropertyQualifier.assertCodeType(type, 'type');
+    }
+
+    const rows = await listRecords<Record<string, unknown>>(
+      this.http,
+      CollaboratorAliasesResource.PATH,
+      sent,
+      CollaboratorAliasesResource.QUERY_FILTERS,
+      CollaboratorAliasesResource.ID_FILTERS,
+    );
+    const plain = rows.map(plainAlias) as SirenList<CollaboratorAlias>;
+    if (rows.estimatedCount !== undefined) {
+      Object.defineProperty(plain, 'estimatedCount', {
+        value: rows.estimatedCount,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      });
+    }
+    return plain;
   }
 
   /**
@@ -164,12 +245,24 @@ export class CollaboratorAliasesResource {
    * `CodeConflictError`, call {@link findByCode} and compare its
    * `collaboratorId` before treating the code as someone else's.
    */
-  create(code: string, type: string, collaboratorId: number): Promise<CollaboratorAlias> {
-    // Stub: slice 3 packet P4
-    void code;
-    void type;
-    void collaboratorId;
-    return Promise.resolve({ code: '', type: '', collaboratorId: 1 });
+  async create(code: string, type: string, collaboratorId: number): Promise<CollaboratorAlias> {
+    const trimmed = aliasCode(code, 'create');
+    const plainType = PropertyQualifier.assertCodeType(type, 'type');
+    const id = recordId(collaboratorId, 'create', 'collaboratorId');
+    let row: Record<string, unknown>;
+    try {
+      row = await writeRecord<Record<string, unknown>>(this.http, 'POST', CollaboratorAliasesResource.PATH, {
+        code: trimmed,
+        type: plainType,
+        collaboratorId: id,
+      });
+    } catch (error) {
+      if (error instanceof ConflictError && !(error instanceof CodeConflictError)) {
+        throw CodeConflictError.fromConflict(error, trimmed, plainType);
+      }
+      throw error;
+    }
+    return plainAlias(row);
   }
 
   /**
@@ -185,10 +278,10 @@ export class CollaboratorAliasesResource {
    * and cannot reach a site's `coupon@property:5`, which only that site's
    * own token frees. Sending it again after a lost answer is safe.
    */
-  free(code: string, type: string): Promise<DeletedResult> {
-    // Stub: slice 3 packet P4
-    void code;
-    void type;
-    return Promise.resolve({ deleted: false });
+  async free(code: string, type: string): Promise<DeletedResult> {
+    const trimmed = aliasCode(code, 'free');
+    const plainType = PropertyQualifier.assertCodeType(type, 'type');
+    await deleteRecord(this.http, CollaboratorAliasesResource.PATH, { code: trimmed, type: plainType });
+    return { deleted: true };
   }
 }
