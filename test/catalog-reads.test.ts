@@ -31,7 +31,7 @@ afterEach(() => {
 describe('P6: webhooks.subscriptions.events()', () => {
   const catalog = fixture<Array<{ event: string; category: string; label: string }>>('webhook-events.json');
 
-  it.skip('GETs /webhooks/events and returns every entry as Siren sent it', async () => {
+  it('GETs /webhooks/events and returns every entry as Siren sent it', async () => {
     const ctx = makeClient([jsonResponse(200, catalog)]);
     const events = await ctx.client.webhooks.subscriptions.events();
 
@@ -44,13 +44,13 @@ describe('P6: webhooks.subscriptions.events()', () => {
     expect(events[0]).toEqual({ event: 'sale.created', category: 'Sales', label: 'A sale was recorded' });
   });
 
-  it.skip('keeps an event this SDK does not know yet', async () => {
+  it('keeps an event this SDK does not know yet', async () => {
     const future = { event: 'loyalty.tier_changed', category: 'Loyalty', label: 'A tier changed' };
     const ctx = makeClient([jsonResponse(200, [future])]);
     expect(await ctx.client.webhooks.subscriptions.events()).toEqual([future]);
   });
 
-  it.skip('throws UnexpectedResponseError when an entry is not an object', async () => {
+  it('throws UnexpectedResponseError when an entry is not an object', async () => {
     const entry = catalog[0]!;
     for (const bad of ['sale.created', null, 7, ['x']]) {
       const body = [entry, bad];
@@ -63,7 +63,7 @@ describe('P6: webhooks.subscriptions.events()', () => {
     }
   });
 
-  it.skip('throws UnexpectedResponseError when the body is not a list', async () => {
+  it('throws UnexpectedResponseError when the body is not a list', async () => {
     for (const body of [{ events: catalog }, null, 'events']) {
       const ctx = makeClient([jsonResponse(200, body)]);
       const error = await ctx.client.webhooks.subscriptions.events().catch((e: unknown) => e);
@@ -74,7 +74,7 @@ describe('P6: webhooks.subscriptions.events()', () => {
     }
   });
 
-  it.skip('goes through the shared transport retry for a 503, like list()', async () => {
+  it('goes through the shared transport retry for a 503, like list()', async () => {
     const ctx = makeClient(
       [jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' }), jsonResponse(200, catalog)],
       { maxRetries: 1 },
@@ -83,7 +83,7 @@ describe('P6: webhooks.subscriptions.events()', () => {
     expect(ctx.calls()).toHaveLength(2);
   });
 
-  it.skip('throws MissingScopeError for a key without a webhook scope', async () => {
+  it('throws MissingScopeError for a key without a webhook scope', async () => {
     const ctx = makeClient(
       [
         jsonResponse(403, {
