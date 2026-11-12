@@ -152,6 +152,12 @@ describe('P2: SiteDisconnectedError', () => {
     expect(error).not.toBeInstanceOf(SiteDisconnectedError);
   });
 
+  it.skip('checks the revoked-site wording before the API key wording', async () => {
+    const error = await thrownBy(401, err('This site is no longer connected, and this route does not accept API keys.'));
+    expect(error).toBeInstanceOf(SiteDisconnectedError);
+    expect(error).not.toBeInstanceOf(ApiKeyNotAcceptedError);
+  });
+
   it.skip('leaves any other 401 an AuthenticationError', async () => {
     const error = await thrownBy(401, err('Invalid API key.'));
     expect(error).toBeInstanceOf(AuthenticationError);
@@ -234,11 +240,13 @@ describe('P3: PolicyError', () => {
     }
   });
 
-  it.skip('lets missing_scope and store_key_not_allowed win over policy wording', async () => {
-    const scope = await thrownBy(403, err("You don't have permission to do that.", 'missing_scope'));
+  it.skip('checks the scope and store wording before the policy wording', async () => {
+    const scope = await thrownBy(403, err('A connected site is not authorized for records:programs:read.'));
     expect(scope).toBeInstanceOf(MissingScopeError);
-    const store = await thrownBy(403, err("You don't have permission to do that.", 'store_key_not_allowed'));
+    expect(scope).not.toBeInstanceOf(PolicyError);
+    const store = await thrownBy(403, err('This key is bound to one store, so a connected site may not read payouts.'));
     expect(store).toBeInstanceOf(StoreKeyNotAllowedError);
+    expect(store).not.toBeInstanceOf(PolicyError);
   });
 
   it.skip('answers matches() by the same rule', () => {
