@@ -1,4 +1,5 @@
-import type { HttpClient } from '../http';
+import { UnexpectedResponseError } from '../errors';
+import { parseJsonBody, type HttpClient } from '../http';
 import type { ApiKey, ApiKeyScopeGroups, CreateApiKeyParams, CreatedApiKey } from '../types';
 
 /**
@@ -53,8 +54,19 @@ export class ApiKeysResource {
    * on 429 and 5xx up to `maxRetries`.
    */
   async scopes(): Promise<ApiKeyScopeGroups> {
-    // Stub: slice 1 packet P7 implements this.
-    return {};
+    const path = '/api-keys/scopes';
+    const response = await this.http.request({ method: 'GET', path, retriable: true });
+    const body = await parseJsonBody(response);
+    const isObject = (value: unknown): value is Record<string, unknown> =>
+      typeof value === 'object' && value !== null && !Array.isArray(value);
+    const isGroup = (group: unknown): boolean => Array.isArray(group) && group.every(isObject);
+    if (!isObject(body) || !Object.values(body).every(isGroup)) {
+      throw new UnexpectedResponseError(
+        `Siren answered GET ${path} with a body that is not an object of scope lists.`,
+        { statusCode: response.status, data: body },
+      );
+    }
+    return body as ApiKeyScopeGroups;
   }
 
   /** Revoke an API key. */
