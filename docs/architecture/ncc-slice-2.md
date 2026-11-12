@@ -254,7 +254,8 @@ the connector slices.
 | `test/docs-slice-2.test.ts` | P8 |
 | `test/bearer-token.test.ts` | 2b P1 |
 | `test/siren-option-checks.test.ts` | 2b P2 |
-| `test/docs-hardening.test.ts` | Runs now, for the 2b README and CHANGELOG lines |
+| `test/siren-option-resolvers.test.ts` | 2b P2, unit tests for the constructor's resolvers |
+| `test/docs-hardening.test.ts` | The 2b README and CHANGELOG lines |
 
 ## Hardening (2b)
 

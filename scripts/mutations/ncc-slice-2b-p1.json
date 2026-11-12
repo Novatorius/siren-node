@@ -26,6 +26,14 @@
     "failing": []
   },
   {
+    "id": "control-malformed-syntax",
+    "file": "src/auth/bearer-token.ts",
+    "find": "export function usableBearerToken(value: unknown): string | null {",
+    "replace": "export function usableBearerToken((value: unknown): string | null {",
+    "expect": "refused",
+    "failing": []
+  },
+  {
     "id": "control-wrong-reason",
     "file": "src/auth/bearer-token.ts",
     "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
@@ -52,7 +60,7 @@
     "replace": "/[\\u0000-\\u001f\\u0080-\\u009f\\u0100-\\uffff]/",
     "expect": "caught",
     "failing": [
-      "DEL"
+      "a DEL (U+007F)"
     ]
   },
   {
@@ -62,7 +70,7 @@
     "replace": "/[\\u0000-\\u0008\\u000a-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
     "expect": "caught",
     "failing": [
-      "tab"
+      "a tab (U+0009)"
     ]
   },
   {
@@ -122,7 +130,17 @@
     "replace": "no character above code point 255.',",
     "expect": "caught",
     "failing": [
-      "naming the rule"
+      "when it is built, naming the rule"
+    ]
+  },
+  {
+    "id": "static-message-drops-option-names",
+    "file": "src/auth/static-access-token.ts",
+    "find": "'Siren: an apiKey or string accessToken must be",
+    "replace": "'Siren: a token must be",
+    "expect": "caught",
+    "failing": [
+      "when it is built, naming the rule"
     ]
   },
   {
@@ -140,6 +158,16 @@
     "file": "src/http.ts",
     "find": "let token = usableBearerToken(await this.tokens.getAccessToken());",
     "replace": "let token: string | null = (await this.tokens.getAccessToken()) || null;",
+    "expect": "caught",
+    "failing": [
+      "the token from getAccessToken"
+    ]
+  },
+  {
+    "id": "http-get-no-refusal",
+    "file": "src/http.ts",
+    "find": "let token = usableBearerToken(await this.tokens.getAccessToken());",
+    "replace": "let token = usableBearerToken(await this.tokens.getAccessToken()) ?? 'fallback-token';",
     "expect": "caught",
     "failing": [
       "the token from getAccessToken"
