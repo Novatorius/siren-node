@@ -15,12 +15,6 @@ import { BASE, ConnectAnswers, connectOver } from './connect-fakes';
  * with a FakeHttpClient at the HttpClient seam, answered with the bodies the
  * controllers in lib/Webhooks/Service/Rest/Connector build at b6f7140d0
  * (test/connect-fakes.ts). One fixture test per route.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`. The packet that removes the last
- * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 const NONCE = 'n0nce_ABCDEFGHIJKL';
@@ -56,7 +50,7 @@ function webhookOver(...args: Parameters<typeof connectOver>) {
 }
 
 describe('P4: ConnectWebhookResource routes', () => {
-  it.skip.each(ROUTES)('%s sends its route once with the bearer token and answers the body as sent', async (_name, call, method, path, body, status, answer) => {
+  it.each(ROUTES)('%s sends its route once with the bearer token and answers the body as sent', async (_name, call, method, path, body, status, answer) => {
     const { http, webhook } = webhookOver([reply(status, answer)]);
 
     const result = await call(webhook);
@@ -69,7 +63,7 @@ describe('P4: ConnectWebhookResource routes', () => {
     expect(http.bearers()).toEqual(['Bearer tok-1']);
   });
 
-  it.skip('replace answers a 200 replacement the same way as a 201 creation', async () => {
+  it('replace answers a 200 replacement the same way as a 201 creation', async () => {
     const { webhook } = webhookOver([reply(200, withSecret)]);
 
     await expect(webhook.replace(params)).resolves.toEqual(withSecret);
@@ -77,7 +71,7 @@ describe('P4: ConnectWebhookResource routes', () => {
 });
 
 describe('P4: ConnectWebhookResource retries', () => {
-  it.skip.each([
+  it.each([
     ['replace, because each send rotates the signing secret', (w: ConnectWebhookResource) => w.replace(params)],
     ['test, because Cloud allows ten tests a site an hour', (w: ConnectWebhookResource) => w.test(NONCE)],
   ])('sends %s once on a 503 and on a network error', async (_name, call) => {
@@ -91,7 +85,7 @@ describe('P4: ConnectWebhookResource retries', () => {
     }
   });
 
-  it.skip.each([
+  it.each([
     ['get', (w: ConnectWebhookResource) => w.get(), ConnectAnswers.webhook],
     ['delete', (w: ConnectWebhookResource) => w.delete(), ConnectAnswers.deleted],
     ['deliveries', (w: ConnectWebhookResource) => w.deliveries(), [ConnectAnswers.delivery]],
@@ -102,7 +96,7 @@ describe('P4: ConnectWebhookResource retries', () => {
     expect(http.requests).toHaveLength(2);
   });
 
-  it.skip.each(ROUTES)('%s is resent once with a refreshed token after a 401, a send-once route included', async (_name, call, _m, _p, _b, status, answer) => {
+  it.each(ROUTES)('%s is resent once with a refreshed token after a 401, a send-once route included', async (_name, call, _m, _p, _b, status, answer) => {
     const { http, webhook } = webhookOver([reply(401, ConnectAnswers.invalidToken), reply(status, answer)]);
 
     await expect(call(webhook)).resolves.toEqual(answer);
@@ -111,19 +105,19 @@ describe('P4: ConnectWebhookResource retries', () => {
 });
 
 describe('P4: ConnectWebhookResource answers', () => {
-  it.skip('get raises NotFoundError when the site has no subscription', async () => {
+  it('get raises NotFoundError when the site has no subscription', async () => {
     const { webhook } = webhookOver([reply(404, { error: { message: 'This site has no webhook subscription.', context: [] } })]);
 
     await expect(webhook.get()).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it.skip.each(ROUTES)('%s raises MissingScopeError when the token lacks connect:webhooks', async (_name, call) => {
+  it.each(ROUTES)('%s raises MissingScopeError when the token lacks connect:webhooks', async (_name, call) => {
     const { webhook } = webhookOver([reply(403, ConnectAnswers.missingScope(ConnectScope.Webhooks))]);
 
     await expect(call(webhook)).rejects.toBeInstanceOf(MissingScopeError);
   });
 
-  it.skip.each([
+  it.each([
     ['replace', (w: ConnectWebhookResource) => w.replace(params)],
     ['get', (w: ConnectWebhookResource) => w.get()],
     ['delete', (w: ConnectWebhookResource) => w.delete()],
@@ -135,7 +129,7 @@ describe('P4: ConnectWebhookResource answers', () => {
     }
   });
 
-  it.skip('replace keeps the signing secret from the answer out of an UnexpectedResponseError', async () => {
+  it('replace keeps the signing secret from the answer out of an UnexpectedResponseError', async () => {
     const { webhook } = webhookOver([reply(200, [withSecret])]);
 
     const error = await failure(webhook.replace(params));
@@ -145,14 +139,14 @@ describe('P4: ConnectWebhookResource answers', () => {
     expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)} ${inspect(error, { depth: 10 })}`).not.toContain(ConnectAnswers.signingSecret);
   });
 
-  it.skip('replace raises UnexpectedResponseError for an answer without a text signingSecret', async () => {
+  it('replace raises UnexpectedResponseError for an answer without a text signingSecret', async () => {
     for (const signingSecret of [undefined, null, 42, '']) {
       const { webhook } = webhookOver([reply(201, { ...ConnectAnswers.webhook, signingSecret })]);
       await expect(webhook.replace(params), String(signingSecret)).rejects.toBeInstanceOf(UnexpectedResponseError);
     }
   });
 
-  it.skip('deliveries raises UnexpectedResponseError for a 2xx that is not a JSON array', async () => {
+  it('deliveries raises UnexpectedResponseError for a 2xx that is not a JSON array', async () => {
     for (const answer of [reply(200, ConnectAnswers.delivery), { status: 200, headers: {}, body: 'not json' }, reply(200)]) {
       const { webhook } = webhookOver([answer]);
       await expect(webhook.deliveries(), JSON.stringify(answer)).rejects.toBeInstanceOf(UnexpectedResponseError);
@@ -161,7 +155,7 @@ describe('P4: ConnectWebhookResource answers', () => {
 });
 
 describe('P4: ConnectWebhookResource.test nonce', () => {
-  it.skip.each([
+  it.each([
     ['16 characters', 'a'.repeat(16)],
     ['128 characters', 'Z'.repeat(128)],
     ['letters, digits, hyphens and underscores', 'aZ09-_aZ09-_aZ09'],
@@ -174,7 +168,7 @@ describe('P4: ConnectWebhookResource.test nonce', () => {
     expect(bodyOf(http.requests[0]!)).toEqual({ nonce });
   });
 
-  it.skip.each([
+  it.each([
     ['15 characters', 'a'.repeat(15)],
     ['129 characters', 'a'.repeat(129)],
     ['a dot', 'abcdefghijklmno.'],
