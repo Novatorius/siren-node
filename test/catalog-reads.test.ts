@@ -107,7 +107,7 @@ describe('P7: apiKeys.scopes()', () => {
     'api-key-scopes.json',
   );
 
-  it.skip('GETs /api-keys/scopes and returns the groups as Siren sent them', async () => {
+  it('GETs /api-keys/scopes and returns the groups as Siren sent them', async () => {
     const ctx = makeClient([jsonResponse(200, groups)]);
     const scopes = await ctx.client.apiKeys.scopes();
 
@@ -136,7 +136,7 @@ describe('P7: apiKeys.scopes()', () => {
     });
   });
 
-  it.skip('throws UnexpectedResponseError when the body is not an object, a group is not a list, or an entry is not an object', async () => {
+  it('throws UnexpectedResponseError when the body is not an object, a group is not a list, or an entry is not an object', async () => {
     const bodies = [[], [groups], null, 'scopes', { ...groups, events: 'event:sale' }, { ...groups, events: ['event:sale'] }];
     for (const body of bodies) {
       const ctx = makeClient([jsonResponse(200, body)]);
@@ -148,7 +148,7 @@ describe('P7: apiKeys.scopes()', () => {
     }
   });
 
-  it.skip('goes through the shared transport retry for a 503, like list()', async () => {
+  it('goes through the shared transport retry for a 503, like list()', async () => {
     const ctx = makeClient(
       [jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' }), jsonResponse(200, groups)],
       { maxRetries: 1 },
@@ -157,7 +157,7 @@ describe('P7: apiKeys.scopes()', () => {
     expect(ctx.calls()).toHaveLength(2);
   });
 
-  it.skip('throws ApiKeyNotAcceptedError when called with an API key', async () => {
+  it('throws ApiKeyNotAcceptedError when called with an API key', async () => {
     const ctx = makeClient(
       [jsonResponse(401, { error: { message: 'This route does not accept API keys.', code: 'api_key_not_accepted' } })],
       { maxRetries: 0 },
