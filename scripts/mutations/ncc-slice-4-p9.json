@@ -138,11 +138,11 @@
   {
     "id": "p9-bulk-path",
     "file": "src/resources/records.ts",
-    "find": "return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
-    "replace": "return bulkRecords<BulkResult>(this.http, '/transaction', action, ids);",
+    "find": "  async bulk(action: TransactionBulkAction, ids: readonly number[]): Promise<BulkResult> {\n    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "  async bulk(action: TransactionBulkAction, ids: readonly number[]): Promise<BulkResult> {\n    return bulkRecords<BulkResult>(this.http, '/transaction', action, ids);",
     "expect": "caught",
     "failing": [
-      "P9: transactions bulk, creditCollaborator and sources"
+      "P9: transactions bulk, creditCollaborator and sources > runs a bulk action with POST /transactions/bulk"
     ]
   },
   {
