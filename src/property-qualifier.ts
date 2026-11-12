@@ -1,3 +1,5 @@
+import { SirenError } from './errors';
+
 /**
  * The namespace Siren Cloud keeps each connected site's names in.
  *
@@ -42,8 +44,8 @@ export const PropertyQualifier = {
    * {@link propertyOf} answers a number.
    */
   unqualify(name: string): string {
-    // Stub: slice 3 packet P2
-    return name;
+    if (PropertyQualifier.propertyOf(name) === null) return name;
+    return name.slice(0, name.lastIndexOf(PropertyQualifier.SEPARATOR));
   },
 
   /**
@@ -52,16 +54,17 @@ export const PropertyQualifier = {
    * make a safe integer also answer `null`.
    */
   propertyOf(name: string): number | null {
-    // Stub: slice 3 packet P2
-    void name;
-    return null;
+    const at = name.lastIndexOf(PropertyQualifier.SEPARATOR);
+    if (at < 0) return null;
+    const digits = name.slice(at + PropertyQualifier.SEPARATOR.length);
+    if (!/^[0-9]+$/.test(digits)) return null;
+    const property = Number(digits);
+    return Number.isSafeInteger(property) ? property : null;
   },
 
   /** Whether a name may be sent to Cloud as a type, platform or token. Any value that is not a string is not. */
   isValidName(name: unknown): name is string {
-    // Stub: slice 3 packet P2
-    void name;
-    return true;
+    return typeof name === 'string' && PropertyQualifier.NAME_PATTERN.test(name);
   },
 
   /**
@@ -71,16 +74,18 @@ export const PropertyQualifier = {
    * which never quotes the name.
    */
   assertName(name: unknown, field: string): string {
-    // Stub: slice 3 packet P2
-    void field;
-    return name as string;
+    if (!PropertyQualifier.isValidName(name)) {
+      throw new SirenError(
+        `Send ${field} as letters, digits, underscores and hyphens only. Siren adds the site's Property itself.`,
+      );
+    }
+    return name;
   },
 
   /** Whether a code type may be sent to Cloud: a valid name, or a match for {@link CODE_TYPE_PATTERN}. */
   isValidCodeType(type: unknown): type is string {
-    // Stub: slice 3 packet P2
-    void type;
-    return true;
+    if (PropertyQualifier.isValidName(type)) return true;
+    return typeof type === 'string' && PropertyQualifier.CODE_TYPE_PATTERN.test(type);
   },
 
   /**
@@ -90,9 +95,12 @@ export const PropertyQualifier = {
    * which never quotes the type.
    */
   assertCodeType(type: unknown, field: string): string {
-    // Stub: slice 3 packet P2
-    void field;
-    return type as string;
+    if (!PropertyQualifier.isValidCodeType(type)) {
+      throw new SirenError(
+        `Send ${field} as letters, digits, underscores and hyphens, or as coupon@source:{integration}. Siren adds the site's Property itself.`,
+      );
+    }
+    return type;
   },
 
   /**
@@ -105,8 +113,8 @@ export const PropertyQualifier = {
    * in is never changed.
    */
   plainRecord<T extends Record<string, unknown>>(record: T, field: string): T & { propertyId?: number | null } {
-    // Stub: slice 3 packet P2
-    void field;
-    return record;
+    const value = record[field];
+    if (typeof value !== 'string') return record;
+    return { ...record, [field]: PropertyQualifier.unqualify(value), propertyId: PropertyQualifier.propertyOf(value) };
   },
 } as const;
