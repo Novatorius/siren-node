@@ -14,10 +14,11 @@ import {
 import type { HttpTransport } from '../src/http';
 import { reply } from './http-fakes';
 import {
-  CollaboratorAnswers,
   bodyOf,
+  CollaboratorAnswers,
   expectRetried,
   expectSentOnce,
+  malformedSuccess,
   page,
   pathOf,
   queryOf,
@@ -103,7 +104,7 @@ describe('P4: aliases.query', () => {
   });
 
   it.skip('throws UnexpectedResponseError for a 2xx that is not a list', async () => {
-    const { aliases } = over([reply(200, { error: 'Something went wrong.' })]);
+    const { aliases } = over([reply(200, malformedSuccess)]);
 
     await expect(aliases.query()).rejects.toBeInstanceOf(UnexpectedResponseError);
   });

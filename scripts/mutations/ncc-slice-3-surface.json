@@ -326,8 +326,8 @@
   {
     "id": "pr-list-filters",
     "file": "src/resources/programs.ts",
-    "find": "'s', 'programGroupId'] as const;",
-    "replace": "'s'] as const;",
+    "find": "    'programGroupId',\n    'engagementType',\n  ] as const;",
+    "replace": "    'programGroupId',\n  ] as const;",
     "expect": "caught",
     "failing": [
       "P8: programs list and retrieve rules"

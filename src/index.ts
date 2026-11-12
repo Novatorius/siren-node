@@ -86,6 +86,7 @@ export { ApiKeysResource } from './resources/api-keys';
 export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';
 export type { RetrieveParams } from './resources/records';
 
+// Slice 3 adds these in their own block so it merges cleanly with slice 5.
 export {
   CollaboratorBulkAction,
   CollaboratorAliasType,

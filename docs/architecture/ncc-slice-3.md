@@ -7,7 +7,7 @@ program groups. It closes part of gap 12 in
 [Design: Siren Node commerce connectors (Source 16182)](https://navigator.novatori.us/r/source/16182).
 Slice 4 adds the rest of gap 12.
 
-Read from: the Siren PHP SDK 0.3.0 at `59383e6` (`src/Resources`,
+This note draws on the Siren PHP SDK 0.3.0 at `59383e6` (`src/Resources`,
 `src/PropertyQualifier.php`, `src/ProgramGroupSorter.php`, `src/Siren.php` and
 their tests) and Siren Cloud at `b6f7140` on `feat/node-commerce-connectors`
 (the controllers under `lib/*/Service/Rest`, `saas/Rest`, the list
@@ -46,10 +46,8 @@ keeps its `SirenList` shape and `estimatedCount`. The three nested ones are
 plain classes their parent builds over the same transport, the way PHP nests
 `$siren->collaborators->aliases`.
 
-`RecordsResource` calls itself a ledger reader, and its `list` answers an
-empty page when Siren's answer has no `items`. The four subclasses replace
-`list` with the stricter `listRecords` and add writes, so their own docs
-govern where the two disagree.
+The four top-level resources override `RecordsResource.list` with
+`listRecords` and add writes, so their own docs govern.
 
 `record-requests.ts` holds the code that calls `http.request` for these
 resources. Each helper fixes one rule, so a resource cannot get it wrong.
@@ -84,7 +82,9 @@ whose `type` is not a string throws the same way. "No codes" must never stand in
 integer and refuses anything else with `SirenError`, worded as
 `retrieveRecord` words it and naming the field (`programId`,
 `collaboratorId`). `collaborators.bulk` checks `extra.programId` and
-`extra.distributorId` the same way, since Cloud casts them to whole numbers.
+`extra.distributorId` the same way, since Cloud casts them to whole numbers,
+and refuses any extra the action does not take, since Cloud hands every
+parameter to the action.
 
 `recordListQuery` pages the way `toListQuery` does, joins a list with commas
 and leaves out `undefined` and an empty `fields` list. It refuses, with `SirenError`
@@ -109,7 +109,8 @@ meant, instead of dropping it (D7 in [Recurring Defect Classes (Design Against T
 
 ## Send-once
 
-Every record write goes out once: create, update, delete, bulk, enroll,
+Every record write goes out once, apart from the single resend after a 401
+that slice 2 makes for every request: create, update, delete, bulk, enroll,
 unenroll, replace, add, remove, set, free and the alias create. A write's
 answer is lost when it throws `ConnectionError` or a 5xx `ApiError`, since
 Siren may have written first. Each write's doc says how to find out before
@@ -164,8 +165,8 @@ and `failed` counts in `data`.
 | Id filters are sent as given | must be positive whole numbers, and `programId`, `distributorId` and `programGroupId` take one | Cloud casts them to one whole number, so `'3abc'` reads as 3 and a list keeps one id |
 | `delete` answers `[]` for any empty body | `null` for a 204, and an empty 200 throws | An empty object would look like a record, and Siren answers 204 for every bodiless delete in this slice |
 | A list answer or a record field of the wrong shape reads as empty | `UnexpectedResponseError` | An empty answer would hide a Cloud change |
-| Bulk extras are sent as given | `programId` and `distributorId` must be positive whole numbers | Cloud casts them, so a bad value reaches record 0 |
-| `Collaborators::BULK_*` has no reject action | `CollaboratorBulkAction.Reject` | Cloud's bulk route accepts `reject` (`CollaboratorBulkAction.php` line 261), and Siren's list wins |
+| Bulk extras are sent as given | each action takes only its own extra, `programId` or `distributorId`, as a positive whole number, and the rest take none | Cloud hands every parameter to the action and casts the ids, so a stray key can steer it and a bad id reaches record 0 |
+| `Collaborators::BULK_*` has no reject action | `CollaboratorBulkAction.Reject` | Cloud's bulk route accepts `reject` (`CollaboratorBulkAction.php` line 261), and the Node SDK follows Cloud |
 | Code types are plain names | also `coupon@source:{integration}` | Cloud's connector rule allows it on the alias routes |
 | `findByCode` and `forCollaborator` send `number: 1` | also `orderBy: 'dateIssued'` and `order: 'DESC'` | D6 in [Recurring Defect Classes (Design Against These) (KB 589)](https://navigator.novatori.us/r/kb/589). Cloud at `b6f7140` defaults to that order |
 | `setTrackingCode` refuses only `''` and sends the code as given | trims it, and refuses a code that is empty once trimmed or holds a comma | Every other code method trims |
@@ -204,9 +205,9 @@ with a fake `httpClient` and that base URL, and stubs the global fetch to
 fail.
 
 Each test is skipped until its packet lands. The surface tests (constant
-vocabularies, filter lists, routes and nested resources) run now. The
-architect's proof, kept outside the repository, ran every test unskipped
-against the stubs, wrote a scratch implementation that passes them all, and
-scored a mutation list against it, per [Proving a Test Is a Contract (KB 730)](https://navigator.novatori.us/r/kb/730).
+vocabularies, filter lists, routes and nested resources) run now. Outside
+the repository, every test was run unskipped against the stubs, a throwaway
+implementation of all eleven packets was written only to prove the tests
+can pass, and a mutation list was scored against it, per [Proving a Test Is a Contract (KB 730)](https://navigator.novatori.us/r/kb/730).
 `scripts/mutations/ncc-slice-3-surface.json` proves the surface tests on this
 branch.

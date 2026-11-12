@@ -91,7 +91,8 @@ export class CollaboratorAliasesResource {
    * is empty once trimmed or holds a comma.
    * Siren refuses a code another collaborator holds with a 400, raised as
    * `BadRequestError`, and refuses `trackingId` from a connected site with a
-   * 403.
+   * 403. Sending it again after a lost answer is safe, since Siren refuses a
+   * code only when another collaborator holds it.
    */
   setTrackingCode(collaboratorId: number, code: string): Promise<Collaborator> {
     // Stub: slice 3 packet P4

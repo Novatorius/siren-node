@@ -74,7 +74,11 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
     return Promise.resolve({} as T);
   }
 
-  /** Updates a group's `name`, `description` or `structure` with `PUT /collaborator-groups/{id}`, sent once. */
+  /**
+   * Updates a group's `name`, `description` or `structure` with `PUT
+   * /collaborator-groups/{id}`, sent once. Sending it again after a lost answer
+   * sets the same values, so it is safe.
+   */
   update(id: number, params: UpdateCollaboratorGroupParams): Promise<T> {
     // Stub: slice 3 packet P6
     void id;
@@ -85,7 +89,8 @@ export class CollaboratorGroupsResource<T = CollaboratorGroup> extends RecordsRe
   /**
    * Deletes the group for good with `DELETE /collaborator-groups/{id}`, sent
    * once. Siren answers 204, so this answers `null`. A resend after a lost
-   * answer raises `NotFoundError` when the first one worked.
+   * answer raises `NotFoundError` once the group is gone, whoever removed
+   * it, so treat that as done and `retrieve` first if the cause matters.
    */
   delete(id: number): Promise<T | null> {
     // Stub: slice 3 packet P6

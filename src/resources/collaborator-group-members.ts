@@ -47,8 +47,10 @@ export class CollaboratorGroupMembersResource {
    * with `POST /collaborator-groups/{groupId}/members` and body
    * `{ members }`, sent once. Collaborators already in the group are
    * skipped. Answers the member rows Siren added, a bare array that is empty
-   * when nobody was new. Throws `SirenError` before sending for an empty
-   * list or a member whose `collaboratorId` is not a positive whole number.
+   * when nobody was new, so a resend after a lost answer is safe and
+   * answers only the rows still missing. Throws `SirenError` before sending
+   * for an empty list or a member whose `collaboratorId` is not a positive
+   * whole number.
    */
   add(groupId: number, members: readonly CollaboratorGroupMemberInput[]): Promise<CollaboratorGroupMember[]> {
     // Stub: slice 3 packet P7
@@ -61,8 +63,9 @@ export class CollaboratorGroupMembersResource {
    * Replaces the group's members with exactly this list, with `PUT
    * /collaborator-groups/{groupId}/members` and body `{ members }`, sent
    * once. An empty list removes every member. Answers the whole member set
-   * after the change, a bare array. Throws `SirenError` before sending for
-   * a member whose `collaboratorId` is not a positive whole number.
+   * after the change, a bare array. Sending it again after a lost answer sets the same values, so it is safe. Throws `SirenError`
+   * before sending for a member whose `collaboratorId` is not a positive
+   * whole number.
    */
   set(groupId: number, members: readonly CollaboratorGroupMemberInput[]): Promise<CollaboratorGroupMember[]> {
     // Stub: slice 3 packet P7
@@ -75,9 +78,10 @@ export class CollaboratorGroupMembersResource {
    * Removes one collaborator from the group with `DELETE
    * /collaborator-groups/{groupId}/members/{collaboratorId}`, sent once.
    * Siren answers 204, so this answers `null`. Siren answers 404 when the
-   * collaborator is not a member, raised as `NotFoundError`, so a resend
-   * after a lost answer that raises `NotFoundError` means the first one
-   * removed them.
+   * collaborator is not a member or the group is gone, raised as
+   * `NotFoundError`. After a lost answer, treat a `NotFoundError` on the
+   * resend as the removal being done, and read the group first if the cause
+   * matters.
    */
   remove(groupId: number, collaboratorId: number): Promise<Record<string, unknown> | null> {
     // Stub: slice 3 packet P7

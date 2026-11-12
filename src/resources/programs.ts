@@ -28,7 +28,15 @@ import type { RetrieveParams } from './records';
  */
 export class ProgramsResource<T = Program> extends RecordsResource<T> {
   /** The filters `GET /programs` reads. {@link list} refuses any other key, `propertyId` included. */
-  static readonly LIST_FILTERS = ['status', 'incentiveType', 'incentiveResolverType', 'units', 's', 'programGroupId'] as const;
+  static readonly LIST_FILTERS = [
+    'status',
+    'incentiveType',
+    'incentiveResolverType',
+    'units',
+    's',
+    'programGroupId',
+    'engagementType',
+  ] as const;
   /** The id filters its list reads, checked before sending: `programGroupId` takes one id, each a positive whole number. */
   static readonly ID_FILTERS = { one: ['programGroupId'] } as const;
 
@@ -75,7 +83,11 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
     return Promise.resolve({} as T);
   }
 
-  /** Updates a program with `PUT /programs/{id}`, sent once. Send only the fields to change. */
+  /**
+   * Updates a program with `PUT /programs/{id}`, sent once. Send only the
+   * fields to change. Sending it again after a lost answer sets the same
+   * values, so it is safe.
+   */
   update(id: number, params: UpdateProgramParams): Promise<T> {
     // Stub: slice 3 packet P8
     void id;
@@ -88,7 +100,8 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
    * call marks it `deleted` and answers it, and a second call removes it and
    * answers `null`. After a lost answer, `retrieve` the program before sending
    * again: a second delete of a program the first one marked deleted removes
-   * it for good.
+   * it for good. A program with status `deleted` means the first send
+   * worked, and `NotFoundError` means it is gone.
    */
   delete(id: number): Promise<T | null> {
     // Stub: slice 3 packet P8
@@ -96,7 +109,12 @@ export class ProgramsResource<T = Program> extends RecordsResource<T> {
     return Promise.resolve(null);
   }
 
-  /** Runs a bulk action with `POST /programs/bulk`, sent once. Takes 1 to 500 ids. */
+  /**
+   * Runs a bulk action with `POST /programs/bulk`, sent once. Takes 1 to 500
+   * ids. A status action sets the same status again, and `permanent_delete`
+   * takes only deleted programs and skips ones already gone, so a resend
+   * after a lost answer is safe, though `affected` may differ.
+   */
   bulk(action: ProgramBulkAction, ids: readonly number[]): Promise<BulkResult> {
     // Stub: slice 3 packet P8
     void action;

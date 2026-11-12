@@ -69,7 +69,11 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
     return Promise.resolve({} as T);
   }
 
-  /** Updates a program group with `PUT /program-groups/{id}`, sent once. `programs`, when sent, replaces the group's programs. */
+  /**
+   * Updates a program group with `PUT /program-groups/{id}`, sent once.
+   * `programs`, when sent, replaces the group's programs. Sending it again
+   * after a lost answer sets the same values, so it is safe.
+   */
   update(id: number, params: UpdateProgramGroupParams): Promise<T> {
     // Stub: slice 3 packet P9
     void id;
@@ -80,7 +84,9 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
   /**
    * Deletes the program group for good with `DELETE /program-groups/{id}`,
    * sent once. Siren answers 204, so this answers `null`. A resend after a
-   * lost answer raises `NotFoundError` when the first one worked.
+   * lost answer raises `NotFoundError` once the group is gone, whoever
+   * removed it, so treat that as done and `retrieve` first if the cause
+   * matters.
    */
   delete(id: number): Promise<T | null> {
     // Stub: slice 3 packet P9
@@ -88,7 +94,11 @@ export class ProgramGroupsResource<T = ProgramGroup> extends RecordsResource<T> 
     return Promise.resolve(null);
   }
 
-  /** Runs a bulk action with `POST /program-groups/bulk`, sent once. Takes 1 to 500 ids. */
+  /**
+   * Runs a bulk action with `POST /program-groups/bulk`, sent once. Takes 1
+   * to 500 ids. Siren skips a group already gone, so a resend after a lost
+   * answer is safe, though `affected` may differ.
+   */
   bulk(action: ProgramGroupBulkAction, ids: readonly number[]): Promise<BulkResult> {
     // Stub: slice 3 packet P9
     void action;

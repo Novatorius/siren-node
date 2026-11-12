@@ -63,9 +63,8 @@ export class ProgramEnrollmentsResource {
   /**
    * A page of the collaborators enrolled in a program, read with `GET
    * /collaborators` and `programId`. Takes the same parameters as
-   * `collaborators.list()` but `programId`, and refuses the same keys, so a
-   * `programId` in `params` throws `SirenError` before sending instead of
-   * losing quietly to the argument.
+   * `collaborators.list()` but `programId`, and refuses the same keys. A
+   * `programId` in `params` throws `SirenError` before sending.
    */
   collaboratorsIn(
     programId: number,
@@ -80,9 +79,11 @@ export class ProgramEnrollmentsResource {
   /**
    * Enrolls collaborators in a program, keeping their other enrollments,
    * with the `addToProgram` bulk action: `POST /collaborators/bulk` and
-   * body `{ action, ids, programId }`, sent once. Takes 1 to 500 ids. Siren skips an id it cannot find or
-   * change and still answers 200, so an `affected` lower than the number of
-   * ids sent means some were skipped.
+   * body `{ action, ids, programId }`, sent once. Takes 1 to 500 ids.
+   * Siren skips an id it cannot find or change and still answers 200, so an
+   * `affected` lower than the number of ids sent means some were skipped.
+   * Sending it again after a lost answer is safe: Siren skips a collaborator
+   * already enrolled, so `affected` may differ from the first send's.
    */
   enroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
     // Stub: slice 3 packet P5
@@ -93,9 +94,11 @@ export class ProgramEnrollmentsResource {
 
   /**
    * Removes collaborators from a program, keeping their other enrollments,
-   * with the `removeFromProgram` bulk action, sent once. Takes 1 to 500 ids. Siren skips an id it cannot find or
-   * change and still answers 200, so an `affected` lower than the number of
-   * ids sent means some were skipped.
+   * with the `removeFromProgram` bulk action, sent once. Takes 1 to 500
+   * ids. Siren skips an id it cannot find or change and still answers 200,
+   * so an `affected` lower than the number of ids sent means some were
+   * skipped. Sending it again after a lost answer is safe: a collaborator
+   * the first send removed stays removed, though `affected` may differ.
    */
   unenroll(programId: number, collaboratorIds: readonly number[]): Promise<BulkResult> {
     // Stub: slice 3 packet P5
@@ -109,6 +112,7 @@ export class ProgramEnrollmentsResource {
    * `PUT /collaborators/{id}` and body `{ programs }`, sent once. An empty
    * list removes every enrollment. Every program id must be a positive whole
    * number. Answers the updated collaborator.
+   * Sending it again after a lost answer sets the same values, so it is safe.
    */
   replace(collaboratorId: number, programIds: readonly number[]): Promise<Collaborator> {
     // Stub: slice 3 packet P5
@@ -136,7 +140,8 @@ export class ProgramEnrollmentsResource {
    * Enrolls one collaborator in one program with `POST
    * /collaborator-programs` and body `{ collaboratorId, programId }`, sent
    * once. Enrolling someone already enrolled changes nothing and is not an
-   * error. Answers `{ collaboratorId, programId }`.
+   * error, so sending it again after a lost answer is safe. Answers
+   * `{ collaboratorId, programId }`.
    */
   add(collaboratorId: number, programId: number): Promise<ProgramEnrollment> {
     // Stub: slice 3 packet P5
@@ -148,8 +153,9 @@ export class ProgramEnrollmentsResource {
   /**
    * Ends one enrollment with `DELETE
    * /collaborator-programs?collaboratorId=...&programId=...` and no body,
-   * sent once. Removing an enrollment that does not exist is not an error.
-   * Answers `{ deleted: true }`.
+   * sent once. Removing an enrollment that does not exist is not an error,
+   * so sending it again after a lost answer is safe. Answers
+   * `{ deleted: true }`.
    */
   remove(collaboratorId: number, programId: number): Promise<DeletedResult> {
     // Stub: slice 3 packet P5
