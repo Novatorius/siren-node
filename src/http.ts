@@ -1,5 +1,5 @@
 import type { AccessTokenSource } from './auth/access-token-source';
-import { ConnectionError, errorFromResponse } from './errors';
+import { ConnectionError, SirenError, errorFromResponse } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.sirenaffiliates.com/siren/v1';
 export const DEFAULT_TIMEOUT_MS = 30_000;
@@ -297,51 +297,58 @@ export class HttpTransport {
    *    caller unchanged and nothing more is sent.
    */
   async request(req: SirenRequest): Promise<ApiResponse> {
-    // Stub: slice 2 packet P4. Until P4 lands, the transport sends through
-    // the global fetch, reads the token once, ignores `client` and never
-    // refreshes. P4 deletes this body.
     const url = this.buildUrl(req);
-    const token = await this.tokens.getAccessToken();
-    const init = this.buildInit(req, token);
-    const maxAttempts = req.retriable ? this.maxRetries + 1 : 1;
+    const body = req.body !== undefined ? JSON.stringify(req.body) : undefined;
 
-    let lastCause: unknown;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      let response: Response;
+    let token = usableToken(await this.tokens.getAccessToken());
+    if (token === null) {
+      throw new SirenError(
+        'Siren: getAccessToken did not answer a usable token. It must be a non-empty string with no control characters.',
+      );
+    }
+    const sent = [token];
+    let refreshed = false;
+    let retries = 0;
+
+    for (;;) {
+      let reply: HttpResponse;
       try {
-        response = await this.fetchWithTimeout(url, init);
-      } catch (cause) {
-        lastCause = cause;
-        if (attempt + 1 < maxAttempts) {
-          await sleep(this.backoffDelay(attempt));
+        reply = await this.client.send(this.buildRequest(req.method, url, token, body));
+      } catch (error) {
+        if (!(error instanceof HttpClientError)) throw error;
+        if (req.retriable && retries < this.maxRetries) {
+          await sleep(this.backoffDelay(retries));
+          retries += 1;
           continue;
         }
-        throw new ConnectionError(
-          `Request to ${url} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-          { cause },
-        );
+        throw new ConnectionError(`Request to ${url} failed: ${scrubTokens(error.message, sent)}`, {
+          cause: error.cause !== undefined ? error.cause : error,
+        });
       }
 
-      if (response.ok) return response;
+      const response = toApiResponse(reply);
+      if (response.status >= 200 && response.status < 300) return response;
 
-      const shouldRetry =
-        (response.status === 429 || response.status >= 500) && attempt + 1 < maxAttempts;
-      if (shouldRetry) {
-        await sleep(this.backoffDelay(attempt, response.headers.get('retry-after')));
+      if (response.status === 401 && !refreshed) {
+        refreshed = true;
+        const fresh = usableToken(await this.tokens.refreshAccessToken(token));
+        if (fresh !== null) {
+          token = fresh;
+          sent.push(fresh);
+          continue;
+        }
+        throw await errorFromApiResponse(response);
+      }
+
+      const retryAfter = response.headers.get('retry-after');
+      if ((response.status === 429 || response.status >= 500) && req.retriable && retries < this.maxRetries) {
+        await sleep(this.backoffDelay(retries, retryAfter));
+        retries += 1;
         continue;
       }
 
-      const body = await parseJsonBody(response);
-      throw errorFromResponse(
-        response.status,
-        response.statusText,
-        body,
-        response.headers.get('retry-after'),
-      );
+      throw await errorFromApiResponse(response);
     }
-
-    /* istanbul ignore next -- the loop always returns or throws */
-    throw new ConnectionError(`Request to ${url} failed`, { cause: lastCause });
   }
 
   /**
@@ -369,28 +376,16 @@ export class HttpTransport {
     return url;
   }
 
-  private buildInit(req: SirenRequest, token: string): RequestInit {
+  /** Builds a new request, headers included, for one send. */
+  private buildRequest(method: HttpMethod, url: string, token: string, body: string | undefined): HttpRequest {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
       'User-Agent': 'siren-sdk-typescript/0.3.0',
     };
-    const init: RequestInit = { method: req.method, headers };
-    if (req.body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-      init.body = JSON.stringify(req.body);
-    }
-    return init;
-  }
-
-  private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
-    try {
-      return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
-    }
+    if (body === undefined) return { method, url, headers, timeout: this.timeout };
+    headers['Content-Type'] = 'application/json';
+    return { method, url, headers, body, timeout: this.timeout };
   }
 
   private backoffDelay(attempt: number, retryAfterHeader?: string | null): number {
@@ -402,4 +397,51 @@ export class HttpTransport {
     }
     return Math.min(INITIAL_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS);
   }
+}
+
+/**
+ * Answers the token when it is a non-empty string with no control character
+ * (U+0000 to U+001F or U+007F), else `null`. A control character in a header
+ * value would make fetch quote the whole value in its error.
+ */
+function usableToken(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  return /[\u0000-\u001f\u007f]/.test(value) ? null : value;
+}
+
+/**
+ * Replaces every occurrence of every token in `text` in one pass, longest
+ * token first, so a token that holds another is removed whole.
+ */
+function scrubTokens(text: string, tokens: readonly string[]): string {
+  const pattern = [...new Set(tokens)]
+    .sort((a, b) => b.length - a.length)
+    .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  return text.replace(new RegExp(pattern, 'g'), '[redacted]');
+}
+
+/** Wraps an {@link HttpResponse} as the {@link ApiResponse} a resource reads. */
+function toApiResponse(reply: HttpResponse): ApiResponse {
+  const headers = new Map<string, string>();
+  for (const [name, value] of Object.entries(reply.headers)) {
+    const key = name.toLowerCase();
+    if (!headers.has(key)) headers.set(key, value);
+  }
+  return {
+    status: reply.status,
+    statusText: reply.statusText ?? '',
+    headers: { get: (name: string) => headers.get(name.toLowerCase()) ?? null },
+    text: async () => reply.body,
+  };
+}
+
+/** Builds the typed error for a reply that is not 2xx. */
+async function errorFromApiResponse(response: ApiResponse): Promise<SirenError> {
+  return errorFromResponse(
+    response.status,
+    response.statusText,
+    await parseJsonBody(response),
+    response.headers.get('retry-after'),
+  );
 }
