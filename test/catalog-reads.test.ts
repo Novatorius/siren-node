@@ -137,7 +137,7 @@ describe('P7: apiKeys.scopes()', () => {
   });
 
   it.skip('throws UnexpectedResponseError when the body is not an object or a group is not a list', async () => {
-    for (const body of [[groups], null, 'scopes', { ...groups, events: 'event:sale' }]) {
+    for (const body of [[], [groups], null, 'scopes', { ...groups, events: 'event:sale' }]) {
       const ctx = makeClient([jsonResponse(200, body)]);
       const error = await ctx.client.apiKeys.scopes().catch((e: unknown) => e);
       expect(error, JSON.stringify(body).slice(0, 40)).toBeInstanceOf(UnexpectedResponseError);
