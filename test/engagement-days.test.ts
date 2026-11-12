@@ -14,13 +14,6 @@ import { EngagementAnswers } from './record-fakes-2';
  *
  * Integration shape (KB 568): the real resource over the real HttpTransport,
  * with a FakeHttpClient at the HttpClient seam, aimed at example.invalid.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * packet F4, named in its describe block. The F4 implementer deletes the
- * `.skip` from each of them, so `it.skip(` becomes `it(` and `it.skip.each(`
- * becomes `it.each(`, and deletes the one-line comment above each, and this
- * paragraph. Nothing else here changes. The tests with no `.skip` pass now
- * and guard against a check that refuses a day Siren reads.
  */
 
 function over() {
@@ -58,8 +51,7 @@ const NOT_DAYS: Array<[string, unknown]> = [
 const ROWS = (['from', 'to'] as const).flatMap((key) => NOT_DAYS.map(([label, value]) => [key, label, value] as const));
 
 describe('4 fix F4: engagements.list day filters', () => {
-  // Skipped until fix packet F4 (the day filters) lands.
-  it.skip.each(ROWS)('refuses a %s that is %s before sending, naming it', async (key, _label, value) => {
+  it.each(ROWS)('refuses a %s that is %s before sending, naming it', async (key, _label, value) => {
     const { http, engagements } = over();
 
     const error = await engagements.list({ collaboratorId: 42, [key]: value } as never).catch((thrown: unknown) => thrown);
@@ -69,8 +61,7 @@ describe('4 fix F4: engagements.list day filters', () => {
     expect(http.requests).toHaveLength(0);
   });
 
-  // Skipped until fix packet F4 (the day filters) lands.
-  it.skip('refuses a bad to even when from is a day', async () => {
+  it('refuses a bad to even when from is a day', async () => {
     const { http, engagements } = over();
 
     await expect(engagements.list({ from: '2026-11-01', to: '2026-11-31' })).rejects.toThrow(
