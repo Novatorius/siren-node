@@ -78,13 +78,64 @@ await siren.events.sale({
 });
 ```
 
-Refunds and referred visits work the same way:
+Give each line a `lineId`, your own id for the order line, and a later refund can name the line by
+it.
+
+To check an integration without a real order, send a test sale. It needs no other field. Siren
+marks it as a test, counts it toward nothing, and ignores `trackingId`, so a real visit is never
+spent. Sending the same test again reads as a pass:
 
 ```ts
-await siren.events.refund({ source: 'stripe', externalId: 'cs_test_a1b2c3' });
+const check = await siren.events.sale({ test: true });
+console.log(check.body?.test); // true
+```
+
+Refunds and referred visits work the same way. A refund names the order by `externalId` and the
+refund by `refundId`, your store's own id for it. Siren requires it and records each refund id once
+per order:
+
+```ts
+await siren.events.refund({ source: 'stripe', externalId: 'cs_test_a1b2c3', refundId: 're_3Nf8a2' });
 await siren.events.siteVisited({ collaboratorId: 88, userId: 12345 });
 await siren.events.ingest('loyalty-points-earned', { userId: 42, points: 100 });
 ```
+
+A refund with neither `amount` nor `lines` refunds the whole order, and `kind` (`RefundKind`) says
+how the order ended: `refund`, `cancelled` or `voided`. A refund that sends `amount` or `lines`
+refunds part of the order. Each line in `lines` is a `RefundLine` that names the sale's line by
+`lineId`, or by `sku`. Send `whole: true` to refund the whole order whatever else you send:
+
+```ts
+import { RefundKind } from '@novatorius/siren';
+
+await siren.events.refund({
+  source: 'woocommerce',
+  externalId: 'order-88',
+  refundId: 2201,
+  currency: 'USD',
+  lines: [{ lineId: 'line-2', quantity: 1, amount: 36.66 }],
+});
+
+await siren.events.refund({
+  source: 'woocommerce',
+  externalId: 'order-91',
+  refundId: 2207,
+  kind: RefundKind.Cancelled,
+});
+```
+
+A visit can name the collaborator by one of their tracking codes instead of their id, written
+`tracking:{code}` (a `TrackingCodeReference`). Siren resolves the code to its collaborator:
+
+```ts
+await siren.events.siteVisited({ collaboratorId: 'tracking:summer-sale' });
+```
+
+Siren records every visit it receives, so the SDK sends `events.siteVisited` once and never retries
+it. Siren has no key to match a resent custom event either, so `events.ingest` is sent once,
+whatever its slug. A sale with no `externalId` is sent once too, because Siren gives a test sale
+with no id a random one and refuses a real sale without one. Refunds and sales that carry an
+`externalId` are retried, because Siren records a resent sale or a resent refund id once.
 
 ## Quickstart: verify a webhook
 
@@ -154,16 +205,27 @@ const sub = await siren.webhooks.subscriptions.create({
 await saveSecretSomewhereSafe(sub.signingSecret);
 ```
 
+`webhooks.subscriptions.events()` reads that live list, each entry an `event`, its `category` and a
+readable `label`. It can hold an event this SDK's `WebhookEventType` lacks yet. The key needs
+`webhook-subscriptions:read` or `webhook-subscriptions:manage`:
+
+```ts
+const catalog = await siren.webhooks.subscriptions.events();
+// [{ event: 'sale.created', category: 'Sales', label: 'A sale was recorded' }, ...]
+```
+
 ## Features
 
 - **Event ingestion** — record sales, refunds, referred visits, and custom event types
-  (`events.sale`, `events.refund`, `events.siteVisited`, `events.ingest`). Ingestion is
-  auto-retried on network errors and 429/5xx.
+  (`events.sale`, `events.refund`, `events.siteVisited`, `events.ingest`). Sales and refunds
+  are auto-retried on network errors and 429/5xx. A visit, a custom event sent through
+  `events.ingest` and a sale with no `externalId` are sent once.
 - **Signed-webhook verification and subscriptions** — constant-time signature checks
   (`webhooks.constructEvent`, `webhooks.verifySignature`) plus subscription management
   (`webhooks.subscriptions.create` / `list` / `delete`) with an API key that holds a webhook scope.
-- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`) with a
-  dashboard session's token. The raw key is returned once and cannot be retrieved later.
+- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`), and list the
+  scopes a new key may hold (`apiKeys.scopes()`), with a dashboard session's token. The raw key is
+  returned once and cannot be retrieved later.
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
   `transactions`, `obligations`, and `payouts`, with an API key that holds the ledger scopes.
 - **Browser storefront module** — `@novatorius/siren/storefront` records referred visits and claims
@@ -267,8 +329,19 @@ such as `ledger:*`, and older names such as `conversions:read` grant none of the
 before these scopes existed reads nothing until you replace it with one that holds them. A key's
 requests count against the organization's API rate limit.
 
-`apiKeys.create`, `list` and `revoke` take a signed-in dashboard session's token. No API key scope
-reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
+`apiKeys.create`, `list`, `revoke` and `scopes` take a signed-in dashboard session's token. No API
+key scope reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
+
+`apiKeys.scopes()` lists every scope a new key may hold, grouped by resource: the event scopes under
+`events`, with any custom event types your organization added, the ledger scopes under `ledger`,
+the webhook scopes under `webhook-subscriptions`, and the record scopes under one `records:*` group
+each. Each entry carries the `scope` string to pass to `apiKeys.create` and a readable `label`:
+
+```ts
+const groups = await siren.apiKeys.scopes();
+for (const entry of groups.ledger ?? []) console.log(entry.scope, entry.label);
+// ledger:conversions:read Read conversions
+```
 
 ```ts
 import { ApiKeyScope } from '@novatorius/siren';
@@ -300,10 +373,16 @@ const siren = new Siren({
 });
 ```
 
-Idempotent reads and event ingestion automatically retry network errors and 429/5xx responses with
+Idempotent reads, sales and refunds automatically retry network errors and 429/5xx responses with
 exponential backoff (honoring `Retry-After`). Management writes — `apiKeys.create` and
 `webhooks.subscriptions.create` — are **never** auto-retried, so a flaky connection can't mint
-duplicate credentials.
+duplicate credentials. `events.siteVisited` is never retried either, because Siren records every
+visit it receives. `events.ingest` is sent once for every slug, and a sale with no `externalId` is
+sent once, because Siren has no key to match a resent copy of either. A 401, 403 or 409 is sent
+once.
+
+If your app sends events from a durable queue, set `maxRetries: 0`. The queue owns redelivery, and
+an SDK retry inside a queued attempt would multiply the attempts.
 
 ## Other SDKs
 
@@ -336,20 +415,31 @@ example, carry no `statusCode`:
 |---|---|
 | `AuthenticationError` | Missing, invalid, expired or revoked API key (401) |
 | `ApiKeyNotAcceptedError` | The route takes a dashboard session and not an API key (401, `code` `api_key_not_accepted`). Extends `AuthenticationError` |
+| `SiteDisconnectedError` | The organization revoked or deleted the connected site's connection (401, `code` `site_disconnected`). Reconnect the site. Extends `AuthenticationError` |
 | `PermissionError` | The credential may not do this (403) |
 | `MissingScopeError` | The key holds none of the route's scopes (403, `code` `missing_scope`). `scope` and `anyOf` name them. Extends `PermissionError` |
 | `StoreKeyNotAllowedError` | A key bound to one store asked for payouts or webhook subscriptions (403, `code` `store_key_not_allowed`). Extends `PermissionError` |
+| `PolicyError` | Siren's policy refused the request, so sending it again fails again (403, one of the `POLICY_ERROR_CODES`). `param` names the refused field when Siren says which. Extends `PermissionError` |
 | `NotFoundError` | The requested resource does not exist (404) |
 | `BadRequestError` | Malformed request or failed validation (400). `fieldErrors` lists each broken rule |
 | `ValidationError` | Request payload failed validation on a route that answers 422 |
 | `ConflictError` | Conflicting state, e.g. a duplicate (409) |
+| `CodeConflictError` | Someone already holds the tracking or coupon code (409, `code` `code_held`). `conflictingCode` and `type` name it. Raised by a resource that assigns codes. Extends `ConflictError` |
+| `HoldConflictError` | Siren refused a store credit hold (409). `reason` is `no_credit`, `token_in_use` or `null` (`HoldConflictReason`). Raised by a resource that places holds. Extends `ConflictError` |
 | `RateLimitError` | Rate limit exceeded (429); honors `Retry-After` |
 | `ApiError` | Unexpected server error (5xx) |
+| `UnexpectedResponseError` | Siren answered with a success status, but the body has the wrong shape, such as an object where a list belongs. `data` holds the body. The deployment is broken, so do not retry. Extends `ApiError` |
 | `ConnectionError` | Network failure reaching Siren |
 | `SignatureVerificationError` | A webhook signature did not verify |
 
 One exception to the subclass rule: constructing a client without an `apiKey` throws the base
-`SirenError` itself. `ErrorCode` holds the codes the SDK raises a dedicated error for.
+`SirenError` itself.
+
+`ErrorCode` holds every `error.code` Siren sends, and `isKnownErrorCode(code)` says whether a code
+is one of them. The SDK picks a 401 or 403 class by the code when it knows it. A reply from an
+older or newer Siren deployment may carry no code or one the SDK does not know, and then the SDK
+reads Siren's wording instead. A reply it cannot place stays a plain `AuthenticationError` or
+`PermissionError`, carrying everything Siren sent.
 
 ```ts
 import {

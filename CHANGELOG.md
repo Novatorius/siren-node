@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- `events.refund` requires `refundId`, the store's own id for the refund, such as WooCommerce
+  refund 2201. Siren now refuses a refund without one with 400. Siren records each refund id once
+  per order, so sending the same refund again is safe.
+- `SaleParams` is a union of `LiveSaleParams` and `TestSaleParams`, so code that extends it as an
+  interface no longer compiles. Extend `LiveSaleParams` or `SaleFields` instead. A real sale still
+  requires `trackingId`.
+
 ### Added
 
 - `getApplicationForm`, `submitApplication` and `verifyApplication` in `@novatorius/siren/storefront`,
@@ -14,6 +23,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the form's field definitions, send an application with the referral the visitor arrived with,
   return a message per field on a refusal, and confirm the application from your own confirmation
   page.
+- `events.refund` takes a partial refund: `amount`, `currency`, `lines` (each a `RefundLine` that
+  names the sale's line by `lineId` or `sku`, with `quantity` and `amount`), `whole`, and `kind`
+  (`RefundKind`: `refund`, `cancelled` or `voided`). A refund with neither `amount` nor `lines`
+  still refunds the whole order.
+- `LineItem.lineId`, your own id for an order line, which a later refund names the line by.
+- A test sale: `events.sale({ test: true })` checks an integration. Siren needs no other field,
+  marks it as a test, counts it toward nothing and ignores `trackingId`.
+- `SiteVisitedParams.collaboratorId` takes a tracking code as `tracking:{code}`, typed as
+  `TrackingCodeReference`, as well as a numeric id.
+- `webhooks.subscriptions.events()` reads `GET /webhooks/events`, the event types Siren delivers,
+  and `apiKeys.scopes()` reads `GET /api-keys/scopes`, the scopes a new key may hold, grouped by
+  resource. Both throw `UnexpectedResponseError` when Siren answers with a body of the wrong shape.
+- `WebhookEventType` holds all 64 events in Siren's webhook catalog, 30 more than before, such as
+  `collaborator.applied`, `payout.failed`, `program.updated` and `store.disconnected`.
+- `ErrorCode` holds every code Siren sends, 26 in all, and `isKnownErrorCode` says whether a code is
+  one of them. `POLICY_ERROR_CODES` lists the 403 codes that mean Siren's policy refused the request.
+- New error classes. `SiteDisconnectedError` (401 `site_disconnected`) means the organization
+  revoked or deleted the connected site's connection. `PolicyError` (403, a policy code) means
+  sending the request again fails again, and `param` names the refused field. `CodeConflictError`
+  and `HoldConflictError` wrap a 409 for a held code and a refused credit hold, with
+  `HoldConflictReason`, and the resources that raise them come in a later release.
+  `UnexpectedResponseError`, an `ApiError`, reports a success reply whose body has the wrong shape.
+- Siren's vocabulary as constants with union types of the same name: `EventSlug`, `RefundKind`,
+  `EventStatus`, `EventReason`, `ConversionStatus`, `TransactionStatus`, `ObligationStatus`,
+  `PayoutStatus`, `OpportunityStatus`, `ProgramStatus`, `CollaboratorStatus`, `DistributorStatus`,
+  `FulfillmentStatus`, `ApiKeyStatus`, `WebhookSubscriptionStatus` and `CustomCurrencyType`.
+- `openapi.yaml` documents the new refund, sale, line and visit fields, `RefundLine`,
+  `GET /api-keys/scopes`, every webhook event and an `ErrorCode` schema.
+
+### Changed
+
+- A 401 or 403 class is chosen by `error.code` when the SDK knows the code. A reply with no code,
+  or one the SDK does not know, comes from an older or newer Siren deployment, so the SDK reads
+  Siren's wording instead, as the Siren PHP SDK does.
+- `events.siteVisited` is sent once and never retried, because Siren records every visit it
+  receives. A retry after a lost reply would record the visit twice.
+- `events.ingest` is sent once for every slug, built-in slugs such as `sale` included, because
+  Siren has no key to match a resent custom event. Custom events are no longer retried.
+- A sale with no `externalId`, or a `null` one, is sent once, whatever `test` holds. Siren gives a
+  test sale with no id a random one, so a resent copy would record a second test, and it refuses a
+  real sale with no id. A sale that carries an `externalId`, an empty one included, and a refund
+  are still retried.
 
 ## [0.3.0] - 2026-10-19
 

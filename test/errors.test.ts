@@ -60,7 +60,7 @@ describe('error mapping by status', () => {
     const ctx = makeClient([jsonResponse(404, stringErr('no such sale'))], { maxRetries: 0 });
 
     const err = await ctx.client.events
-      .refund({ source: 'stripe', externalId: 'nope' })
+      .refund({ source: 'stripe', externalId: 'nope', refundId: 're_1' })
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(NotFoundError);
     expect((err as NotFoundError).message).toBe('no such sale');
@@ -216,7 +216,7 @@ describe('retry behavior', () => {
     expect(ctx.fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('retries event ingestion on network errors', async () => {
+  it('retries a sale on network errors', async () => {
     vi.useFakeTimers();
     const ctx = makeClient(
       [new TypeError('socket hang up'), emptyResponse(200, { 'X-Siren-OID': '42' })],

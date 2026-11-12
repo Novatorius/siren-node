@@ -123,12 +123,12 @@ describe('request construction', () => {
 
   it('sends JSON bodies with the JSON content type', async () => {
     const ctx = makeClient([emptyResponse(200)]);
-    await ctx.client.events.refund({ source: 'stripe', externalId: 'ord_1' });
+    await ctx.client.events.refund({ source: 'stripe', externalId: 'ord_1', refundId: 're_1' });
 
     const call = ctx.lastCall();
     expect(call.method).toBe('POST');
     expect(call.headers['Content-Type']).toBe('application/json');
-    expect(call.body).toEqual({ source: 'stripe', externalId: 'ord_1' });
+    expect(call.body).toEqual({ source: 'stripe', externalId: 'ord_1', refundId: 're_1' });
   });
 
   it('returns a list endpoint body as a bare array (no data envelope)', async () => {

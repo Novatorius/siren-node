@@ -1,5 +1,6 @@
 import type { ApiKeyScope } from './api-key-scopes';
 import type { WebhookEventType } from './event-types';
+import type { RefundKind } from './taxonomy';
 
 /** Options accepted by `new Siren({...})`. */
 export interface SirenOptions {
@@ -54,6 +55,12 @@ export interface EventResult {
 export interface LineItem {
   /** Your id for this line item. Siren stores a number as text. */
   externalId?: string | number;
+  /**
+   * Your id for this order line, 1 to 191 characters. Siren keeps it on the
+   * line, so a later refund can name the line by it in `RefundLine.lineId`.
+   * Siren stores a number as text.
+   */
+  lineId?: string | number;
   /** Human-readable product name. Optional, as Siren needs only `amount`. */
   name?: string | number;
   /**
@@ -65,16 +72,14 @@ export interface LineItem {
   amount: number;
 }
 
-/** Parameters for `events.sale`. */
-export interface SaleParams {
+/** The fields a sale carries, live or test. */
+export interface SaleFields {
   /** Commerce source identifier, e.g. `"stripe"`, `"woocommerce"`. */
   source: string;
   /** Your order or transaction id, used later to match refunds. Siren stores a number as text. */
   externalId: string | number;
   /** Order total in major currency units (9.99 = $9.99). */
   total: number;
-  /** Opportunity id from the Siren tracking cookie / attribution. */
-  trackingId: number;
   /**
    * Currency code for the sale, such as `"EUR"`. It must be a currency your
    * organization uses, or Siren answers 400. Every line is recorded in it.
@@ -85,16 +90,89 @@ export interface SaleParams {
   items?: LineItem[];
 }
 
-/** Parameters for `events.refund`. Both fields must match the original sale. */
+/** A real sale. `trackingId` names the opportunity it belongs to. */
+export interface LiveSaleParams extends SaleFields {
+  /** Opportunity id from the Siren tracking cookie / attribution. */
+  trackingId: number;
+  /** Leave out, or send `false`, for a real sale. */
+  test?: false;
+}
+
+/**
+ * A test sale, sent to check an integration. Siren needs no other field,
+ * marks it as a test, counts it toward nothing, and reads a repeat as a pass.
+ * It ignores `trackingId`, so a real visit is never spent by a test.
+ */
+export interface TestSaleParams extends Partial<SaleFields> {
+  test: true;
+  /** Ignored by Siren on a test sale. */
+  trackingId?: number;
+}
+
+/** Parameters for `events.sale`: a real sale, or a test sale with `test: true`. */
+export type SaleParams = LiveSaleParams | TestSaleParams;
+
+/**
+ * One refunded order line. Name the line by `lineId`, as the sale's item
+ * sent it, or by `sku`. Siren refuses a line that names neither.
+ */
+export interface RefundLine {
+  /** The sale line's `lineId`. Siren stores a number as text. */
+  lineId?: string | number;
+  /** The product SKU of the line, when the sale sent no `lineId`. */
+  sku?: string | number;
+  /** Units returned, 0 to 1,000,000. */
+  quantity?: number;
+  /** Money refunded for this line in major currency units (9.99 = $9.99). */
+  amount?: number;
+}
+
+/**
+ * Parameters for `events.refund`. `source` and `externalId` must match the
+ * original sale. `refundId` names this refund.
+ *
+ * Siren refunds the whole order when `whole` is `true`, or when neither
+ * `amount` nor `lines` is sent. Anything else refunds part of it, and a part
+ * that leaves the order worth nothing counts as a whole refund.
+ */
 export interface RefundParams {
   source: string;
+  /** The order the refund belongs to, as the sale sent it. */
   externalId: string | number;
+  /**
+   * The store's own id for this refund, such as WooCommerce refund 2201.
+   * Siren requires it and records each refund id once per order, so sending
+   * the same refund again is safe.
+   */
+  refundId: string | number;
+  /** Money refunded, in major currency units (9.99 = $9.99). */
+  amount?: number;
+  /**
+   * Currency code of the amounts. When omitted, Siren reads them in the
+   * sale's own currency, or else the organization's default.
+   */
+  currency?: string;
+  /** The refunded order lines. At most 500. */
+  lines?: RefundLine[];
+  /** `true` refunds the whole order, whatever else is sent. */
+  whole?: boolean;
+  /** How the whole order ended. Siren reads `refund` when it is left out. */
+  kind?: RefundKind;
 }
+
+/**
+ * A collaborator's tracking code as Siren reads it in `collaboratorId`, such
+ * as `tracking:summer-sale`. Siren resolves the code to its collaborator.
+ */
+export type TrackingCodeReference = `tracking:${string}`;
 
 /** Parameters for `events.siteVisited`. */
 export interface SiteVisitedParams {
-  /** The collaborator (affiliate) to attribute the visit to. */
-  collaboratorId: number;
+  /**
+   * The collaborator (affiliate) to attribute the visit to: their numeric id,
+   * or one of their tracking codes as `tracking:{code}`.
+   */
+  collaboratorId: number | TrackingCodeReference;
   /** Your platform user id, if known. */
   userId?: number;
 }
@@ -262,4 +340,48 @@ export interface ListParams {
 export interface SirenList<T = Record<string, unknown>> extends Array<T> {
   /** Total record count across all pages, when Siren reports it. */
   estimatedCount?: number;
+}
+
+/**
+ * One event type a webhook subscription can name, as `GET /webhooks/events`
+ * lists it, such as
+ * `{ event: 'sale.created', category: 'Sales', label: 'A sale was recorded' }`.
+ */
+export interface WebhookCatalogEntry {
+  /** The event type. Siren may list one this SDK's {@link WebhookEventType} lacks yet. */
+  event: WebhookEventType | (string & {});
+  /** The group the dashboard's event picker shows it under, such as `Sales`. */
+  category: string;
+  /** A readable description, such as `A sale was recorded`. */
+  label: string;
+}
+
+/**
+ * One scope a new API key may be given, as `GET /api-keys/scopes` lists it,
+ * such as
+ * `{ scope: 'ledger:conversions:read', resource: 'ledger', action: 'conversions:read', label: 'Read conversions' }`.
+ */
+export interface ApiKeyScopeEntry {
+  /** The scope string to pass to `apiKeys.create`. */
+  scope: ApiKeyScope | (string & {});
+  /** The group the scope belongs to, such as `events` or `ledger`. */
+  resource: string;
+  /** What the scope allows within its group, such as `conversions:read`. */
+  action: string;
+  /** A readable description. */
+  label: string;
+}
+
+/**
+ * The scopes a new API key may be given, grouped by resource, from
+ * `GET /api-keys/scopes`. Siren lists the event scopes under `events`, the
+ * ledger read scopes under `ledger`, the webhook scopes under
+ * `webhook-subscriptions`, and the record scopes under one `records:*` group
+ * each, such as `records:programs`. It leaves out a group with no scopes.
+ */
+export interface ApiKeyScopeGroups {
+  events?: ApiKeyScopeEntry[];
+  ledger?: ApiKeyScopeEntry[];
+  'webhook-subscriptions'?: ApiKeyScopeEntry[];
+  [resource: string]: ApiKeyScopeEntry[] | undefined;
 }

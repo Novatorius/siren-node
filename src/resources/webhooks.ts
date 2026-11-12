@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { SignatureVerificationError } from '../errors';
-import type { HttpClient } from '../http';
+import { SignatureVerificationError, UnexpectedResponseError } from '../errors';
+import { parseJsonBody, type HttpClient } from '../http';
 import type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
   WebhookEvent,
+  WebhookCatalogEntry,
   WebhookHeaders,
   WebhookSubscription,
 } from '../types';
@@ -92,6 +93,29 @@ export class WebhookSubscriptionsResource {
       body: params,
       retriable: false,
     });
+  }
+
+  /**
+   * The event types a subscription can name, from `GET /webhooks/events`.
+   * This is the live set Siren delivers, so it can hold an event that
+   * `WebhookEventType` lacks yet. It throws `UnexpectedResponseError`
+   * when the body is not a list or an entry is not an object. It is a
+   * retriable read, like `list()`: the transport retries it on 429 and 5xx
+   * up to `maxRetries`.
+   */
+  async events(): Promise<WebhookCatalogEntry[]> {
+    const path = '/webhooks/events';
+    const response = await this.http.request({ method: 'GET', path, retriable: true });
+    const body = await parseJsonBody(response);
+    const isEntry = (entry: unknown): boolean =>
+      typeof entry === 'object' && entry !== null && !Array.isArray(entry);
+    if (!Array.isArray(body) || !body.every(isEntry)) {
+      throw new UnexpectedResponseError(
+        `Siren answered GET ${path} with a body that is not a list of event objects.`,
+        { statusCode: response.status, data: body },
+      );
+    }
+    return body as WebhookCatalogEntry[];
   }
 
   /** List webhook subscriptions. */
