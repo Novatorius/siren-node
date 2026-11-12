@@ -606,8 +606,8 @@
   {
     "id": "oauth-400-only",
     "file": "src/connect/oauth.ts",
-    "find": "(status === 400 || status === 401) && isJsonObject(answer)",
-    "replace": "status === 400 && isJsonObject(answer)",
+    "find": "(status === 400 || status === 401) && isJsonObject(shown)",
+    "replace": "status === 400 && isJsonObject(shown)",
     "expect": "caught",
     "failing": [
       "raises a 401 with"
@@ -616,8 +616,8 @@
   {
     "id": "oauth-any-status",
     "file": "src/connect/oauth.ts",
-    "find": "(status === 400 || status === 401) && isJsonObject(answer)",
-    "replace": "status >= 400 && isJsonObject(answer)",
+    "find": "(status === 400 || status === 401) && isJsonObject(shown)",
+    "replace": "status >= 400 && isJsonObject(shown)",
     "expect": "caught",
     "failing": [
       "raises a 429 as the usual error",
@@ -627,8 +627,8 @@
   {
     "id": "oauth-envelope-unchecked",
     "file": "src/connect/oauth.ts",
-    "find": "    if ((status === 400 || status === 401) && isJsonObject(answer) && isFilled(answer.error)) {\n      const description = isFilled(answer.error_description) ? answer.error_description : answer.error;\n      throw new OAuthError(description, { code: answer.error, statusCode: status });",
-    "replace": "    if ((status === 400 || status === 401) && isJsonObject(answer) && answer.error !== undefined) {\n      const description = isFilled(answer.error_description) ? answer.error_description : String(answer.error);\n      throw new OAuthError(description, { code: String(answer.error), statusCode: status });",
+    "find": "    if ((status === 400 || status === 401) && isJsonObject(shown) && isFilled(shown.error)) {\n      const description = isFilled(shown.error_description) ? shown.error_description : shown.error;\n      throw new OAuthError(description, { code: shown.error, statusCode: status });",
+    "replace": "    if ((status === 400 || status === 401) && isJsonObject(shown) && shown.error !== undefined) {\n      const description = isFilled(shown.error_description) ? shown.error_description : String(shown.error);\n      throw new OAuthError(description, { code: String(shown.error), statusCode: status });",
     "expect": "caught",
     "failing": [
       "raises a 400 in the app's error envelope through errorFromResponse"
@@ -637,8 +637,8 @@
   {
     "id": "description-ignored",
     "file": "src/connect/oauth.ts",
-    "find": "isFilled(answer.error_description) ? answer.error_description : answer.error",
-    "replace": "answer.error",
+    "find": "isFilled(shown.error_description) ? shown.error_description : shown.error",
+    "replace": "shown.error",
     "expect": "caught",
     "failing": [
       "raises a 400 with"
@@ -647,8 +647,8 @@
   {
     "id": "description-no-fallback",
     "file": "src/connect/oauth.ts",
-    "find": "isFilled(answer.error_description) ? answer.error_description : answer.error",
-    "replace": "String(answer.error_description)",
+    "find": "isFilled(shown.error_description) ? shown.error_description : shown.error",
+    "replace": "String(shown.error_description)",
     "expect": "caught",
     "failing": [
       "falls back to the code as the message"
@@ -657,7 +657,7 @@
   {
     "id": "oauth-code-fixed",
     "file": "src/connect/oauth.ts",
-    "find": "{ code: answer.error, statusCode: status }",
+    "find": "{ code: shown.error, statusCode: status }",
     "replace": "{ code: 'invalid_grant', statusCode: status }",
     "expect": "caught",
     "failing": [
@@ -667,8 +667,8 @@
   {
     "id": "oauth-status-fixed",
     "file": "src/connect/oauth.ts",
-    "find": "{ code: answer.error, statusCode: status }",
-    "replace": "{ code: answer.error, statusCode: 400 }",
+    "find": "{ code: shown.error, statusCode: status }",
+    "replace": "{ code: shown.error, statusCode: 400 }",
     "expect": "caught",
     "failing": [
       "raises a 401 with"
@@ -737,8 +737,8 @@
   {
     "id": "internal-empty-error-is-oauth",
     "file": "src/connect/oauth.ts",
-    "find": "&& isFilled(answer.error)) {",
-    "replace": "&& typeof answer.error === 'string') {",
+    "find": "&& isFilled(shown.error)) {",
+    "replace": "&& typeof shown.error === 'string') {",
     "expect": "caught",
     "failing": [
       "reads a 400 whose error is an empty string through errorFromResponse"
@@ -747,8 +747,8 @@
   {
     "id": "internal-empty-description-kept",
     "file": "src/connect/oauth.ts",
-    "find": "isFilled(answer.error_description) ? answer.error_description",
-    "replace": "typeof answer.error_description === 'string' ? answer.error_description",
+    "find": "isFilled(shown.error_description) ? shown.error_description",
+    "replace": "typeof shown.error_description === 'string' ? shown.error_description",
     "expect": "caught",
     "failing": [
       "falls back to the code when error_description is an empty string"

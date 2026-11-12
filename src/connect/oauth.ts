@@ -27,6 +27,16 @@ export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;
 /** The SDK's `User-Agent`, the one `HttpTransport` sends. */
 const USER_AGENT = 'siren-sdk-typescript/0.3.0';
 
+/**
+ * Token fields of an OAuth answer, named in lower case with no `_` or `-`,
+ * so `refresh_token` and `refreshToken` both match. No error built from an
+ * answer carries their values.
+ */
+const TOKEN_FIELDS: ReadonlySet<string> = new Set(['accesstoken', 'refreshtoken', 'idtoken']);
+
+/** How deep an error's copy of an answer goes. Anything deeper is replaced whole. */
+const MAX_SCRUB_DEPTH = 32;
+
 /** The only shape an S256 challenge has: 43 base64url characters, no padding. */
 const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
 
@@ -254,18 +264,22 @@ export class OAuthClient {
       );
     }
 
+    // Past this point the answer only feeds an error, which carries no
+    // secret this call sent and no token value from the answer.
+    const shown = scrub(answer, secrets);
+
     if (status >= 300 && status < 400) {
       throw new SirenError(`Siren: POST ${path} answered a redirect (${status}), which the SDK never follows.`, {
         statusCode: status,
       });
     }
 
-    if ((status === 400 || status === 401) && isJsonObject(answer) && isFilled(answer.error)) {
-      const description = isFilled(answer.error_description) ? answer.error_description : answer.error;
-      throw new OAuthError(description, { code: answer.error, statusCode: status });
+    if ((status === 400 || status === 401) && isJsonObject(shown) && isFilled(shown.error)) {
+      const description = isFilled(shown.error_description) ? shown.error_description : shown.error;
+      throw new OAuthError(description, { code: shown.error, statusCode: status });
     }
 
-    throw errorFromResponse(status, reply.statusText ?? '', answer, headerOf(reply, 'retry-after'));
+    throw errorFromResponse(status, redact(reply.statusText ?? '', secrets), shown, headerOf(reply, 'retry-after'));
   }
 }
 
@@ -316,6 +330,35 @@ function redact(text: string, secrets: readonly string[]): string {
     .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
   return text.replace(new RegExp(pattern, 'g'), '[redacted]');
+}
+
+/**
+ * A copy of a parsed answer that an error may carry. Every secret is
+ * replaced in each string and each key, the value of each token field is
+ * replaced whole, and anything nested deeper than {@link MAX_SCRUB_DEPTH}
+ * is replaced whole, so a deep answer still raises a `SirenError`.
+ */
+function scrub(value: unknown, secrets: readonly string[], depth = 0): unknown {
+  if (typeof value === 'string') return redact(value, secrets);
+  if (typeof value !== 'object' || value === null) return value;
+  if (depth >= MAX_SCRUB_DEPTH) return '[redacted]';
+  if (Array.isArray(value)) return value.map((item) => scrub(item, secrets, depth + 1));
+  const copy: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    // defineProperty keeps a `__proto__` key an own field of the copy.
+    Object.defineProperty(copy, redact(key, secrets), {
+      value: isTokenField(key) ? '[redacted]' : scrub(item, secrets, depth + 1),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return copy;
+}
+
+/** A token field's name, in any case, with or without `_` or `-`. */
+function isTokenField(key: string): boolean {
+  return TOKEN_FIELDS.has(key.toLowerCase().replace(/[_-]/g, ''));
 }
 
 /**
