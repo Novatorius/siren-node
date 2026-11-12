@@ -6,7 +6,7 @@
     "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanentDelete',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P8: programs surface"
+      "ProgramBulkAction holds every action Siren runs on programs"
     ]
   },
   {
@@ -40,7 +40,7 @@
     "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanentDelete',\n} as const;",
     "expect": "wrong-reason",
     "failing": [
-      "P9: programGroups surface"
+      "P9: programGroups list and retrieve rules"
     ]
   },
   {
@@ -76,101 +76,111 @@
   {
     "id": "co-bulk-activate",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activatex',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activatex',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
+    ]
+  },
+  {
+    "id": "co-bulk-reject",
+    "file": "src/taxonomy.ts",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'rejectx',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "expect": "caught",
+    "failing": [
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-deactivate",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivatex',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivatex',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-restore",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restorex',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restorex',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-delete",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'deletex',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'deletex',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-permanent_delete",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_deletex',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_deletex',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-addToProgram",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgramx',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgramx',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-removeFromProgram",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgramx',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgramx',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-addToDistributor",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributorx',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributorx',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-removeFromDistributor",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributorx',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributorx',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
     "id": "co-bulk-sendSignupEmail",
     "file": "src/taxonomy.ts",
-    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
-    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmailx',\n} as const;",
+    "find": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmail',\n} as const;",
+    "replace": "export const CollaboratorBulkAction = {\n  Activate: 'activate',\n  /** Sets the status to `rejected`. An applicant it declines gets the declined email. */\n  Reject: 'reject',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n  /** Needs `{ programId }` in `extra`. */\n  AddToProgram: 'addToProgram',\n  /** Needs `{ programId }` in `extra`. */\n  RemoveFromProgram: 'removeFromProgram',\n  /** Needs `{ distributorId }` in `extra`. */\n  AddToDistributor: 'addToDistributor',\n  /** Needs `{ distributorId }` in `extra`. */\n  RemoveFromDistributor: 'removeFromDistributor',\n  SendSignupEmail: 'sendSignupEmailx',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P3: collaborators surface"
+      "CollaboratorBulkAction holds every action Siren runs on collaborators"
     ]
   },
   {
@@ -230,7 +240,7 @@
     "replace": "  static readonly PATH = '/collaborator-alias';",
     "expect": "caught",
     "failing": [
-      "names the route and the plain code types"
+      "names the route and its filters"
     ]
   },
   {
@@ -240,7 +250,7 @@
     "replace": "['code', 'type', 'collaboratorId', 'propertyId'] as const;",
     "expect": "caught",
     "failing": [
-      "names the route and the plain code types"
+      "names the route and its filters"
     ]
   },
   {
@@ -250,7 +260,7 @@
     "replace": "export const CollaboratorAliasType = {\n  Tracking: 'track',\n  Coupon: 'coupon',\n} as const;",
     "expect": "caught",
     "failing": [
-      "names the route and the plain code types"
+      "CollaboratorAliasType holds the plain code types"
     ]
   },
   {
@@ -260,7 +270,7 @@
     "replace": "export const CollaboratorAliasType = {\n  Tracking: 'tracking',\n  Coupon: 'coupons',\n} as const;",
     "expect": "caught",
     "failing": [
-      "names the route and the plain code types"
+      "CollaboratorAliasType holds the plain code types"
     ]
   },
   {
@@ -340,7 +350,7 @@
     "replace": "export const ProgramBulkAction = {\n  Activate: 'activatex',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P8: programs surface"
+      "ProgramBulkAction holds every action Siren runs on programs"
     ]
   },
   {
@@ -350,7 +360,7 @@
     "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivatex',\n  Restore: 'restore',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P8: programs surface"
+      "ProgramBulkAction holds every action Siren runs on programs"
     ]
   },
   {
@@ -360,7 +370,7 @@
     "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restorex',\n  Delete: 'delete',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P8: programs surface"
+      "ProgramBulkAction holds every action Siren runs on programs"
     ]
   },
   {
@@ -370,7 +380,7 @@
     "replace": "export const ProgramBulkAction = {\n  Activate: 'activate',\n  Deactivate: 'deactivate',\n  Restore: 'restore',\n  Delete: 'deletex',\n  PermanentDelete: 'permanent_delete',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P8: programs surface"
+      "ProgramBulkAction holds every action Siren runs on programs"
     ]
   },
   {
@@ -380,7 +390,7 @@
     "replace": "export const ProgramGroupSorter = {\n  /** The program the opportunity was bound to first wins. */\n  OldestBindingWins: 'oldest',\n  /** The program the opportunity was bound to most recently wins. */\n  NewestBindingWins: 'newestBindingWins',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P9: programGroups surface"
+      "ProgramGroupSorter holds the two sorters a program group takes"
     ]
   },
   {
@@ -390,7 +400,7 @@
     "replace": "export const ProgramGroupSorter = {\n  /** The program the opportunity was bound to first wins. */\n  OldestBindingWins: 'oldestBindingWins',\n  /** The program the opportunity was bound to most recently wins. */\n  NewestBindingWins: 'newest',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P9: programGroups surface"
+      "ProgramGroupSorter holds the two sorters a program group takes"
     ]
   },
   {
@@ -400,7 +410,57 @@
     "replace": "export const ProgramGroupBulkAction = {\n  Delete: 'remove',\n} as const;",
     "expect": "caught",
     "failing": [
-      "P9: programGroups surface"
+      "ProgramGroupBulkAction holds the one action Siren runs on program groups"
+    ]
+  },
+  {
+    "id": "co-id-filters",
+    "file": "src/resources/collaborators.ts",
+    "find": "{ one: ['programId', 'distributorId'], many: ['id'] } as const;",
+    "replace": "{ one: ['programId'], many: ['id', 'distributorId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "al-id-filters",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  static readonly ID_FILTERS = { many: ['collaboratorId'] } as const;",
+    "replace": "  static readonly ID_FILTERS = {} as const;",
+    "expect": "caught",
+    "failing": [
+      "names the route and its filters"
+    ]
+  },
+  {
+    "id": "en-id-filters",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "  static readonly ID_FILTERS = { many: ['collaboratorId', 'programId'] } as const;",
+    "replace": "  static readonly ID_FILTERS = { many: ['collaboratorId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P5: enrollments surface"
+    ]
+  },
+  {
+    "id": "gm-id-filters",
+    "file": "src/resources/collaborator-group-members.ts",
+    "find": "  static readonly ID_FILTERS = { many: ['collaboratorId'] } as const;",
+    "replace": "  static readonly ID_FILTERS = { one: ['collaboratorId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P7: members list and retrieve rules"
+    ]
+  },
+  {
+    "id": "pr-id-filters",
+    "file": "src/resources/programs.ts",
+    "find": "  static readonly ID_FILTERS = { one: ['programGroupId'] } as const;",
+    "replace": "  static readonly ID_FILTERS = { many: ['programGroupId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P8: programs list and retrieve rules"
     ]
   }
 ]

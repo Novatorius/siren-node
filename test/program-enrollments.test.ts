@@ -172,6 +172,7 @@ describe('P5: enrollments through the collaborator record', () => {
     const { http, enrollments } = over([reply(200, page([]))]);
 
     await expect(enrollments.collaboratorsIn(12, { propertyId: 5 } as never)).rejects.toBeInstanceOf(SirenError);
+    await expect(enrollments.collaboratorsIn(12, { distributorId: [3, 4] } as never)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
   });
 
