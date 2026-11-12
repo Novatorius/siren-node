@@ -50,6 +50,24 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
   /** The filters `GET /currencies/custom` reads. {@link list} refuses any other key, `propertyId` included. No filter takes an id, so there is no `ID_FILTERS`. */
   static readonly LIST_FILTERS = ['type', 'code'] as const;
 
+  /**
+   * The fields {@link create} sends: the eight Siren's create route reads
+   * (`CreateCustomCurrency.php`). The PHP SDK documents six of them, and
+   * `scale` and `propertyIds` are the two it leaves out, which Siren Cloud
+   * reads (it requires `propertyIds`). `create` refuses any other key before
+   * sending.
+   */
+  static readonly CREATE_FIELDS = [
+    'code',
+    'name',
+    'symbol',
+    'symbolPosition',
+    'type',
+    'exchangeRate',
+    'scale',
+    'propertyIds',
+  ] as const;
+
   constructor(http: HttpTransport) {
     super(http, '/currencies/custom');
   }
@@ -90,9 +108,17 @@ export class CustomCurrenciesResource<T = CustomCurrency> extends RecordsResourc
    * after a lost answer is refused as a code Siren already holds, so read
    * the currency with {@link retrieve} first: an answer means the first
    * send worked.
+   *
+   * Sends a new object holding only the {@link CREATE_FIELDS} that `params`
+   * gives. Throws `SirenError` before sending when `params` holds any other
+   * key, whatever its value, `undefined` included, with exactly
+   * `customCurrencies.create() cannot send "{key}". Siren's create route
+   * reads only code, name, symbol, symbolPosition, type, exchangeRate, scale
+   * and propertyIds.`
    */
   async create(params: CreateCustomCurrencyParams): Promise<T> {
     currencyCode(params.code);
+    // Stub: slice 4 fix packet F3 (the create allow lists).
     return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 

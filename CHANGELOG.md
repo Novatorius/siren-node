@@ -134,8 +134,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   store credit balances, the ledger and checkout holds, `siren.mappings` (`MappingsResource`) for
   links to records outside Siren, and `siren.settings` (`SettingsResource`) for the settings Siren
   shares with a connected site. Every write is sent once, and reads retry.
-- Writes on `siren.conversions` (`create`, `update`, `delete`, `bulk`, `types`) and on
-  `siren.transactions` (`details`, `create`, `bulk`, `creditCollaborator`, `sources`).
+- Writes on `siren.conversions` (`create`, `recoverCreate`, `update`, `delete`, `bulk`, `types`)
+  and on `siren.transactions` (`details`, `create`, `bulk`, `creditCollaborator`,
+  `recoverCreditCollaborator`, `sources`). `recoverCreate` and `recoverCreditCollaborator` send a
+  write that lost its answer again only for what Siren does not hold, and send nothing on an answer
+  they cannot read. The conversion, transaction, custom currency and distributor creates send only
+  the fields Siren reads and refuse any other key, and `transactions.create` refuses half a
+  binding.
 - `CreditsResource.holdReference`, which builds the reference a checkout's credit holds carry.
 - `ConversionBulkAction`, `TransactionBulkAction`, `DistributorBulkAction` and `CreditHoldStatus`,
   Siren's names for those bulk actions and hold statuses.

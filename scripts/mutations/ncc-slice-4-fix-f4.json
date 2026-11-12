@@ -1,0 +1,113 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/engagements.ts",
+    "find": "    for (const key of ['from', 'to'] as const) {",
+    "replace": "    for (const key of ['from'] as const) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > refuses a bad to even when from is a day"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/engagements.ts",
+    "find": "/** True for a string that is exactly YYYY-MM-DD",
+    "replace": "/** True for a string that is precisely YYYY-MM-DD",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/engagements.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/engagements.ts",
+    "find": "  const date = new Date(0);",
+    "replace": "  const date = new Date((0);",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/engagements.ts",
+    "find": "    for (const key of ['from', 'to'] as const) {",
+    "replace": "    for (const key of ['from'] as const) {",
+    "expect": "wrong-reason",
+    "failing": [
+      "4 fix F4: engagements.list day filters > sends an ordinary day as it is"
+    ]
+  },
+  {
+    "id": "f4-no-check",
+    "file": "src/resources/engagements.ts",
+    "find": "      if (!isDay(value)) {",
+    "replace": "      if (false) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > refuses a from that is a February 29 in a year with none",
+      "4 fix F4: engagements.list day filters > refuses a to that is a number"
+    ]
+  },
+  {
+    "id": "f4-loose-pattern",
+    "file": "src/resources/engagements.ts",
+    "find": "!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)",
+    "replace": "!/^\\d{4}-\\d{1,2}-\\d{2}/.test(value)",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > refuses a from that is a month with one digit",
+      "4 fix F4: engagements.list day filters > refuses a from that is a trailing line break",
+      "4 fix F4: engagements.list day filters > refuses a to that is a trailing line break"
+    ]
+  },
+  {
+    "id": "f4-no-calendar",
+    "file": "src/resources/engagements.ts",
+    "find": "  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;",
+    "replace": "  return true;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > refuses a from that is a February 29 in a year with none",
+      "4 fix F4: engagements.list day filters > refuses a to that is April 31",
+      "4 fix F4: engagements.list day filters > refuses a from that is month 13"
+    ]
+  },
+  {
+    "id": "f4-from-only",
+    "file": "src/resources/engagements.ts",
+    "find": "    for (const key of ['from', 'to'] as const) {",
+    "replace": "    for (const key of ['from'] as const) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > refuses a bad to even when from is a day",
+      "4 fix F4: engagements.list day filters > refuses a to that is a timestamp"
+    ]
+  },
+  {
+    "id": "f4-shows-json",
+    "file": "src/resources/engagements.ts",
+    "find": "        const shown = typeof value === 'string' ? JSON.stringify(value) : String(value);",
+    "replace": "        const shown = JSON.stringify(value);",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > refuses a from that is a Date",
+      "4 fix F4: engagements.list day filters > refuses a to that is a list of one day"
+    ]
+  },
+  {
+    "id": "f4-refuses-old-years",
+    "file": "src/resources/engagements.ts",
+    "find": "!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)",
+    "replace": "!/^20[1-9]\\d-\\d{2}-\\d{2}$/.test(value)",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > sends February 29 in a year divisible by 400 as it is"
+    ]
+  }
+]

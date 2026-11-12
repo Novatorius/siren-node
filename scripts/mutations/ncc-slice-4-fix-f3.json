@@ -1,0 +1,174 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/records.ts",
+    "find": "      ConversionsResource.CREATE_FIELDS,\n",
+    "replace": "      [...ConversionsResource.CREATE_FIELDS, 'id', 'propertyId', 'stauts', 'dateCreated'],\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > conversions.create refuses \"id\""
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/records.ts",
+    "find": "   * misspelt `quantity` would record one unit.",
+    "replace": "   * misspelt `quantity` would record a single unit.",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/records.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/records.ts",
+    "find": "    const body = pickFields(\n      params,\n      ConversionsResource.CREATE_FIELDS,",
+    "replace": "    const body = pickFields((\n      params,\n      ConversionsResource.CREATE_FIELDS,",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/records.ts",
+    "find": "      ConversionsResource.CREATE_FIELDS,\n",
+    "replace": "      [...ConversionsResource.CREATE_FIELDS, 'id', 'propertyId', 'stauts', 'dateCreated'],\n",
+    "expect": "wrong-reason",
+    "failing": [
+      "4 fix F3: create allow lists surface"
+    ]
+  },
+  {
+    "id": "f3-conversions-allow-all",
+    "file": "src/resources/records.ts",
+    "find": "      ConversionsResource.CREATE_FIELDS,\n",
+    "replace": "      [...ConversionsResource.CREATE_FIELDS, 'id', 'propertyId', 'stauts', 'dateCreated'],\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > conversions.create refuses \"id\"",
+      "4 fix F3: creates send only the fields Siren reads > conversions.create refuses \"propertyId\"",
+      "4 fix F3: creates send only the fields Siren reads > conversions.create refuses \"stauts\""
+    ]
+  },
+  {
+    "id": "f3-conversions-sends-params",
+    "file": "src/resources/records.ts",
+    "find": "        `conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "        `conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    void body;\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > conversions.create sends a new object"
+    ]
+  },
+  {
+    "id": "f3-transactions-allow-all",
+    "file": "src/resources/records.ts",
+    "find": "      TransactionsResource.CREATE_FIELDS,\n",
+    "replace": "      [...TransactionsResource.CREATE_FIELDS, 'id', 'propertyId', 'stauts', 'dateCreated'],\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > transactions.create refuses \"id\"",
+      "4 fix F3: creates send only the fields Siren reads > transactions.create refuses \"stauts\""
+    ]
+  },
+  {
+    "id": "f3-transactions-lines-allow-all",
+    "file": "src/resources/records.ts",
+    "find": "        TransactionsResource.DETAIL_FIELDS,\n",
+    "replace": "        [...TransactionsResource.DETAIL_FIELDS, 'quanity', 'price', 'id', 'transactionId'],\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: transactions.create lines > refuses a line key \"quanity\"",
+      "4 fix F3: transactions.create lines > refuses a line key \"price\""
+    ]
+  },
+  {
+    "id": "f3-transactions-lines-as-given",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
+    "replace": "    body.details = details;\n    return writeRecord<T>(this.http, 'POST', this.path, body);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: transactions.create lines > sends each line as a new object"
+    ]
+  },
+  {
+    "id": "f3-transactions-sends-params",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
+    "replace": "    void body;\n    return writeRecord<T>(this.http, 'POST', this.path, params);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > transactions.create sends a new object"
+    ]
+  },
+  {
+    "id": "f3-currencies-allow-all",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "      CustomCurrenciesResource.CREATE_FIELDS,\n",
+    "replace": "      [...CustomCurrenciesResource.CREATE_FIELDS, 'id', 'propertyId', 'stauts', 'dateCreated'],\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > customCurrencies.create refuses \"id\"",
+      "4 fix F3: creates send only the fields Siren reads > customCurrencies.create refuses \"propertyId\""
+    ]
+  },
+  {
+    "id": "f3-currencies-sends-params",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "    void body;\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > customCurrencies.create sends a new object"
+    ]
+  },
+  {
+    "id": "f3-currencies-drops-scale",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "      CustomCurrenciesResource.CREATE_FIELDS,\n",
+    "replace": "      CustomCurrenciesResource.CREATE_FIELDS.filter((key) => key !== 'scale'),\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > customCurrencies.create sends every field Siren reads, as given"
+    ]
+  },
+  {
+    "id": "f3-distributors-allow-all",
+    "file": "src/resources/distributors.ts",
+    "find": "      DistributorsResource.CREATE_FIELDS,\n",
+    "replace": "      [...DistributorsResource.CREATE_FIELDS, 'id', 'propertyId', 'stauts', 'dateCreated'],\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > distributors.create refuses \"id\"",
+      "4 fix F3: creates send only the fields Siren reads > distributors.create refuses \"stauts\""
+    ]
+  },
+  {
+    "id": "f3-distributors-sends-params",
+    "file": "src/resources/distributors.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "    void body;\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > distributors.create sends a new object"
+    ]
+  },
+  {
+    "id": "f3-undefined-key-skipped",
+    "file": "src/resources/create-fields.ts",
+    "find": "  for (const key of Object.keys(params)) {",
+    "replace": "  for (const key of Object.keys(params).filter((name) => (params as Record<string, unknown>)[name] !== undefined)) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > conversions.create refuses \"dateCreated\"",
+      "4 fix F3: creates send only the fields Siren reads > distributors.create refuses \"dateCreated\"",
+      "4 fix F3: transactions.create lines > refuses a line key \"transactionId\""
+    ]
+  }
+]
