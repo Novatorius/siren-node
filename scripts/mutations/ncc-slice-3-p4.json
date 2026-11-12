@@ -1,0 +1,588 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'DESC' } as const;",
+    "replace": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'ASC' } as const;",
+    "expect": "caught",
+    "failing": [
+      "P4: aliases.findByCode and forCollaborator"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    throw new UnexpectedResponseError('Siren answered a code row whose type is not a string.', { data: row });",
+    "replace": "    throw new UnexpectedResponseError('Siren answered a code row with no string type.', { data: row });",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "const NEWEST = { number: 1,",
+    "replace": "const NEWEST = { number: 1,,",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'DESC' } as const;",
+    "replace": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'ASC' } as const;",
+    "expect": "wrong-reason",
+    "failing": [
+      "P2: PropertyQualifier.unqualify"
+    ]
+  },
+  {
+    "id": "p4-newest-no-order",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'DESC' } as const;",
+    "replace": "const NEWEST = { number: 1 } as const;",
+    "expect": "caught",
+    "failing": [
+      "asks for the newest holder",
+      "asks for a collaborator newest code"
+    ]
+  },
+  {
+    "id": "p4-newest-no-cap",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'DESC' } as const;",
+    "replace": "const NEWEST = { orderBy: 'dateIssued', order: 'DESC' } as const;",
+    "expect": "caught",
+    "failing": [
+      "asks for the newest holder",
+      "asks for a collaborator newest code"
+    ]
+  },
+  {
+    "id": "p4-newest-order-by",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "const NEWEST = { number: 1, orderBy: 'dateIssued', order: 'DESC' } as const;",
+    "replace": "const NEWEST = { number: 1, orderBy: 'id', order: 'DESC' } as const;",
+    "expect": "caught",
+    "failing": [
+      "asks for the newest holder"
+    ]
+  },
+  {
+    "id": "p4-code-untrimmed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  const trimmed = code.trim();",
+    "replace": "  const trimmed = code;",
+    "expect": "caught",
+    "failing": [
+      "aliasCode",
+      "trims each code it sends",
+      "posts the trimmed code"
+    ]
+  },
+  {
+    "id": "p4-code-empty-allowed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  if (trimmed === '') {\n    throw new SirenError(`${method} needs a code that is not empty once trimmed.`);\n  }\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "aliasCode > refuses an empty code",
+      "every method that takes a code refuses \"\""
+    ]
+  },
+  {
+    "id": "p4-code-comma-allowed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  if (trimmed.includes(',')) {",
+    "replace": "  if (trimmed.includes('\\u0000')) {",
+    "expect": "caught",
+    "failing": [
+      "aliasCode > refuses a code with a comma",
+      "every method that takes a code refuses one with a comma"
+    ]
+  },
+  {
+    "id": "p4-code-non-string",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  if (typeof code !== 'string') {\n    throw new SirenError(`${method} needs each code as a string.`);\n  }\n  const trimmed = code.trim();",
+    "replace": "  const trimmed = String(code).trim();",
+    "expect": "caught",
+    "failing": [
+      "aliasCode > refuses a number",
+      "aliasCode > refuses null"
+    ]
+  },
+  {
+    "id": "p4-code-method-unnamed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    throw new SirenError(`${method} needs a code that is not empty once trimmed.`);",
+    "replace": "    throw new SirenError(`A code must not be empty once trimmed.`);",
+    "expect": "caught",
+    "failing": [
+      "aliasCode > refuses an empty code"
+    ]
+  },
+  {
+    "id": "p4-row-type-unchecked",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  if (typeof row.type !== 'string') {",
+    "replace": "  if (row.type === null) {",
+    "expect": "caught",
+    "failing": [
+      "for a code row with no type",
+      "for a code row with a numeric type",
+      "plainAlias > refuses a row with no type"
+    ]
+  },
+  {
+    "id": "p4-row-raw",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  return PropertyQualifier.plainRecord(row, 'type') as CollaboratorAlias;",
+    "replace": "  return row as CollaboratorAlias;",
+    "expect": "caught",
+    "failing": [
+      "plainAlias > answers a qualified row",
+      "answers plain records"
+    ]
+  },
+  {
+    "id": "p4-row-no-data",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "{ data: row });",
+    "replace": "{});",
+    "expect": "caught",
+    "failing": [
+      "plainAlias > refuses a row"
+    ]
+  },
+  {
+    "id": "p4-list-fields",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "{ fields: 'id,aliases' }",
+    "replace": "{ fields: 'aliases' }",
+    "expect": "caught",
+    "failing": [
+      "lists the record aliases field"
+    ]
+  },
+  {
+    "id": "p4-list-check-lenient",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        Array.isArray(body.aliases) && body.aliases.every(isJsonObject)",
+    "replace": "        body.aliases !== undefined",
+    "expect": "caught",
+    "failing": [
+      "list throws UnexpectedResponseError for an aliases field that is not a list",
+      "list throws UnexpectedResponseError for an entry that is a string"
+    ]
+  },
+  {
+    "id": "p4-list-entries-unchecked",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        Array.isArray(body.aliases) && body.aliases.every(isJsonObject)",
+    "replace": "        Array.isArray(body.aliases)",
+    "expect": "caught",
+    "failing": [
+      "list throws UnexpectedResponseError for an entry that is a string",
+      "list throws UnexpectedResponseError for an entry that is null"
+    ]
+  },
+  {
+    "id": "p4-list-message-no-id",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "`Siren answered collaborator ${id} without an aliases list of objects.`",
+    "replace": "'Siren answered without an aliases list.'",
+    "expect": "caught",
+    "failing": [
+      "list throws UnexpectedResponseError for no aliases field"
+    ]
+  },
+  {
+    "id": "p4-list-message-no-field",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "`Siren answered collaborator ${id} without an aliases list of objects.`",
+    "replace": "`Siren answered collaborator ${id} without the field.`",
+    "expect": "caught",
+    "failing": [
+      "list throws UnexpectedResponseError for no aliases field"
+    ]
+  },
+  {
+    "id": "p4-list-id",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "recordId(collaboratorId, 'list', 'collaboratorId')",
+    "replace": "collaboratorId",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a collaborator id refuses one below 1"
+    ]
+  },
+  {
+    "id": "p4-tracking-fields",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "{ fields: 'id,referralCode' }",
+    "replace": "{ fields: 'referralCode' }",
+    "expect": "caught",
+    "failing": [
+      "reads the referral code"
+    ]
+  },
+  {
+    "id": "p4-tracking-empty",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    return record.referralCode === '' ? null : record.referralCode;",
+    "replace": "    return record.referralCode;",
+    "expect": "caught",
+    "failing": [
+      "reads the referral code, or null when it is null or empty"
+    ]
+  },
+  {
+    "id": "p4-tracking-lenient",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        typeof body.referralCode === 'string' || body.referralCode === null",
+    "replace": "        body.referralCode !== undefined",
+    "expect": "caught",
+    "failing": [
+      "trackingCode throws UnexpectedResponseError for a numeric referralCode",
+      "trackingCode throws UnexpectedResponseError for a referralCode list"
+    ]
+  },
+  {
+    "id": "p4-tracking-missing-ok",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        typeof body.referralCode === 'string' || body.referralCode === null",
+    "replace": "        typeof body.referralCode === 'string' || body.referralCode == null",
+    "expect": "caught",
+    "failing": [
+      "trackingCode throws UnexpectedResponseError for no referralCode field"
+    ]
+  },
+  {
+    "id": "p4-tracking-message",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "`Siren answered collaborator ${id} without a referralCode that is a string or null.`",
+    "replace": "'Siren answered a broken record.'",
+    "expect": "caught",
+    "failing": [
+      "trackingCode throws UnexpectedResponseError"
+    ]
+  },
+  {
+    "id": "p4-tracking-id",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "recordId(collaboratorId, 'trackingCode', 'collaboratorId')",
+    "replace": "collaboratorId",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a collaborator id refuses one below 1"
+    ]
+  },
+  {
+    "id": "p4-set-untrimmed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const trackingId = aliasCode(code, 'setTrackingCode');",
+    "replace": "    const trackingId = (aliasCode(code, 'setTrackingCode'), code);",
+    "expect": "caught",
+    "failing": [
+      "puts the trimmed tracking code"
+    ]
+  },
+  {
+    "id": "p4-set-unchecked",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const trackingId = aliasCode(code, 'setTrackingCode');",
+    "replace": "    const trackingId = code.trim();",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a code refuses one with a comma",
+      "every method that takes a code refuses \"\""
+    ]
+  },
+  {
+    "id": "p4-set-id",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "recordId(collaboratorId, 'setTrackingCode', 'collaboratorId')",
+    "replace": "collaboratorId",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a collaborator id refuses one below 1"
+    ]
+  },
+  {
+    "id": "p4-set-retried",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    return writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { trackingId });",
+    "replace": "    return writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { trackingId }).catch(() => writeRecord<Collaborator>(this.http, 'PUT', `/collaborators/${id}`, { trackingId }));",
+    "expect": "caught",
+    "failing": [
+      "retries the reads and sends setTrackingCode once"
+    ]
+  },
+  {
+    "id": "p4-find-first-row",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const rows = await this.query({ code: trimmed, type: plainType, ...NEWEST });\n    return rows[0] ?? null;",
+    "replace": "    const rows = await this.query({ code: trimmed, type: plainType, ...NEWEST });\n    return rows.length === 1 ? null : rows[0] ?? null;",
+    "expect": "caught",
+    "failing": [
+      "asks for the newest holder"
+    ]
+  },
+  {
+    "id": "p4-find-type-redundant",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const plainType = PropertyQualifier.assertCodeType(type, 'type');\n    const rows = await this.query({ code: trimmed,",
+    "replace": "    const plainType = type;\n    const rows = await this.query({ code: trimmed,",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "p4-for-type-dropped",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const rows = await this.query({ collaboratorId: id, type: plainType, ...NEWEST });",
+    "replace": "    const rows = await this.query({ collaboratorId: id, ...NEWEST });",
+    "expect": "caught",
+    "failing": [
+      "asks for a collaborator newest code"
+    ]
+  },
+  {
+    "id": "p4-for-id-redundant",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "recordId(collaboratorId, 'forCollaborator', 'collaboratorId')",
+    "replace": "collaboratorId",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "p4-query-code-untrimmed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "code.map((member: unknown) => aliasCode(member, 'query'))",
+    "replace": "code.map((member: unknown) => (aliasCode(member, 'query'), member))",
+    "expect": "caught",
+    "failing": [
+      "trims each code it sends"
+    ]
+  },
+  {
+    "id": "p4-query-code-members",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "code.map((member: unknown) => aliasCode(member, 'query'))",
+    "replace": "code",
+    "expect": "caught",
+    "failing": [
+      "trims each code it sends"
+    ]
+  },
+  {
+    "id": "p4-query-type-members",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        ? type.map((member: unknown) => PropertyQualifier.assertCodeType(member, 'type'))",
+    "replace": "        ? type",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a type refuses"
+    ]
+  },
+  {
+    "id": "p4-query-type-single",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        : PropertyQualifier.assertCodeType(type, 'type');",
+    "replace": "        : type;",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty type or code list and a type that is not a string"
+    ]
+  },
+  {
+    "id": "p4-query-ids-dropped",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "      CollaboratorAliasesResource.QUERY_FILTERS,\n      CollaboratorAliasesResource.ID_FILTERS,",
+    "replace": "      CollaboratorAliasesResource.QUERY_FILTERS,\n      {},",
+    "expect": "caught",
+    "failing": [
+      "query refuses a text collaborator id",
+      "query refuses collaboratorId"
+    ]
+  },
+  {
+    "id": "p4-query-filters-loose",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "      CollaboratorAliasesResource.QUERY_FILTERS,\n      CollaboratorAliasesResource.ID_FILTERS,",
+    "replace": "      [...CollaboratorAliasesResource.QUERY_FILTERS, 'propertyId', 'collaboratorID'],\n      CollaboratorAliasesResource.ID_FILTERS,",
+    "expect": "caught",
+    "failing": [
+      "query refuses propertyId",
+      "query refuses a misspelt filter"
+    ]
+  },
+  {
+    "id": "p4-query-raw",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const plain = rows.map(plainAlias) as SirenList<CollaboratorAlias>;",
+    "replace": "    const plain = rows as unknown as SirenList<CollaboratorAlias>;",
+    "expect": "caught",
+    "failing": [
+      "answers plain records"
+    ]
+  },
+  {
+    "id": "p4-query-count",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    if (rows.estimatedCount !== undefined) {",
+    "replace": "    if (rows.estimatedCount === -1) {",
+    "expect": "caught",
+    "failing": [
+      "answers plain records"
+    ]
+  },
+  {
+    "id": "p4-create-unwrapped",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        throw CodeConflictError.fromConflict(error, trimmed, plainType);",
+    "replace": "        throw error;",
+    "expect": "caught",
+    "failing": [
+      "raises CodeConflictError from the 409"
+    ]
+  },
+  {
+    "id": "p4-create-untrimmed-conflict",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        throw CodeConflictError.fromConflict(error, trimmed, plainType);",
+    "replace": "        throw CodeConflictError.fromConflict(error, code, plainType);",
+    "expect": "caught",
+    "failing": [
+      "raises CodeConflictError from the 409"
+    ]
+  },
+  {
+    "id": "p4-create-wraps-all",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "      if (error instanceof ConflictError && !(error instanceof CodeConflictError)) {",
+    "replace": "      if (error instanceof SirenError && !(error instanceof CodeConflictError)) {",
+    "expect": "caught",
+    "failing": [
+      "passes a refusal that is not a conflict through unchanged"
+    ]
+  },
+  {
+    "id": "p4-create-raw",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    return plainAlias(row);",
+    "replace": "    return row as CollaboratorAlias;",
+    "expect": "caught",
+    "failing": [
+      "posts the trimmed code and the plain type"
+    ]
+  },
+  {
+    "id": "p4-create-untrimmed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "        code: trimmed,\n        type: plainType,\n        collaboratorId: id,",
+    "replace": "        code,\n        type: plainType,\n        collaboratorId: id,",
+    "expect": "caught",
+    "failing": [
+      "posts the trimmed code and the plain type"
+    ]
+  },
+  {
+    "id": "p4-create-id",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "recordId(collaboratorId, 'create', 'collaboratorId')",
+    "replace": "collaboratorId",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a collaborator id refuses one below 1"
+    ]
+  },
+  {
+    "id": "p4-create-type-unchecked",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const trimmed = aliasCode(code, 'create');\n    const plainType = PropertyQualifier.assertCodeType(type, 'type');",
+    "replace": "    const trimmed = aliasCode(code, 'create');\n    const plainType = type;",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a type refuses"
+    ]
+  },
+  {
+    "id": "p4-create-name-only",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const trimmed = aliasCode(code, 'create');\n    const plainType = PropertyQualifier.assertCodeType(type, 'type');",
+    "replace": "    const trimmed = aliasCode(code, 'create');\n    const plainType = PropertyQualifier.assertName(type, 'type');",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a type accepts an integration coupon type"
+    ]
+  },
+  {
+    "id": "p4-create-retried",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "      row = await writeRecord<Record<string, unknown>>(this.http, 'POST', CollaboratorAliasesResource.PATH, {\n        code: trimmed,\n        type: plainType,\n        collaboratorId: id,\n      });",
+    "replace": "      const body = { code: trimmed, type: plainType, collaboratorId: id };\n      row = await writeRecord<Record<string, unknown>>(this.http, 'POST', CollaboratorAliasesResource.PATH, body).catch((first: unknown) => { if (first instanceof ConflictError) throw first; return writeRecord<Record<string, unknown>>(this.http, 'POST', CollaboratorAliasesResource.PATH, body); });",
+    "expect": "caught",
+    "failing": [
+      "P4: aliases.create > is sent once"
+    ]
+  },
+  {
+    "id": "p4-free-no-type",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "{ code: trimmed, type: plainType });\n    return { deleted: true };",
+    "replace": "{ code: trimmed });\n    return { deleted: true };",
+    "expect": "caught",
+    "failing": [
+      "deletes one code of one type by query"
+    ]
+  },
+  {
+    "id": "p4-free-untrimmed",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "{ code: trimmed, type: plainType });\n    return { deleted: true };",
+    "replace": "{ code, type: plainType });\n    return { deleted: true };",
+    "expect": "caught",
+    "failing": [
+      "deletes one code of one type by query"
+    ]
+  },
+  {
+    "id": "p4-free-type-unchecked",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    const trimmed = aliasCode(code, 'free');\n    const plainType = PropertyQualifier.assertCodeType(type, 'type');",
+    "replace": "    const trimmed = aliasCode(code, 'free');\n    const plainType = type;",
+    "expect": "caught",
+    "failing": [
+      "every method that takes a type refuses"
+    ]
+  },
+  {
+    "id": "p4-free-answer",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    return { deleted: true };",
+    "replace": "    return { deleted: false };",
+    "expect": "caught",
+    "failing": [
+      "deletes one code of one type by query"
+    ]
+  },
+  {
+    "id": "p4-free-retried",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "    await deleteRecord(this.http, CollaboratorAliasesResource.PATH, { code: trimmed, type: plainType });",
+    "replace": "    await deleteRecord(this.http, CollaboratorAliasesResource.PATH, { code: trimmed, type: plainType }).catch(() => deleteRecord(this.http, CollaboratorAliasesResource.PATH, { code: trimmed, type: plainType }));",
+    "expect": "caught",
+    "failing": [
+      "P4: aliases.free > is sent once"
+    ]
+  }
+]
