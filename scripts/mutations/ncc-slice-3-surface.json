@@ -1,0 +1,326 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/programs.ts",
+    "find": "  PermanentDelete: 'permanent_delete',",
+    "replace": "  PermanentDelete: 'permanentDelete',",
+    "expect": "caught",
+    "failing": [
+      "P8: programs surface"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/programs.ts",
+    "find": "  Restore: 'restore',",
+    "replace": "  Restore: 'res' + 'tore',",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/programs.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/programs.ts",
+    "find": "  Restore: 'restore',",
+    "replace": "  Restore: 'restore',,",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/programs.ts",
+    "find": "  PermanentDelete: 'permanent_delete',",
+    "replace": "  PermanentDelete: 'permanentDelete',",
+    "expect": "wrong-reason",
+    "failing": [
+      "P9: programGroups surface"
+    ]
+  },
+  {
+    "id": "pq-separator",
+    "file": "src/property-qualifier.ts",
+    "find": "  SEPARATOR: '@property:',",
+    "replace": "  SEPARATOR: '@prop:',",
+    "expect": "caught",
+    "failing": [
+      "names the separator and the name rule"
+    ]
+  },
+  {
+    "id": "pq-pattern",
+    "file": "src/property-qualifier.ts",
+    "find": "  NAME_PATTERN: /^[A-Za-z0-9_-]+$/,",
+    "replace": "  NAME_PATTERN: /^[A-Za-z0-9_-]+$/i,",
+    "expect": "caught",
+    "failing": [
+      "names the separator and the name rule"
+    ]
+  },
+  {
+    "id": "co-bulk-activate",
+    "file": "src/resources/collaborators.ts",
+    "find": "  Activate: 'activate',",
+    "replace": "  Activate: 'activatex',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-deactivate",
+    "file": "src/resources/collaborators.ts",
+    "find": "  Deactivate: 'deactivate',",
+    "replace": "  Deactivate: 'deactivatex',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-restore",
+    "file": "src/resources/collaborators.ts",
+    "find": "  Restore: 'restore',",
+    "replace": "  Restore: 'restorex',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-delete",
+    "file": "src/resources/collaborators.ts",
+    "find": "  Delete: 'delete',",
+    "replace": "  Delete: 'deletex',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-permanent_delete",
+    "file": "src/resources/collaborators.ts",
+    "find": "  PermanentDelete: 'permanent_delete',",
+    "replace": "  PermanentDelete: 'permanent_deletex',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-addToProgram",
+    "file": "src/resources/collaborators.ts",
+    "find": "  AddToProgram: 'addToProgram',",
+    "replace": "  AddToProgram: 'addToProgramx',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-removeFromProgram",
+    "file": "src/resources/collaborators.ts",
+    "find": "  RemoveFromProgram: 'removeFromProgram',",
+    "replace": "  RemoveFromProgram: 'removeFromProgramx',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-addToDistributor",
+    "file": "src/resources/collaborators.ts",
+    "find": "  AddToDistributor: 'addToDistributor',",
+    "replace": "  AddToDistributor: 'addToDistributorx',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-removeFromDistributor",
+    "file": "src/resources/collaborators.ts",
+    "find": "  RemoveFromDistributor: 'removeFromDistributor',",
+    "replace": "  RemoveFromDistributor: 'removeFromDistributorx',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-bulk-sendSignupEmail",
+    "file": "src/resources/collaborators.ts",
+    "find": "  SendSignupEmail: 'sendSignupEmail',",
+    "replace": "  SendSignupEmail: 'sendSignupEmailx',",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-binding",
+    "file": "src/resources/collaborators.ts",
+    "find": "['programs', 'distributors', 'groups'] as const;",
+    "replace": "['programs', 'distributors'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-updatable",
+    "file": "src/resources/collaborators.ts",
+    "find": "['fullName', 'nickname'] as const;",
+    "replace": "['fullName', 'nickname', 'fields'] as const;",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators surface"
+    ]
+  },
+  {
+    "id": "co-aliases-instance",
+    "file": "src/resources/collaborators.ts",
+    "find": "    this.aliases = new CollaboratorAliasesResource(http);",
+    "replace": "    this.aliases = new ProgramEnrollmentsResource(http) as never;",
+    "expect": "caught",
+    "failing": [
+      "carries aliases and enrollments over the same transport"
+    ]
+  },
+  {
+    "id": "co-enrollments-instance",
+    "file": "src/resources/collaborators.ts",
+    "find": "    this.enrollments = new ProgramEnrollmentsResource(http);",
+    "replace": "    this.enrollments = new CollaboratorAliasesResource(http) as never;",
+    "expect": "caught",
+    "failing": [
+      "carries aliases and enrollments over the same transport"
+    ]
+  },
+  {
+    "id": "al-path",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  static readonly PATH = '/collaborator-aliases';",
+    "replace": "  static readonly PATH = '/collaborator-alias';",
+    "expect": "caught",
+    "failing": [
+      "names the route and the plain code types"
+    ]
+  },
+  {
+    "id": "al-tracking",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  Tracking: 'tracking',",
+    "replace": "  Tracking: 'track',",
+    "expect": "caught",
+    "failing": [
+      "names the route and the plain code types"
+    ]
+  },
+  {
+    "id": "al-coupon",
+    "file": "src/resources/collaborator-aliases.ts",
+    "find": "  Coupon: 'coupon',",
+    "replace": "  Coupon: 'coupons',",
+    "expect": "caught",
+    "failing": [
+      "names the route and the plain code types"
+    ]
+  },
+  {
+    "id": "en-path",
+    "file": "src/resources/program-enrollments.ts",
+    "find": "  static readonly PATH = '/collaborator-programs';",
+    "replace": "  static readonly PATH = '/program-enrollments';",
+    "expect": "caught",
+    "failing": [
+      "P5: enrollments surface"
+    ]
+  },
+  {
+    "id": "gr-members-instance",
+    "file": "src/resources/collaborator-groups.ts",
+    "find": "    this.members = new CollaboratorGroupMembersResource(http);",
+    "replace": "    this.members = {} as never;",
+    "expect": "caught",
+    "failing": [
+      "carries the members resource"
+    ]
+  },
+  {
+    "id": "pr-bulk-activate",
+    "file": "src/resources/programs.ts",
+    "find": "  Activate: 'activate',",
+    "replace": "  Activate: 'activatex',",
+    "expect": "caught",
+    "failing": [
+      "P8: programs surface"
+    ]
+  },
+  {
+    "id": "pr-bulk-deactivate",
+    "file": "src/resources/programs.ts",
+    "find": "  Deactivate: 'deactivate',",
+    "replace": "  Deactivate: 'deactivatex',",
+    "expect": "caught",
+    "failing": [
+      "P8: programs surface"
+    ]
+  },
+  {
+    "id": "pr-bulk-restore",
+    "file": "src/resources/programs.ts",
+    "find": "  Restore: 'restore',",
+    "replace": "  Restore: 'restorex',",
+    "expect": "caught",
+    "failing": [
+      "P8: programs surface"
+    ]
+  },
+  {
+    "id": "pr-bulk-delete",
+    "file": "src/resources/programs.ts",
+    "find": "  Delete: 'delete',",
+    "replace": "  Delete: 'deletex',",
+    "expect": "caught",
+    "failing": [
+      "P8: programs surface"
+    ]
+  },
+  {
+    "id": "pg-oldest",
+    "file": "src/resources/program-groups.ts",
+    "find": "  OldestBindingWins: 'oldestBindingWins',",
+    "replace": "  OldestBindingWins: 'oldest',",
+    "expect": "caught",
+    "failing": [
+      "P9: programGroups surface"
+    ]
+  },
+  {
+    "id": "pg-newest",
+    "file": "src/resources/program-groups.ts",
+    "find": "  NewestBindingWins: 'newestBindingWins',",
+    "replace": "  NewestBindingWins: 'newest',",
+    "expect": "caught",
+    "failing": [
+      "P9: programGroups surface"
+    ]
+  },
+  {
+    "id": "pg-delete",
+    "file": "src/resources/program-groups.ts",
+    "find": "  Delete: 'delete',",
+    "replace": "  Delete: 'remove',",
+    "expect": "caught",
+    "failing": [
+      "P9: programGroups surface"
+    ]
+  }
+]

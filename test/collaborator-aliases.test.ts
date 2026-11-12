@@ -263,10 +263,10 @@ describe('P4: aliases on the collaborator record', () => {
     expect(pathOf(http.requests[0])).toBe('/collaborators/4');
   });
 
-  it.skip('puts a new tracking code as trackingId and answers the collaborator', async () => {
+  it.skip('puts the trimmed tracking code as trackingId and answers the collaborator', async () => {
     const { http, aliases } = over([reply(200, CollaboratorAnswers.updated)]);
 
-    expect(await aliases.setTrackingCode(4, 'ADA2')).toEqual(CollaboratorAnswers.updated);
+    expect(await aliases.setTrackingCode(4, ' ADA2 ')).toEqual(CollaboratorAnswers.updated);
     expect(http.requests[0]!.method).toBe('PUT');
     expect(pathOf(http.requests[0])).toBe('/collaborators/4');
     expect(bodyOf(http.requests[0])).toEqual({ trackingId: 'ADA2' });

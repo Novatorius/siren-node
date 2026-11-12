@@ -37,11 +37,11 @@ function client(http: FakeHttpClient): Siren {
 
 describe('P10: the Siren client carries the record resources', () => {
   it.skip.each([
-    ['collaborators', CollaboratorsResource],
-    ['collaboratorGroups', CollaboratorGroupsResource],
-    ['programs', ProgramsResource],
-    ['programGroups', ProgramGroupsResource],
-  ] as const)('siren.%s is a %O', (field, type) => {
+    ['collaborators', 'CollaboratorsResource', CollaboratorsResource],
+    ['collaboratorGroups', 'CollaboratorGroupsResource', CollaboratorGroupsResource],
+    ['programs', 'ProgramsResource', ProgramsResource],
+    ['programGroups', 'ProgramGroupsResource', ProgramGroupsResource],
+  ] as const)('siren.%s is a %s', (field, _name, type) => {
     expect(Reflect.get(client(new FakeHttpClient([reply(200, {})])), field)).toBeInstanceOf(type);
   });
 

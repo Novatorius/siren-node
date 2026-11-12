@@ -98,6 +98,7 @@ describe('P7: members writes', () => {
     ['add, no members', (m: CollaboratorGroupMembersResource) => m.add(5, [])],
     ['add, a bad collaborator', (m: CollaboratorGroupMembersResource) => m.add(5, [{ collaboratorId: 0 }])],
     ['add, a member that is not an object', (m: CollaboratorGroupMembersResource) => m.add(5, [42 as never])],
+    ['add, a null member', (m: CollaboratorGroupMembersResource) => m.add(5, [null as never])],
     ['set, group', (m: CollaboratorGroupMembersResource) => m.set(-1, [])],
     ['set, a bad collaborator', (m: CollaboratorGroupMembersResource) => m.set(5, [{ collaboratorId: 1.5 }])],
     ['set, members that are not a list', (m: CollaboratorGroupMembersResource) => m.set(5, {} as never)],

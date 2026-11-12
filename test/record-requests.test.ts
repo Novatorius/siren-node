@@ -305,6 +305,7 @@ describe('P1: deleteRecord', () => {
     ['an array', reply(200, [1])],
     ['a string', reply(200, 'gone')],
     ['a JSON null', reply(200, null)],
+    ['text that is not JSON', { status: 200, headers: { 'Content-Type': 'text/plain' }, body: 'gone' }],
   ])('throws UnexpectedResponseError for %s', async (_label, answer) => {
     const { transport } = transportOver([answer]);
 
