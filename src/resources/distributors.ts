@@ -11,6 +11,7 @@ import type {
 import type { SirenList } from '../types';
 import { DistributorBulkAction } from '../taxonomy';
 import { bulkRecords, deleteRecord, listRecords, recordId, writeRecord } from './record-requests';
+import { pickFields } from './create-fields';
 import { RecordsResource, retrieveRecord } from './records';
 import type { RetrieveParams } from './records';
 
@@ -106,8 +107,13 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * only the fifteen fields in DistributorsResource.CREATE_FIELDS.`
    */
   async create(params: CreateDistributorParams): Promise<T> {
-    // Stub: slice 4 fix packet F3 (the create allow lists).
-    return writeRecord<T>(this.http, 'POST', this.path, params);
+    const body = pickFields(
+      params,
+      DistributorsResource.CREATE_FIELDS,
+      (key) =>
+        `distributors.create() cannot send "${key}". Siren's create route reads only the fifteen fields in DistributorsResource.CREATE_FIELDS.`,
+    );
+    return writeRecord<T>(this.http, 'POST', this.path, body);
   }
 
   /**
