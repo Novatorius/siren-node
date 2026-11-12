@@ -1,0 +1,500 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.create"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/collaborators.ts",
+    "find": "/** The keys `createPending()` refuses: the bindings and `status`, which Siren sets. */",
+    "replace": "/** The keys createPending() refuses. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/collaborators.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/collaborators.ts",
+    "find": "const PENDING_REFUSED_FIELDS: readonly string[] = [",
+    "replace": "const PENDING_REFUSED_FIELDS: readonly string[] = [[",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "expect": "wrong-reason",
+    "failing": [
+      "P2: PropertyQualifier.unqualify"
+    ]
+  },
+  {
+    "id": "p3-list-ids-dropped",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return listRecords<T>(\n      this.http,\n      this.path,\n      params,\n      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "replace": "    return listRecords<T>(\n      this.http,\n      this.path,\n      params,\n      CollaboratorsResource.LIST_FILTERS,\n    );",
+    "expect": "caught",
+    "failing": [
+      "refuses a list of programs, which Cloud reads as one",
+      "refuses a program id Cloud would cast to 3",
+      "refuses a distributor list, which Cloud reads as one"
+    ]
+  },
+  {
+    "id": "p3-list-drops-params",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return listRecords<T>(\n      this.http,\n      this.path,\n      params,\n      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "replace": "    return listRecords<T>(\n      this.http,\n      this.path,\n      {},\n      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.list > reads GET /collaborators"
+    ]
+  },
+  {
+    "id": "p3-list-path",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return listRecords<T>(\n      this.http,\n      this.path,\n      params,\n      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "replace": "    return listRecords<T>(\n      this.http,\n      '/collaborator',\n      params,\n      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.list > reads GET /collaborators"
+    ]
+  },
+  {
+    "id": "p3-list-filters-loose",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return listRecords<T>(\n      this.http,\n      this.path,\n      params,\n      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "replace": "    return listRecords<T>(\n      this.http,\n      this.path,\n      params,\n      [...CollaboratorsResource.LIST_FILTERS, 'propertyId', 'programID'],\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "expect": "caught",
+    "failing": [
+      "refuses propertyId",
+      "refuses a misspelt filter"
+    ]
+  },
+  {
+    "id": "p3-list-old",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return listRecords<T>(\n      this.http,\n      this.path,\n      params,\n      CollaboratorsResource.LIST_FILTERS,\n      CollaboratorsResource.ID_FILTERS,\n    );",
+    "replace": "    return super.list(params as never);",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.list"
+    ]
+  },
+  {
+    "id": "p3-retrieve-params",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id, { fields: params.fields });",
+    "expect": "caught",
+    "failing": [
+      "sends include and propertyId"
+    ]
+  },
+  {
+    "id": "p3-retrieve-path",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, '/collaborator', id, params);",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.retrieve"
+    ]
+  },
+  {
+    "id": "p3-create-body",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...params, status: undefined });",
+    "expect": "caught",
+    "failing": [
+      "posts the record to /collaborators"
+    ]
+  },
+  {
+    "id": "p3-create-retried",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, params).catch(() => writeRecord<T>(this.http, 'POST', this.path, params));",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.create > is sent once"
+    ]
+  },
+  {
+    "id": "p3-pending-status-allowed",
+    "file": "src/resources/collaborators.ts",
+    "find": "[...COLLABORATOR_BINDING_FIELDS, 'status']",
+    "replace": "[...COLLABORATOR_BINDING_FIELDS]",
+    "expect": "caught",
+    "failing": [
+      "refuses status"
+    ]
+  },
+  {
+    "id": "p3-pending-bindings-allowed",
+    "file": "src/resources/collaborators.ts",
+    "find": "[...COLLABORATOR_BINDING_FIELDS, 'status']",
+    "replace": "['status']",
+    "expect": "caught",
+    "failing": [
+      "refuses programs",
+      "refuses distributors",
+      "refuses groups"
+    ]
+  },
+  {
+    "id": "p3-pending-value-check",
+    "file": "src/resources/collaborators.ts",
+    "find": "    for (const key of Object.keys(params)) {\n      if (PENDING_REFUSED_FIELDS.includes(key)) {",
+    "replace": "    for (const key of Object.keys(params)) {\n      if (PENDING_REFUSED_FIELDS.includes(key) && (params as unknown as Record<string, unknown>)[key] !== undefined) {",
+    "expect": "caught",
+    "failing": [
+      "refuses groups"
+    ]
+  },
+  {
+    "id": "p3-pending-empty-list-ok",
+    "file": "src/resources/collaborators.ts",
+    "find": "    for (const key of Object.keys(params)) {\n      if (PENDING_REFUSED_FIELDS.includes(key)) {",
+    "replace": "    for (const key of Object.keys(params)) {\n      const given = (params as unknown as Record<string, unknown>)[key];\n      if (PENDING_REFUSED_FIELDS.includes(key) && !(Array.isArray(given) && given.length === 0)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses programs",
+      "refuses groups"
+    ]
+  },
+  {
+    "id": "p3-pending-message",
+    "file": "src/resources/collaborators.ts",
+    "find": "`createPending cannot send \"${key}\". Siren sets a pending collaborator's status, and a site enrolls them with enrollments.add() afterwards.`",
+    "replace": "`createPending cannot send ${key}.`",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.createPending > refuses"
+    ]
+  },
+  {
+    "id": "p3-pending-no-status",
+    "file": "src/resources/collaborators.ts",
+    "find": "{ ...params, status: 'pending' }",
+    "replace": "params",
+    "expect": "caught",
+    "failing": [
+      "posts the details with status pending"
+    ]
+  },
+  {
+    "id": "p3-pending-retried",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, { ...params, status: 'pending' });",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...params, status: 'pending' }).catch(() => writeRecord<T>(this.http, 'POST', this.path, { ...params, status: 'pending' }));",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.createPending > is sent once"
+    ]
+  },
+  {
+    "id": "p3-update-method",
+    "file": "src/resources/collaborators.ts",
+    "find": "writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'update')}`, params);",
+    "replace": "writeRecord<T>(this.http, 'POST', `${this.path}/${recordId(id, 'update')}`, params);",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.update"
+    ]
+  },
+  {
+    "id": "p3-update-id",
+    "file": "src/resources/collaborators.ts",
+    "find": "recordId(id, 'update')",
+    "replace": "id",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators ids > update"
+    ]
+  },
+  {
+    "id": "p3-update-retried",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'update')}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'update')}`, params).catch(() => writeRecord<T>(this.http, 'PUT', `${this.path}/${id}`, params));",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.update > is sent once"
+    ]
+  },
+  {
+    "id": "p3-details-fields",
+    "file": "src/resources/collaborators.ts",
+    "find": "      if (!allowed.includes(key)) {",
+    "replace": "      if (key !== 'fields' && !allowed.includes(key)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses fields"
+    ]
+  },
+  {
+    "id": "p3-details-id-key",
+    "file": "src/resources/collaborators.ts",
+    "find": "      if (!allowed.includes(key)) {",
+    "replace": "      if (key !== 'id' && !allowed.includes(key)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses id"
+    ]
+  },
+  {
+    "id": "p3-details-undefined",
+    "file": "src/resources/collaborators.ts",
+    "find": "      if (!allowed.includes(key)) {",
+    "replace": "      if (!allowed.includes(key) && (params as Record<string, unknown>)[key] !== undefined) {",
+    "expect": "caught",
+    "failing": [
+      "refuses groups"
+    ]
+  },
+  {
+    "id": "p3-details-message",
+    "file": "src/resources/collaborators.ts",
+    "find": "`updateDetails cannot send \"${key}\". A connected site changes only fullName and nickname.`",
+    "replace": "`updateDetails cannot send \"${key}\".`",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.updateDetails > refuses"
+    ]
+  },
+  {
+    "id": "p3-details-path-id",
+    "file": "src/resources/collaborators.ts",
+    "find": "recordId(id, 'updateDetails')",
+    "replace": "id",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators ids > updateDetails"
+    ]
+  },
+  {
+    "id": "p3-details-method",
+    "file": "src/resources/collaborators.ts",
+    "find": "writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'updateDetails')}`, params);",
+    "replace": "writeRecord<T>(this.http, 'PATCH' as 'PUT', `${this.path}/${recordId(id, 'updateDetails')}`, params);",
+    "expect": "caught",
+    "failing": [
+      "puts only fullName and nickname"
+    ]
+  },
+  {
+    "id": "p3-details-retried",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'updateDetails')}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'updateDetails')}`, params).catch(() => writeRecord<T>(this.http, 'PUT', `${this.path}/${id}`, params));",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.updateDetails > is sent once"
+    ]
+  },
+  {
+    "id": "p3-delete-id",
+    "file": "src/resources/collaborators.ts",
+    "find": "recordId(id, 'delete')",
+    "replace": "id",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators ids > delete"
+    ]
+  },
+  {
+    "id": "p3-delete-retried",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'delete')}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'delete')}`).catch(() => deleteRecord<T>(this.http, `${this.path}/${id}`));",
+    "expect": "caught",
+    "failing": [
+      "is sent once, since a second delete removes the record"
+    ]
+  },
+  {
+    "id": "p3-delete-path",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'delete')}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}`, { id: recordId(id, 'delete') });",
+    "expect": "caught",
+    "failing": [
+      "answers the record marked deleted"
+    ]
+  },
+  {
+    "id": "p3-bulk-extra-dropped",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids, extra);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "expect": "caught",
+    "failing": [
+      "posts the action, ids and extras"
+    ]
+  },
+  {
+    "id": "p3-bulk-path",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids, extra);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, '/collaborator', action, ids, extra);",
+    "expect": "caught",
+    "failing": [
+      "posts the action, ids and extras"
+    ]
+  },
+  {
+    "id": "p3-bulk-retried",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids, extra);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids, extra).catch(() => bulkRecords<BulkResult>(this.http, this.path, action, ids, extra));",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators.bulk > is sent once"
+    ]
+  },
+  {
+    "id": "p3-bulk-extra-unchecked",
+    "file": "src/resources/collaborators.ts",
+    "find": "    if (needs !== undefined) recordId(extra[needs], 'bulk', needs);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses extra.programId",
+      "refuses extra.distributorId",
+      "refuses addToProgram without a programId"
+    ]
+  },
+  {
+    "id": "p3-bulk-extra-unnamed",
+    "file": "src/resources/collaborators.ts",
+    "find": "recordId(extra[needs], 'bulk', needs)",
+    "replace": "recordId(extra[needs], 'bulk')",
+    "expect": "caught",
+    "failing": [
+      "refuses extra.programId"
+    ]
+  },
+  {
+    "id": "p3-bulk-extra-any",
+    "file": "src/resources/collaborators.ts",
+    "find": "    for (const key of Object.keys(extra)) {\n      if (key !== needs) {",
+    "replace": "    for (const key of Object.keys(extra)) {\n      if (key === '__never__') {",
+    "expect": "caught",
+    "failing": [
+      "refuses activate with a programId",
+      "refuses addToProgram with a distributorId too",
+      "refuses addToDistributor with a key it does not read",
+      "refuses sendSignupEmail with any extra"
+    ]
+  },
+  {
+    "id": "p3-bulk-extra-unnamed-key",
+    "file": "src/resources/collaborators.ts",
+    "find": "cannot send \"${key}\". It takes",
+    "replace": "cannot send that key. It takes",
+    "expect": "caught",
+    "failing": [
+      "refuses activate with a programId",
+      "refuses addToDistributor with a key it does not read"
+    ]
+  },
+  {
+    "id": "p3-bulk-extra-missing-ok",
+    "file": "src/resources/collaborators.ts",
+    "find": "    if (needs !== undefined) recordId(extra[needs], 'bulk', needs);",
+    "replace": "    if (needs !== undefined && needs in extra) recordId(extra[needs], 'bulk', needs);",
+    "expect": "caught",
+    "failing": [
+      "refuses addToProgram without a programId"
+    ]
+  },
+  {
+    "id": "p3-bulk-table-remove-program",
+    "file": "src/resources/collaborators.ts",
+    "find": "  [CollaboratorBulkAction.RemoveFromProgram]: 'programId',",
+    "replace": "  [CollaboratorBulkAction.RemoveFromProgram]: 'distributorId',",
+    "expect": "caught",
+    "failing": [
+      "sends removeFromProgram with the extra it takes"
+    ]
+  },
+  {
+    "id": "p3-bulk-table-remove-distributor",
+    "file": "src/resources/collaborators.ts",
+    "find": "  [CollaboratorBulkAction.RemoveFromDistributor]: 'distributorId',\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "sends removeFromDistributor with the extra it takes"
+    ]
+  },
+  {
+    "id": "p3-bulk-table-add-distributor",
+    "file": "src/resources/collaborators.ts",
+    "find": "  [CollaboratorBulkAction.AddToDistributor]: 'distributorId',\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "sends addToDistributor with the extra it takes",
+      "posts the action, ids and extras"
+    ]
+  },
+  {
+    "id": "p3-bulk-table-add-program",
+    "file": "src/resources/collaborators.ts",
+    "find": "  [CollaboratorBulkAction.AddToProgram]: 'programId',\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "sends addToProgram with the extra it takes",
+      "refuses addToProgram without a programId"
+    ]
+  },
+  {
+    "id": "p3-status-path",
+    "file": "src/resources/collaborators.ts",
+    "find": "`${this.path}/status-types`",
+    "replace": "`${this.path}/statuses`",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators vocabulary reads"
+    ]
+  },
+  {
+    "id": "p3-referral-path",
+    "file": "src/resources/collaborators.ts",
+    "find": "`${this.path}/generate-referral-code`",
+    "replace": "`${this.path}/referral-code`",
+    "expect": "caught",
+    "failing": [
+      "P3: collaborators vocabulary reads"
+    ]
+  },
+  {
+    "id": "p3-status-not-object",
+    "file": "src/resources/collaborators.ts",
+    "find": "    return readObject<StatusTypes>(this.http, `${this.path}/status-types`);",
+    "replace": "    return readObject<StatusTypes>(this.http, `${this.path}/status-types`).catch(() => ({ options: {} }));",
+    "expect": "caught",
+    "failing": [
+      "statusTypes throws UnexpectedResponseError"
+    ]
+  }
+]
