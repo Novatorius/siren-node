@@ -211,7 +211,9 @@ Each packet committed its own mutation list,
 `scripts/mutations/ncc-slice-5-pN.json`, against its real code. The surface
 list (`scripts/mutations/ncc-slice-5-surface.json`) changes the vocabulary
 and the no-network guard, and `scripts/mutations/ncc-slice-5-fix.json`
-proves the contract fix's tests that run now.
+proves the contract fix's tests that run now. `scripts/mutations/ncc-slice-5-f1.json`
+was proven against a scratch F1 constructor, so packet F1 re-points its
+entries at its own lines.
 
 ## No test reaches the network
 
