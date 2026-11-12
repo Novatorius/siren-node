@@ -262,8 +262,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * Siren takes a second create as a new conversion. After a lost answer,
    * send it again through {@link recoverCreate}, which sends it only when
    * Siren holds no such conversion. An engagement holds many conversions,
-   * so a create with no `transactionId` cannot be checked: set it aside
-   * instead of resending it.
+   * so a create with no `transactionId` cannot be checked. Do not resend
+   * one.
    */
   async create(params: CreateConversionParams): Promise<T> {
     recordId(params?.engagementId, 'conversions.create', 'engagementId');
@@ -284,6 +284,10 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * `id,engagementId,transactionId,type,status`, `number: 1`, `orderBy: 'id'`
    * and `order: 'ASC'`. When Siren answers a well-formed list holding that
    * conversion, it answers the row with `created: false` and sends nothing.
+   * The match is one conversion per transaction, engagement and type, the
+   * one Siren makes for a create: a row whose `status` or `obligationId`
+   * differs still counts, since an approval changes the status after the
+   * first send landed.
    * Only a well-formed empty list, a JSON array or an `items` list with no
    * rows, sends {@link create}, once, and answers the new conversion with
    * `created: true`.
@@ -293,25 +297,30 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * not a list) or holds a row that is not an object throws
    * `UnexpectedResponseError` with the status Siren sent. A row whose
    * `transactionId`, `engagementId` or `type` is not the create's means
-   * Siren did not read a filter, and throws `UnexpectedResponseError` too.
-   * Every error from the read reaches the caller as it is, with the create
-   * unsent.
+   * Siren did not read a filter, and throws `UnexpectedResponseError` with
+   * the row as its `data` and no status. Every error from the read reaches
+   * the caller as it is, after the read's own retries inside `maxRetries`,
+   * with the create unsent. An error from the create itself reaches the
+   * caller as it is too, and the create is never sent a third time.
    *
    * Throws `SirenError` before anything is sent when `params` has no
    * `transactionId`, with exactly `conversions.recoverCreate() needs a
-   * transactionId to find the first send. Without one, set the create
-   * aside.`, and when `engagementId` or `transactionId` is not a positive
+   * transactionId to find the first send. Without one, Siren cannot tell
+   * whether the create landed.`, and when `engagementId` or `transactionId` is not a positive
    * whole number. Throws `SirenError` before sending the create for every
    * other reason {@link create} gives.
    *
    * The read and the create are two requests, so two workers that recover
    * the same create at once can both find nothing. Run one recovery per
-   * conversion at a time.
+   * conversion at a time, keyed in the queue by the create's
+   * `transactionId`, `engagementId` and `type`. {@link create} never falls
+   * back to this method on its own.
    */
   async recoverCreate(params: CreateConversionParams): Promise<RecoveredConversion<T>> {
-    // Stub: slice 4 fix packet F1 (the lost-answer check).
+    // Stub: slice 4 fix packet F1 (the lost-answer check). It throws, so a
+    // caller can never read the stub as a recovered create.
     void params;
-    return { conversion: {} as T, created: false };
+    throw new SirenError('conversions.recoverCreate() is not built yet: slice 4 fix packet F1.');
   }
 
   /**
@@ -559,9 +568,10 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * `transactionId` the asked ids, `collaboratorId`, `type` (`sale` when
    * left out, as Siren defaults it), `fields`
    * `id,transactionId,collaboratorId,type`, `number: 200`, `offset` from 0,
-   * `orderBy: 'id'` and `order: 'ASC'`, page after page, until a page holds
-   * fewer than 200 rows. A transaction counts as credited when a row names
-   * it. Siren filters by the collaborator, so another collaborator's
+   * `orderBy: 'id'` and `order: 'ASC'`, page after page, each `offset` the
+   * number of rows read so far, until a page holds no rows. A short page is
+   * not the end, since Siren may answer fewer rows than asked. A
+   * transaction counts as credited when a row names it. Siren filters by the collaborator, so another collaborator's
    * conversion on the same transaction does not count. It then sends
    * {@link creditCollaborator} once with the rest, in the order asked, or
    * nothing when none is left.
@@ -572,24 +582,35 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * the status Siren sent. A row whose `transactionId` is not one asked,
    * whose `collaboratorId` is not the collaborator or whose `type` is not
    * the type means Siren did not read a filter, and throws
-   * `UnexpectedResponseError` too. Every error from a read reaches the
-   * caller as it is, with nothing sent.
+   * `UnexpectedResponseError` with the row as its `data` and no status.
+   * Every error from a read reaches the caller as it is, after the read's
+   * own retries inside `maxRetries`, with nothing sent. An error from the
+   * credit itself reaches the caller as it is too, and it is never sent a
+   * third time.
+   *
+   * Answers `{ alreadyCredited, credited, result }`: the asked ids a row
+   * named, the ids sent, and Siren's `{ success, affected }` for the send,
+   * or `null` when nothing was sent. An `affected` lower than
+   * `credited.length` means Siren skipped ids it could not find.
    *
    * Throws `SirenError` before anything is sent for every reason
    * {@link creditCollaborator} gives. The reads and the send are separate
    * requests, so run one recovery per collaborator and transaction at a
-   * time.
+   * time, keyed in the queue by the collaborator, the type and the sorted
+   * transaction ids. {@link creditCollaborator} never falls back to this
+   * method on its own.
    */
   async recoverCreditCollaborator(
     transactionIds: readonly number[],
     collaboratorId: number,
     type?: string,
   ): Promise<RecoveredCredit> {
-    // Stub: slice 4 fix packet F1 (the lost-answer check).
+    // Stub: slice 4 fix packet F1 (the lost-answer check). It throws, so a
+    // caller can never read the stub as a recovered credit.
     void transactionIds;
     void collaboratorId;
     void type;
-    return { alreadyCredited: [], credited: [], result: null };
+    throw new SirenError('transactions.recoverCreditCollaborator() is not built yet: slice 4 fix packet F1.');
   }
 
   /**

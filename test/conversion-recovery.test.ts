@@ -164,6 +164,26 @@ describe('4 fix F1: conversions.recoverCreate', () => {
   });
 
   // Skipped until fix packet F1 (the lost-answer check) lands.
+  it.skip('answers a found conversion whose status has changed since, and sends nothing', async () => {
+    const approved = { ...found, status: 'approved' };
+    const { http, conversions } = afterLostCreate([reply(200, page([approved])), reply(201, ConversionAnswers.created)]);
+    await expect(conversions.create(create)).rejects.toBeInstanceOf(ApiError);
+
+    expect(await conversions.recoverCreate(create)).toEqual({ conversion: approved, created: false });
+    expect(writes(http.requests)).toHaveLength(1);
+  });
+
+  // Skipped until fix packet F1 (the lost-answer check) lands.
+  it.skip('lets an error from the second create through and never sends a third', async () => {
+    const { http, conversions } = afterLostCreate([reply(200, page([])), reply(500, { error: 'Server error.' }), reply(201, ConversionAnswers.created)]);
+    await expect(conversions.create(create)).rejects.toBeInstanceOf(ApiError);
+
+    await expect(conversions.recoverCreate(create)).rejects.toBeInstanceOf(ApiError);
+    expect(writes(http.requests)).toHaveLength(2);
+    expect(http.requests).toHaveLength(3);
+  });
+
+  // Skipped until fix packet F1 (the lost-answer check) lands.
   it.skip('reads GET /conversions by the create transaction, engagement and type, oldest first', async () => {
     const { http, conversions } = afterLostCreate([reply(200, page([found]))]);
     await expect(conversions.create(create)).rejects.toBeInstanceOf(ApiError);
@@ -193,7 +213,7 @@ describe('4 fix F1: conversions.recoverCreate', () => {
 
     expect(error).toBeInstanceOf(SirenError);
     expect((error as SirenError).message).toBe(
-      'conversions.recoverCreate() needs a transactionId to find the first send. Without one, set the create aside.',
+      'conversions.recoverCreate() needs a transactionId to find the first send. Without one, Siren cannot tell whether the create landed.',
     );
     expect(http.requests).toHaveLength(0);
   });
@@ -263,6 +283,7 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
       credited: [71, 72],
       result: TransactionAnswers.credited,
     });
+    expect(reads(http.requests)).toHaveLength(1);
 
     const sent = writes(http.requests);
     expect(sent).toHaveLength(2);
@@ -272,7 +293,11 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
 
   // Skipped until fix packet F1 (the lost-answer check) lands.
   it.skip('sends only the transactions this collaborator holds no conversion for, in the order asked', async () => {
-    const { http, transactions } = afterLostCredit([reply(200, page([credit(72)])), reply(200, TransactionAnswers.credited)]);
+    const { http, transactions } = afterLostCredit([
+      reply(200, page([credit(72)])),
+      reply(200, page([])),
+      reply(200, TransactionAnswers.credited),
+    ]);
     await expect(transactions.creditCollaborator([73, 72, 71], 42)).rejects.toBeInstanceOf(ApiError);
 
     expect(await transactions.recoverCreditCollaborator([73, 72, 71], 42)).toEqual({
@@ -285,7 +310,11 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
 
   // Skipped until fix packet F1 (the lost-answer check) lands.
   it.skip('sends nothing when every transaction already holds its conversion', async () => {
-    const { http, transactions } = afterLostCredit([reply(200, page([credit(71), credit(72)])), reply(200, TransactionAnswers.credited)]);
+    const { http, transactions } = afterLostCredit([
+      reply(200, page([credit(71), credit(72)])),
+      reply(200, page([])),
+      reply(200, TransactionAnswers.credited),
+    ]);
     await expect(transactions.creditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
 
     expect(await transactions.recoverCreditCollaborator([71, 72], 42)).toEqual({
@@ -298,7 +327,7 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
 
   // Skipped until fix packet F1 (the lost-answer check) lands.
   it.skip('reads GET /conversions by the asked transactions, the collaborator and the type sale when none is given', async () => {
-    const { http, transactions } = afterLostCredit([reply(200, page([credit(71), credit(72)]))]);
+    const { http, transactions } = afterLostCredit([reply(200, page([credit(71), credit(72)])), reply(200, page([]))]);
     await expect(transactions.creditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
 
     await transactions.recoverCreditCollaborator([71, 72], 42);
@@ -323,6 +352,7 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
     const { http, transactions } = afterLostCredit([
       reply(200, page(ids.slice(0, 200).map((id) => credit(id)), 201, 200, 0)),
       reply(200, page([credit(201)], 201, 200, 200)),
+      reply(200, page([], 201, 200, 201)),
       reply(200, TransactionAnswers.credited),
     ]);
     await expect(transactions.creditCollaborator(ids, 42)).rejects.toBeInstanceOf(ApiError);
@@ -331,7 +361,40 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
 
     expect(recovered).toEqual({ alreadyCredited: ids, credited: [], result: null });
     expect(writes(http.requests)).toHaveLength(1);
-    expect(reads(http.requests).map((read) => queryOf(read).offset)).toEqual(['0', '200']);
+    expect(reads(http.requests).map((read) => queryOf(read).offset)).toEqual(['0', '200', '201']);
+  });
+
+  // Skipped until fix packet F1 (the lost-answer check) lands.
+  it.skip('reads on after a page shorter than asked, from the rows read so far, and stops only on an empty page', async () => {
+    const { http, transactions } = afterLostCredit([
+      reply(200, page([credit(71)])),
+      reply(200, page([credit(72)])),
+      reply(200, page([])),
+      reply(200, TransactionAnswers.credited),
+    ]);
+    await expect(transactions.creditCollaborator([71, 72, 73], 42)).rejects.toBeInstanceOf(ApiError);
+
+    expect(await transactions.recoverCreditCollaborator([71, 72, 73], 42)).toEqual({
+      alreadyCredited: [71, 72],
+      credited: [73],
+      result: TransactionAnswers.credited,
+    });
+    expect(reads(http.requests).map((read) => queryOf(read).offset)).toEqual(['0', '1', '2']);
+    expect(bodyOf(writes(http.requests)[1])).toEqual({ transactionIds: [73], collaboratorId: 42 });
+  });
+
+  // Skipped until fix packet F1 (the lost-answer check) lands.
+  it.skip('lets an error from the second credit through and never sends a third', async () => {
+    const { http, transactions } = afterLostCredit([
+      reply(200, page([])),
+      reply(500, { error: 'Server error.' }),
+      reply(200, TransactionAnswers.credited),
+    ]);
+    await expect(transactions.creditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
+
+    await expect(transactions.recoverCreditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
+    expect(writes(http.requests)).toHaveLength(2);
+    expect(http.requests).toHaveLength(3);
   });
 
   // Skipped until fix packet F1 (the lost-answer check) lands.

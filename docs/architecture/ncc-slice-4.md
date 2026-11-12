@@ -44,7 +44,7 @@ client's one transport. The README carries a section for these resources and
 the PHP parity table, the CHANGELOG names them under Unreleased, and
 `openapi.yaml` describes their 27 paths. Cloud's slice 4 answers live in
 `test/record-fakes-2.ts`, beside slice 3's `test/record-fakes.ts`. The
-version stays 0.3.0, `engines` stays `node >=18`, and nothing publishes.
+version is 0.3.0, `engines` is `node >=18`, and the slice publishes nothing.
 
 ## Class roles
 
@@ -84,14 +84,11 @@ The two field reads, `credits.balances` and `transactions.details`, go
 through `readObject` with a `check`. A broken field raises
 `UnexpectedResponseError` with the status Siren sent.
 
-Conversions and transactions keep slice 2's `RecordsResource.list`, which
-sends any key, so a misspelt filter there widens the query, and reads a
-body it cannot parse as an empty page. Slice 2's methods stay as shipped.
-Nothing in this slice decides anything from that list: the two recovery
-methods read conversions through `listRecords` with their own filters (see
-[Recovering a lost write](#recovering-a-lost-write)). Giving the two lists a
-`LIST_FILTERS` check is a follow-up for a later slice, recorded with this
-slice's assumptions.
+Conversions and transactions list through slice 2's `RecordsResource.list`,
+which sends any key, so a misspelt filter there widens the query, and reads
+a body it cannot parse as an empty page. Never decide a resend from it. The
+two recovery methods read conversions through `listRecords` with their own
+filters (see [Recovering a lost write](#recovering-a-lost-write)).
 
 `engagements.list` sends `from` and `to` only when each is a real calendar
 day written `YYYY-MM-DD`. Cloud's `DayRangeFilterMiddleware.php` (lines 83
@@ -105,11 +102,19 @@ Four creates take a caller's object: `conversions.create`,
 Each sends a new object holding only the fields its Cloud create route
 reads, named in the class's static `CREATE_FIELDS`, and throws `SirenError`
 before sending for any other key, whatever its value, naming it. Siren
-ignores a key it does not read, so a misspelt field would go out unnoticed,
-and an id the caller set would ride along on a write. This follows the
-orchestrator's ruling O2, which set the same rule for
-`collaborators.createPending`. A new object also means a `toJSON` the caller's
-object inherits cannot change what goes out.
+ignores a key it does not read, so a misspelt field would be sent and
+dropped without a word, and an id the caller set would be sent with the
+write. `collaborators.createPending` follows the same rule. Because the body
+is a new object, a `toJSON` method on the caller's object, or on its
+prototype, cannot change what is sent.
+
+The lists are static members, as `LIST_FILTERS` and `ID_FILTERS` are on the
+same classes, so a caller can read them from the class it calls. Slice 3's
+`SITE_CREATABLE_COLLABORATOR_FIELDS` is a named export because no resource
+class owns that create. Each refusal names every field the route reads,
+except the distributor one, which points at `DistributorsResource.CREATE_FIELDS`
+since fifteen names would bury the key it refuses. The allow lists cover the
+four creates. The update methods still send the caller's object as given.
 
 | Create | Fields | Cloud source | Against PHP |
 |---|---|---|---|
@@ -166,12 +171,12 @@ follow-up.
 
 | Write | A second send | Before sending again |
 |---|---|---|
-| `conversions.create` | makes a second conversion | send it through `recoverCreate`. Without a `transactionId`, set it aside |
+| `conversions.create` | makes a second conversion | send it through `recoverCreate`. Without a `transactionId`, nothing can tell whether it landed, so do not resend it |
 | `distributors.create` | makes a second distributor | search by name |
 | `transactions.create` with both binding fields | 409, `ConflictError` | nothing. The 409 means the first worked |
 | `transactions.create` without a binding | makes a second transaction | list the transactions |
 | `transactions.creditCollaborator` | makes a second conversion per transaction | send it through `recoverCreditCollaborator` |
-| `credits.adjust` | applies the amount again | `entries` by `sourceType: 'adjustment'` and a `description` unique to the attempt. Without one, set it aside |
+| `credits.adjust` | applies the amount again | `entries` by `sourceType: 'adjustment'` and a `description` unique to the attempt. Without one, nothing can tell whether it landed, so do not resend it |
 | `distributors.creditMetric` | adds the credit again (`MetricTriggerService.php` `upsertMetric`) | no SDK read. Set it aside for a person to check in Siren's dashboard |
 | `customCurrencies.create` | 400 for a code Siren holds | `retrieve` the code |
 | the updates, the distributor status actions, conversion `delete` and `markPending`, `placeHold`, `releaseHold`, the mapping deletes | the same result, or `affected` may differ | nothing |
@@ -191,31 +196,58 @@ for what a well-formed answer shows is missing.
 - `recoverCreate` reads `GET /conversions` with the create's
   `transactionId`, `engagementId` and `type`, oldest first, one row. A row
   means the first send landed, and the method answers it with
-  `created: false`. An empty list sends `create` once, and the method
+  `created: false`. Siren makes one conversion per transaction, engagement
+  and type for a create, so that is the match. A row whose `status` or
+  `obligationId` differs still counts, since an approval changes the status
+  after the first send. An empty list sends `create` once, and the method
   answers the new conversion with `created: true`. A create with no
   `transactionId` cannot be checked, so the method refuses it.
 - `recoverCreditCollaborator` reads `GET /conversions` with the asked
   `transactionId` list, the `collaboratorId` and the `type` (`sale` when
-  none is given, as Cloud defaults it), 200 rows a page until a short page.
-  A transaction that a row names is credited already. Filtering by the
-  collaborator matters: another collaborator's conversion on the same
-  transaction does not count. The method sends `creditCollaborator` once
-  with the rest, in the order asked, or nothing, and answers
-  `{ alreadyCredited, credited, result }`.
+  none is given, as Cloud defaults it), 200 rows a page, each page's
+  `offset` the number of rows read so far, until a page holds no rows.
+  Siren lowers a larger `number` to 200 (`PageSizeMiddleware.php`), and a
+  short page is not taken as the end, so a lower cap later cannot hide a
+  credited transaction. A transaction that a row names is credited already.
+  Filtering by the collaborator matters: another collaborator's conversion
+  on the same transaction does not count. The method sends
+  `creditCollaborator` once with the rest, in the order asked, or nothing,
+  and answers `{ alreadyCredited, credited, result }`. `result` is Siren's
+  `{ success, affected }`, and an `affected` below `credited.length` means
+  Siren skipped ids it could not find.
 
 Both read through `listRecords` with `ConversionsResource.RECOVERY_FILTERS`
 and `RECOVERY_ID_FILTERS`, so a body that is not a record list (not JSON,
 no `items` key, an `items` that is not a list) or a row that is not an
 object raises `UnexpectedResponseError` with Siren's status. A row naming
 another transaction, engagement, collaborator or type means Siren did not
-read a filter, and raises too. Any error from a read passes through. In
-every one of these cases nothing is sent, because "the answer was broken"
-must never read as "the first send failed". Only a well-formed empty answer
-sends again.
+read a filter, and raises with the row as its `data` and no status. Any
+error from a read passes through, after the read's own retries inside
+`maxRetries`, as every read in this slice has. In every one of these cases
+nothing is sent, because a broken answer must never count as proof that the
+first send failed. Only a well-formed empty answer sends again, once. An
+error from that send passes through, and the write is never sent a third
+time. Neither `create` nor `creditCollaborator` falls back to recovery on
+its own.
+
+What each outcome means for the caller's queue:
+
+| Outcome | For the queue |
+|---|---|
+| an answer, `created` or `credited` | done |
+| `SirenError` before any request | permanent. The job is wrong, so dead-letter it |
+| `UnexpectedResponseError` with a status: an unreadable body | transient. Run the recovery again later. It sends nothing until an answer is readable |
+| `UnexpectedResponseError` with no status: a row naming another record | permanent. Siren ignored a filter, and every later run will see the same |
+| an `ApiError` from the read | transient for a 429 or 5xx, permanent otherwise |
+| an `ApiError` from the send | as for the write on its own. Run the recovery again, which reads first |
 
 The read and the send are two requests, so two workers that recover the
 same write at once can both find nothing. The caller's queue runs one
-recovery per record at a time, as the table above says.
+recovery per record at a time, with a dedupe key at insert: the create's
+`transactionId`, `engagementId` and `type`, or the collaborator, the type
+and the sorted transaction ids. A bound `transactions.create` needs no
+recovery method, since its 409 `ConflictError` means the first send
+landed, and the queue counts it as done.
 
 Siren sets every `idempotencyKey` itself: `place:{collaborator}:{currency}:{token}`
 on a hold (`HoldService.php` line 550), and a `redeem:` key on the entries it
@@ -282,13 +314,13 @@ the wrong shape, and the list key and comma checks. These are new.
 | `conversions->update()` answers `[]` for Siren's empty 200 | `null`, or the object when Siren sends one | An empty object would look like a record |
 | `transactions->details()` and `credits->balances()` answer `[]` for a missing or broken field | `UnexpectedResponseError` | Siren always sends a field it was asked for. "No lines" or "no credit" must never stand in for a broken answer ([Silent Failures — Fail Loud, No Exemptions (KB 592)](https://navigator.novatori.us/r/kb/592)) |
 | `credits->checkoutBalances()` drops rows that are not arrays and documents a `held` field | `UnexpectedResponseError` for a body that is not a list, and no `held` | Cloud's `GetCreditBalances.php` sends no `held` |
-| `conversions->create()` sends the array as given | sends only the five fields Cloud reads and refuses any other key, naming it, and checks `engagementId`, `transactionId` and `obligationId` are positive whole numbers | Ruling O2. Cloud ignores a key it does not read |
+| `conversions->create()` sends the array as given | sends only the five fields Cloud reads and refuses any other key, naming it, and checks `engagementId`, `transactionId` and `obligationId` are positive whole numbers | Cloud ignores a key it does not read |
 | no lost-answer check | `conversions.recoverCreate()` and `transactions.recoverCreditCollaborator()` | A blind resend makes a second conversion, and Siren takes no key on these writes |
 | `transactions->create()` checks only that `details` is a non-empty array | 1 to 500 lines, each an object, one message | Cloud refuses more than 500 with a 400 after parsing |
-| `transactions->create()` sends the array and its lines as given | sends only `details`, `bindingId` and `bindingDataType`, and only the seven line keys Cloud reads, refusing any other key | Ruling O2. A misspelt `quantity` would record one unit |
+| `transactions->create()` sends the array and its lines as given | sends only `details`, `bindingId` and `bindingDataType`, and only the seven line keys Cloud reads, refusing any other key | Cloud ignores a key it does not read, and a misspelt `quantity` would record one unit |
 | `transactions->create()` sends half a binding, or a binding of `""`, `"0"` or `0` | refuses both before sending | Cloud finds a resent transaction only when both fields are set and read as true, so the resend would record a second transaction |
-| `customCurrencies->create()` sends the array as given | sends only the eight fields Cloud reads, `scale` and `propertyIds` included, which PHP does not document, and refuses any other key | Ruling O2. Siren Cloud requires `propertyIds` |
-| `distributors->create()` sends the array as given | sends only the fifteen fields PHP documents, which Cloud reads, and refuses any other key | Ruling O2 |
+| `customCurrencies->create()` sends the array as given | sends only the eight fields Cloud reads, `scale` and `propertyIds` included, which PHP does not document, and refuses any other key | Cloud ignores a key it does not read, and requires `propertyIds` |
+| `distributors->create()` sends the array as given | sends only the fifteen fields PHP documents, which Cloud reads, and refuses any other key | Cloud ignores a key it does not read |
 | `transactions->creditCollaborator()` checks only that the ids are not empty | 1 to 500 positive whole numbers, a positive collaborator id, a non-empty `type` | Cloud reads the ids as `BulkIds` |
 | `credits->placeHold()` raises `HoldLimitException` for a 429 with `hold_limit` | `RateLimitError` | Siren Cloud has no hold cap, so a 429 is the rate limit |
 | `credits->releaseHold()` retries | sent once | Every record write is sent once. A release is safe to repeat, so the caller's queue repeats it ([Retry Unification — The Durable Queue Owns Retries (KB 591)](https://navigator.novatori.us/r/kb/591)) |
@@ -349,7 +381,13 @@ Cloud's source at `b6f7140`, not captured from a live answer, since no test
 or probe in this build calls a running Siren. When Cloud's branch moves,
 whoever merges it into this work checks the cited lines again. The SDK's
 proof against a real Siren is the ship pipeline's integration phase on UAT.
-The base URL is the reserved host `example.invalid`.
+The base URL is the reserved host `example.invalid`. These rules rest on a
+reading of Cloud's source, so the UAT phase checks each against a running
+Siren: a `transactions.create` with a binding of `"0"` sent twice makes two
+transactions, an `engagements.list` with `from` of `2026-02-29` answers every
+engagement, `GET /conversions` with `number=500` answers 200 rows, a
+collaborator with no engagement answers a bare `[]`, and each create drops a
+key it does not read.
 
 KB 568's database, state reset and logger parts do not apply here. The SDK
 has no database, keeps no state between calls and has no logger, so the

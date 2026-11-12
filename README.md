@@ -372,7 +372,8 @@ A conversion create and a collaborator credit take no binding. After either lose
 it again through `conversions.recoverCreate` or `transactions.recoverCreditCollaborator`, with the
 same arguments. Each reads the conversions Siren holds and sends the write only for what is
 missing. An answer it cannot read raises `UnexpectedResponseError` and sends nothing, so a broken
-answer never makes a second conversion.
+answer never makes a second conversion. The read and the send are two requests, so run one recovery
+per record at a time.
 
 ```ts
 const { conversion, created } = await siren.conversions.recoverCreate({
