@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
  * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * `it.skip.each(` becomes `it.each(`. The packet that removes the last
+ * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 function read(name: string): string {
@@ -151,6 +151,45 @@ describe('P7: README', () => {
     expect(
       all.some((s) => /\b(?:SDK|it) (?:keeps|stores|holds) (?:no|nothing)\b/i.test(s) && /\b(?:store|site)\b/i.test(s)),
       'a sentence says the SDK keeps no state and the store keeps it',
+    ).toBe(true);
+  });
+
+  it.skip('says the store locks its refresh, resends only within 30 seconds, and picks a random attemptId', () => {
+    const all = sentences(section(read('README.md'), '## Connected sites'));
+
+    expect(
+      all.some((s) => /\block(?:s|ed)?\b/i.test(s) && /\brefresh/i.test(s)),
+      'a sentence says the store locks its own refresh',
+    ).toBe(true);
+    expect(
+      all.some((s) => /\b30 seconds\b/i.test(s) && /\b(?:revoke[sd]?|family)\b/i.test(s)),
+      'a sentence says a resend after 30 seconds revokes the token family',
+    ).toBe(true);
+    expect(
+      all.some((s) => /`attemptId`/.test(s) && /\brandom\b/i.test(s)),
+      'a sentence says attemptId is random',
+    ).toBe(true);
+  });
+
+  it.skip("says the store checks the callback's state against the one it kept, once", () => {
+    const all = sentences(section(read('README.md'), '## Connected sites'));
+
+    expect(
+      all.some((s) => /`state`/.test(s) && /\b(?:compare|match|check)/i.test(s) && /\bonce\b/i.test(s)),
+      'a sentence says the callback state is checked against the kept one and used once',
+    ).toBe(true);
+  });
+
+  it.skip('says events.forward is sent once and the outbox resends with the same eventId', () => {
+    const all = sentences(section(read('README.md'), '## Connected sites'));
+
+    expect(
+      all.some((s) => /events\.forward/.test(s) && /\b(?:sent|sends) once\b/i.test(s)),
+      'a sentence says events.forward is sent once',
+    ).toBe(true);
+    expect(
+      all.some((s) => /`eventId`/.test(s) && /\bsame\b/i.test(s) && /\b(?:outbox|queue)\b/i.test(s)),
+      "a sentence says the site's outbox resends with the same eventId",
     ).toBe(true);
   });
 });

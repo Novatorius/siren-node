@@ -39,7 +39,8 @@ export class ConnectResource {
   /**
    * `GET /connect/plan`, `connect:read`. The organization's plan, trial and
    * capabilities. Cloud answers 503 with code `plan_unavailable` when it
-   * cannot read billing, so the store keeps what it last knew.
+   * cannot read billing, which raises `ApiError` with that code, so the
+   * store logs the error and keeps what it last knew.
    */
   async plan(): Promise<ConnectPlan> {
     // Stub: slice 5 packet P3.
@@ -97,8 +98,14 @@ export class ConnectResource {
 
   /**
    * `POST /connect/disconnect`, `connect:read`, no body. Revokes the site's
-   * client, its tokens and its webhook. Retried: Cloud answers a repeat as
-   * done. After it the site's tokens are dead, so discard them.
+   * client, its tokens and its webhook. After it the site's tokens are dead,
+   * so discard them.
+   *
+   * Sent once, never retried. Cloud cuts the client off as the disconnect
+   * commits, so a resend after a lost answer meets a 401 saying the
+   * connection was revoked, and the store's refresh then fails with
+   * `OAuthError` `invalid_grant`. A site that sent `disconnect` and then
+   * meets either one treats itself as disconnected.
    */
   async disconnect(): Promise<DisconnectResult> {
     // Stub: slice 5 packet P3.

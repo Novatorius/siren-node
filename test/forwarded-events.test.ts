@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  ApiError,
   ConflictError,
   ConnectionError,
   EventSlug,
@@ -7,6 +8,7 @@ import {
   FORWARDED_EVENT_VERSION,
   HttpClientError,
   NotFoundError,
+  RateLimitError,
   Siren,
   SirenError,
   ValidationError,
@@ -32,23 +34,9 @@ import { FakeHttpClient, reply } from './http-fakes';
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
  * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * `it.skip.each(` becomes `it.each(`. The packet that removes the last
+ * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
-
-/** No test here may reach the network: the global fetch fails any test that calls it. */
-beforeEach(() => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(() => {
-      throw new Error('the global fetch must not be called');
-    }),
-  );
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 const BASE = 'https://api.sirenaffiliates.com/siren/v1';
 const EVENT_ID = '5f0c2b1e-9d8a-4c3f-8e7d-6c5b4a392817';
@@ -89,7 +77,20 @@ const Answers = {
   accepted: { status: 'accepted', event: 'product-deleted', message: 'Event accepted.' },
   duplicate: { status: 'duplicate', event: 'product-deleted', message: 'Event already received.' },
   saleCreated: { status: 'created', event: 'sale-triggered', message: 'Sale recorded.' },
-  cloudOrigin: { error: { message: 'Events that came from Siren Cloud are not taken back.', context: { reason: 'cloud_origin' } } },
+  // ForwardedEventIngestionService::readEnvelope, lines 91 to 95 at b6f7140d0.
+  cloudOrigin: {
+    error: {
+      message: 'This event came from Siren Cloud, so it is not taken back in. Do not send it again.',
+      context: { reason: 'cloud_origin', field: 'origin' },
+    },
+  },
+  // ForwardedEventIngestionService, lines 250 to 254 at b6f7140d0.
+  waitingForRecord: {
+    error: {
+      message: 'The shopper is not linked to a collaborator yet. Nothing was saved. It is safe to send it again.',
+      context: { event: 'product-deleted', reason: 'waiting_for_record' },
+    },
+  },
   notFound: { error: { message: 'No transaction matches that reference.', context: { reason: 'reference_not_found', field: 'data.transaction' } } },
   otherProperty: {
     error: { message: 'The order was recorded for another store.', context: { reason: 'reference_belongs_to_another_property' } },
@@ -152,14 +153,28 @@ describe('P6: events.forward', () => {
     expect(header(http.requests[0]!, 'content-type')).toBe('application/json');
   });
 
-  it.skip('sends a sale with its optional fields and reads the sale status', async () => {
+  it.skip('sends a sale and reads the sale status', async () => {
     const { http, client } = siren([reply(200, Answers.saleCreated)]);
-    const withOptional = { ...sale, optional: { note: 'kept' } };
 
-    const result = await client.events.forward('sale-triggered', withOptional);
+    const result = await client.events.forward('sale-triggered', sale);
 
     expect(result.status).toBe('created');
-    expect(JSON.parse(http.requests[0]!.body!)).toEqual(withOptional);
+    expect(http.requests).toHaveLength(1);
+    expect(JSON.parse(http.requests[0]!.body!)).toEqual(sale);
+  });
+
+  it.skip('sends a refund with its optional refundKind beside data', async () => {
+    const { http, client } = siren([reply(200, Answers.accepted)]);
+    const refund: ForwardedEventEnvelope<'refund-triggered'> = {
+      ...productDeleted,
+      data: { transaction: { id: 1 } },
+      optional: { refundKind: 'cancelled' },
+    };
+
+    await client.events.forward('refund-triggered', refund);
+
+    expect(http.requests).toHaveLength(1);
+    expect(JSON.parse(http.requests[0]!.body!)).toEqual(refund);
   });
 
   it.skip.each(CLOUD_SLUGS)('sends %s to its own path', async (slug) => {
@@ -205,43 +220,43 @@ describe('P6: events.forward final attempt header', () => {
     expect(header(http.requests[0]!, 'x-siren-final-attempt')).toBeUndefined();
   });
 
-  it.skip('sends the header on every send of a final attempt, and on no other call afterwards', async () => {
-    const { http, client } = siren([reply(503, Answers.unavailable, { 'Retry-After': '0' }), reply(200, Answers.accepted)]);
+  it.skip('sends the header on the one send of a final attempt, and on no other call afterwards', async () => {
+    const { http, client } = siren([reply(503, Answers.unavailable, { 'Retry-After': '0' }), reply(200, Answers.accepted), reply(200, Answers.accepted)]);
 
-    await client.events.forward('product-deleted', productDeleted, { finalAttempt: true });
+    await expect(client.events.forward('product-deleted', productDeleted, { finalAttempt: true })).rejects.toBeInstanceOf(ApiError);
     await client.events.forward('product-deleted', productDeleted);
     await client.events.ingest('product-deleted', {});
 
-    expect(http.requests.map((request) => header(request, 'x-siren-final-attempt'))).toEqual(['1', '1', undefined, undefined]);
+    expect(http.requests.map((request) => header(request, 'x-siren-final-attempt'))).toEqual(['1', undefined, undefined]);
   });
 });
 
-describe('P6: events.forward retries', () => {
+describe('P6: events.forward is sent once', () => {
   it.skip.each([
-    ['a 503', reply(503, Answers.unavailable, { 'Retry-After': '0' })],
-    ['a 500 waiting_for_record', reply(500, { error: { message: 'Waiting for the record.', code: 'waiting_for_record', context: [] } }, { 'Retry-After': '0' })],
-    ['a 429', reply(429, Answers.unavailable, { 'Retry-After': '0' })],
-  ])('sends again after %s, with the same body, since Cloud claims each event once', async (_name, first) => {
-    const { http, client } = siren([first, reply(200, Answers.duplicate)]);
+    ['a 503', reply(503, Answers.unavailable, { 'Retry-After': '0' }), ApiError],
+    ['a 500 with no body', reply(500), ApiError],
+    ['a 429', reply(429, Answers.unavailable, { 'Retry-After': '0' }), RateLimitError],
+    ['a network error', new HttpClientError('socket hang up'), ConnectionError],
+  ])('sends once on %s, with the client allowing retries, and raises it for the outbox', async (_name, first, type) => {
+    const { http, client } = siren([first, reply(200, Answers.duplicate)], 3);
 
-    await client.events.forward('product-deleted', productDeleted);
-
-    expect(http.requests).toHaveLength(2);
-    expect(http.requests[1]!.body).toBe(http.requests[0]!.body);
+    await expect(client.events.forward('product-deleted', productDeleted)).rejects.toBeInstanceOf(type);
+    expect(http.requests).toHaveLength(1);
   });
 
-  it.skip('sends again after a network error', async () => {
-    const { http, client } = siren([new HttpClientError('socket hang up'), reply(200, Answers.accepted)]);
+  it.skip("raises Cloud's 500 waiting_for_record as ApiError with the reason in data, sent once", async () => {
+    const { http, client } = siren([reply(500, Answers.waitingForRecord), reply(200, Answers.accepted)], 3);
 
-    await client.events.forward('product-deleted', productDeleted);
+    let caught: unknown;
+    try {
+      await client.events.forward('product-deleted', productDeleted);
+    } catch (error) {
+      caught = error;
+    }
 
-    expect(http.requests).toHaveLength(2);
-  });
-
-  it.skip('stops at maxRetries and raises ConnectionError', async () => {
-    const { http, client } = siren([new HttpClientError('socket hang up')], 0);
-
-    await expect(client.events.forward('product-deleted', productDeleted)).rejects.toBeInstanceOf(ConnectionError);
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as ApiError).statusCode).toBe(500);
+    expect((caught as ApiError).data).toMatchObject({ reason: 'waiting_for_record' });
     expect(http.requests).toHaveLength(1);
   });
 
@@ -270,6 +285,11 @@ describe('P6: events.forward refusals', () => {
     ['an eventId that is not a UUID', 'product-deleted', { ...leaky, eventId: 'evt_123' }],
     ['an eventId with braces', 'product-deleted', { ...leaky, eventId: `{${EVENT_ID}}` }],
     ['an origin of cloud', 'product-deleted', { ...leaky, origin: 'cloud' }],
+    ['an origin of Site', 'product-deleted', { ...leaky, origin: 'Site' }],
+    ['no origin', 'product-deleted', { ...leaky, origin: undefined }],
+    ['no eventId', 'product-deleted', { ...leaky, eventId: undefined }],
+    ['an eventId of 36 characters with its dashes out of place', 'product-deleted', { ...leaky, eventId: '0a1b2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d' }],
+    ['no occurredAt', 'product-deleted', { ...leaky, occurredAt: undefined }],
     ['an occurredAt without an offset', 'product-deleted', { ...leaky, occurredAt: '2026-11-12T09:30:00' }],
     ['an occurredAt with a space for the T', 'product-deleted', { ...leaky, occurredAt: '2026-11-12 09:30:00+00:00' }],
     ['an occurredAt that is a number', 'product-deleted', { ...leaky, occurredAt: 1_762_000_000 }],

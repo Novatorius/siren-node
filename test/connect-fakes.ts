@@ -33,7 +33,8 @@ export const ConnectAnswers = {
     capabilities: ['collaborator-portal', 'lifetime-commissions'],
     trial: { active: true, plan: 'pro', endsAt: '2026-11-26T00:00:00+00:00', ended: false },
     paidPlan: null,
-    pricingUrl: 'https://sirenaffiliates.com/pricing/',
+    /** GetConnectorPlan::PRICING_URL, line 60. */
+    pricingUrl: 'https://www.sirenaffiliates.com/pricing/cloud',
   },
   /** saas/Rest/Connector/GetConnectorPlan.php line 81, through ApiErrorCode::respond (line 153). */
   planUnavailable: {
@@ -60,6 +61,8 @@ export const ConnectAnswers = {
   missingScope(scope: string) {
     return { error: { message: `This token is not authorized for ${scope}.`, context: [] } };
   },
+  /** saas/Auth/ApiKeyAuthMiddleware.php line 273: `/ping` with a token that lacks `connect:ingest`. It names no scope. */
+  ingestRefused: { error: { message: 'This token is not authorized to ingest events.', context: [] } },
   /** OAuthScopeMiddleware.php line 58. */
   invalidToken: { error: { message: 'Invalid access token.', context: [] } },
   /** A 5xx with Siren's error envelope. */

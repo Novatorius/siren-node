@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CallbackAccessTokenSource, Siren, SirenError } from '../src/index';
 import { ConnectResource, SirenConnect } from '../src/connect/index';
 import type { HttpRequest } from '../src/http';
@@ -11,34 +11,19 @@ import { BASE, ConnectAnswers } from './connect-fakes';
  *
  * SirenConnect resolves its options through the same code as `new Siren()`,
  * so the parity table below sends each option set to both and expects the
- * same outcome. Slice 2b hardens that code in parallel, and the table holds
- * before and after it lands, because it compares the two clients rather than
- * pinning either.
+ * same outcome. The table compares the two clients rather than pinning
+ * either one.
  *
  * Integration shape (KB 568): the real clients over a FakeHttpClient.
  *
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
  * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * `it.skip.each(` becomes `it.each(`. The packet that removes the last
+ * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 const KEY = 'sk_live_APIKEYSECRET_123';
-
-/** No test here may reach the network: the global fetch fails any test that calls it. */
-beforeEach(() => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(() => {
-      throw new Error('the global fetch must not be called');
-    }),
-  );
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 
 function header(request: HttpRequest, name: string): string | undefined {

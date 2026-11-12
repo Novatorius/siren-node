@@ -1,3 +1,5 @@
+import { ConnectorScope } from '../auth/connector-scope';
+
 /**
  * The six operation scopes of Siren Cloud's `connect` resource, one per kind
  * of thing a connected site does. Siren's `ScopeService::RESOURCES` at
@@ -7,6 +9,10 @@
  * three are explicit only: no wildcard grants them, so a site holds one only
  * when it asked for it by name. `ConnectorScope.CONNECTED_SITE` asks for the
  * wildcard and those three, so a site that sends it holds all six.
+ *
+ * `ConnectorScope` names what a site asks for at the consent screen.
+ * `ConnectScope` names what each route requires. The three explicit scopes
+ * are the same strings in both, taken from `ConnectorScope`.
  */
 export const ConnectScope = {
   /** Read the connection's state and plan, report site state, disconnect. */
@@ -16,11 +22,11 @@ export const ConnectScope = {
   /** Migrate a site's data into Cloud, and read its migration window. */
   Migrate: 'connect:migrate',
   /** Manage the webhook subscription that sends the site its own events. Explicit only. */
-  Webhooks: 'connect:webhooks',
+  Webhooks: ConnectorScope.Webhooks,
   /** Read the organization's records and the customer email key. Explicit only. */
-  RecordsRead: 'connect:records:read',
+  RecordsRead: ConnectorScope.RecordsRead,
   /** Change the records a person manages, and report integrations and products. Explicit only. */
-  RecordsWrite: 'connect:records:write',
+  RecordsWrite: ConnectorScope.RecordsWrite,
 } as const;
 
 /** Union of the {@link ConnectScope} strings. */

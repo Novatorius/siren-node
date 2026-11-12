@@ -95,8 +95,13 @@ export interface OAuthRefreshParams {
   clientId: string;
   refreshToken: string;
   /**
-   * The same id on every try of one refresh, so Cloud answers the store's own
-   * retry with the pair it already issued and never reads it as a stolen copy.
+   * A fresh random id for each refresh, such as `createState()` makes, sent
+   * again unchanged on every try of that one refresh. Within 30 seconds of
+   * the rotation, Cloud answers a try that carries it with the pair it
+   * already issued, as often as it comes. A repeat without it is answered
+   * once, and any repeat after 30 seconds makes Cloud revoke the whole token
+   * family. A guessable id would let whoever holds a stolen refresh token
+   * repeat it unnoticed inside the window.
    */
   attemptId?: string;
 }

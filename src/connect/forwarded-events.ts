@@ -308,13 +308,14 @@ export interface ForwardedEventData {
 }
 
 /**
- * Fields a receiver may go without, sent beside `data`. Cloud reads the ones
- * it knows and ignores the rest. Siren's `CarriesOptionalFields`.
+ * Fields a receiver may go without, sent beside `data`. Siren's
+ * `CarriesOptionalFields`, which only `RefundTriggeredCodec` implements at
+ * b6f7140d0. Cloud ignores a field it does not know, so the type names only
+ * the ones it reads, and a misspelt field fails to compile.
  */
 export interface ForwardedEventOptionalFields {
   /** `refund-triggered` only: what the refund was. */
   refundKind?: RefundKind;
-  [field: string]: unknown;
 }
 
 /**
@@ -339,7 +340,8 @@ export interface ForwardedEventEnvelope<S extends ForwardedEventSlug = Forwarded
 /** Options for one `events.forward` call. */
 export interface ForwardOptions {
   /**
-   * Marks the sender's last try. Sends `X-Siren-Final-Attempt: 1`, so Cloud
+   * Marks the outbox's last try of this event. Sends
+   * `X-Siren-Final-Attempt: 1` on the one send `forward` makes, so Cloud
    * logs an event it will never record instead of waiting for a resend.
    */
   finalAttempt?: boolean;

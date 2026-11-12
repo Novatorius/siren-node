@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, MissingScopeError, UnexpectedResponseError } from '../src/index';
+import { ApiError, ConnectionError, HttpClientError, MissingScopeError, PermissionError, UnexpectedResponseError } from '../src/index';
 import { ConnectScope, ConnectWebhookResource } from '../src/connect/index';
 import type { ConnectResource } from '../src/connect/index';
 import type { HttpRequest } from '../src/http';
@@ -19,13 +19,13 @@ import { BASE, ConnectAnswers, connectOver } from './connect-fakes';
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
  * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * `it.skip.each(` becomes `it.each(`. The packet that removes the last
+ * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 type Route = {
   name: string;
-  scope: ConnectScope | null;
+  scope: ConnectScope;
   call: (connect: ConnectResource) => Promise<unknown>;
   method: string;
   path: string;
@@ -62,7 +62,7 @@ const ROUTES: Route[] = [
   { name: 'disconnect', scope: ConnectScope.Read, call: (c) => c.disconnect(), method: 'POST', path: '/connect/disconnect', body: undefined, answer: ConnectAnswers.disconnected },
   { name: 'migrationWindow', scope: ConnectScope.Migrate, call: (c) => c.migrationWindow(), method: 'GET', path: '/connect/migration-window', body: undefined, answer: ConnectAnswers.migrationWindow },
   { name: 'customerEmailKey', scope: ConnectScope.RecordsRead, call: (c) => c.customerEmailKey(), method: 'GET', path: '/connect/customer-email-key', body: undefined, answer: ConnectAnswers.customerEmailKey },
-  { name: 'ping', scope: null, call: (c) => c.ping(), method: 'GET', path: '/ping', body: undefined, answer: ConnectAnswers.ping },
+  { name: 'ping', scope: ConnectScope.Ingest, call: (c) => c.ping(), method: 'GET', path: '/ping', body: undefined, answer: ConnectAnswers.ping },
 ];
 
 const integrations = [
@@ -153,12 +153,22 @@ describe('P3: ConnectResource transport rules', () => {
     ['reportIntegrations', (c) => c.reportIntegrations(integrations), reply(204)],
   ];
 
-  it.skip.each(calls)('%s is retried after a 503', async (_name, call, success) => {
+  it.skip.each(calls.filter(([name]) => name !== 'disconnect'))('%s is retried after a 503', async (_name, call, success) => {
     const { http, connect } = connectOver([reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }), success]);
 
     await call(connect);
 
     expect(http.requests).toHaveLength(2);
+  });
+
+  it.skip.each([
+    ['a 503', reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }), ApiError],
+    ['a network error', new HttpClientError('socket hang up'), ConnectionError],
+  ])('disconnect is sent once on %s, since Cloud answers a resend after the commit with 401', async (_name, first, type) => {
+    const { http, connect } = connectOver([first, reply(200, ConnectAnswers.disconnected)], 3);
+
+    await expect(connect.disconnect()).rejects.toBeInstanceOf(type);
+    expect(http.requests).toHaveLength(1);
   });
 
   it.skip.each(calls)('%s is resent once with a refreshed token after a 401', async (_name, call, success) => {
@@ -180,17 +190,29 @@ describe('P3: ConnectResource transport rules', () => {
     },
   );
 
-  it.skip.each(ROUTES.filter((route) => route.scope !== null).map((route) => [route.name, route] as const))(
-    '%s raises MissingScopeError naming its scope when Cloud refuses the token',
-    async (_name, route) => {
-      const { connect } = connectOver([reply(403, ConnectAnswers.missingScope(route.scope!))]);
+  // `/ping` refuses in its own words, tested below.
+  it.skip.each([
+    ...ROUTES.filter((route) => route.name !== 'ping').map((route) => [route.name, route.call, route.scope] as const),
+    ['reportIntegrations', (c: ConnectResource) => c.reportIntegrations(integrations), ConnectScope.RecordsWrite] as const,
+  ])('%s raises MissingScopeError with the scope Cloud names when Cloud refuses the token', async (_name, call, scope) => {
+    const { http, connect } = connectOver([reply(403, ConnectAnswers.missingScope(scope))]);
 
-      const error = await failure(route.call(connect));
+    const error = await failure(call(connect));
 
-      expect(error).toBeInstanceOf(MissingScopeError);
-      expect(error.message).toContain(route.scope!);
-    },
-  );
+    expect(error).toBeInstanceOf(MissingScopeError);
+    expect((error as MissingScopeError).scope).toBe(scope);
+    expect(http.requests).toHaveLength(1);
+  });
+
+  it.skip("ping raises PermissionError on Cloud's 403 for a token without connect:ingest", async () => {
+    const { http, connect } = connectOver([reply(403, ConnectAnswers.ingestRefused)]);
+
+    const error = await failure(connect.ping());
+
+    expect(error).toBeInstanceOf(PermissionError);
+    expect(error.message).toBe(ConnectAnswers.ingestRefused.error.message);
+    expect(http.requests).toHaveLength(1);
+  });
 
   it.skip("plan raises Cloud's 503 plan_unavailable as ApiError with that code once retries run out", async () => {
     const { http, connect } = connectOver([reply(503, ConnectAnswers.planUnavailable, { 'Retry-After': '0' })], 1);
@@ -203,13 +225,17 @@ describe('P3: ConnectResource transport rules', () => {
     expect(http.requests).toHaveLength(2);
   });
 
-  it.skip('customerEmailKey keeps the secret out of an UnexpectedResponseError', async () => {
-    const { connect } = connectOver([reply(200, [ConnectAnswers.customerEmailKey])]);
+  it.skip.each([
+    ['customerEmailKey', (c: ConnectResource) => c.customerEmailKey(), ConnectAnswers.customerEmailKey, ConnectAnswers.customerEmailKey.secret],
+    ['updateGrant', (c: ConnectResource) => c.updateGrant(), ConnectAnswers.updateGrant, ConnectAnswers.updateGrant.grant],
+  ] as const)('%s keeps the secret from the answer out of an UnexpectedResponseError', async (_name, call, answer, secret) => {
+    const { connect } = connectOver([reply(200, [answer])]);
 
-    const error = await failure(connect.customerEmailKey());
+    const error = await failure(call(connect));
 
     expect(error).toBeInstanceOf(UnexpectedResponseError);
-    expect(`${error.message} ${JSON.stringify(error)}`).not.toContain(ConnectAnswers.customerEmailKey.secret);
+    const details = error as UnexpectedResponseError;
+    expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)}`).not.toContain(secret);
   });
 });
 

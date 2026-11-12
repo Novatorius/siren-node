@@ -183,4 +183,7 @@ export function envelopeContract(siren: Siren): void {
 
   // @ts-expect-error refundKind is refund, cancelled or voided
   void siren.events.forward('refund-triggered', { ...base, data: { transaction: { id: 1 } }, optional: { refundKind: 'returned' } });
+
+  // @ts-expect-error Cloud ignores an optional field it does not know, so a misspelt one must not compile
+  void siren.events.forward('refund-triggered', { ...base, data: { transaction: { id: 1 } }, optional: { refundKnd: 'refund' } });
 }

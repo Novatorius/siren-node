@@ -15,8 +15,8 @@ import { codeChallengeS256, createCodeVerifier, createState } from '../src/conne
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
  * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * `it.skip.each(` becomes `it.each(`. The packet that removes the last
+ * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 afterEach(() => {

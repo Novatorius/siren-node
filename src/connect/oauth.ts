@@ -1,6 +1,5 @@
 import { ConnectorScope } from '../auth/connector-scope';
 import { DEFAULT_BASE_URL } from '../http';
-import type { HttpClient } from '../http';
 import type {
   OAuthAuthorizeParams,
   OAuthClientOptions,
@@ -34,10 +33,11 @@ export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;
  *   with `Content-Type: application/json`, `Accept: application/json` and
  *   the SDK's `User-Agent`, and no `Authorization` header. The body is the
  *   grant itself.
- * - It is sent exactly once, whatever the answer. Cloud revokes a refresh
- *   token's whole family when it sees the token again more than 30 seconds
- *   after it rotated, and an authorization code is single use, so only the
- *   caller may decide to send again, with the same `attemptId` for a refresh.
+ * - It is sent exactly once, whatever the answer, with the SDK's headers and
+ *   the client's `timeout`. Cloud revokes a refresh token's whole family
+ *   when it sees the token again more than 30 seconds after it rotated, an
+ *   authorization code is single use, and each registration makes a new
+ *   client, so only the caller may decide to send again.
  * - A 2xx answer whose body is a JSON object with the field the call needs
  *   (`client_id` for `register`, `access_token` and `refresh_token` for a
  *   token) resolves with that body as Cloud sent it. Any other 2xx raises
@@ -52,8 +52,8 @@ export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;
  *   message may quote the grant. Any other error from the client reaches the
  *   caller unchanged.
  * - No error message, `data` or field it raises carries a secret the call
- *   sent: the code, the verifier or the refresh token, each replaced in the
- *   client error's message.
+ *   sent, the code, the verifier or the refresh token, each replaced in the
+ *   client error's message. Nor does it carry a token from Cloud's answer.
  */
 export class OAuthClient {
   /**
@@ -114,7 +114,10 @@ export class OAuthClient {
    * `{ grant_type: 'authorization_code', client_id, code, redirect_uri,
    * code_verifier }`.
    *
-   * Throws `SirenError` before sending when any of the four is empty.
+   * Throws `SirenError` before sending when any of the four is empty. A
+   * `ConnectionError` leaves it unknown whether Cloud spent the code, so the
+   * store starts the connection over with a new verifier and state rather
+   * than sending the code again.
    */
   async exchangeCode(params: OAuthExchangeCodeParams): Promise<OAuthTokenResponse> {
     // Stub: slice 5 packet P2.
@@ -128,6 +131,12 @@ export class OAuthClient {
    * `attempt_id` when given. Cloud rotates the token on every refresh, so
    * store the answer's `refresh_token` before anything else reads the pair.
    *
+   * The store takes its own lock around a refresh, so two refreshes of one
+   * token never race. After a `ConnectionError`, a 429 or a 5xx it may send
+   * the same refresh again, with the same `attemptId`, within 30 seconds of
+   * the first try. Later than that, Cloud reads the repeat as a stolen token
+   * and revokes the whole family.
+   *
    * Throws `SirenError` before sending when `clientId` or `refreshToken` is
    * empty, or `attemptId` is given and empty.
    */
@@ -137,5 +146,3 @@ export class OAuthClient {
     return { access_token: '', token_type: 'Bearer', expires_in: 0, scope: '', refresh_token: '' };
   }
 }
-
-export type { HttpClient };

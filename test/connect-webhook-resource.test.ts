@@ -18,8 +18,8 @@ import { BASE, ConnectAnswers, connectOver } from './connect-fakes';
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
  * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * `it.skip.each(` becomes `it.each(`. The packet that removes the last
+ * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 const NONCE = 'n0nce_ABCDEFGHIJKL';
@@ -132,6 +132,16 @@ describe('P4: ConnectWebhookResource answers', () => {
       const { webhook } = webhookOver([answer]);
       await expect(call(webhook), JSON.stringify(answer)).rejects.toBeInstanceOf(UnexpectedResponseError);
     }
+  });
+
+  it.skip('replace keeps the signing secret from the answer out of an UnexpectedResponseError', async () => {
+    const { webhook } = webhookOver([reply(200, [withSecret])]);
+
+    const error = await failure(webhook.replace(params));
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    const details = error as UnexpectedResponseError;
+    expect(`${error.message} ${JSON.stringify(error)} ${JSON.stringify(details.data ?? null)}`).not.toContain(ConnectAnswers.signingSecret);
   });
 
   it.skip('replace raises UnexpectedResponseError for an answer without a text signingSecret', async () => {

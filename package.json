@@ -1,7 +1,7 @@
 {
   "name": "@novatorius/siren",
   "version": "0.3.0",
-  "description": "Official Siren SDK for Node.js and TypeScript \u2014 affiliate and incentive tracking for any commerce stack.",
+  "description": "Official Siren SDK for Node.js and TypeScript — affiliate and incentive tracking for any commerce stack.",
   "keywords": [
     "siren",
     "affiliate",

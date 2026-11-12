@@ -302,5 +302,45 @@
     "failing": [
       "maps ./connect in package.json"
     ]
+  },
+  {
+    "id": "optional-open-index",
+    "file": "src/connect/forwarded-events.ts",
+    "find": "  refundKind?: RefundKind;\n}",
+    "replace": "  refundKind?: RefundKind;\n  [field: string]: unknown;\n}",
+    "expect": "caught",
+    "failing": [
+      "test/types/forwarded-events.ts"
+    ]
+  },
+  {
+    "id": "scope-webhooks-drift",
+    "file": "src/connect/scopes.ts",
+    "find": "  Webhooks: ConnectorScope.Webhooks,",
+    "replace": "  Webhooks: 'connect:webhook',",
+    "expect": "caught",
+    "failing": [
+      "names the six operation scopes"
+    ]
+  },
+  {
+    "id": "guard-lets-all-through",
+    "file": "test/setup/no-network.ts",
+    "find": "    if (LOOPBACK.has(hostOf(input))) return realFetch(input as string, init);",
+    "replace": "    return realFetch(input as string, init);",
+    "expect": "caught",
+    "failing": [
+      "no-network guard"
+    ]
+  },
+  {
+    "id": "guard-forgets-refusals",
+    "file": "test/setup/no-network.ts",
+    "find": "    offMachine(hostOf(input));\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "no-network guard"
+    ]
   }
 ]

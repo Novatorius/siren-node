@@ -84,10 +84,18 @@ export class EventsResource {
    * an API key the exact `event:{slug}` scope.
    *
    * The body is the envelope as given, and the answer is read as every
-   * event's is. Cloud claims each forwarded event once, on its natural key
-   * or on `eventId`, and answers a repeat as `duplicate`, so a forward is
-   * retried on network errors, 429 and 5xx. `finalAttempt: true` adds the
-   * header `X-Siren-Final-Attempt: 1`, and no other call sends it.
+   * event's is, so a 2xx whose body has no readable `status` resolves
+   * without one. Cloud counts any 2xx as delivered.
+   *
+   * Sent once, never retried, whatever the answer and whatever the client's
+   * `maxRetries`. A forwarded event is queue work, and the site's outbox
+   * owns redelivery (KB 591): it resends with the same `eventId`, which
+   * Cloud claims once, on the event's natural key or on `eventId`, and
+   * answers as `duplicate`. A 500 whose `error.context.reason` is
+   * `waiting_for_record` raises `ApiError` with that reason in `data`, and
+   * the outbox tries the event again later. `finalAttempt: true` adds the
+   * header `X-Siren-Final-Attempt: 1` to that one send, and no other call
+   * sends it.
    *
    * Throws `SirenError`, and sends nothing, when `slug` is not a
    * `ForwardedEventSlug` value, so a typo never becomes a custom event, or

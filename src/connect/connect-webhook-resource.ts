@@ -30,6 +30,10 @@ export class ConnectWebhookResource {
    * signing secret, shown only in this answer. Sent once, never retried:
    * each send rotates the secret, so only the caller may decide to send
    * again. Resolves with a JSON object that carries a text `signingSecret`.
+   * No error it raises carries the secret from Cloud's answer.
+   *
+   * After a `ConnectionError` the site cannot know whether the secret
+   * rotated, so it calls `replace` again before it trusts the stored secret.
    */
   async replace(params: ConnectorWebhookParams): Promise<ConnectorWebhookWithSecret> {
     // Stub: slice 5 packet P4.

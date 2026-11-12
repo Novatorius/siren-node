@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
   BadRequestError,
@@ -35,23 +35,9 @@ import { FakeHttpClient, reply } from './http-fakes';
  * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
  * the packet named in its describe block. That packet's implementer deletes
  * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * `it.skip.each(` becomes `it.each(`. The packet that removes the last
+ * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
-
-/** No test here may reach the network: the global fetch fails any test that calls it. */
-beforeEach(() => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(() => {
-      throw new Error('the global fetch must not be called');
-    }),
-  );
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 const BASE = 'https://api.sirenaffiliates.com/siren/v1';
 const REDIRECT = 'https://store.example/siren/callback';
@@ -313,6 +299,19 @@ describe('P2: OAuthClient.exchangeCode', () => {
     expect(http.requests).toHaveLength(1);
   });
 
+  it.skip.each([
+    ['without refresh_token', { ...Cloud.tokens, refresh_token: undefined }],
+    ['without access_token', { ...Cloud.tokens, access_token: undefined }],
+  ])('raises UnexpectedResponseError for a 2xx %s, showing no token from the body', async (_name, body) => {
+    const { oauth } = client([reply(200, body)]);
+
+    const error = await failure(oauth.exchangeCode(exchangeParams));
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect(shown(error)).not.toContain('ACCESSSECRET');
+    expect(shown(error)).not.toContain('NEXTSECRET');
+  });
+
   it.skip('keeps the code and the verifier out of a ConnectionError, and keeps the client error cause', async () => {
     const cause = new Error('socket hang up');
     const { oauth } = client([new HttpClientError(`POST failed with code=${CODE}&code_verifier=${VERIFIER}`, { cause })]);
@@ -352,22 +351,6 @@ describe('P2: OAuthClient.refresh', () => {
     });
   });
 
-  it.skip.each([
-    ['a 503', reply(503, { error: { message: 'Service unavailable', context: [] } }), ApiError],
-    ['a 500 with no body', reply(500), ApiError],
-    ['a 429', reply(429, { error: { message: 'Too many requests', context: [] } }, { 'Retry-After': '0' }), RateLimitError],
-    ['an HttpClientError', new HttpClientError('connect ECONNREFUSED'), ConnectionError],
-    ['a 400 invalid_grant', reply(400, Cloud.revoked), OAuthError],
-    ['a 302', reply(302, undefined, { Location: 'https://elsewhere.example/' }), SirenError],
-  ])('sends a refresh exactly once on %s, and raises it', async (_name, answer, type) => {
-    const { http, oauth } = client([answer, reply(200, Cloud.tokens)]);
-
-    const error = await failure(oauth.refresh({ ...refreshParams, attemptId: 'attempt-1' }));
-
-    expect(error).toBeInstanceOf(type);
-    expect(http.requests).toHaveLength(1);
-  });
-
   it.skip('raises a 302 as SirenError, not as an OAuth or API error, and never follows it', async () => {
     const { http, oauth } = client([reply(302, undefined, { Location: 'https://elsewhere.example/' })]);
 
@@ -379,6 +362,8 @@ describe('P2: OAuthClient.refresh', () => {
     expect(http.requests.map((request) => request.url)).toEqual([`${BASE}/oauth/token`]);
   });
 
+  // Cloud's IssueToken answers 400 for every refusal at b6f7140d0. The 401 row is
+  // RFC 6749 section 5.2's form for invalid_client, which Cloud may send later.
   it.skip.each([
     [400, Cloud.revoked, 'invalid_grant'],
     [400, Cloud.unknownClient, 'invalid_client'],
@@ -403,6 +388,8 @@ describe('P2: OAuthClient.refresh', () => {
     expect(error.message).toBe('invalid_grant');
   });
 
+  // Cloud sends no OAuth envelope on 429 or 503 today. These rows pin what a
+  // proxy or a later Cloud sending RFC 6749's temporarily_unavailable gets.
   it.skip.each([
     [429, RateLimitError],
     [503, ApiError],
@@ -476,6 +463,61 @@ describe('P2: OAuthClient.refresh', () => {
 
     await expect(oauth.refresh(params)).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
+  });
+});
+
+type SendingCall = [string, (oauth: OAuthClient) => Promise<unknown>, string, HttpResponse];
+
+const SENDING_CALLS: SendingCall[] = [
+  ['register', (o) => o.register(registerParams), `${BASE}/oauth/register`, reply(201, Cloud.registered)],
+  ['exchangeCode', (o) => o.exchangeCode(exchangeParams), `${BASE}/oauth/token`, reply(200, Cloud.tokens)],
+  ['refresh', (o) => o.refresh({ ...refreshParams, attemptId: 'attempt-1' }), `${BASE}/oauth/token`, reply(200, Cloud.tokens)],
+];
+
+describe('P2: OAuthClient rules every sending call follows', () => {
+  it.skip.each(SENDING_CALLS)('%s sends the SDK headers, no Authorization, and waits 15 seconds by default', async (_name, call, url, success) => {
+    const { http, oauth } = client([success]);
+
+    await call(oauth);
+
+    expect(http.requests).toHaveLength(1);
+    const [request] = http.requests;
+    expect(request!.method).toBe('POST');
+    expect(request!.url).toBe(url);
+    expect(header(request!, 'content-type')).toBe('application/json');
+    expect(header(request!, 'accept')).toBe('application/json');
+    expect(header(request!, 'user-agent')).toMatch(/^siren-sdk-typescript\//);
+    expect(header(request!, 'authorization')).toBeUndefined();
+    expect(request!.timeout).toBe(15_000);
+  });
+
+  it.skip.each(SENDING_CALLS)('%s waits the timeout it is given', async (_name, call, _url, success) => {
+    const http = new FakeHttpClient([success]);
+
+    await call(new OAuthClient({ httpClient: http, timeout: 4000 }));
+
+    expect(http.requests).toHaveLength(1);
+    expect(http.requests[0]!.timeout).toBe(4000);
+  });
+
+  it.skip.each(SENDING_CALLS)('%s is sent exactly once on any failure, and raises it', async (name, call, _url, success) => {
+    const failures: Array<[string, HttpResponse | Error, new (...args: never[]) => Error]> = [
+      ['a 503', reply(503, { error: { message: 'Service unavailable', context: [] } }), ApiError],
+      ['a 500 with no body', reply(500), ApiError],
+      ['a 429', reply(429, { error: { message: 'Too many requests', context: [] } }, { 'Retry-After': '0' }), RateLimitError],
+      ['an HttpClientError', new HttpClientError('connect ECONNREFUSED'), ConnectionError],
+      ['a 400 invalid_grant', reply(400, Cloud.revoked), OAuthError],
+      ['a 302', reply(302, undefined, { Location: 'https://elsewhere.example/' }), SirenError],
+    ];
+
+    for (const [label, answer, type] of failures) {
+      const { http, oauth } = client([answer, success]);
+
+      const error = await failure(call(oauth));
+
+      expect(error, `${name} on ${label}`).toBeInstanceOf(type);
+      expect(http.requests, `${name} on ${label}`).toHaveLength(1);
+    }
   });
 });
 
