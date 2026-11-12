@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- `events.refund` requires `refundId`, the store's own id for the refund, such as WooCommerce
+  refund 2201. Siren now refuses a refund without one with 400. Siren records each refund id once
+  per order, so sending the same refund again is safe.
+
 ### Added
 
 - `getApplicationForm`, `submitApplication` and `verifyApplication` in `@novatorius/siren/storefront`,

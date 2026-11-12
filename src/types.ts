@@ -85,10 +85,20 @@ export interface SaleParams {
   items?: LineItem[];
 }
 
-/** Parameters for `events.refund`. Both fields must match the original sale. */
+/**
+ * Parameters for `events.refund`. `source` and `externalId` must match the
+ * original sale. `refundId` names this refund.
+ */
 export interface RefundParams {
   source: string;
+  /** The order the refund belongs to, as the sale sent it. */
   externalId: string | number;
+  /**
+   * The store's own id for this refund, such as WooCommerce refund 2201.
+   * Siren requires it and records each refund id once per order, so sending
+   * the same refund again is safe.
+   */
+  refundId: string | number;
 }
 
 /** Parameters for `events.siteVisited`. */
