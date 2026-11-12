@@ -1,4 +1,6 @@
-import type { HttpTransport } from '../http';
+import { UnexpectedResponseError } from '../errors';
+import { parseJsonBody } from '../http';
+import type { HttpMethod, HttpTransport } from '../http';
 import { ConnectWebhookResource } from './connect-webhook-resource';
 import type {
   ConnectPlan,
@@ -13,6 +15,15 @@ import type {
   SiteStateParams,
   SiteStateReport,
 } from './types';
+
+/**
+ * Standard base64 with its padding, as PHP's `base64_encode` writes it. No
+ * `-` or `_`, so a base64url key is refused.
+ */
+const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/** The shortest customer email key a site may hash with, in bytes. */
+const MIN_EMAIL_KEY_BYTES = 16;
 
 /**
  * The connected-site routes, `/connect/*` and `/ping`, sent with the site's
@@ -38,8 +49,6 @@ export class ConnectResource {
   readonly webhook: ConnectWebhookResource;
 
   constructor(private readonly http: HttpTransport) {
-    // Stub: slice 5 packet P3.
-    void this.http;
     this.webhook = new ConnectWebhookResource(http);
   }
 
@@ -50,14 +59,7 @@ export class ConnectResource {
    * store logs the error and keeps what it last knew.
    */
   async plan(): Promise<ConnectPlan> {
-    // Stub: slice 5 packet P3.
-    return {
-      status: 'none',
-      capabilities: [],
-      trial: { active: false, plan: null, endsAt: null, ended: false },
-      paidPlan: null,
-      pricingUrl: '',
-    };
+    return (await this.object('GET', '/connect/plan', undefined, true)) as unknown as ConnectPlan;
   }
 
   /**
@@ -68,8 +70,9 @@ export class ConnectResource {
    * no part of the answer.
    */
   async updateGrant(): Promise<ConnectUpdateGrant> {
-    // Stub: slice 5 packet P3.
-    return { grant: '', expiresAt: 0, expiresIn: 0 };
+    const answer = await this.object('POST', '/connect/update-grant', undefined, true);
+    if (!isFilled(answer.grant)) throw unexpected('POST', '/connect/update-grant', 'a non-empty text grant');
+    return answer as unknown as ConnectUpdateGrant;
   }
 
   /**
@@ -78,9 +81,11 @@ export class ConnectResource {
    * that is not `undefined`. Sent once. The site's queue reports again.
    */
   async reportSiteState(params: SiteStateParams): Promise<SiteStateReport> {
-    // Stub: slice 5 packet P3.
-    void params;
-    return { reported: true, forwarding: false, cutOverAt: null, localDataDeletedAt: null };
+    const body = withDefined(
+      { forwarding: params.forwarding },
+      { cutOverAt: params.cutOverAt, localDataDeletedAt: params.localDataDeletedAt, migrationComplete: params.migrationComplete },
+    );
+    return (await this.object('PUT', '/connect/site-state', body, false)) as unknown as SiteStateReport;
   }
 
   /**
@@ -90,8 +95,7 @@ export class ConnectResource {
    * with nothing. Sent once. The site's queue reports again.
    */
   async reportIntegrations(integrations: ReportedIntegration[]): Promise<void> {
-    // Stub: slice 5 packet P3.
-    void integrations;
+    await this.http.request({ method: 'PUT', path: '/connect/integrations', body: { integrations }, retriable: false });
   }
 
   /**
@@ -101,9 +105,11 @@ export class ConnectResource {
    * The site's queue sends the batch again.
    */
   async syncProducts(params: ProductSyncParams): Promise<ProductSyncResult> {
-    // Stub: slice 5 packet P3.
-    void params;
-    return { upserted: 0, skipped: 0, removed: 0, pruned: 0, serverTime: 0 };
+    const body = withDefined(
+      { platform: params.platform },
+      { products: params.products, removed: params.removed, pruneBefore: params.pruneBefore },
+    );
+    return (await this.object('PUT', '/connect/products', body, false)) as unknown as ProductSyncResult;
   }
 
   /**
@@ -118,14 +124,12 @@ export class ConnectResource {
    * meets either one treats itself as disconnected.
    */
   async disconnect(): Promise<DisconnectResult> {
-    // Stub: slice 5 packet P3.
-    return { disconnected: true, clientRevoked: false, tokensRevoked: 0, webhooksRemoved: 0 };
+    return (await this.object('POST', '/connect/disconnect', undefined, false)) as unknown as DisconnectResult;
   }
 
   /** `GET /connect/migration-window`, `connect:migrate`. Whether the site may still migrate, and until when. */
   async migrationWindow(): Promise<MigrationWindow> {
-    // Stub: slice 5 packet P3.
-    return { open: false, closesAt: null };
+    return (await this.object('GET', '/connect/migration-window', undefined, true)) as unknown as MigrationWindow;
   }
 
   /**
@@ -139,13 +143,66 @@ export class ConnectResource {
    * way.
    */
   async customerEmailKey(): Promise<CustomerEmailKey> {
-    // Stub: slice 5 packet P3.
-    return { keyId: '', secret: '' };
+    const answer = await this.object('GET', '/connect/customer-email-key', undefined, true);
+    if (!isFilled(answer.keyId) || !isEmailKey(answer.secret)) {
+      throw unexpected(
+        'GET',
+        '/connect/customer-email-key',
+        `a non-empty text keyId and a secret of at least ${MIN_EMAIL_KEY_BYTES} bytes in standard base64`,
+      );
+    }
+    return answer as unknown as CustomerEmailKey;
   }
 
   /** `GET /ping`. Proves the token works, and names the organization it belongs to. */
   async ping(): Promise<PingResult> {
-    // Stub: slice 5 packet P3.
-    return { ok: true, org: { id: 0, name: '' } };
+    return (await this.object('GET', '/ping', undefined, true)) as unknown as PingResult;
   }
+
+  /**
+   * Sends one route through the transport and answers its body when it is a
+   * JSON object. Any other 2xx raises `UnexpectedResponseError`, which
+   * carries no part of the body.
+   */
+  private async object(
+    method: HttpMethod,
+    path: string,
+    body: Record<string, unknown> | undefined,
+    retriable: boolean,
+  ): Promise<Record<string, unknown>> {
+    const response = await this.http.request({ method, path, ...(body !== undefined ? { body } : {}), retriable });
+    const answer = await parseJsonBody(response);
+    if (!isJsonObject(answer)) throw unexpected(method, path, 'a JSON object');
+    return answer;
+  }
+}
+
+/** `required` with each entry of `optional` that is not `undefined`. */
+function withDefined(required: Record<string, unknown>, optional: Record<string, unknown>): Record<string, unknown> {
+  const body = { ...required };
+  for (const [key, value] of Object.entries(optional)) {
+    if (value !== undefined) body[key] = value;
+  }
+  return body;
+}
+
+/** A JSON object, not an array or `null`. */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** A non-empty string. */
+function isFilled(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/** Standard padded base64 that decodes to at least {@link MIN_EMAIL_KEY_BYTES} bytes. */
+function isEmailKey(value: unknown): value is string {
+  if (!isFilled(value) || !STANDARD_BASE64.test(value)) return false;
+  return Buffer.from(value, 'base64').length >= MIN_EMAIL_KEY_BYTES;
+}
+
+/** The error for a 2xx without the shape a route names. It quotes none of the body. */
+function unexpected(method: HttpMethod, path: string, wanted: string): UnexpectedResponseError {
+  return new UnexpectedResponseError(`Siren: ${method} ${path} answered a 2xx without ${wanted}.`);
 }
