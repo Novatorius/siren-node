@@ -244,5 +244,53 @@
     "failing": [
       "P9: transactions bulk, creditCollaborator and sources"
     ]
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/records.ts",
+    "find": "  async sources(): Promise<RegistryOptions> {",
+    "replace": "  async sources(): Promise<RegistryOptions> {;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "r1-p9-create-retried",
+    "file": "src/resources/records.ts",
+    "find": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return this.http.request({ method: 'POST', path: this.path, body: params, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "expect": "caught",
+    "failing": [
+      "P9: transactions bulk, creditCollaborator and sources > sends every write once"
+    ]
+  },
+  {
+    "id": "r1-p9-create-path",
+    "file": "src/resources/records.ts",
+    "find": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return writeRecord<T>(this.http, 'POST', `${this.path}/create`, params);",
+    "expect": "caught",
+    "failing": [
+      "P9: transactions create > records a transaction with POST /transactions and answers it"
+    ]
+  },
+  {
+    "id": "r1-p9-credit-retried",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecord<BulkResult>(this.http, 'POST', `${this.path}/credit-collaborator`, body);",
+    "replace": "    return this.http.request({ method: 'POST', path: `${this.path}/credit-collaborator`, body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as BulkResult);",
+    "expect": "caught",
+    "failing": [
+      "P9: transactions bulk, creditCollaborator and sources > sends every write once"
+    ]
+  },
+  {
+    "id": "r1-p9-credit-path",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecord<BulkResult>(this.http, 'POST', `${this.path}/credit-collaborator`, body);",
+    "replace": "    return writeRecord<BulkResult>(this.http, 'POST', `${this.path}/credit-collaborators`, body);",
+    "expect": "caught",
+    "failing": [
+      "P9: transactions bulk, creditCollaborator and sources > credits transactions with POST /transactions/credit-collaborator"
+    ]
   }
 ]

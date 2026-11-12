@@ -98,8 +98,10 @@
     "file": "src/resources/record-writes.ts",
     "find": "  if (!isJsonObject(answer)) {",
     "replace": "  if (!isJsonObject(answer) && answer !== null) {",
-    "expect": "survives",
-    "failing": []
+    "expect": "caught",
+    "failing": [
+      "writeRecordOrNothing: a JSON null body"
+    ]
   },
   {
     "id": "p8-not-json-null",
@@ -269,6 +271,16 @@
     "expect": "caught",
     "failing": [
       "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "r1-p8-create-retried",
+    "file": "src/resources/records.ts",
+    "find": "    if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');\n    return this.http.request({ method: 'POST', path: this.path, body: params, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types > sends every write once"
     ]
   }
 ]
