@@ -209,7 +209,9 @@ describe('retry behavior', () => {
     );
 
     const promise = ctx.client.conversions.list();
-    await vi.advanceTimersByTimeAsync(10_000);
+    // Step the clock: on Node 18, reading the 500's body takes a real turn of
+    // the event loop, so one 10 s jump can pass before the retry wait exists.
+    for (let step = 0; step < 20; step++) await vi.advanceTimersByTimeAsync(500);
     const page = await promise;
 
     expect(page).toEqual([{ id: 1 }]);
