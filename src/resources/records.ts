@@ -214,7 +214,7 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * The filters {@link recoverCreate} and `transactions.recoverCreditCollaborator()`
    * send to `GET /conversions`. `listRecords` refuses any other key.
    */
-  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId'] as const;
+  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId', 'type'] as const;
 
   /**
    * The id filters among {@link RECOVERY_FILTERS}, by how Siren reads them.
