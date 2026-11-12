@@ -1,5 +1,6 @@
 import type { HttpClient } from '../http';
 import { parseJsonBody } from '../http';
+import { EventSlug } from '../taxonomy';
 import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '../types';
 
 /**
@@ -11,8 +12,11 @@ import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '.
  * as `status` and `body`. While the organization's engine is paused, Siren
  * queues the event and answers 202, which sets `queued: true`.
  *
- * Event ingestion is safe to auto-retry, so these calls retry on network
- * errors and 429/5xx up to the client's `maxRetries`.
+ * Sales, refunds and custom events retry on network errors and 429/5xx up
+ * to the client's `maxRetries`. Siren answers a resent sale with the first
+ * result and records each `refundId` once per order, so a retry records
+ * nothing new. A site visit is sent once, because Siren records every visit
+ * it receives, and a retry after a lost reply would record it twice.
  */
 export class EventsResource {
   constructor(private readonly http: HttpClient) {}
@@ -30,7 +34,7 @@ export class EventsResource {
     if (items !== undefined) {
       payload.items = items.map((item) => ({ ...item, quantity: item.quantity ?? 1 }));
     }
-    return this.send('sale', payload);
+    return this.send(EventSlug.Sale, payload, true);
   }
 
   /**
@@ -40,12 +44,15 @@ export class EventsResource {
    * `NotFoundError` when no matching sale exists.
    */
   refund(params: RefundParams): Promise<EventResult> {
-    return this.send('refund', params);
+    return this.send(EventSlug.Refund, params, true);
   }
 
-  /** Record a referred visit, opening an opportunity for the collaborator. */
+  /**
+   * Record a referred visit, opening an opportunity for the collaborator.
+   * Sent once, never retried, because Siren records every visit it receives.
+   */
   siteVisited(params: SiteVisitedParams): Promise<EventResult> {
-    return this.send('site-visited', params);
+    return this.send(EventSlug.SiteVisited, params, false);
   }
 
   /**
@@ -53,15 +60,19 @@ export class EventsResource {
    * is passed through unchanged as the JSON body.
    */
   ingest(slug: string, payload: Record<string, unknown>): Promise<EventResult> {
-    return this.send(slug, payload);
+    return this.send(slug, payload, true);
   }
 
-  private async send(slug: string, payload: unknown): Promise<EventResult> {
+  /**
+   * POST `payload` to `/event/{slug}`. `retriable` says whether the transport
+   * may resend it on a network error, 429 or 5xx.
+   */
+  private async send(slug: string, payload: unknown, retriable: boolean): Promise<EventResult> {
     const response = await this.http.request({
       method: 'POST',
       path: `/event/${encodeURIComponent(slug)}`,
       body: payload,
-      retriable: true,
+      retriable,
     });
     const result: EventResult = {};
 
