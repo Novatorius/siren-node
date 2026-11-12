@@ -302,6 +302,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * the caller as it is, after the read's own retries inside `maxRetries`,
    * with the create unsent. An error from the create itself reaches the
    * caller as it is too, and the create is never sent a third time.
+   * Running the recovery again after any error is safe, since it reads
+   * before it sends.
    *
    * Throws `SirenError` before anything is sent when `params` has no
    * `transactionId`, with exactly `conversions.recoverCreate() needs a
@@ -570,8 +572,10 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * `id,transactionId,collaboratorId,type`, `number: 200`, `offset` from 0,
    * `orderBy: 'id'` and `order: 'ASC'`, page after page, each `offset` the
    * number of rows read so far, until a page holds no rows. A short page is
-   * not the end, since Siren may answer fewer rows than asked. A
-   * transaction counts as credited when a row names it. Siren filters by the collaborator, so another collaborator's
+   * not the end, since Siren may answer fewer rows than asked. A row whose
+   * `id` an earlier row had means Siren did not read `offset`, and throws
+   * `UnexpectedResponseError` with nothing sent. A transaction counts as
+   * credited when a row names it. Siren filters by the collaborator, so another collaborator's
    * conversion on the same transaction does not count. It then sends
    * {@link creditCollaborator} once with the rest, in the order asked, or
    * nothing when none is left.
@@ -586,7 +590,8 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * Every error from a read reaches the caller as it is, after the read's
    * own retries inside `maxRetries`, with nothing sent. An error from the
    * credit itself reaches the caller as it is too, and it is never sent a
-   * third time.
+   * third time. Running the recovery again after any error is safe, since it
+   * reads before it sends.
    *
    * Answers `{ alreadyCredited, credited, result }`: the asked ids a row
    * named, the ids sent, and Siren's `{ success, affected }` for the send,

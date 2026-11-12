@@ -113,8 +113,8 @@ same classes, so a caller can read them from the class it calls. Slice 3's
 `SITE_CREATABLE_COLLABORATOR_FIELDS` is a named export because no resource
 class owns that create. Each refusal names every field the route reads,
 except the distributor one, which points at `DistributorsResource.CREATE_FIELDS`
-since fifteen names would bury the key it refuses. The allow lists cover the
-four creates. The update methods still send the caller's object as given.
+since fifteen names would hide the refused key. The allow lists cover the
+four creates.
 
 | Create | Fields | Cloud source | Against PHP |
 |---|---|---|---|
@@ -208,7 +208,9 @@ for what a well-formed answer shows is missing.
   `offset` the number of rows read so far, until a page holds no rows.
   Siren lowers a larger `number` to 200 (`PageSizeMiddleware.php`), and a
   short page is not taken as the end, so a lower cap later cannot hide a
-  credited transaction. A transaction that a row names is credited already.
+  credited transaction. A row whose `id` an earlier page held means Siren
+  did not read `offset`, and raises before the loop can run on. A
+  transaction that a row names is credited already.
   Filtering by the collaborator matters: another collaborator's conversion
   on the same transaction does not count. The method sends
   `creditCollaborator` once with the rest, in the order asked, or nothing,
@@ -222,32 +224,42 @@ no `items` key, an `items` that is not a list) or a row that is not an
 object raises `UnexpectedResponseError` with Siren's status. A row naming
 another transaction, engagement, collaborator or type means Siren did not
 read a filter, and raises with the row as its `data` and no status. Any
-error from a read passes through, after the read's own retries inside
-`maxRetries`, as every read in this slice has. In every one of these cases
+error from a read passes through, after the transport's own retries of the
+GET inside `maxRetries`, as every read in this slice has. Those retries stack
+with the queue's own, so a queue that owns retries builds the client with
+`maxRetries: 0`. In every one of these cases
 nothing is sent, because a broken answer must never count as proof that the
 first send failed. Only a well-formed empty answer sends again, once. An
 error from that send passes through, and the write is never sent a third
-time. Neither `create` nor `creditCollaborator` falls back to recovery on
-its own.
+time. Running the recovery again after any error is safe, since it reads
+before it sends. Neither `create` nor `creditCollaborator` falls back to
+recovery on its own.
 
 What each outcome means for the caller's queue:
 
 | Outcome | For the queue |
 |---|---|
-| an answer, `created` or `credited` | done |
-| `SirenError` before any request | permanent. The job is wrong, so dead-letter it |
+| an answer, `created`, or `credited` with `result.affected` equal to `credited.length` | done |
+| a credit answer whose `result.affected` is below `credited.length` | Siren skipped ids it could not find. Hold the job for a person |
+| `SirenError` before any request | permanent. The job is wrong, so hold it for a person |
 | `UnexpectedResponseError` with a status: an unreadable body | transient. Run the recovery again later. It sends nothing until an answer is readable |
-| `UnexpectedResponseError` with no status: a row naming another record | permanent. Siren ignored a filter, and every later run will see the same |
+| `UnexpectedResponseError` with no status: a row naming another record, or a row repeated across pages | permanent. Siren ignored a filter or the offset, and every later run will see the same |
 | an `ApiError` from the read | transient for a 429 or 5xx, permanent otherwise |
 | an `ApiError` from the send | as for the write on its own. Run the recovery again, which reads first |
 
+Transient means the queue's own backoff and attempt cap, and a job that runs
+out of attempts is held for a person, as is a permanent one.
+
 The read and the send are two requests, so two workers that recover the
-same write at once can both find nothing. The caller's queue runs one
-recovery per record at a time, with a dedupe key at insert: the create's
-`transactionId`, `engagementId` and `type`, or the collaborator, the type
-and the sorted transaction ids. A bound `transactions.create` needs no
-recovery method, since its 409 `ConflictError` means the first send
-landed, and the queue counts it as done.
+same write at once can both find nothing. The SDK holds no lock and sends no
+key, so the caller's queue runs one recovery per record at a time, with a
+dedupe key at insert: the create's `transactionId`, `engagementId` and
+`type`, or the collaborator, the type and the sorted transaction ids. A
+bound `transactions.create` answers a resend with a 409 `ConflictError`,
+which means the first send landed, and the queue counts it as done. An
+unbound `transactions.create`, `distributors.create` and `credits.adjust`
+have only the checks in the table above, and a job the table says not to
+resend is held for a person.
 
 Siren sets every `idempotencyKey` itself: `place:{collaborator}:{currency}:{token}`
 on a hold (`HoldService.php` line 550), and a `redeem:` key on the entries it
@@ -391,7 +403,9 @@ key it does not read.
 
 KB 568's database, state reset and logger parts do not apply here. The SDK
 has no database, keeps no state between calls and has no logger, so the
-fake `HttpClient` is the one seam, and each test builds its own. P10's test
+fake `HttpClient` is the one seam, and each test builds its own. Every
+failure reaches the caller as a typed error carrying Siren's status and
+body, and the caller logs it through its own logger. P10's test
 builds `Siren` with a fake `httpClient` and that base URL, and stubs the
 global fetch to fail.
 

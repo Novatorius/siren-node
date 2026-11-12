@@ -384,6 +384,43 @@ describe('4 fix F1: transactions.recoverCreditCollaborator', () => {
   });
 
   // Skipped until fix packet F1 (the lost-answer check) lands.
+  it.skip('raises for a row an earlier page held, since Siren did not read the offset, and never sends again', async () => {
+    const { http, transactions } = afterLostCredit([
+      reply(200, page([credit(71)])),
+      reply(200, page([credit(71)])),
+      reply(200, page([])),
+      reply(200, TransactionAnswers.credited),
+    ]);
+    await expect(transactions.creditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
+
+    const error = await transactions.recoverCreditCollaborator([71, 72], 42).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect(reads(http.requests)).toHaveLength(2);
+    expect(writes(http.requests)).toHaveLength(1);
+  });
+
+  // Skipped until fix packet F1 (the lost-answer check) lands.
+  it.skip('runs again after a failed second credit, reading before it sends', async () => {
+    const { http, transactions } = afterLostCredit([
+      reply(200, page([])),
+      reply(500, { error: 'Server error.' }),
+      reply(200, page([credit(71)])),
+      reply(200, page([])),
+      reply(200, TransactionAnswers.credited),
+    ]);
+    await expect(transactions.creditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
+    await expect(transactions.recoverCreditCollaborator([71, 72], 42)).rejects.toBeInstanceOf(ApiError);
+
+    expect(await transactions.recoverCreditCollaborator([71, 72], 42)).toEqual({
+      alreadyCredited: [71],
+      credited: [72],
+      result: TransactionAnswers.credited,
+    });
+    expect(bodyOf(writes(http.requests)[2])).toEqual({ transactionIds: [72], collaboratorId: 42 });
+  });
+
+  // Skipped until fix packet F1 (the lost-answer check) lands.
   it.skip('lets an error from the second credit through and never sends a third', async () => {
     const { http, transactions } = afterLostCredit([
       reply(200, page([])),
