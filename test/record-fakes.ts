@@ -12,6 +12,10 @@ import { FakeHttpClient, reply, spySource } from './http-fakes';
  * (KB 568, https://navigator.novatori.us/r/kb/568). No test here builds a
  * `Siren` client or reaches the global fetch, so nothing can leave the
  * machine.
+ *
+ * The Cloud answers below were hand-read from Siren's source at b6f7140,
+ * each with the file and lines it came from, not captured from a running
+ * Cloud.
  */
 
 /** A reserved host (RFC 6761), so even a request that slipped past the fake could not reach Siren. */
