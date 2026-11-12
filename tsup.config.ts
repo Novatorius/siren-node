@@ -7,12 +7,13 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     storefront: 'src/storefront/index.ts',
+    connect: 'src/connect/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,
   clean: true,
-  splitting: false,
+  splitting: true,
   target: 'node18',
   platform: 'node',
 });

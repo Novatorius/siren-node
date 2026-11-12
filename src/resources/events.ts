@@ -2,6 +2,7 @@ import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import { EventSlug } from '../taxonomy';
 import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '../types';
+import type { ForwardOptions, ForwardedEventEnvelope, ForwardedEventSlug } from '../connect/forwarded-events';
 
 /**
  * Event ingestion — the primary integration point. Wraps `POST /event/{slug}`.
@@ -75,6 +76,37 @@ export class EventsResource {
    */
   ingest(slug: string, payload: Record<string, unknown>): Promise<EventResult> {
     return this.send(slug, payload, false);
+  }
+
+  /**
+   * Forward an event a connected site recorded, in Siren's versioned
+   * envelope, to `POST /event/{slug}`. The token needs `connect:ingest`, or
+   * an API key the exact `event:{slug}` scope.
+   *
+   * The body is the envelope as given, and the answer is read as every
+   * event's is. Cloud claims each forwarded event once, on its natural key
+   * or on `eventId`, and answers a repeat as `duplicate`, so a forward is
+   * retried on network errors, 429 and 5xx. `finalAttempt: true` adds the
+   * header `X-Siren-Final-Attempt: 1`, and no other call sends it.
+   *
+   * Throws `SirenError`, and sends nothing, when `slug` is not a
+   * `ForwardedEventSlug` value, so a typo never becomes a custom event, or
+   * when the envelope breaks a rule Cloud checks before it reads `data`:
+   * `version` other than 1, `eventId` not a UUID, `origin` other than
+   * `site`, `occurredAt` neither `null` nor ISO 8601 with a `Z` or
+   * `+hh:mm` offset, or `data` not a plain object. No message quotes a value
+   * from `data`.
+   */
+  forward<S extends ForwardedEventSlug>(
+    slug: S,
+    envelope: ForwardedEventEnvelope<S>,
+    options: ForwardOptions = {},
+  ): Promise<EventResult> {
+    // Stub: slice 5 packet P6.
+    void slug;
+    void envelope;
+    void options;
+    return Promise.resolve({});
   }
 
   /**
