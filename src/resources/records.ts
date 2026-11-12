@@ -504,8 +504,23 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
     ) {
       throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');
     }
-    // Stub: slice 4 fix packet F2 (the binding pair).
     // Stub: slice 4 fix packet F3 (the create allow lists).
+    const bindingId: unknown = params.bindingId;
+    const bindingDataType: unknown = params.bindingDataType;
+    const given = (value: unknown) => value !== undefined && value !== null;
+    if (given(bindingId) !== given(bindingDataType)) {
+      throw new SirenError(
+        'transactions.create() needs bindingId and bindingDataType together, or neither. Siren finds a resent transaction only by both.',
+      );
+    }
+    for (const [key, value] of [
+      ['bindingId', bindingId],
+      ['bindingDataType', bindingDataType],
+    ] as const) {
+      if (value === '' || value === '0' || value === 0) {
+        throw new SirenError(`transactions.create() cannot send ${key} ${JSON.stringify(value)}, which Siren reads as no binding.`);
+      }
+    }
     return writeRecord<T>(this.http, 'POST', this.path, params);
   }
 
