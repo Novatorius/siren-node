@@ -13,7 +13,7 @@ import type {
 } from '../record-types';
 import type { ConversionBulkAction, TransactionBulkAction } from '../taxonomy';
 import type { ListParams, SirenList } from '../types';
-import { MAX_BULK_IDS, bulkRecords, deleteRecord, readObject, recordId, writeRecord } from './record-requests';
+import { MAX_BULK_IDS, bulkRecords, deleteRecord, listRecords, readObject, recordId, writeRecord } from './record-requests';
 import { writeRecordOrNothing } from './record-writes';
 
 /** The largest page Siren serves. Siren lowers a larger `number` to this. */
@@ -319,10 +319,41 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * back to this method on its own.
    */
   async recoverCreate(params: CreateConversionParams): Promise<RecoveredConversion<T>> {
-    // Stub: slice 4 fix packet F1 (the lost-answer check). It throws, so a
-    // caller can never read the stub as a recovered create.
-    void params;
-    throw new Error('conversions.recoverCreate() is not built yet: slice 4 fix packet F1.');
+    if (params?.transactionId === undefined) {
+      throw new SirenError(
+        'conversions.recoverCreate() needs a transactionId to find the first send. Without one, Siren cannot tell whether the create landed.',
+      );
+    }
+    const engagementId = recordId(params.engagementId, 'conversions.recoverCreate', 'engagementId');
+    const transactionId = recordId(params.transactionId, 'conversions.recoverCreate', 'transactionId');
+    const rows = await listRecords<Record<string, unknown>>(
+      this.http,
+      this.path,
+      {
+        transactionId,
+        engagementId,
+        type: params.type,
+        fields: 'id,engagementId,transactionId,type,status',
+        number: 1,
+        orderBy: 'id',
+        order: 'ASC',
+      },
+      ConversionsResource.RECOVERY_FILTERS,
+      ConversionsResource.RECOVERY_ID_FILTERS,
+    );
+    // A row for another transaction, engagement or type means Siren did not
+    // read a filter. Status and obligationId are not compared, since an
+    // approval changes them after the first send landed.
+    for (const row of rows) {
+      if (row.transactionId !== transactionId || row.engagementId !== engagementId || row.type !== params.type) {
+        throw new UnexpectedResponseError(
+          `Siren answered GET ${this.path} with a conversion for another transaction, engagement or type, so it did not read a filter. Nothing was sent.`,
+          { data: row },
+        );
+      }
+    }
+    if (rows.length > 0) return { conversion: rows[0] as T, created: false };
+    return { conversion: await this.create(params), created: true };
   }
 
   /**
@@ -610,12 +641,69 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
     collaboratorId: number,
     type?: string,
   ): Promise<RecoveredCredit> {
-    // Stub: slice 4 fix packet F1 (the lost-answer check). It throws, so a
-    // caller can never read the stub as a recovered credit.
-    void transactionIds;
-    void collaboratorId;
-    void type;
-    throw new Error('transactions.recoverCreditCollaborator() is not built yet: slice 4 fix packet F1.');
+    // creditCollaborator's own checks and messages, run before the first read.
+    const method = 'transactions.creditCollaborator';
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS) {
+      throw new SirenError(`${method} needs transactionIds: a list of 1 to ${MAX_BULK_IDS} ids.`);
+    }
+    for (const id of transactionIds) recordId(id, method, 'transactionId');
+    recordId(collaboratorId, method, 'collaboratorId');
+    if (type !== undefined && (typeof type !== 'string' || type === '')) {
+      throw new SirenError(`${method} needs a type that is a non-empty string.`);
+    }
+
+    const kind = type ?? 'sale';
+    const asked = new Set<number>(transactionIds);
+    const found = new Set<number>();
+    const seen = new Set<unknown>();
+    let offset = 0;
+    for (;;) {
+      const rows = await listRecords<Record<string, unknown>>(
+        this.http,
+        '/conversions',
+        {
+          transactionId: [...transactionIds],
+          collaboratorId,
+          type: kind,
+          fields: 'id,transactionId,collaboratorId,type',
+          number: MAX_PAGE_SIZE,
+          offset,
+          orderBy: 'id',
+          order: 'ASC',
+        },
+        ConversionsResource.RECOVERY_FILTERS,
+        ConversionsResource.RECOVERY_ID_FILTERS,
+      );
+      for (const row of rows) {
+        // A row an earlier page held means Siren did not read the offset, and
+        // reading on would never reach an empty page.
+        if (seen.has(row.id)) {
+          throw new UnexpectedResponseError(
+            'Siren answered GET /conversions with a row an earlier page held, so it did not read the offset. Nothing was sent.',
+            { data: row },
+          );
+        }
+        seen.add(row.id);
+        const id = row.transactionId;
+        if (typeof id !== 'number' || !asked.has(id) || row.collaboratorId !== collaboratorId || row.type !== kind) {
+          throw new UnexpectedResponseError(
+            'Siren answered GET /conversions with a conversion for another transaction, collaborator or type, so it did not read a filter. Nothing was sent.',
+            { data: row },
+          );
+        }
+        found.add(id);
+      }
+      // Only an empty page ends the read. Siren may answer fewer rows than
+      // asked before the last page.
+      if (rows.length === 0) break;
+      offset += rows.length;
+    }
+
+    const alreadyCredited = transactionIds.filter((id) => found.has(id));
+    const rest = transactionIds.filter((id) => !found.has(id));
+    if (rest.length === 0) return { alreadyCredited, credited: [], result: null };
+    const result = await this.creditCollaborator(rest, collaboratorId, type);
+    return { alreadyCredited, credited: rest, result };
   }
 
   /**
