@@ -10,10 +10,6 @@ import { PropertyQualifier, SirenError } from '../src/index';
  * coupons (ConnectorRequestRules.php at b6f7140).
  *
  * Unit shape: PropertyQualifier is pure.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P2 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 describe('P2: PropertyQualifier constants', () => {
@@ -27,7 +23,7 @@ describe('P2: PropertyQualifier constants', () => {
 });
 
 describe('P2: PropertyQualifier.unqualify', () => {
-  it.skip.each([
+  it.each([
     ['coupon@property:5', 'coupon'],
     ['wordpress_user@property:12', 'wordpress_user'],
     ['credit_coupon_PTS@property:7', 'credit_coupon_PTS'],
@@ -43,7 +39,7 @@ describe('P2: PropertyQualifier.unqualify', () => {
 });
 
 describe('P2: PropertyQualifier.propertyOf', () => {
-  it.skip.each([
+  it.each([
     ['coupon@property:5', 5],
     ['wordpress_user@property:12', 12],
     ['coupon@property:0', 0],
@@ -58,11 +54,11 @@ describe('P2: PropertyQualifier.propertyOf', () => {
 });
 
 describe('P2: PropertyQualifier.isValidName', () => {
-  it.skip.each(['coupon', 'wordpress_user', 'credit-coupon', 'A9', '_', '-'])('accepts %j', (name) => {
+  it.each(['coupon', 'wordpress_user', 'credit-coupon', 'A9', '_', '-'])('accepts %j', (name) => {
     expect(PropertyQualifier.isValidName(name)).toBe(true);
   });
 
-  it.skip.each([
+  it.each([
     ['empty', ''],
     ['a qualifier', 'coupon@property:5'],
     ['a comma', 'coupon,tracking'],
@@ -79,11 +75,11 @@ describe('P2: PropertyQualifier.isValidName', () => {
 });
 
 describe('P2: PropertyQualifier.assertName', () => {
-  it.skip('returns a valid name unchanged', () => {
+  it('returns a valid name unchanged', () => {
     expect(PropertyQualifier.assertName('coupon', 'type')).toBe('coupon');
   });
 
-  it.skip.each([
+  it.each([
     ['empty', ''],
     ['a qualifier', 'coupon@property:5'],
     ['a comma', 'coupon,tracking'],
@@ -105,14 +101,14 @@ describe('P2: PropertyQualifier.assertName', () => {
 });
 
 describe('P2: PropertyQualifier.isValidCodeType', () => {
-  it.skip.each(['coupon', 'credit_coupon_PTS', 'coupon@source:wc', 'coupon@source:edd-2', `coupon@source:${'a'.repeat(32)}`])(
+  it.each(['coupon', 'credit_coupon_PTS', 'coupon@source:wc', 'coupon@source:edd-2', `coupon@source:${'a'.repeat(32)}`])(
     'accepts %j',
     (type) => {
       expect(PropertyQualifier.isValidCodeType(type)).toBe(true);
     },
   );
 
-  it.skip.each([
+  it.each([
     ['empty', ''],
     ['a Property qualifier', 'coupon@property:5'],
     ['a source with no integration', 'coupon@source:'],
@@ -129,11 +125,11 @@ describe('P2: PropertyQualifier.isValidCodeType', () => {
 });
 
 describe('P2: PropertyQualifier.assertCodeType', () => {
-  it.skip.each(['coupon', 'coupon@source:wc'])('returns %j unchanged', (type) => {
+  it.each(['coupon', 'coupon@source:wc'])('returns %j unchanged', (type) => {
     expect(PropertyQualifier.assertCodeType(type, 'type')).toBe(type);
   });
 
-  it.skip.each([
+  it.each([
     ['empty', ''],
     ['a Property qualifier', 'coupon@property:5'],
     ['a source on another type', 'tracking@source:wc'],
@@ -153,7 +149,7 @@ describe('P2: PropertyQualifier.assertCodeType', () => {
 });
 
 describe('P2: PropertyQualifier.plainRecord', () => {
-  it.skip('strips the qualifier and records the Property', () => {
+  it('strips the qualifier and records the Property', () => {
     const record = { code: 'SAVE10', type: 'coupon@property:5', collaboratorId: 4 };
 
     expect(PropertyQualifier.plainRecord(record, 'type')).toEqual({
@@ -164,7 +160,7 @@ describe('P2: PropertyQualifier.plainRecord', () => {
     });
   });
 
-  it.skip('records a null Property for a name in no site namespace', () => {
+  it('records a null Property for a name in no site namespace', () => {
     expect(PropertyQualifier.plainRecord({ code: 'ADA', type: 'tracking' }, 'type')).toEqual({
       code: 'ADA',
       type: 'tracking',
@@ -172,14 +168,14 @@ describe('P2: PropertyQualifier.plainRecord', () => {
     });
   });
 
-  it.skip('leaves a suffix that is not a safe integer on, with a null Property', () => {
+  it('leaves a suffix that is not a safe integer on, with a null Property', () => {
     expect(PropertyQualifier.plainRecord({ type: 'coupon@property:99999999999999999999' }, 'type')).toEqual({
       type: 'coupon@property:99999999999999999999',
       propertyId: null,
     });
   });
 
-  it.skip('never changes the record passed in', () => {
+  it('never changes the record passed in', () => {
     const record = { code: 'SAVE10', type: 'coupon@property:5' };
     const plain = PropertyQualifier.plainRecord(record, 'type');
 
@@ -187,7 +183,7 @@ describe('P2: PropertyQualifier.plainRecord', () => {
     expect(plain).not.toBe(record);
   });
 
-  it.skip('returns a record whose field is not a string unchanged, as the same object', () => {
+  it('returns a record whose field is not a string unchanged, as the same object', () => {
     const missing = { code: 'SAVE10' };
     const numeric = { code: 'SAVE10', type: 5 };
 
@@ -196,7 +192,7 @@ describe('P2: PropertyQualifier.plainRecord', () => {
     expect(missing).toEqual({ code: 'SAVE10' });
   });
 
-  it.skip('reads the field it is given', () => {
+  it('reads the field it is given', () => {
     expect(PropertyQualifier.plainRecord({ externalType: 'wc_product@property:3' }, 'externalType')).toEqual({
       externalType: 'wc_product',
       propertyId: 3,
