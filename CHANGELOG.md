@@ -17,8 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requires `trackingId`.
 - `new Siren()` throws `SirenError` when `timeout` is not a number from 1 to 2147483647 for each
   send, when `maxRetries` is not a whole number of 0 or more (it has no ceiling), or when `baseUrl`
-  is not an http or https URL with no user name or password in it, or holds a query, a fragment, a
-  space or a control character. NaN, Infinity, `null` and strings are refused. Before, a NaN `maxRetries` turned retries off, Infinity retried without end,
+  is not an http or https URL with no user name or password in it. A `baseUrl` must also be
+  printable ASCII, U+0021 to U+007E, with no query, fragment, backslash or `@`, so a space or a
+  control character is refused and an international host goes in its punycode form. NaN, Infinity,
+  `null` and strings are refused. Before, a NaN `maxRetries` turned retries off, Infinity retried without end,
   a `timeout` above 2147483647 aborted every request after 1 ms, a `null` took the default, and a
   `baseUrl` that fetch could not use was resent and raised as a lost connection.
 - `new Siren()` reads only the options object's own properties, each once. A `baseUrl`,

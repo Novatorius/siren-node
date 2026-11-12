@@ -264,6 +264,9 @@ client options and where the client reads them from. Each rule throws
 `SirenError` for a value outside it. The public surface keeps its names and
 types. The review that set them is
 [PR audit: siren-node PR 26, slice 2 review (Journal 32275)](https://navigator.novatori.us/r/journal/32275).
+The baseUrl character rule came from the slice 2b review,
+[PR audit: siren-node PR 36, slice 2b review (Journal 32289)](https://navigator.novatori.us/r/journal/32289),
+and ships as slice 2c.
 
 ### The bearer token rule
 
@@ -314,10 +317,18 @@ that `maxRetries` is not negative, and its `timeout` is in seconds.
   scheme and no user name or password, because it decides where the token
   goes. Fetch refuses a URL with no scheme or with a user name, and the
   transport would read that refusal as a lost connection, resend it and
-  raise a `ConnectionError` that quotes the URL. It also holds no `?`, `#`,
-  space or control character. The transport joins each path onto the string
-  as given, so a query or fragment would swallow every path, and `new URL`
-  drops spaces and line breaks that a host client would still receive.
+  raise a `ConnectionError` that quotes the URL. Every character is
+  printable ASCII, U+0021 to U+007E, and none is a `?`, `#`, backslash or
+  `@`. The transport joins each path onto the string as given, so a query
+  or fragment would swallow every path. `new URL` drops spaces and line
+  breaks and percent-encodes any other character outside that range, so a
+  host client would receive a string other than the one checked, and one
+  that writes Latin-1 sends U+010A as a line feed. `new URL` also reads a
+  backslash as a slash, so `http://localhost:1\:SECRET@127.0.0.1` has no
+  user name to the check, while a client that parses by RFC 3986 reads
+  `localhost:1\:SECRET` as one and sends to 127.0.0.1. A base URL has no
+  other use for an `@`. An international host goes in its punycode form,
+  and a path character outside the range goes percent-encoded.
 - `timeout` is a number from 1 to 2147483647 milliseconds, fractions
   allowed, for each send. A Node timer above 2147483647 fires after 1 ms. A
   call can make up to `maxRetries + 2` sends, each with its own timeout,
@@ -380,3 +391,15 @@ constructor check. Each list carries the four controls the harness asks for.
 To reproduce, run
 `node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-2b-p1.json` and
 the same for the P2 list.
+
+Slice 2c's one packet, 2c P1, is the baseUrl character rule, with its tests
+in the `2c P1` describe of `test/siren-option-checks.test.ts`. Each refused
+row checks that the message names the range and only the type, that the
+error has no `cause`, and that no message, stack, field or `inspect` output
+holds a word of the URL or its bad character. Its rows that accept a URL,
+the two ends of the range and a percent-encoded path included, run now. The
+rows that refuse one are skipped until 2c P1 lands.
+`scripts/mutations/ncc-slice-2c.json` breaks each part of the rule and each
+leak check, with the same controls, and
+`node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-2c.json`
+reproduces it.

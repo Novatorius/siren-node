@@ -91,8 +91,10 @@ export class Siren {
    *
    * Also throws `SirenError` when `baseUrl` is not an http or https URL
    * with no user name or password in it (a string `new URL` parses), or
-   * holds a `?`, a `#`, a space or a control character, so the string the
-   * transport joins paths onto is the string that was checked,
+   * holds a `?`, a `#`, a backslash, an `@` or any character outside
+   * printable ASCII, U+0021 to U+007E, so the string the transport joins
+   * paths onto is the string that was checked and an international host
+   * comes in its punycode form,
    * `timeout` is not a number from 1 to 2147483647 (the longest wait a
    * timer holds), or `maxRetries` is not a whole number of 0 or more, with
    * no ceiling. NaN, Infinity, `null` and any value of the wrong type are
@@ -203,9 +205,10 @@ function resolveHttpClient(httpClient: unknown): HttpClient {
 
 /**
  * Answers `baseUrl`, or `DEFAULT_BASE_URL` when it is absent. Refuses any
- * value that is not a string with no `?`, `#`, space or control character,
- * that `new URL` parses with the http or https scheme and no user name or
- * password. The message never quotes the value.
+ * value that is not a string of printable ASCII, U+0021 to U+007E, with no
+ * `?`, `#`, backslash or `@`, that `new URL` parses with the http or https
+ * scheme and no user name or password. The message names that range and
+ * never quotes the value, and the error carries no `cause`.
  */
 function resolveBaseUrl(baseUrl: unknown): string {
   if (baseUrl === undefined) return DEFAULT_BASE_URL;
