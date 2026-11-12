@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { inspect } from 'node:util';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Siren, SirenError, type SirenOptions } from '../src/index';
 import { CloudAnswers, FakeHttpClient, failOnGlobalFetch, reply, spySource } from './http-fakes';
@@ -222,6 +223,99 @@ describe('2b P2: Siren baseUrl check', () => {
     await new Siren({ apiKey: KEY, httpClient, baseUrl }).payouts.list();
 
     expect(httpClient.requests[0]!.url).toBe(url);
+  });
+});
+
+/** Everything an error shows a caller or a log: message, stack, fields, getters and hidden properties. */
+function shown(error: SirenError): string {
+  return [error.message, error.stack, JSON.stringify(error), inspect(error, { depth: 10, showHidden: true, getters: true })].join(' ');
+}
+
+/**
+ * The parts of a URL a leak would show, in lower case: each run of letters
+ * and digits that holds a letter and is four or more long, other than the
+ * scheme, and each UTF-16 code unit outside U+0021 to U+007E, so half of an
+ * emoji counts. A code unit also counts in the forms a message or `inspect`
+ * would write it, such as `\x85`, `\u0085` and `U+0085`. Most test URLs use
+ * made-up words, such as `qhostq` and `QSECRETQ`, because words like `siren`
+ * and `test` sit in every stack frame's file path. For the same reason the
+ * check leaves out the `@` and the backslash, since `@vitest` sits in the
+ * frames too.
+ */
+function urlParts(url: string): string[] {
+  const words = url
+    .split(/[^A-Za-z0-9]+/)
+    .filter((part) => part.length >= 4 && /[A-Za-z]/.test(part) && !/^https?$/i.test(part));
+  const unprintable = url.split('').filter((unit) => unit < '\u0021' || unit > '\u007e');
+  const forms = unprintable.flatMap((unit) => {
+    const hex = unit.charCodeAt(0).toString(16).padStart(4, '0');
+    const escaped = [`\\u${hex}`, `u+${hex}`];
+    if (unit.charCodeAt(0) <= 0xff) escaped.push(`\\x${hex.slice(2)}`);
+    return [unit, ...escaped];
+  });
+  return [...words, ...forms].map((part) => part.toLowerCase());
+}
+
+describe('2c P1: Siren baseUrl characters', () => {
+  it.each([
+    ['U+0080, the first C1 control, in the path', 'https://qhostq.example/qpathq/\u0080v1'],
+    ['U+0085, next line, in the path', 'https://qhostq.example/qpathq/\u0085v1'],
+    ['U+009F, the last C1 control, in the path', 'https://qhostq.example/qpathq/\u009fv1'],
+    ['U+00A0, a no-break space, in the path', 'https://qhostq.example/qpathq/\u00a0v1'],
+    ['U+00FC in a host not given in punycode', 'https://b\u00fccherq.example/qpathq/v1'],
+    ['U+010A, which a Latin-1 client sends as a line feed, in the path', 'https://qhostq.example/qpathq/\u010av1'],
+    ['U+010A in the host', 'https://q\u010ahostq.example/qpathq/v1'],
+    ['U+2028, line separator, in the path', 'https://qhostq.example/qpathq/\u2028v1'],
+    ['an emoji in the path', 'https://qhostq.example/qpathq/\u{1f99c}v1'],
+    ['an emoji as the host', 'https://\u{1f99c}.example/qpathq/v1'],
+    ['a backslash alone in the path', 'https://qhostq.example/qpathq\\v1'],
+    ['a backslash for every path slash', 'https://qhostq.example\\qpathq\\v1'],
+    ['the backslash form that hides a user name and password', 'http://localhost:1\\:QSECRETQ@127.0.0.1:8080/qpathq/v1'],
+    ['an @ in the path', 'https://qhostq.example/qpathq/v1/@qmemberq'],
+    ['an @ at the end', 'https://qhostq.example/qpathq/v1@'],
+    ['an @ with an empty user name before the host', 'https://@qhostq.example/qpathq/v1'],
+    ['no slashes after the scheme', 'https:qhostq.example/qpathq/v1'],
+    ['one slash after the scheme', 'http:/127.0.0.1:8080/qpathq/v1'],
+    ['three slashes after the scheme', 'http:///qhostq.example/qpathq/v1'],
+    ['a percent-encoded U+00FC in the host', 'https://b%C3%BCcherq.example/qpathq/v1'],
+    ['a percent-encoded full stop in the host', 'https://qhostq%E3%80%82example/qpathq/v1'],
+  ])('refuses a baseUrl with %s, naming the rule and only the type', (_name, baseUrl) => {
+    let error: unknown;
+    try {
+      new Siren({ apiKey: KEY, httpClient: new FakeHttpClient([reply(200, [])]), baseUrl });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(SirenError);
+    const refusal = error as SirenError;
+    expect(refusal.message).toMatch(/\bbaseUrl\b/);
+    expect(refusal.message).toMatch(/http or https URL/);
+    expect(refusal.message).toContain('U+0021 to U+007E');
+    expect(refusal.message).toContain('backslash');
+    expect(refusal.message).toContain('@');
+    expect(refusal.message).toMatch(/It got string\.$/);
+    expect(refusal.cause).toBeUndefined();
+    const text = shown(refusal).toLowerCase();
+    expect(urlParts(baseUrl).filter((part) => text.includes(part))).toEqual([]);
+  });
+
+  it.each([
+    ['a plain https URL', 'https://qhostq.example/qpathq/v1', 'https://qhostq.example/qpathq/v1/payouts'],
+    ['an http URL with a port', 'http://127.0.0.1:8080/qpathq/v1', 'http://127.0.0.1:8080/qpathq/v1/payouts'],
+    ['a localhost URL with a port', 'http://localhost:8888/qpathq/v1', 'http://localhost:8888/qpathq/v1/payouts'],
+    ['an IPv6 loopback URL', 'http://[::1]:8080/qpathq/v1', 'http://[::1]:8080/qpathq/v1/payouts'],
+    ['a URL with a longer path', 'https://qhostq.example/a/b-c/d_e/v1', 'https://qhostq.example/a/b-c/d_e/v1/payouts'],
+    ['a URL with a punycode host', 'https://xn--bcher-kva.example/qpathq/v1', 'https://xn--bcher-kva.example/qpathq/v1/payouts'],
+    ['a URL whose path holds U+0021 and U+007E, the ends of the range', 'https://qhostq.example/!q~/v1', 'https://qhostq.example/!q~/v1/payouts'],
+    ['a URL with a percent-encoded character in the path', 'https://qhostq.example/q%C3%BC/v1', 'https://qhostq.example/q%C3%BC/v1/payouts'],
+    ['a URL that new URL would rewrite, with a capital host and the default port', 'https://QHOSTQ.example:443/qpathq/v1', 'https://QHOSTQ.example:443/qpathq/v1/payouts'],
+  ])('accepts a baseUrl that is %s and sends to it as given', async (_name, baseUrl, url) => {
+    const httpClient = new FakeHttpClient([reply(200, [])]);
+
+    await new Siren({ apiKey: KEY, httpClient, baseUrl }).payouts.list();
+
+    expect(httpClient.requests.map((request) => request.url)).toEqual([url]);
   });
 });
 

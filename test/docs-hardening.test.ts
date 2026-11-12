@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 /*
  * The README's configuration section and the CHANGELOG's Unreleased section
  * are what a caller reads, so each of the bearer token, option and
- * own-property rules must appear in both.
+ * own-property rules, the baseUrl character rule among them, must appear
+ * in both.
  */
 
 function read(name: string): string {
@@ -39,6 +40,9 @@ const RULES: Array<[string, RegExp]> = [
   ['the maxRetries range', /maxRetries[\s\S]*whole number of 0 or more/],
   ['the maxRetries rule with no ceiling', /maxRetries[\s\S]*no ceiling/],
   ['the baseUrl rule', /baseUrl[\s\S]*http or https URL with no user name or password/],
+  ['the baseUrl character range', /baseUrl[\s\S]*U\+0021 to U\+007E/],
+  ['the baseUrl backslash and @ refusals', /baseUrl[\s\S]*backslash[\s\S]*`@`/],
+  ['the punycode form for an international host', /international host[\s\S]*punycode/],
   ['the own-property rule', /own properties/],
 ];
 

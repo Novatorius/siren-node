@@ -90,9 +90,12 @@ export class Siren {
    * other choice. No message carries a credential.
    *
    * Also throws `SirenError` when `baseUrl` is not an http or https URL
-   * with no user name or password in it (a string `new URL` parses), or
-   * holds a `?`, a `#`, a space or a control character, so the string the
-   * transport joins paths onto is the string that was checked,
+   * with no user name or password in it (a string `new URL` parses), does
+   * not start with `http://` or `https://` and a host with no `%`, or holds
+   * a `?`, a `#`, a backslash, an `@` or any character outside visible
+   * ASCII, U+0021 to U+007E. The check reads the raw string, so the string
+   * the transport joins paths onto is the string that was checked, and an
+   * international host must come in punycode. It also throws when
    * `timeout` is not a number from 1 to 2147483647 (the longest wait a
    * timer holds), or `maxRetries` is not a whole number of 0 or more, with
    * no ceiling. NaN, Infinity, `null` and any value of the wrong type are
@@ -203,21 +206,25 @@ function resolveHttpClient(httpClient: unknown): HttpClient {
 
 /**
  * Answers `baseUrl`, or `DEFAULT_BASE_URL` when it is absent. Refuses any
- * value that is not a string with no `?`, `#`, space or control character,
- * that `new URL` parses with the http or https scheme and no user name or
- * password. The message never quotes the value.
+ * value that is not a string, that holds a character outside visible ASCII
+ * (U+0021 to U+007E) or a `?`, `#`, backslash or `@`, that does not start
+ * with `http://` or `https://` and a host with no `%`, or that `new URL`
+ * does not parse with the http or https scheme and an empty user name and
+ * password. The message names that range, the backslash and the `@`, and
+ * never quotes the value, and the error carries no `cause`.
  */
 function resolveBaseUrl(baseUrl: unknown): string {
   if (baseUrl === undefined) return DEFAULT_BASE_URL;
   if (typeof baseUrl === 'string' && isHttpUrl(baseUrl)) return baseUrl;
   throw new SirenError(
-    `Siren: baseUrl must be an http or https URL with no user name, password, query, fragment, space or control character. It got ${described(baseUrl)}.`,
+    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,
   );
 }
 
 /** True for a string the transport can join paths onto and send a token to. */
 function isHttpUrl(text: string): boolean {
-  if (/[?#\u0000-\u0020\u007f]/.test(text)) return false;
+  if (/[^\u0021-\u007e]|[?#\\@]/.test(text)) return false;
+  if (!/^https?:\/\/[^/%]+(?:\/|$)/i.test(text)) return false;
   let url: URL;
   try {
     url = new URL(text);

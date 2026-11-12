@@ -8,10 +8,13 @@ import type { HttpClient } from './http';
 export interface SirenBaseOptions {
   /**
    * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
-   * Point this at staging or a local dev server as needed. Any value but an
-   * http or https URL with no user name or password in it, and no query,
-   * fragment, space or control character, throws `SirenError` at
-   * construction.
+   * Point this at staging or a local dev server as needed. It must be an
+   * http or https URL with no user name or password in it, made only of
+   * visible ASCII, U+0021 to U+007E, with no `?`, `#`, backslash or `@`. It
+   * starts with `http://` or `https://` and a host that holds no `%`. Give
+   * an international host in its punycode form, such as
+   * `xn--bcher-kva.example`. Any other value throws `SirenError` at
+   * construction, and the message names only the value's type.
    */
   baseUrl?: string;
   /**
