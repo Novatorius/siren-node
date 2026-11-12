@@ -107,8 +107,8 @@
   {
     "id": "scope-drop-message-fallback",
     "file": "src/errors.ts",
-    "find": "if (named) this.scope = named;",
-    "replace": "void named;",
+    "find": "if (end > 0) this.scope = captured.slice(0, end);",
+    "replace": "void end;",
     "expect": "caught",
     "failing": [
       "a 403 with no code that says the token is not authorized for a scope is a MissingScopeError with that scope",
@@ -118,11 +118,32 @@
   {
     "id": "scope-keep-trailing-colon",
     "file": "src/errors.ts",
-    "find": "?.[1]?.replace(/:+$/, '');",
-    "replace": "?.[1];",
+    "find": "while (end > 0 && captured[end - 1] === ':') end--;",
+    "replace": "while (false) end--;",
     "expect": "caught",
     "failing": [
-      "reads the scope from the message without a trailing colon"
+      "reads the scope from the message without a trailing colon",
+      "drops every colon that ends the name and keeps the colons inside it"
+    ]
+  },
+  {
+    "id": "scope-trim-backtracks",
+    "file": "src/errors.ts",
+    "find": "      if (end > 0) this.scope = captured.slice(0, end);",
+    "replace": "      if (end > 0) this.scope = captured.replace(/:+$/, '');",
+    "expect": "caught",
+    "failing": [
+      "reads a name holding a long run of colons in well under a second"
+    ]
+  },
+  {
+    "id": "scope-only-colons-named",
+    "file": "src/errors.ts",
+    "find": "      if (end > 0) this.scope = captured.slice(0, end);",
+    "replace": "      if (captured !== '') this.scope = captured.slice(0, end);",
+    "expect": "caught",
+    "failing": [
+      "leaves the scope undefined when the name is only colons"
     ]
   },
   {

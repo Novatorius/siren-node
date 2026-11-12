@@ -138,8 +138,8 @@
   {
     "id": "wording-case-sensitive",
     "file": "src/errors.ts",
-    "find": "    const wording = message.toLowerCase();",
-    "replace": "    const wording = message;",
+    "find": "    if (typeof contextOf(data).param === 'string') return true;\n    const wording = message.toLowerCase();",
+    "replace": "    if (typeof contextOf(data).param === 'string') return true;\n    const wording = message;",
     "expect": "caught",
     "failing": [
       "maps a 403 with no code by each piece of policy wording, in any case"

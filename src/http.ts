@@ -21,7 +21,8 @@ export interface SirenRequest {
   body?: unknown;
   /**
    * Whether this request may be auto-retried on network errors and 429/5xx.
-   * Idempotent reads and event ingestion retry; management writes must not.
+   * Idempotent reads, sales, refunds and custom events retry. A site visit and
+   * management writes are sent once.
    */
   retriable: boolean;
 }

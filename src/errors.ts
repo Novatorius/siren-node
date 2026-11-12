@@ -313,8 +313,12 @@ export class MissingScopeError extends PermissionError {
       ? context.anyOf.filter((scope): scope is string => typeof scope === 'string' && scope !== '')
       : [];
     if (this.scope === undefined) {
-      const named = MissingScopeError.MESSAGE_PATTERN.exec(message)?.[1]?.replace(/:+$/, '');
-      if (named) this.scope = named;
+      // Trim the colons that end the sentence with a loop. A /:+$/ replace
+      // backtracks, so a long run of colons inside the name takes seconds.
+      const captured = MissingScopeError.MESSAGE_PATTERN.exec(message)?.[1] ?? '';
+      let end = captured.length;
+      while (end > 0 && captured[end - 1] === ':') end--;
+      if (end > 0) this.scope = captured.slice(0, end);
     }
   }
 
