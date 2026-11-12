@@ -418,6 +418,4 @@ The 2c mutation list (`scripts/mutations/ncc-slice-2c.json`) breaks each
 part of the rule, refuses each edge the rule must accept, drops each part of
 the message and the docs, and leaks the URL in each way the rows look for,
 with the same controls. `node scripts/mutation-proof.mjs
-scripts/mutations/ncc-slice-2c.json` reruns it. Until 2c P1 lands, the rows
-that refuse a URL are skipped and the list's entries find the scratch build
-it was proven on, not the code on this branch.
+scripts/mutations/ncc-slice-2c.json` reruns it.

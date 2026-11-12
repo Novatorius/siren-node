@@ -257,7 +257,7 @@ function urlParts(url: string): string[] {
 }
 
 describe('2c P1: Siren baseUrl characters', () => {
-  it.skip.each([
+  it.each([
     ['U+0080, the first C1 control, in the path', 'https://qhostq.example/qpathq/\u0080v1'],
     ['U+0085, next line, in the path', 'https://qhostq.example/qpathq/\u0085v1'],
     ['U+009F, the last C1 control, in the path', 'https://qhostq.example/qpathq/\u009fv1'],
