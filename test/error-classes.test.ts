@@ -120,7 +120,7 @@ describe('P2: SiteDisconnectedError', () => {
     expect(SiteDisconnectedError.MESSAGE).toBe('This site is no longer connected.');
   });
 
-  it.skip('maps a 401 with site_disconnected to SiteDisconnectedError', async () => {
+  it('maps a 401 with site_disconnected to SiteDisconnectedError', async () => {
     const error = await thrownBy(401, err('This site is no longer connected.', 'site_disconnected'));
     expect(error).toBeInstanceOf(SiteDisconnectedError);
     expect(error).toBeInstanceOf(AuthenticationError);
@@ -132,42 +132,42 @@ describe('P2: SiteDisconnectedError', () => {
     expect(sirenError.message).toBe('This site is no longer connected.');
   });
 
-  it.skip('maps the code whatever the message says', async () => {
+  it('maps the code whatever the message says', async () => {
     const error = await thrownBy(401, err('Reconnect the site.', 'site_disconnected'));
     expect(error).toBeInstanceOf(SiteDisconnectedError);
   });
 
-  it.skip('maps a 401 with no code by its wording, in any case', async () => {
+  it('maps a 401 with no code by its wording, in any case', async () => {
     expect(await thrownBy(401, err('This site is no longer connected.'))).toBeInstanceOf(SiteDisconnectedError);
     expect(await thrownBy(401, { error: 'This site is NO LONGER CONNECTED' })).toBeInstanceOf(SiteDisconnectedError);
   });
 
-  it.skip('maps a 401 with an unknown code by its wording', async () => {
+  it('maps a 401 with an unknown code by its wording', async () => {
     const error = await thrownBy(401, err('This site is no longer connected.', 'legacy_refusal'));
     expect(error).toBeInstanceOf(SiteDisconnectedError);
     expect((error as SirenError).code).toBe('legacy_refusal');
   });
 
-  it.skip('lets a known code other than site_disconnected decide over the wording', async () => {
+  it('lets a known code other than site_disconnected decide over the wording', async () => {
     const error = await thrownBy(401, err('This site is no longer connected.', 'api_key_not_accepted'));
     expect(error).toBeInstanceOf(ApiKeyNotAcceptedError);
     expect(error).not.toBeInstanceOf(SiteDisconnectedError);
   });
 
-  it.skip('checks the revoked-site wording before the API key wording', async () => {
+  it('checks the revoked-site wording before the API key wording', async () => {
     const error = await thrownBy(401, err('This site is no longer connected, and this route does not accept API keys.'));
     expect(error).toBeInstanceOf(SiteDisconnectedError);
     expect(error).not.toBeInstanceOf(ApiKeyNotAcceptedError);
   });
 
-  it.skip('leaves any other 401 an AuthenticationError', async () => {
+  it('leaves any other 401 an AuthenticationError', async () => {
     const error = await thrownBy(401, err('Invalid API key.'));
     expect(error).toBeInstanceOf(AuthenticationError);
     expect(error).not.toBeInstanceOf(SiteDisconnectedError);
     expect(error).not.toBeInstanceOf(ApiKeyNotAcceptedError);
   });
 
-  it.skip('answers matches() by the same rule', () => {
+  it('answers matches() by the same rule', () => {
     expect(SiteDisconnectedError.matches('Anything.', 'site_disconnected')).toBe(true);
     expect(SiteDisconnectedError.matches('This site is no longer connected.')).toBe(true);
     expect(SiteDisconnectedError.matches('This site is no longer connected.', 'missing_scope')).toBe(false);
