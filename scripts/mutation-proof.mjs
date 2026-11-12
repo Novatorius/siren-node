@@ -40,8 +40,14 @@ const mutations = JSON.parse(readFileSync(resolve(specPath), 'utf8'));
 const gateConfig = resolve(root, '.mutation-gate.tsconfig.json');
 
 function run(command, args) {
-  const result = spawnSync(command, args, { cwd: root, encoding: 'utf8', env: { ...process.env, CI: '1' } });
-  return { status: result.status ?? 1, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+  const result = spawnSync(command, args, {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, CI: '1', NO_COLOR: '1', FORCE_COLOR: '0' },
+  });
+  // Strip colour codes so a `failing` text matches however the tool styles it.
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`.replace(/\u001b\[[0-9;]*m/g, '');
+  return { status: result.status ?? 1, output };
 }
 
 function srcCompiles() {
