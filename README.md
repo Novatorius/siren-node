@@ -427,7 +427,10 @@ If your app sends events from a durable queue, set `maxRetries: 0`. The queue ow
 an SDK retry inside a queued attempt would multiply the attempts. At 0 a request still goes out a
 second time after a 401 when the `AccessTokenSource` refreshes, because Siren refused the first
 send before it recorded anything. A retriable call makes at most `maxRetries + 2` sends: the first,
-its retries and that one resend.
+its retries and that one resend. Each send gets its own `timeout`, and the SDK waits at most 8 s
+between retries, so a call can take up to `maxRetries + 2` timeouts plus that backoff. `maxRetries`
+covers a brief network fault inside one call. Work that must survive an outage belongs on a durable
+queue, not on a high `maxRetries`.
 
 ### Your own HTTP stack
 

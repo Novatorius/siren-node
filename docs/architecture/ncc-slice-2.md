@@ -333,8 +333,9 @@ The constructor reads `apiKey`, `accessToken`, `httpClient`, `baseUrl`,
 `timeout` and `maxRetries` only when the options object holds them itself,
 and reads each once, so a getter cannot pass a check with one value and be
 used with another. A value it inherits from any prototype,
-`Object.prototype` included, counts as absent, so prototype pollution elsewhere in a host cannot choose the
-host, the client, the credential or the retry policy. That is a deliberate
+`Object.prototype` included, counts as absent, so prototype pollution
+elsewhere in a host cannot choose the host, the client, the credential or
+the retry policy. That is a deliberate
 choice: a caller that builds options as a class instance with getters on its
 prototype spreads it into a plain object first. An options object with no
 prototype works. The values are read as they are, so a token source or a
@@ -367,6 +368,4 @@ on 127.0.0.1 where fetch itself refuses a header or the default client's
 wiring matters. The change adds no surface that needs an end-to-end test
 under KB 569. The slice 2 transport tests already pin the empty, non-string
 and control-character cases on both token paths. No surface mutation list
-covers the 2b code yet, because the packets write it. A mutation run against
-a scratch implementation of both packets proved the tests, and pull request
-36 records it.
+covers the 2b code yet, because the packets write it.

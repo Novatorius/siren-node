@@ -292,9 +292,9 @@ export class HttpTransport {
    *    middleware, or from a request with no accepted credential, before
    *    they write, so the refused send left nothing to duplicate. That holds
    *    by route convention in Siren, and each new write route must keep it.
-   *    A send-once request therefore reaches Siren with a usable credential exactly once, and is sent at
-   *    most twice: the refused send and the resend. After the resend it is
-   *    never sent again, whatever the reply.
+   *    A send-once request therefore reaches Siren with a usable credential
+   *    exactly once, and is sent at most twice: the refused send and the
+   *    resend. After the resend it is never sent again, whatever the reply.
    * 5. A retriable request with retries left is sent again after a backoff on
    *    429, 5xx or an `HttpClientError`. A retriable request is sent at most
    *    `maxRetries + 2` times: its first send, `maxRetries` retries and one

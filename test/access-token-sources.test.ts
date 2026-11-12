@@ -3,10 +3,10 @@ import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src
 
 /*
  * Slice 2 acceptance tests for packets P1 (StaticAccessToken) and P2
- * (CallbackAccessTokenSource). Each source mirrors its PHP SDK class at
- * 59383e6 (src/Auth), except that CallbackAccessTokenSource hands every
- * refresh answer but `null` to the transport, which test/bearer-token.test.ts
- * pins.
+ * (CallbackAccessTokenSource), each built on its PHP SDK class at 59383e6
+ * (src/Auth). CallbackAccessTokenSource answers its refresh function's
+ * answer unchanged unless it is `null`, and test/bearer-token.test.ts pins
+ * the answers that are not a token.
  */
 
 describe('P1: StaticAccessToken', () => {

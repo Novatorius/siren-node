@@ -20,14 +20,16 @@ function section(markdown: string, heading: string): string {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-/** The section's paragraphs and list items, so a rule must sit inside one of them. */
-function blocks(text: string): string[] {
-  return text.split(/\n\s*\n|\n(?=- )/);
+/** The section's sentences, line breaks read as spaces, so a rule must sit inside one of them. */
+function sentences(text: string): string[] {
+  return text
+    .split(/\n\s*\n|\n(?=- )/)
+    .flatMap((block) => block.replace(/\s+/g, ' ').split(/(?<=\.) (?=[A-Z`(])/));
 }
 
-/** True when one paragraph or list item of `text`, its line breaks read as spaces, matches `rule`. */
+/** True when one sentence of `text` matches `rule`. */
 function stated(text: string, rule: RegExp): boolean {
-  return blocks(text).some((block) => rule.test(block.replace(/\s+/g, ' ')));
+  return sentences(text).some((sentence) => rule.test(sentence));
 }
 
 const RULES: Array<[string, RegExp]> = [
@@ -49,7 +51,8 @@ describe('the docs describe the option and token rules', () => {
     expect(stated(section(read('CHANGELOG.md'), '## [Unreleased]'), rule)).toBe(true);
   });
 
-  it('the README retries section states the most sends a call makes', () => {
+  it('the README retries section states the most sends a call makes and how long it can take', () => {
     expect(stated(section(read('README.md'), '### Retries'), /maxRetries \+ 2/)).toBe(true);
+    expect(stated(section(read('README.md'), '### Retries'), /up to `maxRetries \+ 2` timeouts plus/)).toBe(true);
   });
 });

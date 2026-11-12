@@ -190,6 +190,8 @@ describe('2b P2: Siren baseUrl check', () => {
     ['a string with no scheme', 'cloud.test/siren/v1'],
     ['a string that is not a URL', 'sk_secret_value'],
     ['an ftp URL', 'ftp://cloud.test/siren/v1'],
+    ['a file URL', 'file:///etc/siren/v1'],
+    ['a javascript URL', 'javascript:alert(1)'],
     ['a URL with a user name and password', 'https://sk_secret_user:sk_secret_pass@cloud.test/siren/v1'],
     ['a URL with a user name only', 'https://sk_secret_user@cloud.test/siren/v1'],
   ])('refuses a baseUrl that is %s, naming the option and what it got', (_name, baseUrl) => {
