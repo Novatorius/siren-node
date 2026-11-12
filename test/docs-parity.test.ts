@@ -20,10 +20,6 @@ import { BASE } from './record-fakes';
  * real `Siren` client built over a FakeHttpClient and the reserved base URL,
  * with the global fetch stubbed to fail, and any other name is read from the
  * package's exports. Nothing leaves the machine.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P11 implementer turns each into `it` and deletes
- * this paragraph.
  */
 
 beforeEach(failOnGlobalFetch);
@@ -228,7 +224,7 @@ function resolve(name: string, siren: sdk.Siren): unknown {
 }
 
 describe('P11: README parity table', () => {
-  it.skip('has a row for every public method of the PHP SDK, once', () => {
+  it('has a row for every public method of the PHP SDK, once', () => {
     const rows = parityRows();
 
     for (const [php] of PHP_SURFACE) {
@@ -239,14 +235,14 @@ describe('P11: README parity table', () => {
     }
   });
 
-  it.skip.each(PHP_SURFACE.filter(([, node]) => node !== null))('maps %s to %s', (php, node) => {
+  it.each(PHP_SURFACE.filter(([, node]) => node !== null))('maps %s to %s', (php, node) => {
     const row = parityRows().find((candidate) => code(candidate.php) === php);
 
     expect(row, php).toBeDefined();
     expect(code(row!.node)).toBe(node);
   });
 
-  it.skip('shows no PHP-only row without a written difference', () => {
+  it('shows no PHP-only row without a written difference', () => {
     const rows = parityRows();
     const phpOnly = rows.filter((row) => /^(none|)$/i.test(code(row.node)));
 
@@ -259,14 +255,14 @@ describe('P11: README parity table', () => {
     }
   });
 
-  it.skip.each(WRITTEN_DIFFERENCES)('writes down how %s differs', (php) => {
+  it.each(WRITTEN_DIFFERENCES)('writes down how %s differs', (php) => {
     const row = parityRows().find((candidate) => code(candidate.php) === php);
 
     expect(row, php).toBeDefined();
     expect(row!.difference.length, `${php} has a difference`).toBeGreaterThan(20);
   });
 
-  it.skip('names only Node methods that exist', () => {
+  it('names only Node methods that exist', () => {
     const http = new FakeHttpClient([reply(200, {})]);
     const siren = new sdk.Siren({ apiKey: TEST_API_KEY, httpClient: http, baseUrl: BASE });
 

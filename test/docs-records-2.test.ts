@@ -8,10 +8,6 @@ import { describe, expect, it } from 'vitest';
  * merge, and after slice 4's P10, since the README names the client fields
  * P10 adds. The parity table has its own tests in test/docs-parity.test.ts,
  * in the same packet.
- *
- * INCOMPLETE MARKER: every `it.skip` below is the architecture phase's
- * incomplete marker. The P11 implementer turns each into `it` and deletes this
- * paragraph.
  */
 
 const HEADING = '## Store credit, mappings and commerce records';
@@ -75,7 +71,7 @@ const ROUTES: Array<[string, string[]]> = [
 ];
 
 describe('P11: README slice 4 section', () => {
-  it.skip('names each client field and the hold helpers', () => {
+  it('names each client field and the hold helpers', () => {
     const records = section(read('README.md'), HEADING);
 
     for (const name of [
@@ -95,7 +91,7 @@ describe('P11: README slice 4 section', () => {
     }
   });
 
-  it.skip('says placing a hold again for the same checkout replaces it, so the caller may repeat it', () => {
+  it('says placing a hold again for the same checkout replaces it, so the caller may repeat it', () => {
     const all = sentences(section(read('README.md'), HEADING));
 
     expect(
@@ -104,7 +100,7 @@ describe('P11: README slice 4 section', () => {
     ).toBe(true);
   });
 
-  it.skip('warns never to release the hold of a checkout that became an order', () => {
+  it('warns never to release the hold of a checkout that became an order', () => {
     const all = sentences(section(read('README.md'), HEADING));
 
     expect(
@@ -113,7 +109,7 @@ describe('P11: README slice 4 section', () => {
     ).toBe(true);
   });
 
-  it.skip('says every write is sent once and reads retry', () => {
+  it('says every write is sent once and reads retry', () => {
     const all = sentences(section(read('README.md'), HEADING));
 
     expect(all.some((s) => /\bwrites?\b/i.test(s) && /\bsent once\b/i.test(s))).toBe(true);
@@ -122,7 +118,7 @@ describe('P11: README slice 4 section', () => {
 });
 
 describe('P11: CHANGELOG', () => {
-  it.skip('lists the slice 4 resources and taxonomies under Unreleased, Added', () => {
+  it('lists the slice 4 resources and taxonomies under Unreleased, Added', () => {
     const added = section(section(read('CHANGELOG.md'), '## [Unreleased]'), '### Added');
 
     for (const name of [
@@ -144,7 +140,7 @@ describe('P11: CHANGELOG', () => {
 });
 
 describe('P11: openapi.yaml', () => {
-  it.skip.each(ROUTES)('documents %s with each method the SDK sends', (key, methods) => {
+  it.each(ROUTES)('documents %s with each method the SDK sends', (key, methods) => {
     const block = path(read('openapi.yaml'), key);
 
     for (const method of methods) {
