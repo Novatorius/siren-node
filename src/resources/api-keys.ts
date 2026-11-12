@@ -1,5 +1,5 @@
 import type { HttpClient } from '../http';
-import type { ApiKey, CreateApiKeyParams, CreatedApiKey } from '../types';
+import type { ApiKey, ApiKeyScopeGroups, CreateApiKeyParams, CreatedApiKey } from '../types';
 
 /**
  * Manage API keys (`/api-keys`).
@@ -40,6 +40,18 @@ export class ApiKeysResource {
       path: '/api-keys',
       retriable: true,
     });
+  }
+
+  /**
+   * The scopes a new key may be given, grouped by resource, from
+   * `GET /api-keys/scopes`, such as `events`, `ledger` and
+   * `webhook-subscriptions`, each a list of `{ scope, resource, action, label }`.
+   * Siren answers it for a signed-in dashboard session only, like every
+   * `/api-keys` route. A read, so it retries like `list()`.
+   */
+  async scopes(): Promise<ApiKeyScopeGroups> {
+    // Stub: slice 1 packet P7 implements this.
+    return {};
   }
 
   /** Revoke an API key. */

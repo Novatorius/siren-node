@@ -1,0 +1,231 @@
+{
+  "_source": "Siren bb49b7d. Record and webhook scopes from lib/ApiKeys/Core/Enums/ApiKeyRecordScopes.php DEFINITIONS, grouped as ApiKeyScopePolicy::issuableGroups orders them. The event entries follow ApiKeyScopeRegistryInitiated::addEventScope, with labels written for this fixture.",
+  "body": {
+    "events": [
+      {
+        "scope": "event:sale",
+        "resource": "events",
+        "action": "sale",
+        "label": "Sale"
+      },
+      {
+        "scope": "event:refund",
+        "resource": "events",
+        "action": "refund",
+        "label": "Refund"
+      },
+      {
+        "scope": "event:site-visited",
+        "resource": "events",
+        "action": "site-visited",
+        "label": "Site visited"
+      }
+    ],
+    "ledger": [
+      {
+        "scope": "ledger:engagements:read",
+        "resource": "ledger",
+        "action": "engagements:read",
+        "label": "Read engagements"
+      },
+      {
+        "scope": "ledger:opportunities:read",
+        "resource": "ledger",
+        "action": "opportunities:read",
+        "label": "Read opportunities"
+      },
+      {
+        "scope": "ledger:conversions:read",
+        "resource": "ledger",
+        "action": "conversions:read",
+        "label": "Read conversions"
+      },
+      {
+        "scope": "ledger:transactions:read",
+        "resource": "ledger",
+        "action": "transactions:read",
+        "label": "Read transactions"
+      },
+      {
+        "scope": "ledger:obligations:read",
+        "resource": "ledger",
+        "action": "obligations:read",
+        "label": "Read obligations"
+      },
+      {
+        "scope": "ledger:fulfillments:read",
+        "resource": "ledger",
+        "action": "fulfillments:read",
+        "label": "Read fulfillments"
+      },
+      {
+        "scope": "ledger:payouts:read",
+        "resource": "ledger",
+        "action": "payouts:read",
+        "label": "Read payouts"
+      }
+    ],
+    "webhook-subscriptions": [
+      {
+        "scope": "webhook-subscriptions:read",
+        "resource": "webhook-subscriptions",
+        "action": "read",
+        "label": "Read webhooks and their deliveries"
+      },
+      {
+        "scope": "webhook-subscriptions:manage",
+        "resource": "webhook-subscriptions",
+        "action": "manage",
+        "label": "Create, change, delete and test webhooks"
+      }
+    ],
+    "records:products": [
+      {
+        "scope": "records:products:read",
+        "resource": "records:products",
+        "action": "read",
+        "label": "Read products, their store listings and match suggestions"
+      },
+      {
+        "scope": "records:products:manage",
+        "resource": "records:products",
+        "action": "manage",
+        "label": "Add, rename, merge and split products, and set their owners"
+      }
+    ],
+    "records:coupons": [
+      {
+        "scope": "records:coupons:read",
+        "resource": "records:coupons",
+        "action": "read",
+        "label": "Read coupons and their store listings"
+      },
+      {
+        "scope": "records:coupons:manage",
+        "resource": "records:coupons",
+        "action": "manage",
+        "label": "Add, link, rename, merge, split and remove coupons"
+      }
+    ],
+    "records:collaborators": [
+      {
+        "scope": "records:collaborators:read",
+        "resource": "records:collaborators",
+        "action": "read",
+        "label": "Read collaborators and their program enrollments"
+      },
+      {
+        "scope": "records:collaborators:manage",
+        "resource": "records:collaborators",
+        "action": "manage",
+        "label": "Add, change and delete collaborators, and enroll them in programs"
+      }
+    ],
+    "records:collaborator-groups": [
+      {
+        "scope": "records:collaborator-groups:read",
+        "resource": "records:collaborator-groups",
+        "action": "read",
+        "label": "Read collaborator groups and their members"
+      },
+      {
+        "scope": "records:collaborator-groups:manage",
+        "resource": "records:collaborator-groups",
+        "action": "manage",
+        "label": "Add, change and delete collaborator groups and their members"
+      }
+    ],
+    "records:programs": [
+      {
+        "scope": "records:programs:read",
+        "resource": "records:programs",
+        "action": "read",
+        "label": "Read programs"
+      },
+      {
+        "scope": "records:programs:manage",
+        "resource": "records:programs",
+        "action": "manage",
+        "label": "Add, change and delete programs"
+      }
+    ],
+    "records:program-groups": [
+      {
+        "scope": "records:program-groups:read",
+        "resource": "records:program-groups",
+        "action": "read",
+        "label": "Read program groups"
+      },
+      {
+        "scope": "records:program-groups:manage",
+        "resource": "records:program-groups",
+        "action": "manage",
+        "label": "Add, change and delete program groups"
+      }
+    ],
+    "records:distributors": [
+      {
+        "scope": "records:distributors:read",
+        "resource": "records:distributors",
+        "action": "read",
+        "label": "Read distributors and their distributions"
+      },
+      {
+        "scope": "records:distributors:manage",
+        "resource": "records:distributors",
+        "action": "manage",
+        "label": "Add, change and delete distributors"
+      }
+    ],
+    "records:application-forms": [
+      {
+        "scope": "records:application-forms:read",
+        "resource": "records:application-forms",
+        "action": "read",
+        "label": "Read application forms"
+      },
+      {
+        "scope": "records:application-forms:manage",
+        "resource": "records:application-forms",
+        "action": "manage",
+        "label": "Add, change and delete application forms"
+      }
+    ],
+    "records:applications": [
+      {
+        "scope": "records:applications:read",
+        "resource": "records:applications",
+        "action": "read",
+        "label": "Read applications and their answers"
+      },
+      {
+        "scope": "records:applications:manage",
+        "resource": "records:applications",
+        "action": "manage",
+        "label": "Approve and decline applications"
+      }
+    ],
+    "records:notification-rules": [
+      {
+        "scope": "records:notification-rules:read",
+        "resource": "records:notification-rules",
+        "action": "read",
+        "label": "Read notification rules"
+      },
+      {
+        "scope": "records:notification-rules:manage",
+        "resource": "records:notification-rules",
+        "action": "manage",
+        "label": "Add, change and delete notification rules"
+      }
+    ],
+    "records:properties": [
+      {
+        "scope": "records:properties:read",
+        "resource": "records:properties",
+        "action": "read",
+        "label": "Read properties and what each is connected to"
+      }
+    ]
+  }
+}

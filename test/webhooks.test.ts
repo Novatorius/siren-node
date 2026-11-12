@@ -250,10 +250,13 @@ describe('webhooks.constructEvent', () => {
 });
 
 describe('WebhookEventType', () => {
-  // The 34 events Siren's WebhookCatalog lists and GET /webhooks/events serves.
-  it('contains all 34 event types plus "*"', () => {
+  // The 64 events Siren's WebhookCatalog lists and GET /webhooks/events serves
+  // (Siren bb49b7d). test/wire-taxonomy.test.ts pins the whole list.
+  it('contains all 64 event types plus "*"', () => {
     const values = Object.values(WebhookEventType);
-    expect(values).toHaveLength(35);
+    expect(values).toHaveLength(65);
+    expect(values).toContain('refund.recorded');
+    expect(values).toContain('collaborator_group.member_added');
     expect(values).toContain('program.created');
     expect(values).toContain('collaborator.updated');
     expect(values).toContain('collaborator.deactivated');

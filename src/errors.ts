@@ -7,10 +7,10 @@
  * | status          | error class            |
  * |-----------------|------------------------|
  * | 400             | BadRequestError        |
- * | 401             | AuthenticationError, or ApiKeyNotAcceptedError for `api_key_not_accepted` |
- * | 403             | PermissionError, or MissingScopeError for `missing_scope` and StoreKeyNotAllowedError for `store_key_not_allowed` |
+ * | 401             | AuthenticationError, or SiteDisconnectedError for `site_disconnected` and ApiKeyNotAcceptedError for `api_key_not_accepted` |
+ * | 403             | PermissionError, or MissingScopeError for `missing_scope`, StoreKeyNotAllowedError for `store_key_not_allowed` and PolicyError for the {@link POLICY_ERROR_CODES} |
  * | 404             | NotFoundError          |
- * | 409             | ConflictError          |
+ * | 409             | ConflictError. A resource that knows the conflict raises CodeConflictError or HoldConflictError |
  * | 422             | ValidationError        |
  * | 429             | RateLimitError         |
  * | 5xx             | ApiError               |
@@ -18,6 +18,12 @@
  *
  * `SignatureVerificationError` is thrown by webhook verification and carries
  * no HTTP status.
+ *
+ * A specialized 401 or 403 class is chosen from `error.code` first. When the
+ * reply carries a code this SDK knows ({@link isKnownErrorCode}), the code
+ * alone decides. When it carries no code, or one this SDK does not know, the
+ * reply comes from an older or newer Siren deployment, and the class is
+ * chosen from Siren's wording instead, as the Siren PHP SDK does.
  */
 
 export interface SirenErrorDetails {
@@ -39,10 +45,14 @@ export interface SirenErrorDetails {
 }
 
 /**
- * The machine-readable `error.code` values this SDK raises a dedicated error
- * for. Compare `error.code` against these, not the message, which can change.
+ * The machine-readable `error.code` values Siren sends beside a refusal's
+ * message, as in `{"error": {"message": "...", "code": "hold_no_credit"}}`.
+ * Compare `error.code` against these, not the message, which can change.
+ * The list matches the Siren service's own list of codes.
  */
 export const ErrorCode = {
+  /** 401: the organization revoked or deleted the connected site's connection. A {@link SiteDisconnectedError}. */
+  SiteDisconnected: 'site_disconnected',
   /**
    * 401: the route does not accept an API key, such as every `/api-keys`
    * route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
@@ -59,10 +69,97 @@ export const ErrorCode = {
    * store, such as payouts or webhook subscriptions. A {@link StoreKeyNotAllowedError}.
    */
   StoreKeyNotAllowed: 'store_key_not_allowed',
+  /** 403: a site may not send this field here. `error.context.param` names it. A {@link PolicyError}. */
+  FieldNotAllowed: 'field_not_allowed',
+  /** 403: a site creates collaborators as pending, and sent another status. A {@link PolicyError}. */
+  PendingStatusRequired: 'pending_status_required',
+  /** 403: a site may not use the `user` mapping type, which names a Cloud account. A {@link PolicyError}. */
+  UserTypeNotAllowed: 'user_type_not_allowed',
+  /** 403: the program does not run on the site's Property. A {@link PolicyError}. */
+  ProgramNotOnSite: 'program_not_on_site',
+  /** 403: the collaborator does not belong to the site's Property. A {@link PolicyError}. */
+  CollaboratorNotOnSite: 'collaborator_not_on_site',
+  /**
+   * 403: a site reads these records only through a filter that ties them to
+   * its own store. `error.context.anyOf` names the filters. A {@link PolicyError}.
+   */
+  SiteFilterRequired: 'site_filter_required',
+  /**
+   * 403: a site reads only the reports its collaborator portal shows.
+   * `error.context.param` names the part of the query that asked for another.
+   * A {@link PolicyError}.
+   */
+  ReportNotAllowed: 'report_not_allowed',
+  /** 403: the route's own authorization refused the caller, and no plan or role change would lift it. A {@link PolicyError}. */
+  NotPermitted: 'not_permitted',
+  /**
+   * 403: the site's migration into Cloud is closed. A plain {@link PermissionError},
+   * because an organization admin reopens it by approving the connection again.
+   */
+  MigrationClosed: 'migration_closed',
+  /**
+   * 403: the organization's plan does not include the feature.
+   * `error.context.capability` names it. A plain {@link PermissionError}.
+   */
+  PlanRequired: 'plan_required',
+  /** 403: only an organization admin may do this. A plain {@link PermissionError}. */
+  AdminRequired: 'admin_required',
+  /**
+   * 403: the organization's owner has not confirmed their email address, and
+   * the request would reach people or move money. A plain {@link PermissionError}.
+   */
+  EmailConfirmationRequired: 'email_confirmation_required',
+  /** 409: someone already holds the code under that type, in any namespace. See {@link CodeConflictError}. */
+  CodeHeld: 'code_held',
+  /** 409: the mapping already exists. */
+  MappingExists: 'mapping_exists',
+  /** 409: the collaborator has no credit available in that currency. See {@link HoldConflictError}. */
+  HoldNoCredit: 'hold_no_credit',
+  /** 409: another checkout already holds credit under that token. See {@link HoldConflictError}. */
+  HoldTokenInUse: 'hold_token_in_use',
+  /** 409: the currency is not bound to the store asking, so its credit cannot be held there. */
+  HoldCurrencyNotAtStore: 'hold_currency_not_at_store',
+  /** 409: a migration batch names currencies the organization already has, and the merchant has not chosen what to do with them. */
+  CurrencyResolutionRequired: 'currency_resolution_required',
+  /** 422: a choice for a migrating store's currency cannot be used, such as a new code that is taken. */
+  InvalidCurrencyResolution: 'invalid_currency_resolution',
+  /** 422: the collaborator cannot be deleted or erased yet, because money is still owed to them. */
+  CollaboratorDeletionRefused: 'collaborator_deletion_refused',
+  /** 422: the email address is one Siren keeps for its own records, so no sign-up may use it. */
+  ReservedAddress: 'reserved_address',
+  /** 503: Siren could not read the organization's plan because its entitlement service did not answer. An {@link ApiError}. */
+  PlanUnavailable: 'plan_unavailable',
 } as const;
 
 /** Union of the {@link ErrorCode} strings. */
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+/**
+ * The 403 codes that mean Siren's policy refused the request, so repeating it
+ * fails again. Each is a {@link PolicyError}. Matches the Siren PHP SDK's
+ * `ErrorCode::POLICY`.
+ */
+export const POLICY_ERROR_CODES: readonly ErrorCode[] = [
+  ErrorCode.FieldNotAllowed,
+  ErrorCode.PendingStatusRequired,
+  ErrorCode.UserTypeNotAllowed,
+  ErrorCode.ProgramNotOnSite,
+  ErrorCode.CollaboratorNotOnSite,
+  ErrorCode.SiteFilterRequired,
+  ErrorCode.ReportNotAllowed,
+  ErrorCode.NotPermitted,
+];
+
+/**
+ * Whether `code` is one of the {@link ErrorCode} values. A known code decides
+ * the error class on its own. A missing or unknown one leaves the choice to
+ * Siren's wording.
+ */
+export function isKnownErrorCode(code: string | null | undefined): code is ErrorCode {
+  // Stub: slice 1 packet P1 implements this.
+  void code;
+  return false;
+}
 
 /** Base class for every error thrown by this SDK. */
 export class SirenError extends Error {
@@ -138,6 +235,47 @@ export class ApiKeyNotAcceptedError extends AuthenticationError {
     super(message, { ...details, code: details.code ?? ErrorCode.ApiKeyNotAccepted });
     this.name = 'ApiKeyNotAcceptedError';
   }
+
+  /**
+   * Whether a 401 is Siren's refusal of an API key on a route that takes a
+   * session: the `api_key_not_accepted` code, or, from a Siren deployment
+   * that sends no code this SDK knows, a message that says the route "does
+   * not accept API keys".
+   */
+  static matches(message: string, code?: string): boolean {
+    // Architecture commit: today's code-only rule, kept so the existing
+    // suite stays green. Slice 1 packet P1 adds the known-code rule and the
+    // wording fallback.
+    void message;
+    return code === ErrorCode.ApiKeyNotAccepted;
+  }
+}
+
+/**
+ * 401 with `code` `site_disconnected`: the organization revoked or deleted
+ * the connected site's connection ("This site is no longer connected.").
+ * Stop calling Siren for this site until it reconnects, rather than retry.
+ */
+export class SiteDisconnectedError extends AuthenticationError {
+  /** The message Siren sends for a revoked site. */
+  static readonly MESSAGE = 'This site is no longer connected.';
+
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, { ...details, code: details.code ?? ErrorCode.SiteDisconnected });
+    this.name = 'SiteDisconnectedError';
+  }
+
+  /**
+   * Whether a 401 is Siren's revoked-site refusal: the `site_disconnected`
+   * code, or, from a Siren deployment that sends no code this SDK knows, a
+   * message that says the site is "no longer connected", in any case.
+   */
+  static matches(message: string, code?: string): boolean {
+    // Stub: slice 1 packet P2 implements this.
+    void message;
+    void code;
+    return false;
+  }
 }
 
 /** 403 — the credential may not do this. */
@@ -179,6 +317,26 @@ export class MissingScopeError extends PermissionError {
       ? context.anyOf.filter((scope): scope is string => typeof scope === 'string' && scope !== '')
       : [];
   }
+
+  /**
+   * How Siren words the refusal when it sends no code, such as "This token
+   * is not authorized for connect:records:read." The first group is the scope.
+   */
+  static readonly MESSAGE_PATTERN = /\bnot authorized for ([A-Za-z0-9_:*-]+)/;
+
+  /**
+   * Whether a 403 is Siren's missing-scope refusal: the `missing_scope`
+   * code, or, from a Siren deployment that sends no code this SDK knows, a
+   * message that matches {@link MissingScopeError.MESSAGE_PATTERN}. When the
+   * context names no scope, {@link scope} is read from that message, with
+   * any trailing `:` removed.
+   */
+  static matches(message: string, code?: string): boolean {
+    // Architecture commit: today's code-only rule. Slice 1 packet P1 adds
+    // the known-code rule, the wording fallback and the scope fallback.
+    void message;
+    return code === ErrorCode.MissingScope;
+  }
 }
 
 /**
@@ -196,6 +354,55 @@ export class StoreKeyNotAllowedError extends PermissionError {
     const propertyId = contextOf(details.data).propertyId;
     if (typeof propertyId === 'number' && Number.isInteger(propertyId)) this.propertyId = propertyId;
   }
+
+  /**
+   * Whether a 403 is Siren's store-bound key refusal: the
+   * `store_key_not_allowed` code, or, from a Siren deployment that sends no
+   * code this SDK knows, a message that says the key is "bound to one store",
+   * in any case.
+   */
+  static matches(message: string, code?: string): boolean {
+    // Architecture commit: today's code-only rule. Slice 1 packet P1 adds
+    // the known-code rule and the wording fallback.
+    void message;
+    return code === ErrorCode.StoreKeyNotAllowed;
+  }
+}
+
+/**
+ * 403 that is not about scopes: the credential may use the route, but
+ * Siren's policy refuses this request, so repeating it fails again. For a
+ * connected site that is one of the connector rules, such as sending a field
+ * a site may not set, or enrolling a collaborator in a program that does not
+ * run on the site. {@link param} names the refused field when Siren says which.
+ */
+export class PolicyError extends PermissionError {
+  /** What Siren says when a route's authorization policy refuses the caller. */
+  static readonly DENIED_MESSAGE = "You don't have permission to do that.";
+
+  /** The request field Siren refused, from `error.context.param`, when it names one. */
+  readonly param?: string;
+
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'PolicyError';
+    // Stub: slice 1 packet P3 reads `param` from the context.
+  }
+
+  /**
+   * Whether a 403 is a policy refusal: one of the {@link POLICY_ERROR_CODES}.
+   * From a Siren deployment that sends no code this SDK knows, it is a policy
+   * refusal when `error.context.param` is a string, when the message is
+   * {@link PolicyError.DENIED_MESSAGE} in any case, or when the message
+   * mentions a "connected site" or says a program does not "run on this site".
+   */
+  static matches(message: string, data: unknown, code?: string): boolean {
+    // Stub: slice 1 packet P3 implements this.
+    void message;
+    void data;
+    void code;
+    return false;
+  }
 }
 
 /** 404 — resource not found (e.g. refund for an unknown sale). */
@@ -211,6 +418,82 @@ export class ConflictError extends SirenError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, { ...details, statusCode: details.statusCode ?? 409 });
     this.name = 'ConflictError';
+  }
+}
+
+/**
+ * 409: Siren refused to give out a tracking or coupon code because someone
+ * already holds it. A code has one holder per type across every namespace,
+ * so the holder may be another connected site or the dashboard. Free the code
+ * first, or pick another one. A resource that assigns codes raises this from
+ * the {@link ConflictError} Siren answered with, through {@link CodeConflictError.fromConflict}.
+ */
+export class CodeConflictError extends ConflictError {
+  /** The code that is already held. */
+  readonly conflictingCode: string;
+  /** The plain type the code was asked for under, such as `coupon`. */
+  readonly type: string;
+
+  constructor(message: string, conflictingCode: string, type: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'CodeConflictError';
+    this.conflictingCode = conflictingCode;
+    this.type = type;
+  }
+
+  /**
+   * Wrap the {@link ConflictError} Siren answered with. Keeps its message,
+   * status, code and data, and sets it as the `cause`.
+   */
+  static fromConflict(conflict: ConflictError, code: string, type: string): CodeConflictError {
+    // Stub: slice 1 packet P4 implements this.
+    void conflict;
+    return new CodeConflictError('', code, type);
+  }
+}
+
+/** Why Siren refused a store credit hold, as {@link HoldConflictError.reason} reports it. */
+export const HoldConflictReason = {
+  /** The collaborator has no credit available in that currency. Apply no credit. */
+  NoCredit: 'no_credit',
+  /** Another site's checkout already holds credit under the same token. Mint a new token. */
+  TokenInUse: 'token_in_use',
+} as const;
+
+/** Union of the {@link HoldConflictReason} strings. */
+export type HoldConflictReason = (typeof HoldConflictReason)[keyof typeof HoldConflictReason];
+
+/**
+ * 409: Siren refused to place a store credit hold. {@link reason} tells the
+ * causes apart. A resource that places holds raises this from the
+ * {@link ConflictError} Siren answered with, through {@link HoldConflictError.fromConflict}.
+ */
+export class HoldConflictError extends ConflictError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'HoldConflictError';
+  }
+
+  /**
+   * Wrap the {@link ConflictError} Siren answered with. Keeps its message,
+   * status, code and data, and sets it as the `cause`.
+   */
+  static fromConflict(conflict: ConflictError): HoldConflictError {
+    // Stub: slice 1 packet P5 implements this.
+    void conflict;
+    return new HoldConflictError('');
+  }
+
+  /**
+   * `no_credit` for the `hold_no_credit` code, `token_in_use` for
+   * `hold_token_in_use`, and `null` for any other code this SDK knows. With
+   * no code, or one this SDK does not know, it reads Siren's wording:
+   * "under that token" means `token_in_use`, "no credit available" means
+   * `no_credit`, in any case, and anything else is `null`.
+   */
+  get reason(): HoldConflictReason | null {
+    // Stub: slice 1 packet P5 implements this.
+    return null;
   }
 }
 
@@ -336,11 +619,13 @@ export function errorFromResponse(
     case 400:
       return new BadRequestError(message, details);
     case 401:
-      if (parsed.code === ErrorCode.ApiKeyNotAccepted) return new ApiKeyNotAcceptedError(message, details);
+      if (SiteDisconnectedError.matches(message, parsed.code)) return new SiteDisconnectedError(message, details);
+      if (ApiKeyNotAcceptedError.matches(message, parsed.code)) return new ApiKeyNotAcceptedError(message, details);
       return new AuthenticationError(message, details);
     case 403:
-      if (parsed.code === ErrorCode.MissingScope) return new MissingScopeError(message, details);
-      if (parsed.code === ErrorCode.StoreKeyNotAllowed) return new StoreKeyNotAllowedError(message, details);
+      if (MissingScopeError.matches(message, parsed.code)) return new MissingScopeError(message, details);
+      if (StoreKeyNotAllowedError.matches(message, parsed.code)) return new StoreKeyNotAllowedError(message, details);
+      if (PolicyError.matches(message, parsed.data, parsed.code)) return new PolicyError(message, details);
       return new PermissionError(message, details);
     case 404:
       return new NotFoundError(message, details);

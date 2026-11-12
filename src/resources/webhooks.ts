@@ -5,6 +5,7 @@ import type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
   WebhookEvent,
+  WebhookCatalogEntry,
   WebhookHeaders,
   WebhookSubscription,
 } from '../types';
@@ -92,6 +93,17 @@ export class WebhookSubscriptionsResource {
       body: params,
       retriable: false,
     });
+  }
+
+  /**
+   * The event types a subscription can name, from `GET /webhooks/events`.
+   * This is the live set Siren delivers, so it can hold an event that
+   * `WebhookEventType` lacks yet. Entries that are not objects are dropped.
+   * A read, so it retries like `list()`.
+   */
+  async events(): Promise<WebhookCatalogEntry[]> {
+    // Stub: slice 1 packet P6 implements this.
+    return [];
   }
 
   /** List webhook subscriptions. */
