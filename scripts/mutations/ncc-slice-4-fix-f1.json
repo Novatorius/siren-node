@@ -140,8 +140,8 @@
   {
     "id": "f1-credit-reads-unguarded-as-empty",
     "file": "src/resources/records.ts",
-    "find": "      const rows = await listRecords<Record<string, unknown>>(\n        this.http,\n        '/conversions',\n        {\n          transactionId: [...transactionIds],\n          collaboratorId,\n          type: kind,\n          fields: 'id,transactionId,collaboratorId,type',\n          number: 200,\n          offset,\n          orderBy: 'id',\n          order: 'ASC',\n        },\n        ConversionsResource.RECOVERY_FILTERS,\n        ConversionsResource.RECOVERY_ID_FILTERS,\n      );",
-    "replace": "      const rows = await listRecords<Record<string, unknown>>(\n        this.http,\n        '/conversions',\n        {\n          transactionId: [...transactionIds],\n          collaboratorId,\n          type: kind,\n          fields: 'id,transactionId,collaboratorId,type',\n          number: 200,\n          offset,\n          orderBy: 'id',\n          order: 'ASC',\n        },\n        ConversionsResource.RECOVERY_FILTERS,\n        ConversionsResource.RECOVERY_ID_FILTERS,\n      ).catch(() => [] as Array<Record<string, unknown>>);",
+    "find": "      const rows = await listRecords<Record<string, unknown>>(\n        this.http,\n        '/conversions',\n        {\n          transactionId: [...transactionIds],\n          collaboratorId,\n          type: kind,\n          fields: 'id,transactionId,collaboratorId,type',\n          number: MAX_PAGE_SIZE,\n          offset,\n          orderBy: 'id',\n          order: 'ASC',\n        },\n        ConversionsResource.RECOVERY_FILTERS,\n        ConversionsResource.RECOVERY_ID_FILTERS,\n      );",
+    "replace": "      const rows = await listRecords<Record<string, unknown>>(\n        this.http,\n        '/conversions',\n        {\n          transactionId: [...transactionIds],\n          collaboratorId,\n          type: kind,\n          fields: 'id,transactionId,collaboratorId,type',\n          number: MAX_PAGE_SIZE,\n          offset,\n          orderBy: 'id',\n          order: 'ASC',\n        },\n        ConversionsResource.RECOVERY_FILTERS,\n        ConversionsResource.RECOVERY_ID_FILTERS,\n      ).catch(() => [] as Array<Record<string, unknown>>);",
     "expect": "caught",
     "failing": [
       "4 fix F1: transactions.recoverCreditCollaborator > raises for a malformed 200 that is not JSON",
@@ -276,7 +276,7 @@
   {
     "id": "f1-credit-checks-after-read",
     "file": "src/resources/records.ts",
-    "find": "    if (type !== undefined && (typeof type !== 'string' || type === '')) {\n      throw new SirenError(`${method} needs a type that is a non-empty string.`);\n    }\n    const kind",
+    "find": "    if (type !== undefined && (typeof type !== 'string' || type === '')) {\n      throw new SirenError(`${method} needs a type that is a non-empty string.`);\n    }\n\n    const kind",
     "replace": "    const kind",
     "expect": "caught",
     "failing": [
