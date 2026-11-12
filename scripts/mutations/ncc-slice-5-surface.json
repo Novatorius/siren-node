@@ -331,7 +331,8 @@
     "expect": "caught",
     "failing": [
       "no-network guard"
-    ]
+    ],
+    "offline": true
   },
   {
     "id": "guard-forgets-refusals",
@@ -341,7 +342,8 @@
     "expect": "caught",
     "failing": [
       "no-network guard"
-    ]
+    ],
+    "offline": true
   },
   {
     "id": "guard-not-at-load",
@@ -351,7 +353,8 @@
     "expect": "caught",
     "failing": [
       "is in place when the test file loads"
-    ]
+    ],
+    "offline": true
   },
   {
     "id": "guard-gone-between-tests",
@@ -361,7 +364,8 @@
     "expect": "caught",
     "failing": [
       "is in place in a beforeAll that runs after earlier tests"
-    ]
+    ],
+    "offline": true
   },
   {
     "id": "advice-ignores-refusals",

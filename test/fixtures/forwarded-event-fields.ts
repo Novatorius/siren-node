@@ -11,7 +11,10 @@
  * list. test/types/forwarded-events.ts checks the SDK's types against this
  * file at compile time.
  *
- * Paths are under lib/EventForwarding/Core in Siren.
+ * Paths are under lib/EventForwarding/Core in Siren. The lists are
+ * hand-read from the cited codecs, not captured from a running Cloud.
+ * Slice 20 runs the connector golden path against a local Cloud and checks
+ * them there.
  */
 export const FORWARDED_EVENT_FIELDS = {
   /** Codecs/SaleTriggeredCodec.php line 202, reads at lines 204 to 207. */

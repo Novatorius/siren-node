@@ -490,8 +490,10 @@ const consentUrl = oauth.authorizeUrl({
 });
 ```
 
-`register` makes a new client every time it runs, so a store registers once and keeps
-`client_id`. `authorizeUrl` sends nothing. It builds the consent screen URL from the S256
+`new OAuthClient()` takes `baseUrl`, `consentScreenUrl`, `timeout` and `httpClient`, reads only
+the options object's own properties, and checks each as `new Siren()` checks `baseUrl`, `timeout`
+and `httpClient`. Its wait defaults to 15 seconds. `register` makes a new client every time it
+runs, so a store registers once and keeps `client_id`. `authorizeUrl` sends nothing. It builds the consent screen URL from the S256
 challenge and refuses anything else, so the verifier never reaches the merchant's browser.
 
 When the merchant approves, Cloud sends the browser back to the redirect URI with `code` and
@@ -525,11 +527,17 @@ await store.saveTokens(pair);
 Cloud rotates the refresh token on every refresh, so the store saves the new pair before anything
 else reads it. A refresh is sent exactly once and never retried by the SDK, whatever the answer.
 The store takes its own lock around each refresh, so two refreshes of one token never race. Give
-each refresh a random `attemptId`, such as one from `createState()`. After a `ConnectionError`, a
-429 or a 5xx, the store may send that refresh once more within 30 seconds of the first try, with
-the same `attemptId`, and Cloud answers with the pair it already issued. A resend more than 30
-seconds after the first try makes Cloud revoke the whole token family. A refresh refused with
-`invalid_grant` or `invalid_client` means the grant is gone, and the site connects again.
+each refresh a random `attemptId` on its first try, such as one from `createState()`, because a
+resend cannot add one later.
+
+Cloud keeps a 30-second reuse window from the rotation. Inside it, a repeat that carries the same
+`attemptId` gets the pair Cloud already issued. Any repeat after 30 seconds makes Cloud revoke the
+whole token family. So after a `ConnectionError`, a 429 or a 5xx, the store may resend that
+refresh once, with the same `attemptId`, and it sends that resend at once, as Siren's WordPress
+plugin does. A request that cannot wait hands the resend to a background task that runs straight
+away, never to a queue that waits minutes. If the resend fails too, the store sends nothing more
+for that refresh. A refresh refused with `invalid_grant` or `invalid_client` means the grant is
+gone, and the site connects again.
 
 ### SirenConnect
 
@@ -553,7 +561,9 @@ await siren.connect.reportSiteState({ forwarding: true });
 `new Siren()` does. `siren.connect` holds the `/connect/*` routes and `/ping`, and each method
 names the `ConnectScope` its route needs. `siren.events` forwards the site's events.
 
-The reads, `updateGrant` and `webhook.delete` retry like any read. The three reports, `reportSiteState`,
+The reads, `updateGrant` and `webhook.delete` retry like any read. `webhook.delete` answers
+`deleted: false` when the site had no webhook left to remove, which is also what a retry after a
+lost answer meets, so it counts as success. The three reports, `reportSiteState`,
 `reportIntegrations` and `syncProducts`, are sent once, because the site's task queue sends them
 again. `disconnect` is sent once, because Cloud cuts the client off as it commits, so a 401 after
 a `disconnect` means the site is disconnected. A site that calls a retried route from its own
@@ -597,12 +607,14 @@ await siren.events.forward(
 ```
 
 `events.forward` sends one of the site's events in Siren's versioned envelope. Before sending, it
-refuses a slug outside `ForwardedEventSlug`, so a typo never becomes a custom event, and an
-envelope Cloud would refuse. `events.forward` is sent once and never retried, whatever
-`maxRetries` says, because the site's outbox owns redelivery. Its one resend is the transport's,
-with a refreshed token after a 401. The outbox resends a failed event with the same `eventId` and
-the same token, and Cloud answers an event it already recorded with `status: duplicate`. On the
-outbox's last try, pass `finalAttempt: true`, which adds the `X-Siren-Final-Attempt: 1` header.
+refuses a slug outside `ForwardedEventSlug`, so a typo never becomes a custom event. It also
+refuses an envelope Cloud would refuse. `events.forward` is sent once, whatever `maxRetries` says,
+because the site's outbox owns redelivery. After a 401 it sends again with a refreshed token, and
+only then. Mint the `eventId` once, when the site records the event, and keep it with the event.
+The outbox resends a failed event with that same `eventId` and the same token, and Cloud answers
+an event it already recorded with `status: duplicate`, which the outbox counts as delivered. On
+the outbox's last try, pass `finalAttempt: true`, which adds the `X-Siren-Final-Attempt: 1`
+header.
 
 ## Other SDKs
 

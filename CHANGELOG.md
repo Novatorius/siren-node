@@ -95,7 +95,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`authorizeUrl`), exchanges the callback's code (`exchangeCode`) and refreshes the token pair
   (`refresh`). Each call is sent once and never retried. A refusal with the RFC error envelope
   raises `OAuthError`, whose code is one of `OAuthErrorCode`. `ConnectorSoftware` names the
-  connector a site registers as.
+  connector a site registers as. `new OAuthClient()` reads and checks `baseUrl`, `timeout` and
+  `httpClient` as `new Siren()` does, with the same messages, and `consentScreenUrl` by the
+  `baseUrl` rule, so a URL with an `@`, a backslash, a query or a character outside visible ASCII
+  is refused when the client is built.
 - `createCodeVerifier`, `createState` and `codeChallengeS256` make the PKCE verifier, the state and
   the S256 challenge `authorizeUrl` takes.
 - `SirenConnect`, the client a connected site holds once it has tokens. It takes `accessToken` and
@@ -106,9 +109,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   own subscription: `replace`, `get`, `delete`, `test` and `deliveries`. `ConnectScope` names the
   six scopes those routes need.
 - `events.forward` sends a connected site's event in Siren's versioned envelope, once and never
-  retried. It takes the slug, the envelope and `{ finalAttempt }`. `ForwardedEventSlug` names the 28 slugs it takes,
-  `ForwardedEventEnvelope` types the envelope for each, and `FORWARDED_EVENT_VERSION` is 1.
-  `finalAttempt: true` adds `X-Siren-Final-Attempt: 1`.
+  retried. It takes the slug, the envelope and `{ finalAttempt }`. `ForwardedEventSlug` names the
+  28 slugs it takes, `ForwardedEventEnvelope` types the envelope for each, and
+  `FORWARDED_EVENT_VERSION` is 1. `finalAttempt: true` adds `X-Siren-Final-Attempt: 1`.
 - `openapi.yaml` documents `/oauth/register`, `/oauth/token`, every `/connect/*` route with the
   scope it needs, the `ForwardedEventEnvelope` schema and the `X-Siren-Final-Attempt` header.
 

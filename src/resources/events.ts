@@ -98,15 +98,18 @@ export class EventsResource {
    * event's is, so a 2xx whose body has no readable `status` resolves
    * without one. Cloud counts any 2xx as delivered.
    *
-   * Sent once, never retried, whatever the answer and whatever the client's
-   * `maxRetries`. The one exception is the transport's rule for every call:
-   * after a 401 with an `AccessTokenSource`, one resend with a refreshed
-   * token, carrying the same headers, `X-Siren-Final-Attempt` included.
+   * Sent once, whatever the answer and whatever the client's `maxRetries`.
+   * After a 401 with an `AccessTokenSource` it sends again with a refreshed
+   * token, carrying the same headers, `X-Siren-Final-Attempt` included, and
+   * only then, as the transport does for every call.
    *
-   * A forwarded event is queue work, and the site's outbox owns redelivery:
-   * it resends with the same `eventId`, which Cloud claims once, on the
-   * event's natural key or on `eventId`, and answers as `duplicate`. The
-   * claim is scoped to the credential's Property, so every try of one event
+   * A forwarded event is queue work, and the site's outbox owns redelivery.
+   * The site mints `eventId` once, when it records the event, and keeps it
+   * with the event, because a slug with no natural key is claimed on
+   * `eventId` alone and a fresh id on each try records the event twice. The
+   * outbox resends with that same `eventId`, which Cloud claims once, on
+   * the event's natural key or on `eventId`, and answers as `duplicate`,
+   * which the outbox counts as delivered. The claim is scoped to the credential's Property, so every try of one event
    * must use the same credential. A 500 whose `error.context.reason` is
    * `waiting_for_record` raises `ApiError`, and a 404 `reference_not_found`
    * raises `NotFoundError`, each with that reason in `data`, and the outbox

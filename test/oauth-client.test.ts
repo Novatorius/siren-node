@@ -32,6 +32,10 @@ import { FakeHttpClient, reply } from './http-fakes';
  * lib/OAuth/Core/Services/OAuthService.php (registerClient at line 111,
  * tokenResponse at line 264, the invalid_grant messages). The consent URL
  * order is lib/Connect/Service/Services/OAuthConnectService.php begin().
+ *
+ * Hand-read from the cited source, not captured from a running Cloud.
+ * Slice 20 runs the connector golden path against a local Cloud and
+ * replaces these bodies.
  */
 
 const BASE = 'https://api.sirenaffiliates.com/siren/v1';

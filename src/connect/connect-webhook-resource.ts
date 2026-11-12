@@ -60,7 +60,12 @@ export class ConnectWebhookResource {
     return this.send<ConnectorWebhook>('GET', '/connect/webhook', undefined, true, 'object');
   }
 
-  /** `DELETE /connect/webhook`, retried: a repeat removes nothing more. Resolves with `{ deleted }`. */
+  /**
+   * `DELETE /connect/webhook`, retried, because a repeat removes nothing
+   * more. Resolves with `{ deleted }`. `deleted: false` means the site had
+   * no webhook left to remove, which is also what a retry after a lost
+   * answer meets, so it counts as success.
+   */
   async delete(): Promise<{ deleted: boolean }> {
     return this.send<{ deleted: boolean }>('DELETE', '/connect/webhook', undefined, true, 'object');
   }

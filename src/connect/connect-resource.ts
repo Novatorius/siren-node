@@ -102,7 +102,9 @@ export class ConnectResource {
    * `PUT /connect/products`, `connect:records:write`, with body `{ platform }`
    * plus each of `products`, `removed` and `pruneBefore` that is not
    * `undefined`. Upserts and removes up to 200 products a call. Sent once.
-   * The site's queue sends the batch again.
+   * The site's queue sends the batch again. The upsert is idempotent, but
+   * Cloud announces the batch's imported and deleted products on every
+   * send, a resend included.
    */
   async syncProducts(params: ProductSyncParams): Promise<ProductSyncResult> {
     const body = withDefined(
@@ -121,7 +123,7 @@ export class ConnectResource {
    * commits, so a resend after a lost answer meets a 401 saying the
    * connection was revoked, and the store's refresh then fails with
    * `OAuthError` `invalid_grant`. A site that sent `disconnect` and then
-   * meets either one treats itself as disconnected.
+   * meets that 401 or that `invalid_grant` treats itself as disconnected.
    */
   async disconnect(): Promise<DisconnectResult> {
     return (await this.object('POST', '/connect/disconnect', undefined, false)) as unknown as DisconnectResult;
@@ -135,12 +137,12 @@ export class ConnectResource {
   /**
    * `GET /connect/customer-email-key`, `connect:records:read`. The key the
    * site hashes customer emails with. Cloud sends it with
-   * `Cache-Control: no-store`. Never log it. A 2xx without a non-empty
-   * text `keyId`, and a `secret` that is standard base64 of at least 16
-   * bytes, raises `UnexpectedResponseError`, so a site never hashes with a
+   * `Cache-Control: no-store`. Never log it. A 2xx raises
+   * `UnexpectedResponseError` unless `keyId` is non-empty text and `secret`
+   * is standard base64 of at least 16 bytes, as Siren's
+   * `CloudCustomerEmailKeys` reads it, so a site never hashes with a
    * missing or weak key. That error quotes no part of the answer, in its
-   * message, `data` or cause. Siren's `CloudCustomerEmailKeys` reads it the same
-   * way.
+   * message, `data` or cause.
    */
   async customerEmailKey(): Promise<CustomerEmailKey> {
     const answer = await this.object('GET', '/connect/customer-email-key', undefined, true);
@@ -154,7 +156,11 @@ export class ConnectResource {
     return answer as unknown as CustomerEmailKey;
   }
 
-  /** `GET /ping`. Proves the token works, and names the organization it belongs to. */
+  /**
+   * `GET /ping`, `connect:ingest`. Proves the token works, and names the
+   * organization it belongs to. A token without `connect:ingest` is refused
+   * with `PermissionError`.
+   */
   async ping(): Promise<PingResult> {
     return (await this.object('GET', '/ping', undefined, true)) as unknown as PingResult;
   }
