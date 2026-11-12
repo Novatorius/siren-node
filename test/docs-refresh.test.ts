@@ -14,8 +14,8 @@ import { describe, expect, it } from 'vitest';
  *
  * Each text must say the window is 30 seconds, that the one resend carries
  * the same `attemptId` and goes at once, and that nothing resends after it.
- * No sentence may send a refresh, a resend or any recovery through a queue,
- * unless it says never to.
+ * No sentence may put a refresh, a resend or any recovery off to a queue or
+ * a later time, unless it says never to.
  */
 
 function read(name: string): string {
@@ -46,16 +46,21 @@ const SOURCES: Array<[string, () => string]> = [
 ];
 
 /**
- * A sentence that sends a refresh, a resend or a recovery through a queue,
- * or has a queue send it, without saying never to. A sentence that only
- * names the queue, such as the reason a queue cannot make the try, passes.
+ * A sentence that puts a refresh, a resend or a recovery off: through a
+ * queue, by having a queue send it, or later, without saying never to. A
+ * sentence that only names the queue, such as the reason a queue cannot
+ * make the try, passes, and so does one that says a resend cannot do
+ * something later.
  */
-function queuesTheRefresh(sentence: string): boolean {
+function delaysTheRefresh(sentence: string): boolean {
   if (!/\b(?:refresh|resend|retr(?:y|ies|ied)|recover)/i.test(sentence)) return false;
   const throughQueue = /\b(?:through|via|from|to|into|on|in|by)\s+(?:(?:its|the|a|their|own|site's|store's|task)\s+)*queue/i.test(sentence);
   const queueSends = /\bqueue[sd]?\s+(?:the |a |its |that )?(?:retr(?:y|ies)|resends?|recovers?|refresh(?:es)?|sends?)\b/i.test(sentence);
-  if (!throughQueue && !queueSends) return false;
-  return !/\b(?:never|not|no)\b[^.]{0,40}\bqueue/i.test(sentence);
+  const queued = (throughQueue || queueSends) && !/\b(?:never|not|no)\b[^.]{0,40}\bqueue/i.test(sentence);
+  const later =
+    /\b(?:later|after a (?:while|delay|pause)|next run)\b/i.test(sentence) &&
+    !/\b(?:never|not|no|cannot|can't)\b[^.]{0,40}\b(?:later|after a (?:while|delay|pause)|next run)\b/i.test(sentence);
+  return queued || later;
 }
 
 describe('refresh advice', () => {
@@ -73,19 +78,22 @@ describe('refresh advice', () => {
     expect(all.some((s) => /\b(?:nothing more|nothing resends|sends nothing)\b/i.test(s)), 'a sentence says nothing resends after it').toBe(true);
   });
 
-  it.each(SOURCES)('%s sends no refresh, resend or recovery through a queue', (_name, text) => {
-    expect(sentences(text()).filter(queuesTheRefresh)).toEqual([]);
+  it.each(SOURCES)('%s puts no refresh, resend or recovery off to a queue or a later time', (_name, text) => {
+    expect(sentences(text()).filter(delaysTheRefresh)).toEqual([]);
   });
 
   it.each([
     ['the sentence the review found', 'Any further recovery goes through its queue with that `attemptId`.', true],
     ['a queued retry', 'A failed refresh is retried from the queue later.', true],
     ['the advice to never queue it', 'A request that cannot wait hands the resend to a background task that runs straight away, never to a queue that waits minutes.', false],
-    ['a queue that retries it', "The store's queue retries a lost refresh a few minutes later.", true],
-    ['a refresh queued for later', 'It queues the refresh for the next run.', true],
+    ['a queue that retries it', "The store's queue retries a lost refresh.", true],
+    ['a queued refresh', 'It queues the refresh.', true],
     ['the reason a queue cannot make the try', 'That one resend is the only exception to the rule that the queue owns retries, because a queue waits minutes between tries.', false],
     ['a sentence about the event outbox', 'The outbox resends a failed event with the same eventId.', false],
-  ])('reads %s as queueing a refresh: %s', (_name, sentence, queued) => {
-    expect(queuesTheRefresh(sentence)).toBe(queued);
+    ['a resend sent later', 'The store may send that resend later, with the same `attemptId`.', true],
+    ['a refresh tried again after a while', 'Try the refresh again after a while.', true],
+    ['the reason to pass attemptId first', 'Give each refresh a random `attemptId` on its first try, because a resend cannot add one later.', false],
+  ])('reads %s as putting a refresh off: %s', (_name, sentence, delayed) => {
+    expect(delaysTheRefresh(sentence)).toBe(delayed);
   });
 });
