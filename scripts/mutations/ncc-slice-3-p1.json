@@ -1,0 +1,942 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/record-requests.ts",
+    "find": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;",
+    "replace": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;",
+    "expect": "caught",
+    "failing": [
+      "P1: recordId"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (text === '' && response.status === 204) return null;",
+    "replace": "  if (text.length === 0 && response.status === 204) return null;",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/record-requests.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/record-requests.ts",
+    "find": "export const MAX_BULK_IDS = 500;",
+    "replace": "export const MAX_BULK_IDS = = 500;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/record-requests.ts",
+    "find": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;",
+    "replace": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;",
+    "expect": "wrong-reason",
+    "failing": [
+      "P2: PropertyQualifier.unqualify"
+    ]
+  },
+  {
+    "id": "p1-id-fraction",
+    "file": "src/resources/record-requests.ts",
+    "find": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;",
+    "replace": "  return typeof value === 'number' && Number.isFinite(value) && value >= 1;",
+    "expect": "caught",
+    "failing": [
+      "P1: recordId",
+      "refuses a fraction"
+    ]
+  },
+  {
+    "id": "p1-id-unsafe",
+    "file": "src/resources/record-requests.ts",
+    "find": "  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;",
+    "replace": "  return typeof value === 'number' && Number.isInteger(value) && value >= 1;",
+    "expect": "caught",
+    "failing": [
+      "refuses 9007199254740992",
+      "refuses one past the largest safe integer"
+    ]
+  },
+  {
+    "id": "p1-id-string",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!isRecordId(id)) {\n    const shown",
+    "replace": "  if (typeof id === 'string' && /^[0-9]+$/.test(id)) return Number(id);\n  if (!isRecordId(id)) {\n    const shown",
+    "expect": "caught",
+    "failing": [
+      "P1: recordId"
+    ]
+  },
+  {
+    "id": "p1-id-message",
+    "file": "src/resources/record-requests.ts",
+    "find": "and got ${shown}.`",
+    "replace": "but got ${shown}.`",
+    "expect": "caught",
+    "failing": [
+      "P1: recordId"
+    ]
+  },
+  {
+    "id": "p1-id-shown-unquoted",
+    "file": "src/resources/record-requests.ts",
+    "find": "const shown = typeof id === 'string' ? JSON.stringify(id) : String(id);",
+    "replace": "const shown = String(id);",
+    "expect": "caught",
+    "failing": [
+      "P1: recordId"
+    ]
+  },
+  {
+    "id": "p1-id-field-name",
+    "file": "src/resources/record-requests.ts",
+    "find": "throw new SirenError(`${method} needs a positive whole number ${what}, and got ${shown}.`);",
+    "replace": "throw new SirenError(`${method} needs a positive whole number id, and got ${shown}.`);",
+    "expect": "caught",
+    "failing": [
+      "names the field it checks"
+    ]
+  },
+  {
+    "id": "p1-id-method-name",
+    "file": "src/resources/record-requests.ts",
+    "find": "throw new SirenError(`${method} needs a positive whole number ${what}, and got ${shown}.`);",
+    "replace": "throw new SirenError(`retrieve needs a positive whole number ${what}, and got ${shown}.`);",
+    "expect": "caught",
+    "failing": [
+      "P1: recordId"
+    ]
+  },
+  {
+    "id": "p1-object-array-ok",
+    "file": "src/resources/record-requests.ts",
+    "find": "  return typeof value === 'object' && value !== null && !Array.isArray(value);",
+    "replace": "  return typeof value === 'object' && value !== null;",
+    "expect": "caught",
+    "failing": [
+      "isJsonObject",
+      "throws UnexpectedResponseError for an array"
+    ]
+  },
+  {
+    "id": "p1-object-null-ok",
+    "file": "src/resources/record-requests.ts",
+    "find": "  return typeof value === 'object' && value !== null && !Array.isArray(value);",
+    "replace": "  return typeof value === 'object' && !Array.isArray(value);",
+    "expect": "caught",
+    "failing": [
+      "isJsonObject",
+      "throws UnexpectedResponseError for null"
+    ]
+  },
+  {
+    "id": "p1-unknown-key-allowed",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (!allowed.has(key)) {",
+    "replace": "    if (allowed.has('__never__')) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a key the route does not read",
+      "refuses a misspelt filter"
+    ]
+  },
+  {
+    "id": "p1-unknown-undefined",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (!allowed.has(key)) {",
+    "replace": "    if (!allowed.has(key) && (params as Record<string, unknown>)[key] !== undefined) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a key the route does not read, set to undefined"
+    ]
+  },
+  {
+    "id": "p1-control-keys-dropped",
+    "file": "src/resources/record-requests.ts",
+    "find": "new Set<string>([...LIST_CONTROL_KEYS, ...filters])",
+    "replace": "new Set<string>([...filters])",
+    "expect": "caught",
+    "failing": [
+      "takes the paging, sorting and fields keys whatever the filters"
+    ]
+  },
+  {
+    "id": "p1-filters-ignored",
+    "file": "src/resources/record-requests.ts",
+    "find": "new Set<string>([...LIST_CONTROL_KEYS, ...filters])",
+    "replace": "new Set<string>([...LIST_CONTROL_KEYS])",
+    "expect": "caught",
+    "failing": [
+      "sends a list comma-separated"
+    ]
+  },
+  {
+    "id": "p1-unknown-key-message",
+    "file": "src/resources/record-requests.ts",
+    "find": "      throw new SirenError(`This list does not read ${key}, and Siren",
+    "replace": "      throw new SirenError(`This list does not read that key, and Siren",
+    "expect": "caught",
+    "failing": [
+      "refuses a key the route does not read"
+    ]
+  },
+  {
+    "id": "p1-query-undefined",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (value === undefined) continue;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "leaves out undefined and an empty fields list"
+    ]
+  },
+  {
+    "id": "p1-query-null",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (value === undefined) continue;",
+    "replace": "    if (value === undefined || value === null) continue;",
+    "expect": "caught",
+    "failing": [
+      "refuses null"
+    ]
+  },
+  {
+    "id": "p1-one-unchecked",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (one.has(key) && !isRecordId(value)) {",
+    "replace": "    if (one.has('__never__') && !isRecordId(value)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a list for a single-id filter",
+      "refuses a text id for a single-id filter",
+      "refuses 0 for a single-id filter",
+      "refuses a fraction for a single-id filter"
+    ]
+  },
+  {
+    "id": "p1-one-allows-list",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (one.has(key) && !isRecordId(value)) {",
+    "replace": "    if (one.has(key) && !(Array.isArray(value) ? value : [value]).every(isRecordId)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a list for a single-id filter",
+      "sends nothing for an id filter it refuses"
+    ]
+  },
+  {
+    "id": "p1-many-unchecked",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (many.has(key) && !(Array.isArray(value) ? value : [value]).every(isRecordId)) {",
+    "replace": "    if (many.has('__never__') && !(Array.isArray(value) ? value : [value]).every(isRecordId)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses an id Cloud would cast to 3",
+      "refuses a text id in an id list",
+      "refuses 0 in an id list",
+      "refuses a negative id"
+    ]
+  },
+  {
+    "id": "p1-many-first-only",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (many.has(key) && !(Array.isArray(value) ? value : [value]).every(isRecordId)) {",
+    "replace": "    if (many.has(key) && !(Array.isArray(value) ? value.slice(0, 1) : [value]).every(isRecordId)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a text id in an id list",
+      "refuses 0 in an id list"
+    ]
+  },
+  {
+    "id": "p1-one-key-message",
+    "file": "src/resources/record-requests.ts",
+    "find": "      throw new SirenError(`${key} takes one positive whole number id",
+    "replace": "      throw new SirenError(`This filter takes one positive whole number id",
+    "expect": "caught",
+    "failing": [
+      "refuses a list for a single-id filter"
+    ]
+  },
+  {
+    "id": "p1-empty-list-dropped",
+    "file": "src/resources/record-requests.ts",
+    "find": "        if (key === 'fields') continue;\n        throw new SirenError(`An empty ${key} list",
+    "replace": "        continue;\n        throw new SirenError(`An empty ${key} list",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty filter list",
+      "refuses an empty id list"
+    ]
+  },
+  {
+    "id": "p1-empty-fields-refused",
+    "file": "src/resources/record-requests.ts",
+    "find": "        if (key === 'fields') continue;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "leaves out undefined and an empty fields list"
+    ]
+  },
+  {
+    "id": "p1-query-nan",
+    "file": "src/resources/record-requests.ts",
+    "find": "        if (typeof member !== 'string' && !(typeof member === 'number' && Number.isFinite(member))) {",
+    "replace": "        if (typeof member !== 'string' && typeof member !== 'number') {",
+    "expect": "caught",
+    "failing": [
+      "a list holding NaN"
+    ]
+  },
+  {
+    "id": "p1-query-bool-member",
+    "file": "src/resources/record-requests.ts",
+    "find": "        if (typeof member !== 'string' && !(typeof member === 'number' && Number.isFinite(member))) {",
+    "replace": "        if (typeof member !== 'boolean' && typeof member !== 'string' && !(typeof member === 'number' && Number.isFinite(member))) {",
+    "expect": "caught",
+    "failing": [
+      "a list holding a boolean"
+    ]
+  },
+  {
+    "id": "p1-query-object-member",
+    "file": "src/resources/record-requests.ts",
+    "find": "        if (typeof member !== 'string' && !(typeof member === 'number' && Number.isFinite(member))) {",
+    "replace": "        if (typeof member === 'boolean' || (typeof member === 'number' && !Number.isFinite(member))) {",
+    "expect": "caught",
+    "failing": [
+      "a list holding an object"
+    ]
+  },
+  {
+    "id": "p1-query-comma",
+    "file": "src/resources/record-requests.ts",
+    "find": "        if (String(member).includes(',')) {",
+    "replace": "        if (String(member).includes('\\u0000')) {",
+    "expect": "caught",
+    "failing": [
+      "a list member with a comma"
+    ]
+  },
+  {
+    "id": "p1-query-fields-join",
+    "file": "src/resources/record-requests.ts",
+    "find": "      query[key] = value.join(',');",
+    "replace": "      query[key] = key === 'fields' ? value.join(' ') : value.join(',');",
+    "expect": "caught",
+    "failing": [
+      "sends a list comma-separated"
+    ]
+  },
+  {
+    "id": "p1-query-filter-join",
+    "file": "src/resources/record-requests.ts",
+    "find": "      query[key] = value.join(',');",
+    "replace": "      query[key] = key === 'fields' ? value.join(',') : value.join('|');",
+    "expect": "caught",
+    "failing": [
+      "sends a list comma-separated"
+    ]
+  },
+  {
+    "id": "p1-string-comma-allowed",
+    "file": "src/resources/record-requests.ts",
+    "find": "      if (value.includes(',') && key !== 'fields' && key !== 's') {",
+    "replace": "      if (value.includes('\\u0000') && key !== 'fields' && key !== 's') {",
+    "expect": "caught",
+    "failing": [
+      "refuses a string filter with a comma"
+    ]
+  },
+  {
+    "id": "p1-comma-in-fields-refused",
+    "file": "src/resources/record-requests.ts",
+    "find": "      if (value.includes(',') && key !== 'fields' && key !== 's') {",
+    "replace": "      if (value.includes(',') && key !== 's') {",
+    "expect": "caught",
+    "failing": [
+      "allows a comma only in fields and in the search text"
+    ]
+  },
+  {
+    "id": "p1-comma-in-s-refused",
+    "file": "src/resources/record-requests.ts",
+    "find": "      if (value.includes(',') && key !== 'fields' && key !== 's') {",
+    "replace": "      if (value.includes(',') && key !== 'fields') {",
+    "expect": "caught",
+    "failing": [
+      "allows a comma only in fields and in the search text"
+    ]
+  },
+  {
+    "id": "p1-query-boolean",
+    "file": "src/resources/record-requests.ts",
+    "find": "    } else if ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean') {",
+    "replace": "    } else if (typeof value === 'number' && Number.isFinite(value)) {",
+    "expect": "caught",
+    "failing": [
+      "keeps a boolean"
+    ]
+  },
+  {
+    "id": "p1-query-object",
+    "file": "src/resources/record-requests.ts",
+    "find": "      throw new SirenError(`Send ${key} as a string, a finite number, a boolean or a list of strings or numbers.`);",
+    "replace": "      query[key] = String(value);",
+    "expect": "caught",
+    "failing": [
+      "refuses an object",
+      "refuses a function"
+    ]
+  },
+  {
+    "id": "p1-query-paging-skipped",
+    "file": "src/resources/record-requests.ts",
+    "find": "  return toListQuery(query);",
+    "replace": "  return query;",
+    "expect": "caught",
+    "failing": [
+      "pages with page and perPage"
+    ]
+  },
+  {
+    "id": "p1-list-not-retried",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const query = recordListQuery(params, filters, ids);\n  const response = await http.request({ method: 'GET', path, query, retriable: true });",
+    "replace": "  const query = recordListQuery(params, filters, ids);\n  const response = await http.request({ method: 'GET', path, query, retriable: false });",
+    "expect": "caught",
+    "failing": [
+      "P1: listRecords > retries like a read"
+    ]
+  },
+  {
+    "id": "p1-list-ids-ignored",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const query = recordListQuery(params, filters, ids);",
+    "replace": "  const query = recordListQuery(params, filters);",
+    "expect": "caught",
+    "failing": [
+      "sends nothing for an id filter it refuses"
+    ]
+  },
+  {
+    "id": "p1-list-sends-refused",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const query = recordListQuery(params, filters, ids);\n",
+    "replace": "  const query = (() => { try { return recordListQuery(params, filters, ids); } catch { return {}; } })();\n",
+    "expect": "caught",
+    "failing": [
+      "P1: listRecords > sends nothing for"
+    ]
+  },
+  {
+    "id": "p1-list-no-total",
+    "file": "src/resources/record-requests.ts",
+    "find": "    if (typeof body.total === 'number' && Number.isFinite(body.total)) count = body.total;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P1: listRecords"
+    ]
+  },
+  {
+    "id": "p1-list-no-header",
+    "file": "src/resources/record-requests.ts",
+    "find": "      if (Number.isFinite(parsed)) count = parsed;",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "reads a bare array with the count header"
+    ]
+  },
+  {
+    "id": "p1-list-count-enumerable",
+    "file": "src/resources/record-requests.ts",
+    "find": "      value: count,\n      enumerable: false,",
+    "replace": "      value: count,\n      enumerable: true,",
+    "expect": "caught",
+    "failing": [
+      "keeps estimatedCount out of JSON and spreads"
+    ]
+  },
+  {
+    "id": "p1-list-wrong-shape-empty",
+    "file": "src/resources/record-requests.ts",
+    "find": "  } else {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a record list.`",
+    "replace": "  } else if (body === undefined || body === null || typeof body === 'string') {\n    records = [];\n  } else {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a record list.`",
+    "expect": "caught",
+    "failing": [
+      "for a JSON null, never an empty page",
+      "for a string, never an empty page",
+      "for an empty body, never an empty page"
+    ]
+  },
+  {
+    "id": "p1-list-items-object",
+    "file": "src/resources/record-requests.ts",
+    "find": "  } else if (isJsonObject(body) && Array.isArray(body.items)) {\n    records = body.items as unknown[];",
+    "replace": "  } else if (isJsonObject(body) && body.items !== undefined) {\n    records = [body.items];",
+    "expect": "caught",
+    "failing": [
+      "for items that are not a list"
+    ]
+  },
+  {
+    "id": "p1-list-error-object",
+    "file": "src/resources/record-requests.ts",
+    "find": "  } else if (isJsonObject(body) && Array.isArray(body.items)) {\n    records = body.items as unknown[];",
+    "replace": "  } else if (isJsonObject(body)) {\n    records = Array.isArray(body.items) ? (body.items as unknown[]) : [];",
+    "expect": "caught",
+    "failing": [
+      "for an error object"
+    ]
+  },
+  {
+    "id": "p1-list-wrong-shape-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "with a body that is not a record list.`, {\n      statusCode: response.status,",
+    "replace": "with a body that is not a record list.`, {\n      statusCode: 0,",
+    "expect": "caught",
+    "failing": [
+      "never an empty page"
+    ]
+  },
+  {
+    "id": "p1-row-unchecked",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!records.every(isJsonObject)) {",
+    "replace": "  if (records.length < 0) {",
+    "expect": "caught",
+    "failing": [
+      "for an items row that is not an object",
+      "for a bare array holding null",
+      "for a bare array holding a list"
+    ]
+  },
+  {
+    "id": "p1-row-first-only",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!records.every(isJsonObject)) {",
+    "replace": "  if (records.length > 0 && !isJsonObject(records[0])) {",
+    "expect": "caught",
+    "failing": [
+      "for an items row that is not an object"
+    ]
+  },
+  {
+    "id": "p1-row-no-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "with a list row that is not a JSON object.`, {\n      statusCode: response.status,",
+    "replace": "with a list row that is not a JSON object.`, {\n      statusCode: 0,",
+    "expect": "caught",
+    "failing": [
+      "for an items row that is not an object"
+    ]
+  },
+  {
+    "id": "p1-read-not-retried",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const response = await http.request({ method: 'GET', path, query, retriable: true });\n  const body = await parseJsonBody(response);\n  if (!isJsonObject(body)) {",
+    "replace": "  const response = await http.request({ method: 'GET', path, query, retriable: false });\n  const body = await parseJsonBody(response);\n  if (!isJsonObject(body)) {",
+    "expect": "caught",
+    "failing": [
+      "P1: readObject > retries like a read"
+    ]
+  },
+  {
+    "id": "p1-read-shape-unchecked",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!isJsonObject(body)) {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON object.`, {\n      statusCode: response.status,\n      data: body,\n    });\n  }\n\n  const problem = check === undefined ? undefined : check(body);",
+    "replace": "  if (body === undefined) {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON object.`, {\n      statusCode: response.status,\n      data: body,\n    });\n  }\n\n  const problem = check === undefined ? undefined : check(body as Record<string, unknown>);",
+    "expect": "caught",
+    "failing": [
+      "throws UnexpectedResponseError for an array",
+      "throws UnexpectedResponseError for a string",
+      "throws UnexpectedResponseError for null"
+    ]
+  },
+  {
+    "id": "p1-read-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON object.`, {\n      statusCode: response.status,",
+    "replace": "    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON object.`, {\n      statusCode: 502,",
+    "expect": "caught",
+    "failing": [
+      "P1: readObject"
+    ]
+  },
+  {
+    "id": "p1-check-ignored",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const problem = check === undefined ? undefined : check(body);",
+    "replace": "  const problem = undefined as string | undefined;\n  void check;",
+    "expect": "caught",
+    "failing": [
+      "the status and the body when the check fails"
+    ]
+  },
+  {
+    "id": "p1-check-wrong-body",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const problem = check === undefined ? undefined : check(body);",
+    "replace": "  const problem = check === undefined ? undefined : check({});",
+    "expect": "caught",
+    "failing": [
+      "answers the object when the check passes, and hands the check the body"
+    ]
+  },
+  {
+    "id": "p1-check-message",
+    "file": "src/resources/record-requests.ts",
+    "find": "    throw new UnexpectedResponseError(problem, { statusCode: response.status, data: body });",
+    "replace": "    throw new UnexpectedResponseError('Siren answered with a broken field.', { statusCode: response.status, data: body });",
+    "expect": "caught",
+    "failing": [
+      "the status and the body when the check fails"
+    ]
+  },
+  {
+    "id": "p1-check-no-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "    throw new UnexpectedResponseError(problem, { statusCode: response.status, data: body });",
+    "replace": "    throw new UnexpectedResponseError(problem, { data: body });",
+    "expect": "caught",
+    "failing": [
+      "the status and the body when the check fails"
+    ]
+  },
+  {
+    "id": "p1-check-no-data",
+    "file": "src/resources/record-requests.ts",
+    "find": "    throw new UnexpectedResponseError(problem, { statusCode: response.status, data: body });",
+    "replace": "    throw new UnexpectedResponseError(problem, { statusCode: response.status });",
+    "expect": "caught",
+    "failing": [
+      "the status and the body when the check fails"
+    ]
+  },
+  {
+    "id": "p1-check-before-shape",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const body = await parseJsonBody(response);\n  if (!isJsonObject(body)) {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON object.`, {\n      statusCode: response.status,\n      data: body,\n    });\n  }\n\n  const problem",
+    "replace": "  const body = await parseJsonBody(response);\n  check?.(body as Record<string, unknown>);\n  if (!isJsonObject(body)) {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON object.`, {\n      statusCode: response.status,\n      data: body,\n    });\n  }\n\n  const problem",
+    "expect": "caught",
+    "failing": [
+      "throws for a body that is not an object before running the check"
+    ]
+  },
+  {
+    "id": "p1-readlist-not-retried",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const response = await http.request({ method: 'GET', path, retriable: true });",
+    "replace": "  const response = await http.request({ method: 'GET', path, retriable: false });",
+    "expect": "caught",
+    "failing": [
+      "P1: readList > retries like a read"
+    ]
+  },
+  {
+    "id": "p1-readlist-object",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!Array.isArray(body)) {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON array.`",
+    "replace": "  if (body === undefined || body === null) {\n    throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a JSON array.`",
+    "expect": "caught",
+    "failing": [
+      "throws UnexpectedResponseError for an object"
+    ]
+  },
+  {
+    "id": "p1-write-retried",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const response = await http.request({ method, path, body, retriable: false });\n  const answer = await parseJsonBody(response);\n  if (!isJsonObject(answer)) {",
+    "replace": "  const response = await http.request({ method, path, body, retriable: true });\n  const answer = await parseJsonBody(response);\n  if (!isJsonObject(answer)) {",
+    "expect": "caught",
+    "failing": [
+      "P1: writeRecord"
+    ]
+  },
+  {
+    "id": "p1-write-shape-unchecked",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!isJsonObject(answer)) {\n    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`",
+    "replace": "  if (answer === undefined) {\n    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`",
+    "expect": "caught",
+    "failing": [
+      "throws UnexpectedResponseError with the 2xx status for an array"
+    ]
+  },
+  {
+    "id": "p1-write-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`, {\n      statusCode: response.status,",
+    "replace": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`, {\n      statusCode: 500,",
+    "expect": "caught",
+    "failing": [
+      "P1: writeRecord"
+    ]
+  },
+  {
+    "id": "p1-write-no-body",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const response = await http.request({ method, path, body, retriable: false });\n  const answer = await parseJsonBody(response);\n  if (!isJsonObject(answer)) {",
+    "replace": "  const response = await http.request({ method, path, retriable: false });\n  const answer = await parseJsonBody(response);\n  if (!isJsonObject(answer)) {",
+    "expect": "caught",
+    "failing": [
+      "P1: writeRecord > sends"
+    ]
+  },
+  {
+    "id": "p1-writelist-retried",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const response = await http.request({ method, path, body, retriable: false });\n  const answer = await parseJsonBody(response);\n  if (!Array.isArray(answer)) {",
+    "replace": "  const response = await http.request({ method, path, body, retriable: true });\n  const answer = await parseJsonBody(response);\n  if (!Array.isArray(answer)) {",
+    "expect": "caught",
+    "failing": [
+      "P1: writeList"
+    ]
+  },
+  {
+    "id": "p1-writelist-object",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!Array.isArray(answer)) {",
+    "replace": "  if (answer === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "P1: writeList"
+    ]
+  },
+  {
+    "id": "p1-writelist-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON array.`, {\n      statusCode: response.status,",
+    "replace": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON array.`, {\n      statusCode: 500,",
+    "expect": "caught",
+    "failing": [
+      "P1: writeList"
+    ]
+  },
+  {
+    "id": "p1-delete-retried",
+    "file": "src/resources/record-requests.ts",
+    "find": "{ method: 'DELETE', path, query, retriable: false }",
+    "replace": "{ method: 'DELETE', path, query, retriable: true }",
+    "expect": "caught",
+    "failing": [
+      "P1: deleteRecord"
+    ]
+  },
+  {
+    "id": "p1-delete-body",
+    "file": "src/resources/record-requests.ts",
+    "find": "{ method: 'DELETE', path, query, retriable: false }",
+    "replace": "{ method: 'DELETE', path, query, body: query, retriable: false }",
+    "expect": "caught",
+    "failing": [
+      "sends DELETE with the query and no body"
+    ]
+  },
+  {
+    "id": "p1-delete-no-query",
+    "file": "src/resources/record-requests.ts",
+    "find": "{ method: 'DELETE', path, query, retriable: false }",
+    "replace": "{ method: 'DELETE', path, retriable: false }",
+    "expect": "caught",
+    "failing": [
+      "sends DELETE with the query and no body"
+    ]
+  },
+  {
+    "id": "p1-delete-empty-200-null",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (text === '' && response.status === 204) return null;",
+    "replace": "  if (text === '') return null;",
+    "expect": "caught",
+    "failing": [
+      "for a 200 with no body, never null"
+    ]
+  },
+  {
+    "id": "p1-delete-204-throws",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (text === '' && response.status === 204) return null;",
+    "replace": "  if (text === '' && response.status === 200) return null;",
+    "expect": "caught",
+    "failing": [
+      "P1: deleteRecord > answers null for a 204"
+    ]
+  },
+  {
+    "id": "p1-delete-204-empty-object",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (text === '' && response.status === 204) return null;",
+    "replace": "  if (text === '' && response.status === 204) return {} as T;",
+    "expect": "caught",
+    "failing": [
+      "P1: deleteRecord > answers null for a 204"
+    ]
+  },
+  {
+    "id": "p1-delete-shape-unchecked",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!isJsonObject(answer)) {\n    throw new UnexpectedResponseError(\n      `Siren answered DELETE",
+    "replace": "  if (answer === undefined && text === '') {\n    throw new UnexpectedResponseError(\n      `Siren answered DELETE",
+    "expect": "caught",
+    "failing": [
+      "throws UnexpectedResponseError for an array",
+      "throws UnexpectedResponseError for a string",
+      "throws UnexpectedResponseError for a JSON null",
+      "throws UnexpectedResponseError for text that is not JSON"
+    ]
+  },
+  {
+    "id": "p1-delete-json-null",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!isJsonObject(answer)) {\n    throw new UnexpectedResponseError(\n      `Siren answered DELETE",
+    "replace": "  if (answer === null) return null;\n  if (!isJsonObject(answer)) {\n    throw new UnexpectedResponseError(\n      `Siren answered DELETE",
+    "expect": "caught",
+    "failing": [
+      "a JSON null"
+    ]
+  },
+  {
+    "id": "p1-delete-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "      { statusCode: response.status, data: answer === undefined ? text : answer },",
+    "replace": "      { statusCode: 0, data: answer === undefined ? text : answer },",
+    "expect": "caught",
+    "failing": [
+      "for a 200 with no body, never null"
+    ]
+  },
+  {
+    "id": "p1-bulk-empty-action",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (typeof action !== 'string' || action === '') {",
+    "replace": "  if (typeof action !== 'string') {",
+    "expect": "caught",
+    "failing": [
+      "an empty action"
+    ]
+  },
+  {
+    "id": "p1-bulk-empty",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!Array.isArray(ids) || ids.length === 0) {",
+    "replace": "  if (!Array.isArray(ids)) {",
+    "expect": "caught",
+    "failing": [
+      "no ids"
+    ]
+  },
+  {
+    "id": "p1-bulk-not-array",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (!Array.isArray(ids) || ids.length === 0) {",
+    "replace": "  if ((ids as unknown[]).length === 0) {",
+    "expect": "caught",
+    "failing": [
+      "ids that are not an array"
+    ]
+  },
+  {
+    "id": "p1-bulk-max",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (ids.length > MAX_BULK_IDS) {",
+    "replace": "  if (ids.length > MAX_BULK_IDS + 1) {",
+    "expect": "caught",
+    "failing": [
+      "501 ids"
+    ]
+  },
+  {
+    "id": "p1-bulk-max-low",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (ids.length > MAX_BULK_IDS) {",
+    "replace": "  if (ids.length >= MAX_BULK_IDS) {",
+    "expect": "caught",
+    "failing": [
+      "takes MAX_BULK_IDS ids"
+    ]
+  },
+  {
+    "id": "p1-bulk-ids-unchecked",
+    "file": "src/resources/record-requests.ts",
+    "find": "  for (const id of ids) recordId(id, 'bulk');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "an id of 0",
+      "a text id",
+      "a fractional id"
+    ]
+  },
+  {
+    "id": "p1-bulk-extra-ids",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (Object.prototype.hasOwnProperty.call(extra, 'action') || Object.prototype.hasOwnProperty.call(extra, 'ids')) {",
+    "replace": "  if (Object.prototype.hasOwnProperty.call(extra, 'action')) {",
+    "expect": "caught",
+    "failing": [
+      "an extra named ids"
+    ]
+  },
+  {
+    "id": "p1-bulk-extra-action",
+    "file": "src/resources/record-requests.ts",
+    "find": "  if (Object.prototype.hasOwnProperty.call(extra, 'action') || Object.prototype.hasOwnProperty.call(extra, 'ids')) {",
+    "replace": "  if (Object.prototype.hasOwnProperty.call(extra, 'ids')) {",
+    "expect": "caught",
+    "failing": [
+      "an extra named action"
+    ]
+  },
+  {
+    "id": "p1-bulk-order",
+    "file": "src/resources/record-requests.ts",
+    "find": "{ action, ids: [...ids], ...extra }",
+    "replace": "{ ...extra, action, ids: [...ids] }",
+    "expect": "caught",
+    "failing": [
+      "posts {action, ids, ...extra}"
+    ]
+  },
+  {
+    "id": "p1-bulk-extra-dropped",
+    "file": "src/resources/record-requests.ts",
+    "find": "{ action, ids: [...ids], ...extra }",
+    "replace": "{ action, ids: [...ids] }",
+    "expect": "caught",
+    "failing": [
+      "posts {action, ids, ...extra}"
+    ]
+  },
+  {
+    "id": "p1-bulk-path",
+    "file": "src/resources/record-requests.ts",
+    "find": "return writeRecord<T>(http, 'POST', `${collection}/bulk`",
+    "replace": "return writeRecord<T>(http, 'POST', `${collection}`",
+    "expect": "caught",
+    "failing": [
+      "posts {action, ids, ...extra}"
+    ]
+  },
+  {
+    "id": "p1-bulk-retried",
+    "file": "src/resources/record-requests.ts",
+    "find": "return writeRecord<T>(http, 'POST', `${collection}/bulk`, { action, ids: [...ids], ...extra });",
+    "replace": "return http.request({ method: 'POST', path: `${collection}/bulk`, body: { action, ids: [...ids], ...extra }, retriable: true }).then(async (r) => { const a = await parseJsonBody(r); if (!isJsonObject(a)) throw new UnexpectedResponseError('x', { statusCode: r.status }); return a as T; });",
+    "expect": "caught",
+    "failing": [
+      "P1: bulkRecords > sends once on a 503 or a network failure"
+    ]
+  }
+]
