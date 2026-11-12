@@ -59,6 +59,7 @@ describe('Siren timeout check', () => {
     ['-Infinity', Number.NEGATIVE_INFINITY],
     ['negative', -1],
     ['zero', 0],
+    ['a fraction below 1', 0.5],
     ['just above the longest timer wait', 2_147_483_648],
     ['far above the longest timer wait', 1e12],
     ['a string of digits', '30000'],
