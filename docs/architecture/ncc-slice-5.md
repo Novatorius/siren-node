@@ -208,7 +208,7 @@ whose client answers every send itself.
 
 Against the stubs, every skipped test fails on its assertion except ten,
 each a guard the stubs already meet. A throwaway implementation of all
-seven packets passes all 759 tests. Each of 153 mutations against it, one
+seven packets passes all 781 tests. Each of 169 mutations against it, one
 per rule, scores as the harness's controls predict. The surface mutation
 list (`scripts/mutations/ncc-slice-5-surface.json`) changes the branch's
 own vocabulary and the no-network guard, and runs here.
