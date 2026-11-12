@@ -51,9 +51,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FulfillmentStatus`, `ApiKeyStatus`, `WebhookSubscriptionStatus` and `CustomCurrencyType`.
 - `openapi.yaml` documents the new refund, sale, line and visit fields, `RefundLine`,
   `GET /api-keys/scopes`, every webhook event and an `ErrorCode` schema.
+- `accessToken`, a `new Siren()` option beside `apiKey`, for a connected store's OAuth access token.
+  It takes a string, or an `AccessTokenSource` that supplies the token and a fresh one after a 401.
+  `StaticAccessToken` holds a fixed token and never refreshes. `CallbackAccessTokenSource` builds a
+  source from two functions, for a host that keeps its grant in its own storage. Pass `apiKey` or
+  `accessToken`, never both.
+- `httpClient`, a `new Siren()` option that sends every request through the host's own HTTP stack.
+  `HttpClient` has one method, `send(request)`, with `HttpRequest` and `HttpResponse` as its types.
+  It never follows a redirect and keeps the request headers out of its errors. `FetchHttpClient`
+  is the default, over the global `fetch`, and sends with `redirect: 'manual'`. A client rejects
+  with `HttpClientError` when no complete response arrived.
+- `ConnectorScope` names the OAuth scopes a connected site asks for: `ConnectAll`, `Webhooks`,
+  `RecordsRead`, `RecordsWrite`, the joined `CONNECTED_SITE` value and `forConnectedSite()`.
+- `conversions.retrieve` and `transactions.retrieve` read one record with
+  `GET /conversions/{id}` and `GET /transactions/{id}`, taking `fields`, `include` and
+  `propertyId`. They throw `SirenError` before sending when the id is not a positive whole number,
+  and `UnexpectedResponseError` when a 2xx body is not a JSON object.
+- `openapi.yaml` documents `GET /conversions/{id}` and `GET /transactions/{id}`.
 
 ### Changed
 
+- A 401 is resent once with a refreshed token when the credential is an `AccessTokenSource` that
+  can refresh, whether or not the request may be retried, because Siren answers a 401 before it
+  records anything. The resend does not count against `maxRetries`. An `apiKey` is never
+  refreshed, and a 403 or 409 is still sent once.
+- A 3xx reply raises `SirenError` with its status. The SDK never follows a redirect, because a
+  followed redirect would send the bearer token to another host.
 - A 401 or 403 class is chosen by `error.code` when the SDK knows the code. A reply with no code,
   or one the SDK does not know, comes from an older or newer Siren deployment, so the SDK reads
   Siren's wording instead, as the Siren PHP SDK does.
