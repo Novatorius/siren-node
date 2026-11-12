@@ -1,0 +1,156 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/settings.ts",
+    "find": "      if (typeof name !== 'string' || name === '' || name.includes(',')) {",
+    "replace": "      if (typeof name !== 'string' || name === '') {",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/settings.ts",
+    "find": "        throw new SirenError(`A setting ${field} must be a name with no comma.`);",
+    "replace": "        throw new SirenError(`A setting ${field} must be a name ` + `with no comma.`);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/settings.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/settings.ts",
+    "find": "    return row?.value ?? null;",
+    "replace": "    return row?.value ?? null;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/settings.ts",
+    "find": "      if (typeof name !== 'string' || name === '' || name.includes(',')) {",
+    "replace": "      if (typeof name !== 'string' || name === '') {",
+    "expect": "wrong-reason",
+    "failing": [
+      "P7: settings surface"
+    ]
+  },
+  {
+    "id": "p7-page-size",
+    "file": "src/resources/settings.ts",
+    "find": "    const query = { type: SettingsResource.TYPE_COLLABORATOR, number: 200 };",
+    "replace": "    const query = { type: SettingsResource.TYPE_COLLABORATOR, number: 100 };",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-collaborator-type",
+    "file": "src/resources/settings.ts",
+    "find": "    const query = { type: SettingsResource.TYPE_COLLABORATOR, number: 200 };",
+    "replace": "    const query = { type: 'collaborators', number: 200 };",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-collaborator-unchecked",
+    "file": "src/resources/settings.ts",
+    "find": "    return listRecords<SharedSetting>(this.http, SettingsResource.PATH, query, SettingsResource.FILTERS);",
+    "replace": "    return this.http.request({ method: 'GET', path: SettingsResource.PATH, query, retriable: true }).then(async (r) => (JSON.parse(await r.text()) as { items: SharedSetting[] }).items ?? []);",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-collaborator-path",
+    "file": "src/resources/settings.ts",
+    "find": "    return listRecords<SharedSetting>(this.http, SettingsResource.PATH, query, SettingsResource.FILTERS);",
+    "replace": "    return listRecords<SharedSetting>(this.http, '/config', query, SettingsResource.FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-value-page",
+    "file": "src/resources/settings.ts",
+    "find": "    const query = { ...names, number: 1 };",
+    "replace": "    const query = { ...names };",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-value-filters-narrow",
+    "file": "src/resources/settings.ts",
+    "find": "    const [row] = await listRecords<SharedSetting>(this.http, SettingsResource.PATH, query, SettingsResource.FILTERS);",
+    "replace": "    const [row] = await listRecords<SharedSetting>(this.http, SettingsResource.PATH, query, ['type', 'subtype']);",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-value-undefined",
+    "file": "src/resources/settings.ts",
+    "find": "    return row?.value ?? null;",
+    "replace": "    return row === undefined ? null : row.value;",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-value-row",
+    "file": "src/resources/settings.ts",
+    "find": "    return row?.value ?? null;",
+    "replace": "    return row ?? null;",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-empty-allowed",
+    "file": "src/resources/settings.ts",
+    "find": "      if (typeof name !== 'string' || name === '' || name.includes(',')) {",
+    "replace": "      if (typeof name !== 'string' || name.includes(',')) {",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-type-unchecked",
+    "file": "src/resources/settings.ts",
+    "find": "      if (typeof name !== 'string' || name === '' || name.includes(',')) {",
+    "replace": "      if (name === '' || name.includes(',')) {",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  },
+  {
+    "id": "p7-message-field",
+    "file": "src/resources/settings.ts",
+    "find": "        throw new SirenError(`A setting ${field} must be a name with no comma.`);",
+    "replace": "        throw new SirenError(`A setting ${name} must be a name with no comma.`);",
+    "expect": "caught",
+    "failing": [
+      "P7: settings reads"
+    ]
+  }
+]
