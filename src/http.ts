@@ -1,4 +1,5 @@
 import type { AccessTokenSource } from './auth/access-token-source';
+import { usableBearerToken } from './auth/bearer-token';
 import { ConnectionError, SirenError, errorFromResponse } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.sirenaffiliates.com/siren/v1';
@@ -26,7 +27,10 @@ export interface HttpRequest {
   readonly headers: Readonly<Record<string, string>>;
   /** The raw request body, or `undefined` for none. */
   readonly body?: string;
-  /** Milliseconds to allow for the whole request, the SDK's `timeout` option. */
+  /**
+   * Milliseconds to allow for this one send, the SDK's `timeout` option. A
+   * retry or the resend after a 401 gets the full timeout again.
+   */
   readonly timeout: number;
 }
 
@@ -63,8 +67,9 @@ export interface HttpResponse {
  * - Resolve with an {@link HttpResponse} for every HTTP status, 4xx and 5xx
  *   included. The SDK maps error statuses to its own errors and decides what
  *   to resend.
- * - Reject with {@link HttpClientError} only when no HTTP response arrived:
- *   DNS failure, refused connection, TLS error, timeout. The SDK may resend
+ * - Reject with {@link HttpClientError} only when no complete response
+ *   arrived: DNS failure, refused connection, TLS error, timeout, or a
+ *   connection that dropped while the body was read. The SDK may resend
  *   these when the request allows it, and raises `ConnectionError` after
  *   that. Any other error the client throws reaches the caller unchanged and
  *   is never resent, because the SDK cannot tell whether the request left.
@@ -270,19 +275,25 @@ export class HttpTransport {
    *
    * 1. Reads the token once, from `tokens.getAccessToken()`, before the first
    *    send. Every send of this call carries it until a refresh replaces it.
-   *    A token that is not a non-empty string, or that holds a control
-   *    character such as a line break, raises `SirenError`, naming
-   *    `getAccessToken` and never quoting the value, and nothing is sent.
+   *    A token that fails `usableBearerToken` (not a non-empty string, or
+   *    holding a control character such as a line break or any character
+   *    above U+00FF) raises `SirenError` whose message names
+   *    `getAccessToken`, control characters and U+00FF, never quoting the
+   *    value, and nothing is sent.
    * 2. Sends through `client.send()`, building a new `HttpRequest`, headers
    *    included, for each send.
    * 3. A 2xx reply is returned. Any other reply that is not a 401 is never
    *    refreshed. A 3xx raises `SirenError` with its status and is never
    *    followed or sent again.
    * 4. The first 401 of the call asks `tokens.refreshAccessToken(sent)` for a
-   *    new token, passing the token that was refused. A non-empty string
-   *    with no control character is sent at once in a new request, with no
-   *    wait. Any other answer raises the 401. A later 401 in the same call, with or without retries in
-   *    between, never refreshes again and raises through
+   *    new token, passing the token that was refused. An answer that passes
+   *    `usableBearerToken` is sent at once in a new request, with no wait.
+   *    An answer of `null` raises the 401 as it is. Any other answer raises
+   *    the 401 with `cause` set to a `SirenError` whose message names
+   *    `refreshAccessToken`, control characters and U+00FF, never quoting
+   *    the value, so a broken token source shows behind the 401. A later
+   *    401 in the same call, with or without retries in between, never
+   *    refreshes again and raises through
    *    `errorFromResponse`, so Siren's revoked-site answer surfaces as
    *    `SiteDisconnectedError`.
    *
@@ -290,10 +301,10 @@ export class HttpTransport {
    *    and does not use up a retry. Siren's routes answer 401 from
    *    middleware, or from a request with no accepted credential, before
    *    they write, so the refused send left nothing to duplicate. That holds
-   *    by route convention in Siren, and each new write route must keep it. A send-once request therefore
-   *    reaches Siren with a usable credential exactly once, and is sent at
-   *    most twice: the refused send and the resend. After the resend it is
-   *    never sent again, whatever the reply.
+   *    by route convention in Siren, and each new write route must keep it.
+   *    A send-once request therefore reaches Siren with a usable credential
+   *    exactly once, and is sent at most twice: the refused send and the
+   *    resend. After the resend it is never sent again, whatever the reply.
    * 5. A retriable request with retries left is sent again after a backoff on
    *    429, 5xx or an `HttpClientError`. A retriable request is sent at most
    *    `maxRetries + 2` times: its first send, `maxRetries` retries and one
@@ -310,10 +321,10 @@ export class HttpTransport {
     const url = this.buildUrl(req);
     const body = req.body !== undefined ? JSON.stringify(req.body) : undefined;
 
-    let token = usableToken(await this.tokens.getAccessToken());
+    let token = usableBearerToken(await this.tokens.getAccessToken());
     if (token === null) {
       throw new SirenError(
-        'Siren: getAccessToken did not answer a usable token. It must be a non-empty string with no control characters.',
+        'Siren: getAccessToken did not answer a usable token. A token must be a non-empty string with no control character and no character above U+00FF.',
       );
     }
     const sent = [token];
@@ -341,13 +352,26 @@ export class HttpTransport {
 
       if (response.status === 401 && !refreshed) {
         refreshed = true;
-        const fresh = usableToken(await this.tokens.refreshAccessToken(token));
+        const answer: unknown = await this.tokens.refreshAccessToken(token);
+        const fresh = usableBearerToken(answer);
         if (fresh !== null) {
           token = fresh;
           sent.push(fresh);
           continue;
         }
-        throw await errorFromApiResponse(response);
+        const refused = await errorFromApiResponse(response);
+        if (answer !== null) {
+          // Set as Error's own constructor sets it, so `cause` stays out of JSON.
+          Object.defineProperty(refused, 'cause', {
+            value: new SirenError(
+              'Siren: refreshAccessToken answered neither null nor a usable token. A token must be a non-empty string with no control character and no character above U+00FF.',
+            ),
+            writable: true,
+            configurable: true,
+            enumerable: false,
+          });
+        }
+        throw refused;
       }
 
       const retryAfter = response.headers.get('retry-after');
@@ -415,16 +439,6 @@ export class HttpTransport {
     }
     return Math.min(INITIAL_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS);
   }
-}
-
-/**
- * Answers the token when it is a non-empty string with no control character
- * (U+0000 to U+001F or U+007F), else `null`. A control character in a header
- * value would make fetch quote the whole value in its error.
- */
-function usableToken(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length === 0) return null;
-  return /[\u0000-\u001f\u007f]/.test(value) ? null : value;
 }
 
 /**

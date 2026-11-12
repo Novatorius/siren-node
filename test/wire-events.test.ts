@@ -20,10 +20,6 @@ import { emptyResponse, jsonResponse, makeClient } from './helpers';
  *   resent one is a second test sale) and IsBoolean::parse (`test` reads as
  *   true for true, 1, '1' and 'true')
  * - Siren matches no key on a custom event, so a resent one is recorded again
- *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else in this file.
  */
 
 afterEach(() => {

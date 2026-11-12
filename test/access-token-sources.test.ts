@@ -3,14 +3,10 @@ import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src
 
 /*
  * Slice 2 acceptance tests for packets P1 (StaticAccessToken) and P2
- * (CallbackAccessTokenSource). Each source mirrors its PHP SDK class at
- * 59383e6 (src/Auth).
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
+ * (CallbackAccessTokenSource), each built on its PHP SDK class at 59383e6
+ * (src/Auth). CallbackAccessTokenSource answers its refresh function's
+ * answer unchanged unless it is `null`, and test/bearer-token.test.ts pins
+ * the answers that are not a token.
  */
 
 describe('P1: StaticAccessToken', () => {
@@ -60,15 +56,10 @@ describe('P2: CallbackAccessTokenSource', () => {
     expect(await new CallbackAccessTokenSource(() => 'tok-1').refreshAccessToken('tok-1')).toBeNull();
   });
 
-  it.each([
-    ['null', null],
-    ['an empty string', ''],
-    ['a number', 7],
-    ['undefined', undefined],
-  ])('answers null when the refresh function returns %s', async (_name, value) => {
+  it('answers null when the refresh function returns null', async () => {
     const source = new CallbackAccessTokenSource(
       () => 'tok-1',
-      () => value as unknown as string | null,
+      () => null,
     );
 
     expect(await source.refreshAccessToken('tok-1')).toBeNull();

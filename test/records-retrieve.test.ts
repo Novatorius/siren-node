@@ -17,12 +17,6 @@ import { emptyResponse, jsonResponse, makeClient } from './helpers';
  * Integration shape (KB 568): the real client, with the global fetch mocked
  * by makeClient and answered with Siren's GetConversionById and
  * GetTransactionById bodies at bb49b7d.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
  */
 
 afterEach(() => {

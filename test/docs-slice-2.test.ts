@@ -7,12 +7,6 @@ import { describe, expect, it } from 'vitest';
  * Unreleased section and openapi.yaml are what a caller reads, so each new
  * option, class and route must appear there, and no sentence may still say
  * every 401 is sent once.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`, leaves none of them skipped, and
- * changes nothing else here.
  */
 
 function read(name: string): string {

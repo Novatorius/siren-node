@@ -11,10 +11,6 @@ import { jsonResponse, makeClient } from './helpers';
  * bb49b7d. `scripts/siren-fixtures.mjs` generates both from Siren's source
  * and, with `--check`, reports a fixture that no longer matches it. Each
  * fixture's `_source` names the files it came from.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` belongs to the packet named in
- * its describe block. That packet's implementer turns `it.skip(` into `it(`
- * for its own tests and changes nothing else in this file.
  */
 
 function fixture<T>(name: string): T {

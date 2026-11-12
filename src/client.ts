@@ -15,6 +15,9 @@ import { StaticAccessToken } from './auth/static-access-token';
 import type { HttpClient } from './http';
 import type { SirenOptions } from './types';
 
+/** The longest wait a Node timer holds. A longer one fires after 1 ms. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 /**
  * The Siren API client.
  *
@@ -60,6 +63,23 @@ export class Siren {
   readonly payouts: RecordsResource;
 
   /**
+   * Reads only the options object's own properties: `apiKey`,
+   * `accessToken`, `httpClient`, `baseUrl`, `timeout` and `maxRetries`. A
+   * value the object inherits, from `Object.prototype` or any other
+   * prototype, counts as absent, so prototype pollution cannot choose the
+   * host, the HTTP client, the credential or the retry policy through these
+   * reads. Fetch reads options of its own, so a host that cannot rule out
+   * pollution passes its own `httpClient`, one that does not send through
+   * the global `fetch` or that sets its own dispatcher. An object with no
+   * prototype works as well. Each option is read once, so a getter cannot
+   * pass a check with one value and be used with another.
+   *
+   * The values themselves are read as they are, so a token source or client
+   * class keeps its methods on its prototype. A method counts only when the
+   * value or a prototype other than `Object.prototype` holds it, so a
+   * `send`, `getAccessToken` or `refreshAccessToken` that only
+   * `Object.prototype` supplies is missing, and the option is refused.
+   *
    * Throws `SirenError` when the options pass both `apiKey` and
    * `accessToken`, neither, an empty one, an `accessToken` that is neither a
    * string nor an `AccessTokenSource`, or an `httpClient` without a `send`
@@ -69,18 +89,42 @@ export class Siren {
    * credential says an apiKey is required and names `accessToken` as the
    * other choice. No message carries a credential.
    *
+   * Also throws `SirenError` when `baseUrl` is not an http or https URL
+   * with no user name or password in it (a string `new URL` parses), does
+   * not start with `http://` or `https://` and a host with no `%`, or holds
+   * a `?`, a `#`, a backslash, an `@` or any character outside visible
+   * ASCII, U+0021 to U+007E. The check reads the raw string, so the string
+   * the transport joins paths onto is the string that was checked, and an
+   * international host must come in punycode. It also throws when
+   * `timeout` is not a number from 1 to 2147483647 (the longest wait a
+   * timer holds), or `maxRetries` is not a whole number of 0 or more, with
+   * no ceiling. NaN, Infinity, `null` and any value of the wrong type are
+   * refused, and a fraction of a millisecond is allowed. Each message names
+   * the option, what it takes ("an http or https URL", "from 1 to
+   * 2147483647", "a whole number of 0 or more") and what it got: the number
+   * itself, or the type of any other value, never a string's text. Absent,
+   * they default to `DEFAULT_BASE_URL`, 30000 and 2. Unknown option names
+   * are ignored.
+   *
    * `apiKey` and a string `accessToken` become a `StaticAccessToken`. An
    * `AccessTokenSource` is used as given. Requests go through `httpClient`,
    * or a `FetchHttpClient` when there is none.
    */
   constructor(options: SirenOptions) {
-    const given = (options ?? {}) as unknown as Record<string, unknown>;
+    const given: unknown = options ?? {};
+    const apiKey = ownOption(given, 'apiKey');
+    const accessToken = ownOption(given, 'accessToken');
+    const httpClient = ownOption(given, 'httpClient');
+    const baseUrl = ownOption(given, 'baseUrl');
+    const timeout = ownOption(given, 'timeout');
+    const maxRetries = ownOption(given, 'maxRetries');
+
     const http = new HttpTransport({
-      tokens: resolveTokens(given.apiKey, given.accessToken),
-      client: resolveHttpClient(given.httpClient),
-      baseUrl: options?.baseUrl ?? DEFAULT_BASE_URL,
-      timeout: options?.timeout ?? DEFAULT_TIMEOUT_MS,
-      maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES,
+      tokens: resolveTokens(apiKey, accessToken),
+      client: resolveHttpClient(httpClient),
+      baseUrl: resolveBaseUrl(baseUrl),
+      timeout: resolveTimeout(timeout),
+      maxRetries: resolveMaxRetries(maxRetries),
     });
 
     this.events = new EventsResource(http);
@@ -117,22 +161,101 @@ function resolveTokens(apiKey: unknown, accessToken: unknown): AccessTokenSource
   );
 }
 
-/** An `AccessTokenSource` is any object with both methods. */
-function isAccessTokenSource(value: unknown): value is AccessTokenSource {
-  if (typeof value !== 'object' || value === null) return false;
-  const source = value as Record<string, unknown>;
-  return typeof source.getAccessToken === 'function' && typeof source.refreshAccessToken === 'function';
+/**
+ * Answers the option `name` when the options object holds it itself, else
+ * `undefined`. It never reads an inherited value, and it reads an own value
+ * once, so a getter runs a single time. It works on an object with no
+ * prototype, since it calls `hasOwnProperty` from `Object.prototype`.
+ */
+function ownOption(options: unknown, name: string): unknown {
+  if (!Object.prototype.hasOwnProperty.call(options, name)) return undefined;
+  return (options as Record<string, unknown>)[name];
 }
 
 /**
- * Answers the given `httpClient`, any object with a `send` function, or a
- * `FetchHttpClient` with no fetch of its own when the option is absent, so
- * it reads the global fetch at each send.
+ * True when `value` is an object whose `name` is a function held by the
+ * object itself or by a prototype other than `Object.prototype`. The walk
+ * stops at the first object that holds `name`, which is the one a call would
+ * use, so a non-function there hides a function further up.
+ */
+function holdsMethod(value: unknown, name: string): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  for (let holder: object | null = value; holder !== null && holder !== Object.prototype; holder = Object.getPrototypeOf(holder)) {
+    if (Object.prototype.hasOwnProperty.call(holder, name)) {
+      return typeof (value as Record<string, unknown>)[name] === 'function';
+    }
+  }
+  return false;
+}
+
+/** An `AccessTokenSource` is any object that holds both methods. */
+function isAccessTokenSource(value: unknown): value is AccessTokenSource {
+  return holdsMethod(value, 'getAccessToken') && holdsMethod(value, 'refreshAccessToken');
+}
+
+/**
+ * Answers the given `httpClient`, any object that holds a `send` function,
+ * or a `FetchHttpClient` with no fetch of its own when the option is absent,
+ * so it reads the global fetch at each send.
  */
 function resolveHttpClient(httpClient: unknown): HttpClient {
   if (httpClient === undefined) return new FetchHttpClient();
-  if (typeof httpClient === 'object' && httpClient !== null && typeof (httpClient as HttpClient).send === 'function') {
-    return httpClient as HttpClient;
-  }
+  if (holdsMethod(httpClient, 'send')) return httpClient as HttpClient;
   throw new SirenError('Siren: httpClient must be an object with a send function.');
+}
+
+/**
+ * Answers `baseUrl`, or `DEFAULT_BASE_URL` when it is absent. Refuses any
+ * value that is not a string, that holds a character outside visible ASCII
+ * (U+0021 to U+007E) or a `?`, `#`, backslash or `@`, that does not start
+ * with `http://` or `https://` and a host with no `%`, or that `new URL`
+ * does not parse with the http or https scheme and an empty user name and
+ * password. The message names that range, the backslash and the `@`, and
+ * never quotes the value, and the error carries no `cause`.
+ */
+function resolveBaseUrl(baseUrl: unknown): string {
+  if (baseUrl === undefined) return DEFAULT_BASE_URL;
+  if (typeof baseUrl === 'string' && isHttpUrl(baseUrl)) return baseUrl;
+  throw new SirenError(
+    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,
+  );
+}
+
+/** True for a string the transport can join paths onto and send a token to. */
+function isHttpUrl(text: string): boolean {
+  if (/[^\u0021-\u007e]|[?#\\@]/.test(text)) return false;
+  if (!/^https?:\/\/[^/%]+(?:\/|$)/i.test(text)) return false;
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return false;
+  }
+  return (url.protocol === 'http:' || url.protocol === 'https:') && url.username === '' && url.password === '';
+}
+
+/** Answers `timeout`, or `DEFAULT_TIMEOUT_MS` when it is absent. */
+function resolveTimeout(timeout: unknown): number {
+  if (timeout === undefined) return DEFAULT_TIMEOUT_MS;
+  if (typeof timeout === 'number' && timeout >= 1 && timeout <= MAX_TIMEOUT_MS) return timeout;
+  throw new SirenError(
+    `Siren: timeout must be a number of milliseconds from 1 to ${MAX_TIMEOUT_MS}. It got ${described(timeout)}.`,
+  );
+}
+
+/** Answers `maxRetries`, or `DEFAULT_MAX_RETRIES` when it is absent. It has no ceiling. */
+function resolveMaxRetries(maxRetries: unknown): number {
+  if (maxRetries === undefined) return DEFAULT_MAX_RETRIES;
+  if (typeof maxRetries === 'number' && Number.isInteger(maxRetries) && maxRetries >= 0) return maxRetries;
+  throw new SirenError(`Siren: maxRetries must be a whole number of 0 or more. It got ${described(maxRetries)}.`);
+}
+
+/**
+ * What a refused option got, for its message: a number as `String(value)`,
+ * `null` as "null", and the type of anything else, so a string's text, which
+ * might be a credential, never reaches the message.
+ */
+function described(value: unknown): string {
+  if (typeof value === 'number') return String(value);
+  return value === null ? 'null' : typeof value;
 }

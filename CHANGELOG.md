@@ -15,6 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SaleParams` is a union of `LiveSaleParams` and `TestSaleParams`, so code that extends it as an
   interface no longer compiles. Extend `LiveSaleParams` or `SaleFields` instead. A real sale still
   requires `trackingId`.
+- `new Siren()` throws `SirenError` when `timeout` is not a number from 1 to 2147483647 for each
+  send, when `maxRetries` is not a whole number of 0 or more (it has no ceiling), or when `baseUrl`
+  is not an http or https URL with no user name or password in it. A `baseUrl` must also be
+  visible ASCII, U+0021 to U+007E, with no query, fragment, backslash or `@`, so a space or a
+  control character is refused and an international host goes in its punycode form. It starts with
+  `http://` or `https://` and a host that holds no `%`. NaN, Infinity and strings are refused for
+  `timeout` and `maxRetries`, and `null` for all three. Before, a NaN `maxRetries` turned retries off, Infinity retried without end,
+  a `timeout` above 2147483647 aborted every request after 1 ms, a `null` took the default, and a
+  `baseUrl` that fetch could not use was resent and raised as a lost connection.
+- `new Siren()` reads only the options object's own properties, each once. A `baseUrl`,
+  `httpClient`, credential, `timeout` or `maxRetries` inherited from a prototype is ignored, and a
+  `send` or token method that only `Object.prototype` supplies does not count. Fetch reads its own
+  options, so a host that cannot rule out prototype pollution passes its own `httpClient`.
+- A bearer token with a control character (C0, DEL or C1) or a character above U+00FF is refused
+  before it is sent, because neither can go in an HTTP header. An `apiKey` or string `accessToken`
+  throws `SirenError` when the client is built, and a `getAccessToken` answer raises `SirenError`. A
+  refresh answer that breaks the rule raises the 401 with a `SirenError` cause naming
+  `refreshAccessToken`, and `CallbackAccessTokenSource` hands an empty, `undefined` or non-string
+  refresh answer to that rule instead of reading it as `null`. Before, fetch refused such a token and
+  the SDK resent the request as a lost connection.
 
 ### Added
 

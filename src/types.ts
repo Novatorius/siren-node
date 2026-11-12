@@ -8,17 +8,30 @@ import type { HttpClient } from './http';
 export interface SirenBaseOptions {
   /**
    * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
-   * Point this at staging or a local dev server as needed.
+   * Point this at staging or a local dev server as needed. It must be an
+   * http or https URL with no user name or password in it, made only of
+   * visible ASCII, U+0021 to U+007E, with no `?`, `#`, backslash or `@`. It
+   * starts with `http://` or `https://` and a host that holds no `%`. Give
+   * an international host in its punycode form, such as
+   * `xn--bcher-kva.example`. Any other value throws `SirenError` at
+   * construction, and the message names only the value's type.
    */
   baseUrl?: string;
-  /** Request timeout in milliseconds. Defaults to 30000. */
+  /**
+   * Timeout for each send in milliseconds, from 1 to 2147483647. Defaults
+   * to 30000. A call that retries makes several sends, each with its own
+   * timeout. Any other value, NaN and Infinity included, throws `SirenError`
+   * at construction.
+   */
   timeout?: number;
   /**
    * Retry count for network errors and 429/5xx responses on idempotent
    * operations (reads, and sales and refunds that Siren can match). Site
    * visits, custom events, sales with no `externalId` and management writes
-   * are never auto-retried. Defaults to 2. A caller with a durable queue sets
-   * 0, because the queue owns redelivery.
+   * are never auto-retried. A token the SDK refuses is never sent, so never
+   * retried. A whole number, 0 or more, and defaults to 2, with no ceiling.
+   * Any other value throws `SirenError` at construction. A caller with a
+   * durable queue sets 0, because the queue owns redelivery.
    *
    * The one resend after a 401 with a refreshed token is not a retry and
    * happens whatever this says.
