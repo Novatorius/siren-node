@@ -58,8 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or one the SDK does not know, comes from an older or newer Siren deployment, so the SDK reads
   Siren's wording instead, as the Siren PHP SDK does.
 - `events.siteVisited` is sent once and never retried, because Siren records every visit it
-  receives. A retry after a lost reply would record the visit twice. Sales, refunds and custom
-  events are still retried.
+  receives. A retry after a lost reply would record the visit twice.
+- `events.ingest` is sent once for every slug, built-in slugs such as `sale` included, because
+  Siren has no key to match a resent custom event. Custom events are no longer retried.
+- A sale with no `externalId`, or a `null` one, is sent once, whatever `test` holds. Siren gives a
+  test sale with no id a random one, so a resent copy would record a second test, and it refuses a
+  real sale with no id. A sale that carries an `externalId`, an empty one included, and a refund
+  are still retried.
 
 ## [0.3.0] - 2026-10-19
 

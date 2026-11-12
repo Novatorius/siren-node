@@ -205,7 +205,7 @@ describe('P10: events.ingest and a sale with no externalId are sent once', () =>
   const unavailable = () => jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' });
   const dropped = () => new TypeError('fetch failed');
 
-  it.skip('sends a custom event once on a 503, even with retries on, because Siren has no key to match a resent one', async () => {
+  it('sends a custom event once on a 503, even with retries on, because Siren has no key to match a resent one', async () => {
     const ctx = makeClient([unavailable(), emptyResponse(200)], { maxRetries: 2 });
     const error = await ctx.client.events
       .ingest('loyalty-points-earned', { userId: 42, points: 100 })
@@ -216,13 +216,13 @@ describe('P10: events.ingest and a sale with no externalId are sent once', () =>
     expect(ctx.lastCall().url).toBe('https://api.sirenaffiliates.com/siren/v1/event/loyalty-points-earned');
   });
 
-  it.skip('sends a custom event once when the connection fails, even with retries on', async () => {
+  it('sends a custom event once when the connection fails, even with retries on', async () => {
     const ctx = makeClient([dropped(), emptyResponse(200)], { maxRetries: 2 });
     await ctx.client.events.ingest('loyalty-points-earned', { userId: 42 }).catch(() => undefined);
     expect(ctx.calls()).toHaveLength(1);
   });
 
-  it.skip("sends ingest('site-visited') once on a 503, the same rule as siteVisited", async () => {
+  it("sends ingest('site-visited') once on a 503, the same rule as siteVisited", async () => {
     const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'attributed', opportunityId: 318 })], {
       maxRetries: 2,
     });
@@ -232,7 +232,7 @@ describe('P10: events.ingest and a sale with no externalId are sent once', () =>
     expect(ctx.calls()).toHaveLength(1);
   });
 
-  it.skip("sends ingest('sale') once on a 503, the same rule as every other slug", async () => {
+  it("sends ingest('sale') once on a 503, the same rule as every other slug", async () => {
     const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created' })], { maxRetries: 2 });
     await ctx.client.events
       .ingest('sale', { source: 'woocommerce', externalId: 'order-88', total: 10, trackingId: 9 })
@@ -241,7 +241,7 @@ describe('P10: events.ingest and a sale with no externalId are sent once', () =>
     expect(ctx.lastCall().url).toBe('https://api.sirenaffiliates.com/siren/v1/event/sale');
   });
 
-  it.skip('sends a test sale with no externalId once on a 503, because Siren gives it a random id', async () => {
+  it('sends a test sale with no externalId once on a 503, because Siren gives it a random id', async () => {
     const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
     const error = await ctx.client.events.sale({ test: true }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
@@ -250,13 +250,13 @@ describe('P10: events.ingest and a sale with no externalId are sent once', () =>
     expect(ctx.lastCall().body).toEqual({ test: true });
   });
 
-  it.skip('sends a test sale with no externalId once when the connection fails, even with retries on', async () => {
+  it('sends a test sale with no externalId once when the connection fails, even with retries on', async () => {
     const ctx = makeClient([dropped(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
     await ctx.client.events.sale({ test: true, source: 'medusa', total: 10 }).catch(() => undefined);
     expect(ctx.calls()).toHaveLength(1);
   });
 
-  it.skip('sends a test sale with a null externalId once, since Siren reads null as no id', async () => {
+  it('sends a test sale with a null externalId once, since Siren reads null as no id', async () => {
     const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
     await ctx.client.events
       .sale({ test: true, externalId: null as unknown as string })
@@ -264,13 +264,13 @@ describe('P10: events.ingest and a sale with no externalId are sent once', () =>
     expect(ctx.calls()).toHaveLength(1);
   });
 
-  it.skip('sends a test sale with externalId set to undefined once, the same as leaving it out', async () => {
+  it('sends a test sale with externalId set to undefined once, the same as leaving it out', async () => {
     const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
     await ctx.client.events.sale({ test: true, externalId: undefined }).catch(() => undefined);
     expect(ctx.calls()).toHaveLength(1);
   });
 
-  it.skip("sends a sale with no externalId once when test is 1 or 'true', which Siren also reads as a test", async () => {
+  it("sends a sale with no externalId once when test is 1 or 'true', which Siren also reads as a test", async () => {
     for (const test of [1, 'true']) {
       const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
       await ctx.client.events.sale({ test } as unknown as SaleParams).catch(() => undefined);

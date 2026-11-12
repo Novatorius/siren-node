@@ -132,8 +132,10 @@ await siren.events.siteVisited({ collaboratorId: 'tracking:summer-sale' });
 ```
 
 Siren records every visit it receives, so the SDK sends `events.siteVisited` once and never retries
-it. Sales and refunds are retried, because Siren records a resent sale or a resent refund id
-once.
+it. Siren has no key to match a resent custom event either, so `events.ingest` is sent once,
+whatever its slug. A sale with no `externalId` is sent once too, because Siren gives a test sale
+with no id a random one and refuses a real sale without one. Refunds and sales that carry an
+`externalId` are retried, because Siren records a resent sale or a resent refund id once.
 
 ## Quickstart: verify a webhook
 
@@ -215,8 +217,9 @@ const catalog = await siren.webhooks.subscriptions.events();
 ## Features
 
 - **Event ingestion** — record sales, refunds, referred visits, and custom event types
-  (`events.sale`, `events.refund`, `events.siteVisited`, `events.ingest`). Sales, refunds and
-  custom events are auto-retried on network errors and 429/5xx. A visit is sent once.
+  (`events.sale`, `events.refund`, `events.siteVisited`, `events.ingest`). Sales and refunds
+  are auto-retried on network errors and 429/5xx. A visit, a custom event sent through
+  `events.ingest` and a sale with no `externalId` are sent once.
 - **Signed-webhook verification and subscriptions** — constant-time signature checks
   (`webhooks.constructEvent`, `webhooks.verifySignature`) plus subscription management
   (`webhooks.subscriptions.create` / `list` / `delete`) with an API key that holds a webhook scope.
@@ -370,11 +373,13 @@ const siren = new Siren({
 });
 ```
 
-Idempotent reads and event ingestion automatically retry network errors and 429/5xx responses with
+Idempotent reads, sales and refunds automatically retry network errors and 429/5xx responses with
 exponential backoff (honoring `Retry-After`). Management writes — `apiKeys.create` and
 `webhooks.subscriptions.create` — are **never** auto-retried, so a flaky connection can't mint
 duplicate credentials. `events.siteVisited` is never retried either, because Siren records every
-visit it receives. A 401, 403 or 409 is sent once.
+visit it receives. `events.ingest` is sent once for every slug, and a sale with no `externalId` is
+sent once, because Siren has no key to match a resent copy of either. A 401, 403 or 409 is sent
+once.
 
 If your app sends events from a durable queue, set `maxRetries: 0`. The queue owns redelivery, and
 an SDK retry inside a queued attempt would multiply the attempts.
