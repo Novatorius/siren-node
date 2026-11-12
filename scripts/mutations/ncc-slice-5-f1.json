@@ -1,0 +1,228 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);",
+    "replace": "    this.timeout = 15_001;",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient timeout check > accepts a timeout of 1"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/oauth.ts",
+    "find": "/** A non-empty string. */",
+    "replace": "/** A string that is not empty. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/oauth.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);",
+    "replace": "    this.timeout = = 1;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);",
+    "replace": "    this.timeout = 15_001;",
+    "expect": "wrong-reason",
+    "failing": [
+      "5 fix F1: OAuthClient baseUrl check > accepts a baseUrl that is a plain https URL"
+    ]
+  },
+  {
+    "id": "baseurl-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "replace": "    this.baseUrl = String(ownOption(given, 'baseUrl') ?? 'https://api.sirenaffiliates.com/siren/v1').replace(/\\/+$/, '');",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient baseUrl check > refuses a baseUrl that is",
+      "5 fix F1: OAuthClient baseUrl check > never sends a refresh grant to the host after an @"
+    ]
+  },
+  {
+    "id": "baseurl-own-message",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "replace": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl'), 'OAuthClient baseUrl').replace(/\\/+$/, '');",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient baseUrl check > refuses a baseUrl that is"
+    ]
+  },
+  {
+    "id": "baseurl-inherited",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "replace": "    this.baseUrl = resolveBaseUrl((given as OAuthClientOptions).baseUrl).replace(/\\/+$/, '');",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient reads only its own options > sends a refresh to the default host when Object.prototype carries a baseUrl"
+    ]
+  },
+  {
+    "id": "baseurl-read-twice",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "replace": "    this.baseUrl = (resolveBaseUrl(ownOption(given, 'baseUrl')), resolveBaseUrl(ownOption(given, 'baseUrl'))).replace(/\\/+$/, '');",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient reads only its own options > reads baseUrl once"
+    ]
+  },
+  {
+    "id": "baseurl-rewritten",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "replace": "    this.baseUrl = new URL(resolveBaseUrl(ownOption(given, 'baseUrl'))).href.replace(/\\/+$/, '');",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient baseUrl check > accepts a baseUrl that is a URL with a capital host"
+    ]
+  },
+  {
+    "id": "baseurl-slash-kept",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "replace": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl'));",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient baseUrl check > accepts a baseUrl that is an https URL with a trailing slash"
+    ]
+  },
+  {
+    "id": "baseurl-leak-in-field",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.baseUrl = resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "replace": "    this.baseUrl = ((v: unknown) => { try { return resolveBaseUrl(v); } catch (e) { Object.assign(e as object, { url: v }); throw e; } })(ownOption(given, 'baseUrl')).replace(/\\/+$/, '');",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient baseUrl check > refuses a baseUrl that is a URL with a user name and password"
+    ]
+  },
+  {
+    "id": "consent-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "resolveBaseUrl(consentScreenUrl, 'consentScreenUrl');",
+    "replace": "String(consentScreenUrl);",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient consentScreenUrl check > refuses a consentScreenUrl that is",
+      "5 fix F1: OAuthClient consentScreenUrl check > never builds a consent link to the host after an @"
+    ]
+  },
+  {
+    "id": "consent-named-baseurl",
+    "file": "src/connect/oauth.ts",
+    "find": "resolveBaseUrl(consentScreenUrl, 'consentScreenUrl');",
+    "replace": "resolveBaseUrl(consentScreenUrl);",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient consentScreenUrl check > refuses a consentScreenUrl that is"
+    ]
+  },
+  {
+    "id": "consent-leak-in-cause",
+    "file": "src/connect/oauth.ts",
+    "find": "resolveBaseUrl(consentScreenUrl, 'consentScreenUrl');",
+    "replace": "((v: unknown) => { try { return resolveBaseUrl(v, 'consentScreenUrl'); } catch (e) { throw new SirenError((e as Error).message, { cause: new Error(String(v)) }); } })(consentScreenUrl);",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient consentScreenUrl check > refuses a consentScreenUrl that is a URL with a user name and password"
+    ]
+  },
+  {
+    "id": "consent-inherited",
+    "file": "src/connect/oauth.ts",
+    "find": "    const consentScreenUrl = ownOption(given, 'consentScreenUrl');",
+    "replace": "    const consentScreenUrl = (given as OAuthClientOptions).consentScreenUrl;",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient reads only its own options > builds the consent link on the default screen when Object.prototype carries a consentScreenUrl"
+    ]
+  },
+  {
+    "id": "timeout-unchecked",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);",
+    "replace": "    this.timeout = (ownOption(given, 'timeout') as number | undefined) ?? DEFAULT_OAUTH_TIMEOUT_MS;",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient timeout check > refuses a timeout that is"
+    ]
+  },
+  {
+    "id": "timeout-siren-default",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);",
+    "replace": "    this.timeout = resolveTimeout(ownOption(given, 'timeout'));",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient timeout check > waits 15 seconds when timeout is given as undefined"
+    ]
+  },
+  {
+    "id": "timeout-inherited",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);",
+    "replace": "    this.timeout = resolveTimeout((given as OAuthClientOptions).timeout, DEFAULT_OAUTH_TIMEOUT_MS);",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient reads only its own options > waits 15 seconds when Object.prototype carries a timeout"
+    ]
+  },
+  {
+    "id": "httpclient-prototype-send",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.client = resolveHttpClient(ownOption(given, 'httpClient'));",
+    "replace": "    this.client = ((c: unknown) => (typeof (c as HttpClient | undefined)?.send === 'function' ? (c as HttpClient) : resolveHttpClient(c)))(ownOption(given, 'httpClient'));",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient httpClient check > refuses an httpClient whose send only Object.prototype supplies"
+    ]
+  },
+  {
+    "id": "httpclient-own-message",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.client = resolveHttpClient(ownOption(given, 'httpClient'));",
+    "replace": "    this.client = ((c: unknown) => { try { return resolveHttpClient(c); } catch { throw new SirenError('Siren: OAuthClient needs an httpClient with a send function.'); } })(ownOption(given, 'httpClient'));",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient httpClient check > refuses an httpClient that is null"
+    ]
+  },
+  {
+    "id": "httpclient-inherited",
+    "file": "src/connect/oauth.ts",
+    "find": "    this.client = resolveHttpClient(ownOption(given, 'httpClient'));",
+    "replace": "    this.client = resolveHttpClient((given as OAuthClientOptions).httpClient);",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient reads only its own options > sends through the global fetch, not the polluting client"
+    ]
+  },
+  {
+    "id": "inherits-from-own-prototype",
+    "file": "src/connect/oauth.ts",
+    "find": "    const given: unknown = options ?? {};",
+    "replace": "    const given: unknown = { ...Object.getPrototypeOf(options ?? {}), ...(options ?? {}) };",
+    "expect": "caught",
+    "failing": [
+      "5 fix F1: OAuthClient reads only its own options > ignores every option the options object inherits from a prototype of its own"
+    ]
+  }
+]
