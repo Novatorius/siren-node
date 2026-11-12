@@ -20,5 +20,5 @@
  */
 export function usableBearerToken(value: unknown): string | null {
   if (typeof value !== 'string' || value.length === 0) return null;
-  return /[\u0000-\u001f\u007f]/.test(value) ? null : value;
+  return /[\u0000-\u001f\u007f-\u009f\u0100-\uffff]/.test(value) ? null : value;
 }

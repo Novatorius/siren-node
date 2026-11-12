@@ -1,5 +1,6 @@
 import { SirenError } from '../errors';
 import type { AccessTokenSource } from './access-token-source';
+import { usableBearerToken } from './bearer-token';
 
 /**
  * A token that never changes, such as an API key from the Siren dashboard.
@@ -17,8 +18,10 @@ export class StaticAccessToken implements AccessTokenSource {
    *   `new Siren({ apiKey })` refuses such a key when the client is built.
    */
   constructor(private readonly token: string) {
-    if (typeof token !== 'string' || token === '') {
-      throw new SirenError('StaticAccessToken needs a non-empty string token.');
+    if (usableBearerToken(token) === null) {
+      throw new SirenError(
+        'Siren: an apiKey or string accessToken must be a non-empty string with no control character and no character above U+00FF.',
+      );
     }
   }
 
