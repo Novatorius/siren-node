@@ -375,7 +375,11 @@ const siren = new Siren({
 ```
 
 Pass `apiKey` or `accessToken`, never both. Both, neither or an empty one throws `SirenError`
-when you build the client.
+when you build the client. So does a token with a control character or a character above U+00FF,
+which cannot go in an HTTP header. `timeout` takes a number of milliseconds from 1 to 2147483647,
+and `maxRetries` a whole number of 0 or more. Any other value, NaN, Infinity and `null` included,
+throws `SirenError` that names the option. The client reads only the options object's own
+properties, so a value inherited from `Object.prototype` is ignored.
 
 ### Access tokens
 

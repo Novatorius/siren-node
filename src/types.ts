@@ -11,14 +11,19 @@ export interface SirenBaseOptions {
    * Point this at staging or a local dev server as needed.
    */
   baseUrl?: string;
-  /** Request timeout in milliseconds. Defaults to 30000. */
+  /**
+   * Request timeout in milliseconds, from 1 to 2147483647. Defaults to
+   * 30000. Any other value, NaN and Infinity included, throws `SirenError`
+   * at construction.
+   */
   timeout?: number;
   /**
    * Retry count for network errors and 429/5xx responses on idempotent
    * operations (reads, and sales and refunds that Siren can match). Site
    * visits, custom events, sales with no `externalId` and management writes
-   * are never auto-retried. Defaults to 2. A caller with a durable queue sets
-   * 0, because the queue owns redelivery.
+   * are never auto-retried. A whole number, 0 or more, and defaults to 2.
+   * Any other value throws `SirenError` at construction. A caller with a
+   * durable queue sets 0, because the queue owns redelivery.
    *
    * The one resend after a 401 with a refreshed token is not a retry and
    * happens whatever this says.

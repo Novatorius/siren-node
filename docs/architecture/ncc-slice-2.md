@@ -71,13 +71,11 @@ The transport mirrors the PHP SDK's refresh loop (`HttpTransport.php` lines
 81 to 118):
 
 1. It reads the token once per call, before the first send, and every send of
-   the call carries it until a refresh replaces it. A token that is not a
-   non-empty string, or that holds a control character such as a line break,
-   raises `SirenError`, naming `getAccessToken` and never quoting the value,
-   and nothing is sent. A line break in a header would make fetch quote the
-   whole value in its error.
+   the call carries it until a refresh replaces it. A token that fails the
+   bearer token rule (see "Hardening (2b)") raises `SirenError`, naming
+   `getAccessToken` and never quoting the value, and nothing is sent.
 2. On the first 401 of the call, it asks the source for a new token, passing
-   the token that was refused. A non-empty string with no control character
+   the token that was refused. An answer that passes the bearer token rule
    goes out at once, with no wait, in a new request with the same method, URL
    and body. Any other answer raises the 401.
 3. A later 401 in the same call, with or without retries in between, never
@@ -207,9 +205,10 @@ a thrown error:
 
 | Failure | What the caller gets |
 |---|---|
-| Missing, double or empty credential, bad `accessToken`, `httpClient` without `send` | `SirenError` from the constructor, with no credential in it |
+| Missing, double or empty credential, an `apiKey` or string `accessToken` that fails the bearer token rule, bad `accessToken`, `httpClient` without `send` | `SirenError` from the constructor, with no credential in it |
+| A `timeout` or `maxRetries` out of range | `SirenError` from the constructor, naming the option and what it got |
 | The token store throws | That error, unchanged. Nothing sent |
-| The token store answers no token, or one with a control character | `SirenError` naming `getAccessToken`, without the value. Nothing sent |
+| The token store answers a token that fails the bearer token rule | `SirenError` naming `getAccessToken`, without the value. Nothing sent |
 | 401 and the source cannot refresh | The 401's `AuthenticationError` or `SiteDisconnectedError` |
 | The refresh throws | That error, unchanged. Nothing more sent |
 | 401 again after the resend | `SiteDisconnectedError` for a revoked site, else `AuthenticationError` |
@@ -222,10 +221,7 @@ a thrown error:
 
 ## Tests
 
-Acceptance tests are written in full and skipped with `it.skip` or
-`it.skip.each`. The packet's implementer deletes the `.skip` from every one
-of its own tests and leaves none skipped. The vocabulary in `ConnectorScope`
-runs now. Integration shape per
+The acceptance tests take the integration shape of
 [Integration Testing Standards (KB 568)](https://navigator.novatori.us/r/kb/568):
 the real client, transport and resources, with the network mocked only at
 the `HttpClient` seam by the fake client (`test/http-fakes.ts`), or at the
@@ -256,26 +252,79 @@ the connector slices.
 | `test/connector-scope.test.ts` | P6 |
 | `test/records-retrieve.test.ts` | P7 |
 | `test/docs-slice-2.test.ts` | P8 |
+| `test/bearer-token.test.ts` | 2b P1 |
+| `test/siren-option-checks.test.ts` | 2b P2 |
 
-## The stubs and the interim send path
+## Hardening (2b)
 
-Until P4 lands, `HttpTransport.request` sends through the global `fetch`,
-reads the token once and never refreshes. Until P5 lands, the constructor
-takes an `apiKey` only and hands the transport an inline source that answers
-it. That keeps the existing suite green on the architecture commit. P4
-replaces the transport's body, and P5 replaces the constructor's resolution.
-Every other new body returns a fixed value of its type. The two token
-sources' stubs answer an empty string from `refreshAccessToken`, not the
-documented `null`, so the `null` tests fail against them.
+The slice 2 review in
+[PR audit: siren-node PR 26, slice 2 review (Journal 32275)](https://navigator.novatori.us/r/journal/32275)
+left three gaps in the transport's inputs, and ruling A76 closes them before
+slice 11 builds on the transport. The public surface does not change. Each
+rule makes a value the SDK used to accept throw `SirenError` instead.
 
-## Proof
+### The bearer token rule
 
-Each acceptance test was unskipped against the stubs and failed on its
-assertion, except nine tests the stubs already pass. A scratch implementation
-of all eight packets passed the whole suite, then was deleted. A mutation run
-against it, one mutation for each rule a test checks, with the harness's
-three controls, scored every mutation as expected. The packet mutation lists
-target that scratch code, so they stay in the run folder with the scratch
-patch and the outputs, as in slice 1. The surface mutation list, which
-changes the branch's own code (`scripts/mutations/ncc-slice-2-surface.json`),
-runs here.
+`usableBearerToken(value)` in `src/auth/bearer-token.ts` is the one rule for a
+token the SDK sends: a non-empty string with no control character (U+0000 to
+U+001F, U+007F) and no character above U+00FF. It answers the token, or
+`null`. It is internal and not exported.
+
+A character above U+00FF cannot go in a header. Fetch refuses it before
+sending, and the transport read that refusal as a lost connection, resent the
+request and raised `ConnectionError`. A host client that writes headers as
+Latin-1 keeps only the low byte, so U+010A goes out as a line feed. A
+character outside the Basic Multilingual Plane is two UTF-16 code units, both
+above U+00FF, so the rule refuses it too. U+0080 to U+00FF stay allowed,
+because fetch sends them as single bytes.
+
+The rule applies at every place a token enters the SDK:
+
+| Where | What a token that fails the rule gets |
+|---|---|
+| `HttpTransport.request`, the `getAccessToken` answer | `SirenError` naming `getAccessToken`, never the value. Nothing sent |
+| `HttpTransport.request`, the `refreshAccessToken` answer | Read as `null`, so the first 401 is raised |
+| `StaticAccessToken`'s constructor, and so `new Siren({ apiKey })` and a string `accessToken` | `SirenError` when the client is built, never quoting the token |
+
+`CallbackAccessTokenSource` keeps its own check (a non-empty string) and
+leaves the rest to the transport, which reads every source's answer through
+the rule.
+
+### Option checks
+
+`new Siren()` checks two numbers when it is built, as the PHP SDK's `Siren`
+checks `maxRetries`:
+
+- `timeout` is a number from 1 to 2147483647 milliseconds. Above 2147483647
+  a Node timer fires after 1 ms, so every request would abort at once. Zero
+  and negatives abort at once too. Fractions are allowed.
+- `maxRetries` is a whole number of 0 or more. NaN turned retries off,
+  negatives did the same, and Infinity retried without end. There is no
+  upper bound, and the default stays 2.
+
+`undefined` means absent and takes the default. `null`, strings, booleans,
+NaN and Infinity are refused, with no silent default. The message names the
+option, its range and what it got: the number, or the type of any other
+value. It never quotes a string, which might be a credential passed in the
+wrong place.
+
+### Own properties only
+
+The constructor read `options.apiKey` and the rest through the prototype
+chain, so a polluted `Object.prototype.baseUrl` sent the bearer token to
+another host, and a polluted `httpClient` handed it to another client. The
+constructor now reads `apiKey`, `accessToken`, `httpClient`, `baseUrl`,
+`timeout` and `maxRetries` only when the options object holds them itself.
+An inherited value counts as absent. An options object with no prototype
+works. The values are read as they are, so a token source or a client class
+keeps its methods on its prototype.
+
+A caller that builds options as a class instance with getters on its
+prototype must spread it into a plain object first.
+
+### Packets
+
+| Packet | Class | Tests |
+|---|---|---|
+| 2b P1 | `usableBearerToken` and `StaticAccessToken` | `test/bearer-token.test.ts` |
+| 2b P2 | `Siren` constructor | `test/siren-option-checks.test.ts` |

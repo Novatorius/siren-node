@@ -34,8 +34,8 @@
 export interface AccessTokenSource {
   /**
    * The token to send as `Authorization: Bearer <token>`. It must be a
-   * non-empty string with no control character. The SDK raises `SirenError`
-   * and sends nothing when it is not.
+   * non-empty string with no control character and no character above
+   * U+00FF. The SDK raises `SirenError` and sends nothing when it is not.
    */
   getAccessToken(): string | Promise<string>;
 
@@ -47,7 +47,8 @@ export interface AccessTokenSource {
    * caller already rotated the token, return the stored one instead of
    * refreshing again. Return `null` when no refresh is possible, and the SDK
    * raises the 401 it received. The SDK reads any answer but a non-empty
-   * string with no control character as `null`.
+   * string with no control character and no character above U+00FF as
+   * `null`.
    */
   refreshAccessToken(rejectedToken: string): string | null | Promise<string | null>;
 }

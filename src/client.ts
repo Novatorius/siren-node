@@ -60,6 +60,15 @@ export class Siren {
   readonly payouts: RecordsResource;
 
   /**
+   * Reads only the options object's own properties: `apiKey`,
+   * `accessToken`, `httpClient`, `baseUrl`, `timeout` and `maxRetries`. A
+   * value the object inherits, from `Object.prototype` or any other
+   * prototype, counts as absent, so a polluted prototype can never choose
+   * the host, the HTTP client, the credential or the retry policy. An
+   * object with no prototype works as well. The values themselves are read
+   * as they are, so a token source or client keeps its methods on its
+   * prototype.
+   *
    * Throws `SirenError` when the options pass both `apiKey` and
    * `accessToken`, neither, an empty one, an `accessToken` that is neither a
    * string nor an `AccessTokenSource`, or an `httpClient` without a `send`
@@ -68,6 +77,14 @@ export class Siren {
    * an `accessToken` is refused as both. The message for a missing
    * credential says an apiKey is required and names `accessToken` as the
    * other choice. No message carries a credential.
+   *
+   * Also throws `SirenError` when `timeout` is not a number from 1 to
+   * 2147483647 (the longest wait a timer holds), or `maxRetries` is not a
+   * whole number of 0 or more. NaN, Infinity, `null` and any value that is
+   * not a number are refused, and a fraction of a millisecond is allowed.
+   * Each message names the option, the range it takes and what it got: the
+   * number itself, or the type of any other value, never a string's text.
+   * Absent, they default to 30000 and 2.
    *
    * `apiKey` and a string `accessToken` become a `StaticAccessToken`. An
    * `AccessTokenSource` is used as given. Requests go through `httpClient`,
