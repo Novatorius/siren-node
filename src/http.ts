@@ -21,8 +21,10 @@ export interface SirenRequest {
   body?: unknown;
   /**
    * Whether this request may be auto-retried on network errors and 429/5xx.
-   * Idempotent reads, sales, refunds and custom events retry. A site visit and
-   * management writes are sent once.
+   * Idempotent reads, sales and refunds retry. A site visit, a custom event,
+   * a test sale with no `externalId` and management writes are sent once.
+   * Stub: slice 1 packet P10 makes `events.ingest` and that test sale send
+   * once. Until then both are marked retriable.
    */
   retriable: boolean;
 }
