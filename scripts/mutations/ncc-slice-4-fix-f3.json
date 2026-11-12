@@ -170,5 +170,56 @@
       "4 fix F3: creates send only the fields Siren reads > distributors.create refuses \"dateCreated\"",
       "4 fix F3: transactions.create lines > refuses a line key \"transactionId\""
     ]
+  },
+  {
+    "id": "f3u-keeps-undefined",
+    "file": "src/resources/create-fields.ts",
+    "find": "    if (value !== undefined) body[key] = value;",
+    "replace": "    body[key] = value;",
+    "expect": "caught",
+    "failing": [
+      "pickFields > leaves out an allowed key whose value is undefined, and keeps one whose value is null"
+    ]
+  },
+  {
+    "id": "f3u-drops-null",
+    "file": "src/resources/create-fields.ts",
+    "find": "    if (value !== undefined) body[key] = value;",
+    "replace": "    if (value != null) body[key] = value;",
+    "expect": "caught",
+    "failing": [
+      "pickFields > leaves out an allowed key whose value is undefined, and keeps one whose value is null"
+    ]
+  },
+  {
+    "id": "f3u-no-refusal",
+    "file": "src/resources/create-fields.ts",
+    "find": "    if (!allowed.includes(key)) throw new SirenError(refuse(key));",
+    "replace": "    if (!allowed.includes(key)) continue;",
+    "expect": "caught",
+    "failing": [
+      "pickFields > throws SirenError with the refusal for a key not allowed, with a value",
+      "pickFields > throws SirenError with the refusal for a key not allowed, with an undefined value"
+    ]
+  },
+  {
+    "id": "f3u-inherited-keys",
+    "file": "src/resources/create-fields.ts",
+    "find": "  for (const key of Object.keys(params)) {",
+    "replace": "  for (const key in params) {",
+    "expect": "caught",
+    "failing": [
+      "pickFields > copies no key the object inherits"
+    ]
+  },
+  {
+    "id": "f3u-same-object",
+    "file": "src/resources/create-fields.ts",
+    "find": "  return body;\n}",
+    "replace": "  return params as Record<string, unknown>;\n}",
+    "expect": "caught",
+    "failing": [
+      "pickFields > answers a new object holding the allowed keys given"
+    ]
   }
 ]
