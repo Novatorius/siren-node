@@ -36,8 +36,8 @@
   {
     "id": "base-url-keeps-slash",
     "file": "src/connect/oauth.ts",
-    "find": "(given.baseUrl ?? DEFAULT_BASE_URL).replace(/\\/+$/, '')",
-    "replace": "(given.baseUrl ?? DEFAULT_BASE_URL)",
+    "find": "resolveBaseUrl(ownOption(given, 'baseUrl')).replace(/\\/+$/, '')",
+    "replace": "resolveBaseUrl(ownOption(given, 'baseUrl'))",
     "expect": "caught",
     "failing": [
       "without a trailing slash"
@@ -46,8 +46,8 @@
   {
     "id": "default-timeout-30s",
     "file": "src/connect/oauth.ts",
-    "find": "given.timeout ?? DEFAULT_OAUTH_TIMEOUT_MS",
-    "replace": "given.timeout ?? 30_000",
+    "find": "resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS)",
+    "replace": "resolveTimeout(ownOption(given, 'timeout'), 30_000)",
     "expect": "caught",
     "failing": [
       "waits 15 seconds by default"
@@ -56,8 +56,8 @@
   {
     "id": "timeout-ignored",
     "file": "src/connect/oauth.ts",
-    "find": "this.timeout = given.timeout ?? DEFAULT_OAUTH_TIMEOUT_MS;",
-    "replace": "this.timeout = DEFAULT_OAUTH_TIMEOUT_MS;",
+    "find": "this.timeout = resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS);",
+    "replace": "this.timeout = (resolveTimeout(ownOption(given, 'timeout'), DEFAULT_OAUTH_TIMEOUT_MS), DEFAULT_OAUTH_TIMEOUT_MS);",
     "expect": "caught",
     "failing": [
       "waits the timeout it is given"
@@ -66,8 +66,8 @@
   {
     "id": "consent-default-wrong",
     "file": "src/connect/oauth.ts",
-    "find": "given.consentScreenUrl ?? DEFAULT_CONSENT_SCREEN_URL",
-    "replace": "given.consentScreenUrl ?? 'https://api.sirenaffiliates.com/connect'",
+    "find": "consentScreenUrl === undefined ? DEFAULT_CONSENT_SCREEN_URL :",
+    "replace": "consentScreenUrl === undefined ? 'https://api.sirenaffiliates.com/connect' :",
     "expect": "caught",
     "failing": [
       "builds the consent screen URL with Siren's six query parameters"
@@ -76,8 +76,8 @@
   {
     "id": "consent-option-ignored",
     "file": "src/connect/oauth.ts",
-    "find": "this.consentScreenUrl = given.consentScreenUrl ?? DEFAULT_CONSENT_SCREEN_URL;",
-    "replace": "this.consentScreenUrl = DEFAULT_CONSENT_SCREEN_URL;",
+    "find": ": resolveBaseUrl(consentScreenUrl, 'consentScreenUrl');",
+    "replace": ": (resolveBaseUrl(consentScreenUrl, 'consentScreenUrl'), DEFAULT_CONSENT_SCREEN_URL);",
     "expect": "caught",
     "failing": [
       "uses the consentScreenUrl and scope it is given"
@@ -86,8 +86,8 @@
   {
     "id": "client-send-unchecked",
     "file": "src/connect/oauth.ts",
-    "find": "httpClient !== null && typeof (httpClient as HttpClient).send === 'function'",
-    "replace": "httpClient !== null",
+    "find": "    this.client = resolveHttpClient(ownOption(given, 'httpClient'));",
+    "replace": "    const httpClient = ownOption(given, 'httpClient');\n    this.client = typeof httpClient === 'object' && httpClient !== null ? (httpClient as HttpClient) : resolveHttpClient(httpClient);",
     "expect": "caught",
     "failing": [
       "refuses httpClient"
@@ -96,8 +96,8 @@
   {
     "id": "client-null-unchecked",
     "file": "src/connect/oauth.ts",
-    "find": "typeof httpClient === 'object' && httpClient !== null && typeof",
-    "replace": "typeof httpClient === 'object' && typeof",
+    "find": "    this.client = resolveHttpClient(ownOption(given, 'httpClient'));",
+    "replace": "    const httpClient = ownOption(given, 'httpClient');\n    this.client = httpClient === null ? (httpClient as unknown as HttpClient) : resolveHttpClient(httpClient);",
     "expect": "caught",
     "failing": [
       "refuses httpClient null"
@@ -106,8 +106,8 @@
   {
     "id": "default-client-not-fetch",
     "file": "src/connect/oauth.ts",
-    "find": "if (httpClient === undefined) return new FetchHttpClient();",
-    "replace": "if (httpClient === undefined) return { send: async () => ({ status: 200, headers: {}, body: '{}' }) };",
+    "find": "    this.client = resolveHttpClient(ownOption(given, 'httpClient'));",
+    "replace": "    const httpClient = ownOption(given, 'httpClient');\n    this.client = httpClient === undefined ? { send: async () => ({ status: 200, headers: {}, body: '{}' }) } : resolveHttpClient(httpClient);",
     "expect": "caught",
     "failing": [
       "sends through the global fetch when no httpClient is given"
@@ -765,13 +765,13 @@
     ]
   },
   {
-    "id": "internal-consent-separator",
+    "id": "consent-separator-amp",
     "file": "src/connect/oauth.ts",
-    "find": "this.consentScreenUrl.includes('?') ? '&' : '?'",
-    "replace": "'?'",
+    "find": "return `${this.consentScreenUrl}?${query.toString()}`;",
+    "replace": "return `${this.consentScreenUrl}&${query.toString()}`;",
     "expect": "caught",
     "failing": [
-      "adds its query after one the consentScreenUrl already carries"
+      "builds the consent screen URL with Siren's six query parameters"
     ]
   }
 ]
