@@ -378,6 +378,19 @@ describe('P3: collaborators.bulk', () => {
     expect(http.requests[0]!.body).toBe('{"action":"addToDistributor","ids":[1,2],"distributorId":5}');
   });
 
+  it.skip.each([
+    [CollaboratorBulkAction.AddToProgram, { programId: 5 }],
+    [CollaboratorBulkAction.RemoveFromProgram, { programId: 5 }],
+    [CollaboratorBulkAction.AddToDistributor, { distributorId: 3 }],
+    [CollaboratorBulkAction.RemoveFromDistributor, { distributorId: 3 }],
+  ])('sends %s with the extra it takes', async (action, extra) => {
+    const { http, collaborators } = over([reply(200, CollaboratorAnswers.bulk)]);
+
+    await collaborators.bulk(action, [1], extra);
+
+    expect(bodyOf(http.requests[0])).toEqual({ action, ids: [1], ...extra });
+  });
+
   it.skip('refuses an empty id list and sends nothing', async () => {
     const { http, collaborators } = over([reply(200, CollaboratorAnswers.bulk)]);
 
