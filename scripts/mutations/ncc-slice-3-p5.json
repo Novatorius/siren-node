@@ -168,14 +168,12 @@
     ]
   },
   {
-    "id": "p5-in-id",
+    "id": "p5-in-id-second-guard",
     "file": "src/resources/program-enrollments.ts",
     "find": "recordId(programId, 'collaboratorsIn', 'programId')",
     "replace": "programId",
-    "expect": "caught",
-    "failing": [
-      "refuse bad ids before sending > collaboratorsIn"
-    ]
+    "expect": "survives",
+    "failing": []
   },
   {
     "id": "p5-enroll-action",
