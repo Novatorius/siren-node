@@ -68,8 +68,21 @@ anything else, so a later Siren that sends the record still works.
 
 Each list names its filters in a static `LIST_FILTERS` (`ENTRY_FILTERS`,
 `HOLD_FILTERS` and `BALANCE_FILTERS` on credits, `FILTERS` on settings).
-`listRecords` refuses any other key and any comma outside `fields` and `s`,
-as slice 3 set out. Conversions and transactions keep slice 2's
+`listRecords` refuses any other key, any comma outside `fields` and `s`,
+and an empty filter list, and it checks every row is an object, as slice 3
+set out. The id filters sit in a static `ID_FILTERS`, by how Cloud reads
+them:
+
+| Resource | `one` | `many` | Evidence |
+|---|---|---|---|
+| `OpportunitiesResource` | `collaboratorId` | none | GetOpportunities.php line 138 casts it to one number |
+| `EngagementsResource` | none | `collaboratorId`, `programId`, `opportunityId` | GetEngagements.php line 85, column filters |
+| `MappingsResource` | none | `localId` | GetMappings.php line 78, a column filter |
+| `CreditsResource` | `collaboratorId` | none | GetCreditBalances.php line 55 reads one. A ledger or hold query names one collaborator |
+
+The two field reads, `credits.balances` and `transactions.details`, go
+through `readObject` with a `check`, so a broken field raises
+`UnexpectedResponseError` with the status Siren sent. Conversions and transactions keep slice 2's
 `RecordsResource.list`, which sends any key, since changing a shipped
 method is out of this slice's scope.
 

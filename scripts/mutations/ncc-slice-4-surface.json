@@ -164,5 +164,45 @@
     "failing": [
       "P7: settings surface"
     ]
+  },
+  {
+    "id": "opportunities-collaborator-many",
+    "file": "src/resources/opportunities.ts",
+    "find": "static readonly ID_FILTERS = { one: ['collaboratorId'] } as const;",
+    "replace": "static readonly ID_FILTERS = { many: ['collaboratorId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities surface"
+    ]
+  },
+  {
+    "id": "engagements-drop-program-id",
+    "file": "src/resources/engagements.ts",
+    "find": "static readonly ID_FILTERS = { many: ['collaboratorId', 'programId', 'opportunityId'] } as const;",
+    "replace": "static readonly ID_FILTERS = { many: ['collaboratorId', 'opportunityId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements surface"
+    ]
+  },
+  {
+    "id": "mappings-local-id-one",
+    "file": "src/resources/mappings.ts",
+    "find": "static readonly ID_FILTERS = { many: ['localId'] } as const;",
+    "replace": "static readonly ID_FILTERS = { one: ['localId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings surface"
+    ]
+  },
+  {
+    "id": "credits-collaborator-many",
+    "file": "src/resources/credits.ts",
+    "find": "static readonly ID_FILTERS = { one: ['collaboratorId'] } as const;",
+    "replace": "static readonly ID_FILTERS = { many: ['collaboratorId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "P5: credits surface"
+    ]
   }
 ]
