@@ -16,12 +16,6 @@ import { BASE, ConnectAnswers, connectOver } from './connect-fakes';
  * the bodies in test/connect-fakes.ts. The done condition is one fixture test
  * per route: each row below sends one route and checks its method, URL, body,
  * bearer token and the answer it resolves with.
- *
- * INCOMPLETE MARKER: a test written `it.skip(` or `it.skip.each(` belongs to
- * the packet named in its describe block. That packet's implementer deletes
- * the `.skip` from every one of its own tests, so `it.skip(` becomes `it(` and
- * `it.skip.each(` becomes `it.each(`. The packet that removes the last
- * `.skip` in this file deletes this paragraph too. Nothing else here changes.
  */
 
 type Route = {
@@ -89,7 +83,7 @@ async function failure(promise: Promise<unknown>): Promise<Error> {
 }
 
 describe('P3: ConnectResource routes', () => {
-  it.skip.each(ROUTES.map((route) => [route.name, route] as const))(
+  it.each(ROUTES.map((route) => [route.name, route] as const))(
     '%s sends its route once with the bearer token and answers Cloud\'s body as sent',
     async (_name, route) => {
       const answer = { ...route.answer, addedLater: 'kept' };
@@ -107,7 +101,7 @@ describe('P3: ConnectResource routes', () => {
     },
   );
 
-  it.skip('reportIntegrations sends PUT /connect/integrations with the whole list, and resolves with nothing on 204', async () => {
+  it('reportIntegrations sends PUT /connect/integrations with the whole list, and resolves with nothing on 204', async () => {
     const { http, connect } = connectOver([reply(204)]);
 
     const result = await connect.reportIntegrations(integrations);
@@ -120,7 +114,7 @@ describe('P3: ConnectResource routes', () => {
     expect(header(http.requests[0]!, 'authorization')).toBe('Bearer tok-1');
   });
 
-  it.skip('reportIntegrations sends an empty list as an empty list, so Cloud clears what it held', async () => {
+  it('reportIntegrations sends an empty list as an empty list, so Cloud clears what it held', async () => {
     const { http, connect } = connectOver([reply(204)]);
 
     await connect.reportIntegrations([]);
@@ -129,7 +123,7 @@ describe('P3: ConnectResource routes', () => {
     expect(bodyOf(http.requests[0]!)).toEqual({ integrations: [] });
   });
 
-  it.skip('reportSiteState sends only the fields it is given', async () => {
+  it('reportSiteState sends only the fields it is given', async () => {
     const { http, connect } = connectOver([reply(200, ConnectAnswers.siteState)]);
 
     await connect.reportSiteState({ forwarding: false });
@@ -138,7 +132,7 @@ describe('P3: ConnectResource routes', () => {
     expect(bodyOf(http.requests[0]!)).toEqual({ forwarding: false });
   });
 
-  it.skip('syncProducts sends only the fields it is given', async () => {
+  it('syncProducts sends only the fields it is given', async () => {
     const { http, connect } = connectOver([reply(200, ConnectAnswers.productSync)]);
 
     await connect.syncProducts({ platform: 'wc', pruneBefore: 1_762_000_123 });
@@ -156,7 +150,7 @@ describe('P3: ConnectResource transport rules', () => {
 
   const sentOnce = ['disconnect', 'reportSiteState', 'reportIntegrations', 'syncProducts'];
 
-  it.skip.each(calls.filter(([name]) => !sentOnce.includes(name)))('%s is retried after a 503', async (_name, call, success) => {
+  it.each(calls.filter(([name]) => !sentOnce.includes(name)))('%s is retried after a 503', async (_name, call, success) => {
     const { http, connect } = connectOver([reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }), success]);
 
     await call(connect);
@@ -164,7 +158,7 @@ describe('P3: ConnectResource transport rules', () => {
     expect(http.requests).toHaveLength(2);
   });
 
-  it.skip.each([
+  it.each([
     ['a 503', reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }), ApiError],
     ['a network error', new HttpClientError('socket hang up'), ConnectionError],
   ])('disconnect is sent once on %s, since Cloud answers a resend after the commit with 401', async (_name, first, type) => {
@@ -174,7 +168,7 @@ describe('P3: ConnectResource transport rules', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip.each(calls.filter(([name]) => sentOnce.includes(name) && name !== 'disconnect'))(
+  it.each(calls.filter(([name]) => sentOnce.includes(name) && name !== 'disconnect'))(
     '%s is sent once on a 503 and on a network error, since the site queue reports again',
     async (_name, call, success) => {
       for (const first of [reply(503, ConnectAnswers.unavailable, { 'Retry-After': '0' }), new HttpClientError('socket hang up')]) {
@@ -186,7 +180,7 @@ describe('P3: ConnectResource transport rules', () => {
     },
   );
 
-  it.skip.each(calls)('%s is resent once with a refreshed token after a 401', async (_name, call, success) => {
+  it.each(calls)('%s is resent once with a refreshed token after a 401', async (_name, call, success) => {
     const { http, tokens, connect } = connectOver([reply(401, ConnectAnswers.invalidToken), success]);
 
     await call(connect);
@@ -195,7 +189,7 @@ describe('P3: ConnectResource transport rules', () => {
     expect(tokens.refreshAccessToken).toHaveBeenCalledWith('tok-1');
   });
 
-  it.skip.each(ROUTES.map((route) => [route.name, route] as const))(
+  it.each(ROUTES.map((route) => [route.name, route] as const))(
     '%s raises UnexpectedResponseError for a 2xx that is not a JSON object',
     async (_name, route) => {
       for (const answer of [reply(200, [route.answer]), { status: 200, headers: {}, body: 'not json' }, reply(200)]) {
@@ -206,7 +200,7 @@ describe('P3: ConnectResource transport rules', () => {
   );
 
   // `/ping` refuses in its own words, tested below.
-  it.skip.each([
+  it.each([
     ...ROUTES.filter((route) => route.name !== 'ping').map((route) => [route.name, route.call, route.scope] as const),
     ['reportIntegrations', (c: ConnectResource) => c.reportIntegrations(integrations), ConnectScope.RecordsWrite] as const,
   ])('%s raises MissingScopeError with the scope Cloud names when Cloud refuses the token', async (_name, call, scope) => {
@@ -219,7 +213,7 @@ describe('P3: ConnectResource transport rules', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip("ping raises PermissionError on Cloud's 403 for a token without connect:ingest", async () => {
+  it("ping raises PermissionError on Cloud's 403 for a token without connect:ingest", async () => {
     const { http, connect } = connectOver([reply(403, ConnectAnswers.ingestRefused)]);
 
     const error = await failure(connect.ping());
@@ -229,7 +223,7 @@ describe('P3: ConnectResource transport rules', () => {
     expect(http.requests).toHaveLength(1);
   });
 
-  it.skip("plan raises Cloud's 503 plan_unavailable as ApiError with that code once retries run out", async () => {
+  it("plan raises Cloud's 503 plan_unavailable as ApiError with that code once retries run out", async () => {
     const { http, connect } = connectOver([reply(503, ConnectAnswers.planUnavailable, { 'Retry-After': '0' })], 1);
 
     const error = await failure(connect.plan());
@@ -240,7 +234,7 @@ describe('P3: ConnectResource transport rules', () => {
     expect(http.requests).toHaveLength(2);
   });
 
-  it.skip.each([
+  it.each([
     ['customerEmailKey without keyId', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, keyId: undefined }],
     ['customerEmailKey with an empty keyId', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, keyId: '' }],
     ['customerEmailKey with an empty secret', (c: ConnectResource) => c.customerEmailKey(), { ...ConnectAnswers.customerEmailKey, secret: '' }],
@@ -263,14 +257,14 @@ describe('P3: ConnectResource transport rules', () => {
     }
   });
 
-  it.skip('customerEmailKey accepts a key of exactly 16 bytes', async () => {
+  it('customerEmailKey accepts a key of exactly 16 bytes', async () => {
     const answer = { ...ConnectAnswers.customerEmailKey, secret: 'c2l4dGVlbi1ieXRlcy1reQ==' };
     const { connect } = connectOver([reply(200, answer)]);
 
     await expect(connect.customerEmailKey()).resolves.toEqual(answer);
   });
 
-  it.skip.each([
+  it.each([
     ['customerEmailKey', (c: ConnectResource) => c.customerEmailKey(), ConnectAnswers.customerEmailKey, ConnectAnswers.customerEmailKey.secret],
     ['updateGrant', (c: ConnectResource) => c.updateGrant(), ConnectAnswers.updateGrant, ConnectAnswers.updateGrant.grant],
   ] as const)('%s keeps the secret from the answer out of an UnexpectedResponseError', async (_name, call, answer, secret) => {
@@ -284,7 +278,7 @@ describe('P3: ConnectResource transport rules', () => {
 });
 
 describe('P3: ConnectResource.webhook', () => {
-  it.skip('is a ConnectWebhookResource over the same transport', async () => {
+  it('is a ConnectWebhookResource over the same transport', async () => {
     const { http, connect } = connectOver([reply(200, ConnectAnswers.webhook)]);
 
     expect(connect.webhook).toBeInstanceOf(ConnectWebhookResource);
