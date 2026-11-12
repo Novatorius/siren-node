@@ -38,8 +38,6 @@ export class CallbackAccessTokenSource implements AccessTokenSource {
       return null;
     }
 
-    const token: unknown = await this.refresh(rejectedToken);
-
-    return typeof token === 'string' && token !== '' ? token : null;
+    return this.refresh(rejectedToken);
   }
 }

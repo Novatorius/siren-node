@@ -314,7 +314,7 @@ export class HttpTransport {
     let token = usableBearerToken(await this.tokens.getAccessToken());
     if (token === null) {
       throw new SirenError(
-        'Siren: getAccessToken did not answer a usable token. It must be a non-empty string with no control characters.',
+        'Siren: getAccessToken did not answer a usable token. A token must be a non-empty string with no control character and no character above U+00FF.',
       );
     }
     const sent = [token];
@@ -342,13 +342,26 @@ export class HttpTransport {
 
       if (response.status === 401 && !refreshed) {
         refreshed = true;
-        const fresh = usableBearerToken(await this.tokens.refreshAccessToken(token));
+        const answer: unknown = await this.tokens.refreshAccessToken(token);
+        const fresh = usableBearerToken(answer);
         if (fresh !== null) {
           token = fresh;
           sent.push(fresh);
           continue;
         }
-        throw await errorFromApiResponse(response);
+        const refused = await errorFromApiResponse(response);
+        if (answer !== null) {
+          // Set as Error's own constructor sets it, so `cause` stays out of JSON.
+          Object.defineProperty(refused, 'cause', {
+            value: new SirenError(
+              'Siren: refreshAccessToken answered neither null nor a usable token. A token must be a non-empty string with no control character and no character above U+00FF.',
+            ),
+            writable: true,
+            configurable: true,
+            enumerable: false,
+          });
+        }
+        throw refused;
       }
 
       const retryAfter = response.headers.get('retry-after');

@@ -108,7 +108,7 @@ const NOT_A_TOKEN: Array<[string, unknown]> = [
 ];
 
 describe('2b P1: bearer token rule: the token from getAccessToken', () => {
-  it.skip.each([...ABOVE_FF, ...CONTROL])(
+  it.each([...ABOVE_FF, ...CONTROL])(
     'refuses a token that holds %s with SirenError naming the rule, and sends nothing',
     async (_name, token) => {
       const tokens = spySource();
@@ -126,7 +126,7 @@ describe('2b P1: bearer token rule: the token from getAccessToken', () => {
     },
   );
 
-  it.skip('refuses it through new Siren with an AccessTokenSource, and sends nothing', async () => {
+  it('refuses it through new Siren with an AccessTokenSource, and sends nothing', async () => {
     const tokens = spySource(['sk_secret_first\u010ask_secret_last']);
     const httpClient = new FakeHttpClient([reply(200, [])]);
 
@@ -147,7 +147,7 @@ describe('2b P1: bearer token rule: the token from getAccessToken', () => {
 });
 
 describe('2b P1: bearer token rule: the token from refreshAccessToken', () => {
-  it.skip.each([...ABOVE_FF, ...CONTROL, ...NOT_A_TOKEN])(
+  it.each([...ABOVE_FF, ...CONTROL, ...NOT_A_TOKEN])(
     'raises the 401 after one send when the refresh answers %s, with a SirenError cause naming refreshAccessToken',
     async (_name, fresh) => {
       for (const [refusal, raised] of [
@@ -186,7 +186,7 @@ describe('2b P1: bearer token rule: the token from refreshAccessToken', () => {
     expect(client.requests).toHaveLength(1);
   });
 
-  it.skip('reads such an answer through new Siren with an AccessTokenSource the same way', async () => {
+  it('reads such an answer through new Siren with an AccessTokenSource the same way', async () => {
     const tokens = spySource(['tok-1'], 'sk_secret_first\u010ask_secret_last');
     const httpClient = new FakeHttpClient([reply(401, CloudAnswers.siteDisconnected), reply(200, [])]);
 
@@ -207,7 +207,7 @@ describe('2b P1: bearer token rule: the token from refreshAccessToken', () => {
 });
 
 describe('2b P1: bearer token rule: CallbackAccessTokenSource hands the refresh answer on', () => {
-  it.skip.each(NOT_A_TOKEN)('answers %s unchanged when the refresh function returns it', async (_name, value) => {
+  it.each(NOT_A_TOKEN)('answers %s unchanged when the refresh function returns it', async (_name, value) => {
     const source = new CallbackAccessTokenSource(
       () => 'tok-1',
       () => value as unknown as string | null,
@@ -216,7 +216,7 @@ describe('2b P1: bearer token rule: CallbackAccessTokenSource hands the refresh 
     expect(await source.refreshAccessToken('tok-1')).toBe(value);
   });
 
-  it.skip.each(NOT_A_TOKEN)(
+  it.each(NOT_A_TOKEN)(
     'raises the 401 through new Siren with a SirenError cause when the refresh function returns %s',
     async (_name, value) => {
       const httpClient = new FakeHttpClient([reply(401, CloudAnswers.authenticationRequired), reply(200, [])]);
@@ -250,7 +250,7 @@ describe('2b P1: bearer token rule: CallbackAccessTokenSource hands the refresh 
 });
 
 describe('2b P1: bearer token rule: StaticAccessToken and the apiKey and accessToken options', () => {
-  it.skip.each([...ABOVE_FF, ...CONTROL])(
+  it.each([...ABOVE_FF, ...CONTROL])(
     'refuses a token that holds %s when it is built, naming the rule and never quoting it',
     (_name, token) => {
       for (const build of [
@@ -310,7 +310,7 @@ describe('2b P1: bearer token rule over a real socket', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  it.skip('refuses a getAccessToken answer before fetch sees it, so the real FetchHttpClient raises SirenError, not ConnectionError', async () => {
+  it('refuses a getAccessToken answer before fetch sees it, so the real FetchHttpClient raises SirenError, not ConnectionError', async () => {
     const fetchCalls = vi.fn(realFetch);
     const tokens = spySource(['sk_secret_first\u010aX-Injected: sk_secret_last']);
 
@@ -323,7 +323,7 @@ describe('2b P1: bearer token rule over a real socket', () => {
     expect(received).toEqual([]);
   });
 
-  it.skip('refuses it through new Siren with the default client, which never reaches the server', async () => {
+  it('refuses it through new Siren with the default client, which never reaches the server', async () => {
     const fetchCalls = vi.fn(realFetch);
     vi.stubGlobal('fetch', fetchCalls);
     const tokens = spySource(['sk_secret_first\u010aX-Injected: sk_secret_last']);
@@ -351,7 +351,7 @@ describe('2b P1: bearer token rule over a real socket', () => {
     expect(received).toEqual(['Bearer tok-1', 'Bearer tok-\u00e9\u00ff']);
   });
 
-  it.skip('raises the 401 after one send when the refresh answers U+010A, never resending through fetch', async () => {
+  it('raises the 401 after one send when the refresh answers U+010A, never resending through fetch', async () => {
     const fetchCalls = vi.fn(realFetch);
 
     const error = await rejection(
