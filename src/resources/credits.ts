@@ -76,17 +76,18 @@ function isReference(value: unknown): boolean {
  * with `connect:records:write`. Only Siren writes the ledger, through its
  * engine and the dashboard's {@link adjust}. These routes need no plan.
  *
- * Reads retry. {@link adjust}, {@link placeHold} and {@link releaseHold} are
- * sent once, whatever the client's `maxRetries`, apart from the one resend
- * after a 401 that every request gets. A write's answer is lost when it
- * throws `ConnectionError` or a 5xx `ApiError`, since Siren may have written
- * first. Each write's doc says how to find out before sending it again.
+ * Reads retry on a network error, 429 or 5xx inside the client's
+ * `maxRetries`, so a caller that runs them from its own durable queue builds
+ * the client with `maxRetries: 0`. {@link adjust}, {@link placeHold} and
+ * {@link releaseHold} are sent once, whatever the client's `maxRetries`,
+ * apart from the one resend after a 401 that every request gets. A write's
+ * answer is lost when it throws `ConnectionError` or a 5xx `ApiError`, since
+ * Siren may have written first. Each write's doc says how to find out before sending it again.
  * Every id must be a positive whole number, and every currency, wherever
  * a method takes one, a code of letters, digits, underscores and hyphens,
- * or `SirenError` is thrown with exactly `Send a currency code as letters,
- * digits, underscores and hyphens, such as STORE_CREDIT.` Every check here
- * throws
- * `SirenError` before anything is sent.
+ * or the method throws `SirenError` with exactly `Send a currency code as
+ * letters, digits, underscores and hyphens, such as STORE_CREDIT.` Every
+ * check here throws `SirenError` before anything is sent.
  *
  * Siren sets `idempotencyKey` itself: a hold carries
  * `place:{collaborator}:{currency}:{token}`, and the ledger entries Siren
@@ -146,9 +147,10 @@ export class CreditsResource {
    * Siren writes the entry with `sourceType` `adjustment`.
    *
    * A caller whose queue may send it again must give each adjustment its
-   * own `description`. After a lost answer, it looks for that entry with
-   * {@link entries}, `{ collaboratorId, sourceType: 'adjustment', description }`,
-   * before sending again. Without a unique `description`, a lost answer
+   * own `description`, with no comma, since {@link entries} reads a comma as
+   * "any of" and refuses one. After a lost answer, it looks for that entry
+   * with {@link entries}, `{ collaboratorId, sourceType: 'adjustment',
+   * description }`, before sending again. Without a unique `description`, a lost answer
    * cannot be checked, so set the adjustment aside instead of resending it.
    *
    * Throws `SirenError` before sending when `collaboratorId` is not a
@@ -184,10 +186,10 @@ export class CreditsResource {
    * Siren always sends a field it was asked for, so a record with no
    * `creditBalances` list, or with an entry that is not an object, throws
    * `UnexpectedResponseError` with the status Siren sent, never an empty
-   * answer. The read goes through `readObject` with a `check`, as slice 3's
-   * field reads do. A connected site's
-   * token cannot read this field (403 `field_not_allowed`), so a checkout
-   * uses {@link checkoutBalances}.
+   * answer. The read goes through `readObject` with a `check`, as
+   * `transactions.details` does. A connected site's token cannot read this
+   * field (403 `field_not_allowed`), so a checkout uses
+   * {@link checkoutBalances}.
    */
   async balances(collaboratorId: number): Promise<CreditBalance[]> {
     const path = `/collaborators/${recordId(collaboratorId, 'credits.balances', 'collaboratorId')}`;
@@ -217,9 +219,14 @@ export class CreditsResource {
    * Siren answers `{ items }` with no paging. Sent through `listRecords`
    * with {@link BALANCE_FILTERS} and {@link ID_FILTERS}, so a 2xx that is
    * not a list, or a row that is not an object, throws
-   * `UnexpectedResponseError`.
+   * `UnexpectedResponseError`. Throws `SirenError` before sending when
+   * `collaboratorId` is not a positive whole number, a missing one
+   * included, since Siren answers 400 for a read that names no collaborator.
    */
   async checkoutBalances(collaboratorId: number, currency?: string, excludeReference?: string): Promise<CheckoutBalance[]> {
+    // listRecords leaves out an undefined filter, so a missing collaborator is
+    // refused here. ID_FILTERS refuses every other id that is not one record.
+    if (collaboratorId === undefined) recordId(collaboratorId, 'credits.checkoutBalances', 'collaboratorId');
     const query = {
       collaboratorId,
       currency: currency === undefined ? undefined : currencyCode(currency),
@@ -257,7 +264,7 @@ export class CreditsResource {
    *
    * A query must name `collaboratorId` (a positive whole number) or
    * `idempotencyKey` (a string that is not blank), so it never lists a whole
-   * organization's ledger. Otherwise `SirenError` is thrown before sending,
+   * organization's ledger. Otherwise it throws `SirenError` before sending,
    * with exactly `Send at least one of: collaboratorId, idempotencyKey.`
    * That check comes first, and a `collaboratorId` that is not a positive
    * whole number, or a blank `idempotencyKey`, does not satisfy it. A
@@ -266,9 +273,14 @@ export class CreditsResource {
    * Other filters, each an exact match: `currency`, `sourceType`, `sourceId`
    * and `description`. Sort with `orderBy` (`id`, `dateCreated`, `amount`)
    * and `order`. Sent through `listRecords` with {@link ENTRY_FILTERS} and
-   * {@link ID_FILTERS}, so any other key throws `SirenError`.
+   * {@link ID_FILTERS}, so any other key throws `SirenError`. It reads each
+   * own key of `params` once and no inherited key, so the check and the
+   * query see the same values.
    */
   async entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {
+    // Each own key read once, so the scope check and the query see the same
+    // values and no inherited key reaches either.
+    params = { ...params };
     if (!isRecordId(params.collaboratorId) && !filled(params.idempotencyKey)) throw new SirenError(ENTRIES_MESSAGE);
     if (params.currency !== undefined) currencyCode(params.currency);
     return listRecords<CreditEntry>(
@@ -281,27 +293,36 @@ export class CreditsResource {
   }
 
   /**
-   * Lists credit holds with `GET /credit-holds`. Each hold holds `id`,
+   * Lists credit holds with `GET /credit-holds`. Each hold carries `id`,
    * `collaboratorId`, `currency`, `amount`, `status`, `reference`,
    * `idempotencyKey`, `expiresAt` and `createdDate`.
    *
    * A query must name `collaboratorId` (a positive whole number),
-   * `reference` or `idempotencyKey` (strings that are not blank), or
-   * `SirenError` is thrown before sending, with exactly `Send at least one
-   * of: collaboratorId, reference, idempotencyKey.` That check comes first,
-   * so a blank `reference` does not satisfy it, and a `collaboratorId`
-   * given beside another key must still be a positive whole number. Send
-   * `reference` as
-   * {@link holdReference} builds it, or `SirenError` is thrown with exactly
-   * `Send reference as hold:{platform}:{token}. Build it with
-   * CreditsResource.holdReference().` Other filters: `currency` and `status`
+   * `reference` or `idempotencyKey` (strings that are not blank), or it
+   * throws `SirenError` before sending, with exactly `Send at least one of:
+   * collaboratorId, reference, idempotencyKey.` That check comes first, so a
+   * blank `reference` does not satisfy it, and a `collaboratorId` given
+   * beside another key must still be a positive whole number. Send
+   * `reference` as {@link holdReference} builds it, or it throws
+   * `SirenError` with exactly `Send reference as hold:{platform}:{token}.
+   * Build it with CreditsResource.holdReference().` Other filters: `currency` and `status`
    * (`CreditHoldStatus`). Sort with `orderBy` (`id`, `dateCreated`,
    * `expiresAt`). A connected site reads only the holds its own checkouts
    * placed, and their references come back as Siren stores them, with the
    * site's Property (`hold:woocommerce@property:5:{token}`). Sent through
-   * `listRecords` with {@link HOLD_FILTERS} and {@link ID_FILTERS}.
+   * `listRecords` with {@link HOLD_FILTERS} and {@link ID_FILTERS}. It reads
+   * each own key of `params` once and no inherited key, so the check and the
+   * query see the same values.
+   *
+   * An API key cannot filter by the reference Siren stores for a site's
+   * hold, with the site's Property in it, since this method takes only the
+   * plain form {@link holdReference} builds. Filter such a hold by
+   * `collaboratorId` and `status` and match its `reference` in the answer.
    */
   async holds(params: CreditHoldListParams): Promise<SirenList<CreditHold>> {
+    // Each own key read once, so the scope check and the query see the same
+    // values and no inherited key reaches either.
+    params = { ...params };
     if (!isRecordId(params.collaboratorId) && !filled(params.reference) && !filled(params.idempotencyKey)) {
       throw new SirenError(HOLDS_MESSAGE);
     }
@@ -320,8 +341,9 @@ export class CreditsResource {
    * platform, such as `woocommerce`. Send the plain platform: Siren adds the
    * site's Property. Placing again for the same token and currency replaces
    * that session's hold, so after a lost answer the caller may send it
-   * again, or find the hold with {@link holds} by {@link holdReference}. The hold's `amount` may be lower than asked, because
-   * Siren caps it at the credit available outside this session's own hold.
+   * again, or find the hold with {@link holds} by {@link holdReference}.
+   * The hold's `amount` may be lower than asked, because Siren caps it at
+   * the credit available outside this session's own hold.
    *
    * Throws `SirenError` before sending when `collaboratorId` is not a
    * positive whole number, `currency` is not a currency code, `amount` is
@@ -381,8 +403,8 @@ export class CreditsResource {
    * credit it reserved is free again, and answers the hold as Siren now
    * stores it. Call it only when the shopper drops the credit, or it no
    * longer applies to a cart that never became an order. Never release the
-   * hold of a checkout that became an order: settlement spends that hold,
-   * and released first, the same credit could be spent twice.
+   * hold of a checkout that became an order. Settlement spends that hold, so
+   * a hold released first lets the shopper spend the same credit twice.
    *
    * Releasing again is safe: a hold that already ended comes back unchanged
    * with no error, so a caller whose release lost its answer sends it again

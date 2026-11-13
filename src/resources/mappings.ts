@@ -40,8 +40,8 @@ function plainMapping(row: Mapping | Record<string, unknown>): Mapping {
  * boundary.
  *
  * Every type, `localType` included, must pass `PropertyQualifier.assertName`,
- * or `SirenError` is thrown before sending. Every external id is trimmed and
- * refused when nothing is left. Every local id must be a positive whole
+ * or the method throws `SirenError` before sending. It trims every
+ * external id and refuses one with nothing left. Every local id must be a positive whole
  * number.
  *
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
@@ -73,12 +73,11 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * Lists links with `GET /mappings`, through `listRecords` with
    * {@link LIST_FILTERS} and {@link ID_FILTERS}.
    *
-   * `externalType` is required and must be one plain type, or `SirenError`
-   * is thrown before sending, so a query never lists every link of the
+   * `externalType` is required and must be one plain type, or it throws
+   * `SirenError` before sending, so a query never lists every link of the
    * organization. `localType`, when present and not `undefined`, must be a
    * plain type too, and `localId` a positive whole number or a list of
-   * them. Other filters,
-   * each an exact match: `externalId`. Sort with `orderBy` (`localId`,
+   * them. Other filters, each an exact match: `externalId`. Sort with `orderBy` (`localId`,
    * `externalId`, `localType`, `externalType`) and `order`. Every row comes
    * back through `PropertyQualifier.plainRecord(row, 'externalType')`, and
    * the list keeps Siren's `estimatedCount`.
@@ -132,6 +131,10 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * `mapping_exists`, raised as `ConflictError`: it is the link this call
    * asked for, so a caller whose first send lost its answer can treat it as
    * made.
+   *
+   * An external id that holds a comma is sent as given, as Siren stores it,
+   * but {@link forExternal} and {@link list} refuse one, since Siren reads a
+   * comma in a filter as "any of". Read such a link with {@link forLocal}.
    */
   async create(collaboratorId: number, externalId: string, externalType: string): Promise<Mapping> {
     const body = {
@@ -162,8 +165,9 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * Removes every collaborator link of one outside record with
    * `DELETE /mappings?localType=collaborator&externalId=&externalType=`, the
    * external id trimmed, sent once, no body. Removing nothing is not an
-   * error, so a resend after a lost answer is safe. Answers `{ deleted: true }`, and throws `UnexpectedResponseError`
-   * when a 2xx carries no object.
+   * error, so a resend after a lost answer is safe. Answers
+   * `{ deleted: true }`, and throws `UnexpectedResponseError` when a 2xx
+   * carries no object.
    */
   async deleteForExternal(externalId: string, externalType: string): Promise<DeletedResult> {
     return this.deleteLinks({

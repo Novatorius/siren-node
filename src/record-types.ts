@@ -764,7 +764,8 @@ export interface SharedSetting {
 export interface CreateConversionParams {
   engagementId: number;
   type: string;
-  status: ConversionStatus;
+  /** `pending`, `approved`, `rejected` or `expired`. Siren's create and update routes refuse `deleted`. */
+  status: Exclude<ConversionStatus, 'deleted'>;
   transactionId?: number;
   obligationId?: number;
 }

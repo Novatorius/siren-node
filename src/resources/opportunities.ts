@@ -16,8 +16,8 @@ import type { RetrieveParams } from './records';
  * from its own durable queue builds the client with `maxRetries: 0`.
  * {@link update} is sent once, apart from the one resend after a 401 that
  * every request gets, and setting the same fields again is safe. Every id
- * must be a positive whole number, or `SirenError` is thrown before
- * sending.
+ * must be a positive whole number, or the method throws `SirenError`
+ * before sending.
  *
  * A connected site's token reads with `connect:records:read` and must name
  * the opportunity: by id through {@link retrieve}, or by `collaboratorId`

@@ -25,8 +25,8 @@ const MAX_METRIC_POINTS = 1_000_000_000_000;
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
  * from its own durable queue builds the client with `maxRetries: 0`.
  * Every write is sent once, apart from the one resend after a 401 that
- * every request gets. Every id must be a positive whole number, or
- * `SirenError` is thrown before sending.
+ * every request gets. Every id must be a positive whole number, or the
+ * method throws `SirenError` before sending.
  *
  * A write's answer is lost when it throws `ConnectionError` or a 5xx
  * `ApiError`. Siren may have written before the answer failed, so each
@@ -76,9 +76,17 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * `status`, `dateCreated`) and `order`. Sends through `listRecords` with
    * {@link LIST_FILTERS}: any other key and an empty filter list throw
    * `SirenError` before sending, and a 2xx that is not a list throws
-   * `UnexpectedResponseError`, never an empty page.
+   * `UnexpectedResponseError`, never an empty page. A `metricType` of `""`
+   * throws `SirenError` before sending too, since Siren reads it as no
+   * filter (`GetDistributors.php`) and answers every distributor.
    */
-  override list(params: DistributorListParams = {}): Promise<SirenList<T>> {
+  override async list(params: DistributorListParams = {}): Promise<SirenList<T>> {
+    // Each own key read once, so the metricType check and the query see the
+    // same value.
+    params = { ...params };
+    if (params.metricType === '') {
+      throw new SirenError('distributors.list() cannot send a metricType of "", which Siren reads as no filter and answers every distributor.');
+    }
     return listRecords<T>(this.http, this.path, params, DistributorsResource.LIST_FILTERS);
   }
 

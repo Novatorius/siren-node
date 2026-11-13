@@ -23,6 +23,21 @@ export const MAX_PAGE_SIZE = 200;
 /** Siren's page size when a list request sends none. */
 const DEFAULT_PAGE_SIZE = 10;
 
+/**
+ * The problem with a recovery read's page, for `listRecords` to raise with
+ * Siren's status: no rows, while Siren's count says more than `offset` rows
+ * match. GetConversions.php reads the rows and the count in two queries, and
+ * answers no rows when one fails to load, so a write that lands between them,
+ * or a row that cannot be read, gives that page. It does not show the write
+ * is missing, so the recovery must not send on it.
+ */
+function emptyButCounted(page: SirenList<unknown>, offset: number, path: string): string | undefined {
+  const count = page.estimatedCount;
+  return page.length === 0 && count !== undefined && count > offset
+    ? `Siren answered GET ${path} with no rows and a total of ${count}, so the answer does not show the write is missing. Nothing was sent.`
+    : undefined;
+}
+
 type Query = Record<string, string | number | boolean | undefined>;
 
 /**
@@ -64,8 +79,10 @@ export function toListQuery(params: ListParams): Query {
  * and obligations, and is refused on payouts with a `StoreKeyNotAllowedError`.
  *
  * The record resources that extend it (collaborators, collaborator groups,
- * programs and program groups) replace `list` with a stricter one that
+ * programs, program groups, opportunities, engagements, distributors,
+ * custom currencies and mappings) replace `list` with a stricter one that
  * refuses a key its route does not read, and their own docs govern.
+ * Conversions and transactions keep this `list`.
  */
 export class RecordsResource<T = Record<string, unknown>> {
   constructor(
@@ -197,11 +214,13 @@ export async function retrieveRecord<T>(
  * an API key that holds `ledger:conversions:read`, a dashboard session's
  * token, or a connected site's token with `connect:records:read`.
  *
- * The writes are sent once, apart from the one resend after a 401 that
- * every request gets. A write's answer is lost when it throws
- * `ConnectionError` or a 5xx `ApiError`. Siren may have written before the
- * answer failed, so each write says how to find out before sending it
- * again.
+ * Reads retry on a network error, 429 or 5xx inside the client's
+ * `maxRetries`, so a caller that runs them from its own durable queue builds
+ * the client with `maxRetries: 0`. The writes are sent once, apart from the
+ * one resend after a 401 that every request gets. A write's answer is lost
+ * when it throws `ConnectionError` or a 5xx `ApiError`. Siren may have
+ * written before the answer failed, so each write says how to find out
+ * before sending it again.
  */
 export class ConversionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
   /**
@@ -300,8 +319,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * differs still counts, since an approval changes the status after the
    * first send landed.
    * Only a well-formed empty list, a JSON array or an `items` list with no
-   * rows, sends {@link create}, once, and answers the new conversion with
-   * `created: true`.
+   * rows and a total of 0 or none, sends {@link create}, once, and answers
+   * the new conversion with `created: true`.
    *
    * It never sends the create after an answer it cannot read. A 2xx body
    * that is not a record list (not JSON, no `items` key, an `items` that is
@@ -309,9 +328,13 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * `UnexpectedResponseError` with the status Siren sent. A row whose
    * `transactionId`, `engagementId` or `type` is not the create's means
    * Siren did not read a filter, and throws `UnexpectedResponseError` with
-   * the row as its `data` and no status. Every error from the read reaches
-   * the caller as it is, after the read's own retries inside `maxRetries`,
-   * with the create unsent. An error from the create itself reaches the
+   * the row as its `data` and no status. An empty list whose `total`, or
+   * count header, is above 0 throws `UnexpectedResponseError` with the
+   * status Siren sent, since Siren reads the rows and the total in two
+   * queries and a row that landed between them, or failed to load, leaves
+   * the list empty. Every error from the read reaches the caller as it is,
+   * after the read's own retries inside `maxRetries`, with the create
+   * unsent. An error from the create itself reaches the
    * caller as it is too, and the create is never sent a third time.
    * Running the recovery again after any error is safe, since it reads
    * before it sends.
@@ -319,8 +342,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * Throws `SirenError` before anything is sent when `params` has no
    * `transactionId`, with exactly `conversions.recoverCreate() needs a
    * transactionId to find the first send. Without one, Siren cannot tell
-   * whether the create landed.`, and when `engagementId` or `transactionId` is not a positive
-   * whole number. Throws `SirenError` before sending the create for every
+   * whether the create landed.`, and when `engagementId` or `transactionId`
+   * is not a positive whole number. Throws `SirenError` before sending the create for every
    * other reason {@link create} gives. Like {@link create}, it reads each own
    * key of `params` once and no inherited key, so the read and the create it
    * sends ask about the same conversion.
@@ -356,6 +379,7 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
       },
       ConversionsResource.RECOVERY_FILTERS,
       ConversionsResource.RECOVERY_ID_FILTERS,
+      (page) => emptyButCounted(page, 0, this.path),
     );
     // A row for another transaction, engagement or type means Siren did not
     // read a filter. Status and obligationId are not compared, since an
@@ -375,14 +399,22 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
   /**
    * Updates a conversion with `PUT /conversions/{id}`, sent once. Siren
    * answers 200 with no body, so this answers `null`, and an object when a
-   * later Siren sends one. Either way, Siren took the update. Read the conversion again with {@link retrieve}
-   * to see the result: setting `approved` runs Siren's approval, which
+   * later Siren sends one. Either way, Siren took the update. Read the
+   * conversion again with {@link retrieve} to see the result: setting `approved` runs Siren's approval, which
    * stores the conversion as `complete`. Throws `NotFoundError` for an
    * unknown id, and `UnexpectedResponseError` for a 2xx body that is
    * neither empty nor a JSON object. Sending it again after a lost answer
    * sets the same values, so it is safe.
+   *
+   * Throws `SirenError` before sending, as {@link create} does, when an
+   * `engagementId`, `transactionId` or `obligationId` that is present is not
+   * a positive whole number. Siren's update route reads all three as whole
+   * numbers from 1.
    */
   async update(id: number, params: UpdateConversionParams): Promise<T | null> {
+    for (const key of ['engagementId', 'transactionId', 'obligationId'] as const) {
+      if (params?.[key] !== undefined) recordId(params[key], 'conversions.update', key);
+    }
     return writeRecordOrNothing<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'conversions.update')}`, params);
   }
 
@@ -436,11 +468,13 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
  * an API key that holds `ledger:transactions:read`, a dashboard session's
  * token, or a connected site's token with `connect:records:read`.
  *
- * The writes are sent once, apart from the one resend after a 401 that
- * every request gets. A write's answer is lost when it throws
- * `ConnectionError` or a 5xx `ApiError`. Siren may have written before the
- * answer failed, so each write says how to find out before sending it
- * again.
+ * Reads retry on a network error, 429 or 5xx inside the client's
+ * `maxRetries`, so a caller that runs them from its own durable queue builds
+ * the client with `maxRetries: 0`. The writes are sent once, apart from the
+ * one resend after a 401 that every request gets. A write's answer is lost
+ * when it throws `ConnectionError` or a 5xx `ApiError`. Siren may have
+ * written before the answer failed, so each write says how to find out
+ * before sending it again.
  */
 export class TransactionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
   /**
@@ -521,8 +555,11 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * only by both.`, when one is given without the other, and with exactly
    * `transactions.create() cannot send {key} {value}, which Siren reads as
    * no binding.` for a binding field of `""`, `"0"` or `0`. `{value}` is the
-   * value in JSON. A field that is `undefined` or `null` counts as not
-   * given.
+   * value in JSON. A binding field of `NaN`, `Infinity` or `-Infinity`,
+   * which JSON writes as `null`, throws with exactly `transactions.create()
+   * cannot send {key} {value}, which JSON writes as null and Siren reads as
+   * no binding.`, where `{value}` is the number as `String()` writes it. A
+   * field that is `undefined` or `null` counts as not given.
    *
    * Sends a new object holding only `details`, `bindingId` and
    * `bindingDataType` ({@link CREATE_FIELDS}), each line a new object
@@ -586,6 +623,9 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
       if (value === '' || value === '0' || value === 0) {
         throw new SirenError(`transactions.create() cannot send ${key} ${JSON.stringify(value)}, which Siren reads as no binding.`);
       }
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        throw new SirenError(`transactions.create() cannot send ${key} ${String(value)}, which JSON writes as null and Siren reads as no binding.`);
+      }
     }
     return writeRecord<T>(this.http, 'POST', this.path, body);
   }
@@ -621,7 +661,8 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * Throws `SirenError` before sending when `transactionIds` is not a
    * non-empty array of at most 500 positive whole numbers, `collaboratorId`
    * is not a positive whole number, or `type` is given and is not a
-   * non-empty string. Siren answers 404, raised as `NotFoundError`, when it
+   * non-empty string. Siren reads a `type` of `null` as `sale`, but the SDK
+   * refuses it, so a caller leaves `type` out for a sale. Siren answers 404, raised as `NotFoundError`, when it
    * has no such collaborator.
    */
   async creditCollaborator(transactionIds: readonly number[], collaboratorId: number, type?: string): Promise<BulkResult> {
@@ -656,8 +697,9 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * not the end, since Siren may answer fewer rows than asked. A row whose
    * `id` an earlier row had means Siren did not read `offset`, and throws
    * `UnexpectedResponseError` with nothing sent. A transaction counts as
-   * credited when a row names it. Siren filters by the collaborator, so another collaborator's
-   * conversion on the same transaction does not count. It then sends
+   * credited when a row names it. Siren filters by the collaborator, so
+   * another collaborator's conversion on the same transaction does not
+   * count. It then sends
    * {@link creditCollaborator} once with the rest, in the order asked, or
    * nothing when none is left.
    *
@@ -667,7 +709,10 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * the status Siren sent. A row whose `transactionId` is not one asked,
    * whose `collaboratorId` is not the collaborator or whose `type` is not
    * the type means Siren did not read a filter, and throws
-   * `UnexpectedResponseError` with the row as its `data` and no status.
+   * `UnexpectedResponseError` with the row as its `data` and no status. An
+   * empty page whose `total`, or count header, is above the rows read so
+   * far throws `UnexpectedResponseError` with the status Siren sent, since
+   * Siren reads the rows and the total in two queries.
    * Every error from a read reaches the caller as it is, after the read's
    * own retries inside `maxRetries`, with nothing sent. An error from the
    * credit itself reaches the caller as it is too, and it is never sent a
@@ -723,6 +768,7 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
         },
         ConversionsResource.RECOVERY_FILTERS,
         ConversionsResource.RECOVERY_ID_FILTERS,
+        (page) => emptyButCounted(page, offset, '/conversions'),
       );
       for (const row of rows) {
         // A row an earlier page held means Siren did not read the offset, and

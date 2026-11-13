@@ -64,9 +64,9 @@ export class Siren {
   readonly webhooks: WebhooksResource;
   /** Manage API keys. Takes a signed-in dashboard session's token. */
   readonly apiKeys: ApiKeysResource;
-  /** Conversions: list a page, or read one by id. An API key needs `ledger:conversions:read`. */
+  /** Conversions: list, read, write and recover a lost create. An API key reads with `ledger:conversions:read`. */
   readonly conversions: ConversionsResource;
-  /** Transactions: list a page, or read one by id. An API key needs `ledger:transactions:read`. */
+  /** Transactions: list, read, write and recover a lost credit. An API key reads with `ledger:transactions:read`. */
   readonly transactions: TransactionsResource;
   /** Reconciliation reader for obligations. An API key needs `ledger:obligations:read`. */
   readonly obligations: RecordsResource;

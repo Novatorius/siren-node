@@ -27,8 +27,8 @@ export function isDay(value: unknown): boolean {
  *
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
  * from its own durable queue builds the client with `maxRetries: 0`. Every
- * id must be a positive whole number, or `SirenError` is thrown before
- * sending.
+ * id must be a positive whole number, or the method throws `SirenError`
+ * before sending.
  *
  * A connected site's token reads {@link list} and {@link retrieve} with
  * `connect:records:read`, limited to its own store. It cannot read
