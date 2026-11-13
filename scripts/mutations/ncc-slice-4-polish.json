@@ -1,0 +1,257 @@
+[
+  {
+    "id": "polish-binding-nonfinite-dropped",
+    "file": "src/resources/records.ts",
+    "find": "      if (typeof value === 'number' && !Number.isFinite(value)) {\n        throw new SirenError(`transactions.create() cannot send ${key} ${String(value)}, which JSON writes as null and Siren reads as no binding.`);\n      }\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of NaN before sending",
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of Infinity before sending",
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of -Infinity before sending",
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingDataType of NaN before sending"
+    ]
+  },
+  {
+    "id": "polish-binding-nan-only",
+    "file": "src/resources/records.ts",
+    "find": "      if (typeof value === 'number' && !Number.isFinite(value)) {\n",
+    "replace": "      if (typeof value === 'number' && Number.isNaN(value)) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of Infinity before sending",
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of -Infinity before sending"
+    ]
+  },
+  {
+    "id": "polish-binding-id-only",
+    "file": "src/resources/records.ts",
+    "find": "      if (typeof value === 'number' && !Number.isFinite(value)) {\n",
+    "replace": "      if (key === 'bindingId' && typeof value === 'number' && !Number.isFinite(value)) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingDataType of NaN before sending"
+    ]
+  },
+  {
+    "id": "polish-binding-message-json",
+    "file": "src/resources/records.ts",
+    "find": "cannot send ${key} ${String(value)}, which JSON writes as null",
+    "replace": "cannot send ${key} ${JSON.stringify(value)}, which JSON writes as null",
+    "expect": "caught",
+    "failing": [
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of NaN before sending",
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of Infinity before sending"
+    ]
+  },
+  {
+    "id": "polish-binding-over-refuses",
+    "file": "src/resources/records.ts",
+    "find": "      if (typeof value === 'number' && !Number.isFinite(value)) {\n",
+    "replace": "      if (typeof value === 'number' && !Number.isSafeInteger(value)) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: transactions.create refuses a binding JSON cannot carry > sends a large finite numeric bindingId as given"
+    ]
+  },
+  {
+    "id": "polish-recover-create-total-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "      (page) => emptyButCounted(page, 0, this.path),\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "4 polish: recovery refuses an empty page whose total says rows exist > conversions.recoverCreate raises with the status for an empty items list with a total of 1",
+      "4 polish: recovery refuses an empty page whose total says rows exist > conversions.recoverCreate raises with the status for an empty JSON array whose count header says 1"
+    ]
+  },
+  {
+    "id": "polish-recover-credit-total-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "        (page) => emptyButCounted(page, offset, '/conversions'),\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "4 polish: recovery refuses an empty page whose total says rows exist > transactions.recoverCreditCollaborator raises with the status for an empty first page with a total of 2",
+      "4 polish: recovery refuses an empty page whose total says rows exist > transactions.recoverCreditCollaborator raises for an empty later page whose total is above the rows read"
+    ]
+  },
+  {
+    "id": "polish-recover-credit-offset-ignored",
+    "file": "src/resources/records.ts",
+    "find": "        (page) => emptyButCounted(page, offset, '/conversions'),\n",
+    "replace": "        (page) => emptyButCounted(page, 0, '/conversions'),\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: recovery refuses an empty page whose total says rows exist > transactions.recoverCreditCollaborator ends on an empty page whose total equals the rows read"
+    ]
+  },
+  {
+    "id": "polish-recover-total-at-offset",
+    "file": "src/resources/records.ts",
+    "find": "  return page.length === 0 && count !== undefined && count > offset\n",
+    "replace": "  return page.length === 0 && count !== undefined && count >= offset && count > 0\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: recovery refuses an empty page whose total says rows exist > transactions.recoverCreditCollaborator ends on an empty page whose total equals the rows read"
+    ]
+  },
+  {
+    "id": "polish-recover-total-on-any-page",
+    "file": "src/resources/records.ts",
+    "find": "  return page.length === 0 && count !== undefined && count > offset\n",
+    "replace": "  return count !== undefined && count > offset\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: conversions.recoverCreate > answers the conversion the first send made and sends nothing"
+    ]
+  },
+  {
+    "id": "polish-list-check-no-status",
+    "file": "src/resources/record-requests.ts",
+    "find": "    throw new UnexpectedResponseError(pageProblem, { statusCode: response.status, data: body });\n",
+    "replace": "    throw new UnexpectedResponseError(pageProblem, { data: body });\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: recovery refuses an empty page whose total says rows exist > conversions.recoverCreate raises with the status for an empty items list with a total of 1",
+      "4 polish: recovery refuses an empty page whose total says rows exist > transactions.recoverCreditCollaborator raises with the status for an empty first page with a total of 2"
+    ]
+  },
+  {
+    "id": "polish-entries-own-keys",
+    "file": "src/resources/credits.ts",
+    "find": "  async entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {\n    // Each own key read once, so the scope check and the query see the same\n    // values and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: credits reads refuse before sending > entries with no argument throws its own SirenError, not a TypeError",
+      "4 polish: credits reads refuse before sending > entries refuses a scope key it would not send, one the params only inherit",
+      "4 polish: credits reads refuse before sending > entries sends the collaboratorId it checked, when a getter answers it first"
+    ]
+  },
+  {
+    "id": "polish-holds-own-keys",
+    "file": "src/resources/credits.ts",
+    "find": "  async holds(params: CreditHoldListParams): Promise<SirenList<CreditHold>> {\n    // Each own key read once, so the scope check and the query see the same\n    // values and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async holds(params: CreditHoldListParams): Promise<SirenList<CreditHold>> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: credits reads refuse before sending > holds with no argument throws its own SirenError, not a TypeError",
+      "4 polish: credits reads refuse before sending > holds refuses a scope key it would not send, one the params only inherit"
+    ]
+  },
+  {
+    "id": "polish-checkout-collaborator-unchecked",
+    "file": "src/resources/credits.ts",
+    "find": "      collaboratorId: recordId(collaboratorId, 'credits.checkoutBalances', 'collaboratorId'),\n",
+    "replace": "      collaboratorId,\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: credits reads refuse before sending > checkoutBalances refuses a missing collaboratorId before sending"
+    ]
+  },
+  {
+    "id": "polish-update-engagement-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    for (const key of ['engagementId', 'transactionId', 'obligationId'] as const) {\n",
+    "replace": "    for (const key of ['transactionId', 'obligationId'] as const) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: conversions.update checks the ids create checks > refuses a zero engagementId before sending"
+    ]
+  },
+  {
+    "id": "polish-update-transaction-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    for (const key of ['engagementId', 'transactionId', 'obligationId'] as const) {\n",
+    "replace": "    for (const key of ['engagementId', 'obligationId'] as const) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: conversions.update checks the ids create checks > refuses a transactionId that is a string before sending"
+    ]
+  },
+  {
+    "id": "polish-update-obligation-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    for (const key of ['engagementId', 'transactionId', 'obligationId'] as const) {\n",
+    "replace": "    for (const key of ['engagementId', 'transactionId'] as const) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: conversions.update checks the ids create checks > refuses a fractional obligationId before sending"
+    ]
+  },
+  {
+    "id": "polish-update-over-refuses",
+    "file": "src/resources/records.ts",
+    "find": "      if (params?.[key] !== undefined) recordId(params[key], 'conversions.update', key);\n",
+    "replace": "      if (params?.[key] !== undefined) recordId(-1, 'conversions.update', key);\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: conversions.update checks the ids create checks > sends good ids as given"
+    ]
+  },
+  {
+    "id": "polish-metric-type-unchecked",
+    "file": "src/resources/distributors.ts",
+    "find": "    if (params.metricType === '') {\n",
+    "replace": "    if (params.metricType === '' && false) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 polish: distributors.list refuses a metricType Siren reads as no filter > refuses a metricType of \"\" before sending, naming it"
+    ]
+  },
+  {
+    "id": "polish-status-type-deleted",
+    "file": "src/record-types.ts",
+    "find": "  status: Exclude<ConversionStatus, 'deleted'>;\n",
+    "replace": "  status: ConversionStatus;\n",
+    "expect": "caught",
+    "failing": [
+      "error TS2578"
+    ]
+  },
+  {
+    "id": "control-break",
+    "file": "src/resources/records.ts",
+    "find": "      if (typeof value === 'number' && !Number.isFinite(value)) {\n        throw new SirenError(`transactions.create() cannot send ${key} ${String(value)}, which JSON writes as null and Siren reads as no binding.`);\n      }\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "4 polish: transactions.create refuses a binding JSON cannot carry > refuses a bindingId of NaN before sending"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/records.ts",
+    "find": "  return page.length === 0 && count !== undefined && count > offset\n",
+    "replace": "  return count !== undefined && page.length === 0 && count > offset\n",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/records.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/credits.ts",
+    "find": "  async entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {\n    // Each own key read once, so the scope check and the query see the same\n    // values and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {\n    params = { ...params ;\n",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/distributors.ts",
+    "find": "    if (params.metricType === '') {\n",
+    "replace": "    if (params.metricType === '' && false) {\n",
+    "expect": "wrong-reason",
+    "failing": [
+      "4 polish: credits reads refuse before sending > checkoutBalances refuses a missing collaboratorId before sending"
+    ]
+  }
+]
