@@ -148,8 +148,8 @@
   {
     "id": "p9-credit-not-list",
     "file": "src/resources/records.ts",
-    "find": "if (!Array.isArray(transactionIds) || transactionIds.length === 0",
-    "replace": "if (transactionIds.length === 0",
+    "find": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS) {",
+    "replace": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS) {",
     "expect": "caught",
     "failing": [
       "P9: transactions bulk, creditCollaborator and sources"
@@ -158,8 +158,8 @@
   {
     "id": "p9-credit-empty",
     "file": "src/resources/records.ts",
-    "find": "|| transactionIds.length === 0 ||",
-    "replace": "||",
+    "find": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS) {",
+    "replace": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (!Array.isArray(transactionIds) || transactionIds.length > MAX_BULK_IDS) {",
     "expect": "caught",
     "failing": [
       "P9: transactions bulk, creditCollaborator and sources"
@@ -168,8 +168,8 @@
   {
     "id": "p9-credit-cap",
     "file": "src/resources/records.ts",
-    "find": "transactionIds.length > MAX_BULK_IDS) {",
-    "replace": "transactionIds.length > MAX_BULK_IDS + 1) {",
+    "find": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS) {",
+    "replace": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS + 1) {",
     "expect": "caught",
     "failing": [
       "P9: transactions bulk, creditCollaborator and sources"
@@ -178,8 +178,8 @@
   {
     "id": "p9-credit-cap-tight",
     "file": "src/resources/records.ts",
-    "find": "transactionIds.length > MAX_BULK_IDS) {",
-    "replace": "transactionIds.length >= MAX_BULK_IDS) {",
+    "find": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length > MAX_BULK_IDS) {",
+    "replace": "Promise<BulkResult> {\n    const method = 'transactions.creditCollaborator';\n    if (!Array.isArray(transactionIds) || transactionIds.length === 0 || transactionIds.length >= MAX_BULK_IDS) {",
     "expect": "caught",
     "failing": [
       "P9 unit: creditCollaborator checks"
@@ -188,8 +188,8 @@
   {
     "id": "p9-credit-ids-unchecked",
     "file": "src/resources/records.ts",
-    "find": "    for (const id of transactionIds) recordId(id, method, 'transactionId');\n",
-    "replace": "",
+    "find": "    for (const id of transactionIds) recordId(id, method, 'transactionId');\n    const body: Record<string, unknown> = {\n",
+    "replace": "    const body: Record<string, unknown> = {\n",
     "expect": "caught",
     "failing": [
       "P9: transactions bulk, creditCollaborator and sources"
@@ -256,8 +256,8 @@
   {
     "id": "r1-p9-create-retried",
     "file": "src/resources/records.ts",
-    "find": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
-    "replace": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return this.http.request({ method: 'POST', path: this.path, body: params, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "find": "    }\n    return writeRecord<T>(this.http, 'POST', this.path, body);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
+    "replace": "    }\n    return this.http.request({ method: 'POST', path: this.path, body: body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
     "expect": "caught",
     "failing": [
       "P9: transactions bulk, creditCollaborator and sources > sends every write once"
@@ -266,8 +266,8 @@
   {
     "id": "r1-p9-create-path",
     "file": "src/resources/records.ts",
-    "find": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
-    "replace": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');\n    }\n    return writeRecord<T>(this.http, 'POST', `${this.path}/create`, params);",
+    "find": "    }\n    return writeRecord<T>(this.http, 'POST', this.path, body);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
+    "replace": "    }\n    return writeRecord<T>(this.http, 'POST', `${this.path}/create`, body);\n  }\n\n  /**\n   * Runs a bulk action with `POST /transactions/bulk`",
     "expect": "caught",
     "failing": [
       "P9: transactions create > records a transaction with POST /transactions and answers it"

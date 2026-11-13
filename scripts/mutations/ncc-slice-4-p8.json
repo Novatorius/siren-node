@@ -166,8 +166,8 @@
   {
     "id": "p8-create-put",
     "file": "src/resources/records.ts",
-    "find": "'conversions.create', 'obligationId');\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
-    "replace": "'conversions.create', 'obligationId');\n    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "find": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'PUT', this.path, body);",
     "expect": "caught",
     "failing": [
       "P8: conversions create"
@@ -176,8 +176,8 @@
   {
     "id": "p8-create-body-dropped",
     "file": "src/resources/records.ts",
-    "find": "'conversions.create', 'obligationId');\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
-    "replace": "'conversions.create', 'obligationId');\n    return writeRecord<T>(this.http, 'POST', this.path, {});",
+    "find": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, {});",
     "expect": "caught",
     "failing": [
       "P8: conversions create"
@@ -276,8 +276,8 @@
   {
     "id": "r1-p8-create-retried",
     "file": "src/resources/records.ts",
-    "find": "    if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');\n    return writeRecord<T>(this.http, 'POST', this.path, params);",
-    "replace": "    if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');\n    return this.http.request({ method: 'POST', path: this.path, body: params, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "find": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return this.http.request({ method: 'POST', path: this.path, body: body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
     "expect": "caught",
     "failing": [
       "P8: conversions delete, bulk and types > sends every write once"
