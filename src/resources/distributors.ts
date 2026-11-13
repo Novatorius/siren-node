@@ -76,9 +76,17 @@ export class DistributorsResource<T = Distributor> extends RecordsResource<T> {
    * `status`, `dateCreated`) and `order`. Sends through `listRecords` with
    * {@link LIST_FILTERS}: any other key and an empty filter list throw
    * `SirenError` before sending, and a 2xx that is not a list throws
-   * `UnexpectedResponseError`, never an empty page.
+   * `UnexpectedResponseError`, never an empty page. A `metricType` of `""`
+   * throws `SirenError` before sending too, since Siren reads it as no
+   * filter (`GetDistributors.php`) and answers every distributor.
    */
-  override list(params: DistributorListParams = {}): Promise<SirenList<T>> {
+  override async list(params: DistributorListParams = {}): Promise<SirenList<T>> {
+    // Each own key read once, so the metricType check and the query see the
+    // same value.
+    params = { ...params };
+    if (params.metricType === '') {
+      throw new SirenError('distributors.list() cannot send a metricType of "", which Siren reads as no filter and answers every distributor.');
+    }
     return listRecords<T>(this.http, this.path, params, DistributorsResource.LIST_FILTERS);
   }
 

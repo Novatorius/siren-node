@@ -221,7 +221,7 @@ export class CreditsResource {
    */
   async checkoutBalances(collaboratorId: number, currency?: string, excludeReference?: string): Promise<CheckoutBalance[]> {
     const query = {
-      collaboratorId,
+      collaboratorId: recordId(collaboratorId, 'credits.checkoutBalances', 'collaboratorId'),
       currency: currency === undefined ? undefined : currencyCode(currency),
       excludeReference,
     };
@@ -269,6 +269,9 @@ export class CreditsResource {
    * {@link ID_FILTERS}, so any other key throws `SirenError`.
    */
   async entries(params: CreditEntryListParams): Promise<SirenList<CreditEntry>> {
+    // Each own key read once, so the scope check and the query see the same
+    // values and no inherited key reaches either.
+    params = { ...params };
     if (!isRecordId(params.collaboratorId) && !filled(params.idempotencyKey)) throw new SirenError(ENTRIES_MESSAGE);
     if (params.currency !== undefined) currencyCode(params.currency);
     return listRecords<CreditEntry>(
@@ -302,6 +305,9 @@ export class CreditsResource {
    * `listRecords` with {@link HOLD_FILTERS} and {@link ID_FILTERS}.
    */
   async holds(params: CreditHoldListParams): Promise<SirenList<CreditHold>> {
+    // Each own key read once, so the scope check and the query see the same
+    // values and no inherited key reaches either.
+    params = { ...params };
     if (!isRecordId(params.collaboratorId) && !filled(params.reference) && !filled(params.idempotencyKey)) {
       throw new SirenError(HOLDS_MESSAGE);
     }

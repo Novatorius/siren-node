@@ -182,6 +182,11 @@ export function recordListQuery(
  * answers an empty page for such a body, since "nobody holds this code"
  * must not stand in for a broken answer.
  *
+ * `check`, when given, runs on the page once its rows and count are read.
+ * When it answers a message, `listRecords` throws `UnexpectedResponseError`
+ * with that message, the status Siren sent and the body as `data`, as
+ * {@link readObject}'s `check` does.
+ *
  * @internal
  */
 export async function listRecords<T>(
@@ -190,6 +195,7 @@ export async function listRecords<T>(
   params: object,
   filters: readonly string[],
   ids: ListIdFilters = {},
+  check?: (page: SirenList<T>) => string | undefined,
 ): Promise<SirenList<T>> {
   const query = recordListQuery(params, filters, ids);
   const response = await http.request({ method: 'GET', path, query, retriable: true });
@@ -233,6 +239,11 @@ export async function listRecords<T>(
       writable: true,
       configurable: true,
     });
+  }
+
+  const pageProblem = check === undefined ? undefined : check(list);
+  if (pageProblem !== undefined) {
+    throw new UnexpectedResponseError(pageProblem, { statusCode: response.status, data: body });
   }
   return list;
 }
