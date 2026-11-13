@@ -316,7 +316,7 @@ export const DistributorBulkAction = {
 export type DistributorBulkAction = (typeof DistributorBulkAction)[keyof typeof DistributorBulkAction];
 
 /**
- * The statuses a store credit hold can hold. A hold is `active` until its
+ * The statuses a store credit hold can take. A hold is `active` until its
  * `ttl` runs out (`expired`), the site gives it back (`released`), or Siren
  * spends it from the order's redemption (`settled`).
  */

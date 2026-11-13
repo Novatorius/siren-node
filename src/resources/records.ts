@@ -79,8 +79,10 @@ export function toListQuery(params: ListParams): Query {
  * and obligations, and is refused on payouts with a `StoreKeyNotAllowedError`.
  *
  * The record resources that extend it (collaborators, collaborator groups,
- * programs and program groups) replace `list` with a stricter one that
+ * programs, program groups, opportunities, engagements, distributors,
+ * custom currencies and mappings) replace `list` with a stricter one that
  * refuses a key its route does not read, and their own docs govern.
+ * Conversions and transactions keep this `list`.
  */
 export class RecordsResource<T = Record<string, unknown>> {
   constructor(
@@ -212,11 +214,13 @@ export async function retrieveRecord<T>(
  * an API key that holds `ledger:conversions:read`, a dashboard session's
  * token, or a connected site's token with `connect:records:read`.
  *
- * The writes are sent once, apart from the one resend after a 401 that
- * every request gets. A write's answer is lost when it throws
- * `ConnectionError` or a 5xx `ApiError`. Siren may have written before the
- * answer failed, so each write says how to find out before sending it
- * again.
+ * Reads retry on a network error, 429 or 5xx inside the client's
+ * `maxRetries`, so a caller that runs them from its own durable queue builds
+ * the client with `maxRetries: 0`. The writes are sent once, apart from the
+ * one resend after a 401 that every request gets. A write's answer is lost
+ * when it throws `ConnectionError` or a 5xx `ApiError`. Siren may have
+ * written before the answer failed, so each write says how to find out
+ * before sending it again.
  */
 export class ConversionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
   /**
@@ -338,8 +342,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
    * Throws `SirenError` before anything is sent when `params` has no
    * `transactionId`, with exactly `conversions.recoverCreate() needs a
    * transactionId to find the first send. Without one, Siren cannot tell
-   * whether the create landed.`, and when `engagementId` or `transactionId` is not a positive
-   * whole number. Throws `SirenError` before sending the create for every
+   * whether the create landed.`, and when `engagementId` or `transactionId`
+   * is not a positive whole number. Throws `SirenError` before sending the create for every
    * other reason {@link create} gives. Like {@link create}, it reads each own
    * key of `params` once and no inherited key, so the read and the create it
    * sends ask about the same conversion.
@@ -395,8 +399,8 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
   /**
    * Updates a conversion with `PUT /conversions/{id}`, sent once. Siren
    * answers 200 with no body, so this answers `null`, and an object when a
-   * later Siren sends one. Either way, Siren took the update. Read the conversion again with {@link retrieve}
-   * to see the result: setting `approved` runs Siren's approval, which
+   * later Siren sends one. Either way, Siren took the update. Read the
+   * conversion again with {@link retrieve} to see the result: setting `approved` runs Siren's approval, which
    * stores the conversion as `complete`. Throws `NotFoundError` for an
    * unknown id, and `UnexpectedResponseError` for a 2xx body that is
    * neither empty nor a JSON object. Sending it again after a lost answer
@@ -464,11 +468,13 @@ export class ConversionsResource<T = Record<string, unknown>> extends RecordsRes
  * an API key that holds `ledger:transactions:read`, a dashboard session's
  * token, or a connected site's token with `connect:records:read`.
  *
- * The writes are sent once, apart from the one resend after a 401 that
- * every request gets. A write's answer is lost when it throws
- * `ConnectionError` or a 5xx `ApiError`. Siren may have written before the
- * answer failed, so each write says how to find out before sending it
- * again.
+ * Reads retry on a network error, 429 or 5xx inside the client's
+ * `maxRetries`, so a caller that runs them from its own durable queue builds
+ * the client with `maxRetries: 0`. The writes are sent once, apart from the
+ * one resend after a 401 that every request gets. A write's answer is lost
+ * when it throws `ConnectionError` or a 5xx `ApiError`. Siren may have
+ * written before the answer failed, so each write says how to find out
+ * before sending it again.
  */
 export class TransactionsResource<T = Record<string, unknown>> extends RecordsResource<T> {
   /**
@@ -655,7 +661,8 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * Throws `SirenError` before sending when `transactionIds` is not a
    * non-empty array of at most 500 positive whole numbers, `collaboratorId`
    * is not a positive whole number, or `type` is given and is not a
-   * non-empty string. Siren answers 404, raised as `NotFoundError`, when it
+   * non-empty string. Siren reads a `type` of `null` as `sale`, but the SDK
+   * refuses it, so a caller leaves `type` out for a sale. Siren answers 404, raised as `NotFoundError`, when it
    * has no such collaborator.
    */
   async creditCollaborator(transactionIds: readonly number[], collaboratorId: number, type?: string): Promise<BulkResult> {
@@ -690,8 +697,9 @@ export class TransactionsResource<T = Record<string, unknown>> extends RecordsRe
    * not the end, since Siren may answer fewer rows than asked. A row whose
    * `id` an earlier row had means Siren did not read `offset`, and throws
    * `UnexpectedResponseError` with nothing sent. A transaction counts as
-   * credited when a row names it. Siren filters by the collaborator, so another collaborator's
-   * conversion on the same transaction does not count. It then sends
+   * credited when a row names it. Siren filters by the collaborator, so
+   * another collaborator's conversion on the same transaction does not
+   * count. It then sends
    * {@link creditCollaborator} once with the rest, in the order asked, or
    * nothing when none is left.
    *
