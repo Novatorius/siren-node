@@ -11,8 +11,10 @@ info:
     This document describes the **developer-facing surface**: event ingestion,
     webhooks, API keys, read endpoints for reconciliation, and the record
     routes a connector reads and writes: collaborators with their codes and
-    program enrollments, collaborator groups with their members, programs
-    and program groups. The rest of the admin surface used by the Siren
+    program enrollments, collaborator groups with their members, programs,
+    program groups, opportunities, engagements, conversion and transaction
+    writes, distributors, custom currencies, store credit, mappings and the
+    shared settings. The rest of the admin surface used by the Siren
     dashboard is out of scope here.
 
     Every request sends a bearer token (`Authorization: Bearer ...`). An API
@@ -78,6 +80,24 @@ tags:
     description: Incentive rules that turn engagements into rewards.
   - name: Program Groups
     description: Sets of programs that compete for the same engagement.
+  - name: Opportunities
+    description: A tracked visitor's chance to convert.
+  - name: Transactions
+    description: Transactions and their line-item details.
+  - name: Conversions
+    description: Engagements that turned into a reward.
+  - name: Engagements
+    description: A collaborator's claim on an opportunity in one program. Read only.
+  - name: Distributors
+    description: Revenue pools shared among collaborators on a schedule.
+  - name: Custom Currencies
+    description: Points, store credit, and other organization-defined units, keyed by code.
+  - name: Credits
+    description: Store credit balances, ledger entries, checkout holds, and adjustments.
+  - name: Mappings
+    description: Links between collaborators and records outside Siren, such as WordPress users and products.
+  - name: Settings
+    description: The organization settings Siren shares with a connected site.
 paths:
   /event/sale:
     post:
@@ -626,6 +646,33 @@ paths:
         '200': { $ref: '#/components/responses/PaginatedList' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Conversions]
+      operationId: createConversion
+      summary: Create a conversion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [engagementId, type, status]
+              properties:
+                engagementId: { type: integer }
+                type: { type: string }
+                status: { type: string, enum: [pending, approved, rejected, expired] }
+                transactionId: { type: integer }
+                obligationId: { type: integer }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
   /conversions/{id}:
     get:
       tags: [Reconciliation]
@@ -677,6 +724,45 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+    put:
+      tags: [Conversions]
+      operationId: updateConversion
+      summary: Update a conversion
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                engagementId: { type: integer }
+                type: { type: string }
+                status: { type: string, enum: [pending, approved, rejected, expired] }
+                transactionId: { type: integer }
+                obligationId: { type: integer }
+      responses:
+        '200':
+          description: Updated. The response has no body.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Conversions]
+      operationId: deleteConversion
+      summary: Delete a conversion
+      description: |
+        The first call marks the record `deleted` and returns it. A second call on a
+        deleted record removes it and answers 204.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /transactions:
     get:
       tags: [Reconciliation]
@@ -700,6 +786,34 @@ paths:
         '200': { $ref: '#/components/responses/PaginatedList' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Transactions]
+      operationId: createTransaction
+      summary: Create a transaction
+      description: |
+        Records a transaction directly. Commerce sales should use `POST /event/sale`,
+        which also runs attribution.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [details]
+              properties:
+                details: { type: array, minItems: 1, items: { $ref: '#/components/schemas/TransactionDetail' } }
+                bindingId: { type: string, description: An external reference Siren stores as a mapping. }
+                bindingDataType: { type: string, description: The external reference type. }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
   /transactions/{id}:
     get:
       tags: [Reconciliation]
@@ -1596,6 +1710,782 @@ paths:
         '200': { $ref: '#/components/responses/Record' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '400': { $ref: '#/components/responses/ValidationError' }
+  /conversions/bulk:
+    post:
+      tags: [Conversions]
+      operationId: bulkConversions
+      summary: Run a bulk action on conversions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { type: string, enum: [approve, reject, markPending, delete, permanent_delete] }
+                ids: { type: array, items: { type: integer } }
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /conversions/types:
+    get:
+      tags: [Conversions]
+      operationId: listConversionTypes
+      summary: List conversion types
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /transactions/bulk:
+    post:
+      tags: [Transactions]
+      operationId: bulkTransactions
+      summary: Run a bulk action on transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { type: string, enum: [cancel, refund, delete] }
+                ids: { type: array, items: { type: integer } }
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /transactions/credit-collaborator:
+    post:
+      tags: [Transactions]
+      operationId: creditTransactionsToCollaborator
+      summary: Credit transactions to a collaborator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transactionIds, collaboratorId]
+              properties:
+                transactionIds: { type: array, items: { type: integer } }
+                collaboratorId: { type: integer }
+                type: { type: string, description: The conversion type to create. }
+      responses:
+        '200':
+          description: Credited.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /transactions/sources:
+    get:
+      tags: [Transactions]
+      operationId: listTransactionSources
+      summary: List transaction sources
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /opportunities:
+    get:
+      tags: [Opportunities]
+      operationId: listOpportunities
+      summary: List opportunities
+      description: |
+        Siren opens opportunities when it ingests a `site-visited` event. There is
+        no create or delete route. A connected site must send `collaboratorId`
+        or `id`, or Siren Cloud answers 403 `site_filter_required`.
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Fields' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [id, status, lastTriggered, dateCreated, dateModified] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, inactive, invalid] }
+        - name: collaboratorId
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /opportunities/{id}:
+    get:
+      tags: [Opportunities]
+      operationId: getOpportunity
+      summary: Get an opportunity
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Opportunities]
+      operationId: updateOpportunity
+      summary: Update an opportunity
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [active, inactive] }
+                lastTriggered: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /engagements:
+    get:
+      tags: [Engagements]
+      operationId: listEngagements
+      summary: List engagements
+      description: |
+        Siren creates engagements while it processes events, so the routes only read.
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Fields' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [id, opportunityId, programId, collaboratorId, score, status, source, dateCreated, dateModified] }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: collaboratorId
+          in: query
+          schema: { type: integer }
+        - name: programId
+          in: query
+          schema: { type: integer }
+        - name: opportunityId
+          in: query
+          schema: { type: integer }
+        - name: include
+          in: query
+          schema: { type: string }
+          description: Send `extended` for the summary fields when `fields` is not given.
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /engagements/{id}:
+    get:
+      tags: [Engagements]
+      operationId: getEngagement
+      summary: Get an engagement
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/Fields' }
+        - name: include
+          in: query
+          schema: { type: string }
+          description: Send `extended` for the summary fields when `fields` is not given.
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /engagements/types:
+    get:
+      tags: [Engagements]
+      operationId: listEngagementTypes
+      summary: List engagement types
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /engagements/calculations:
+    get:
+      tags: [Engagements]
+      operationId: listEngagementCalculations
+      summary: List engagement calculations
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /distributors:
+    get:
+      tags: [Distributors]
+      operationId: listDistributors
+      summary: List distributors
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Fields' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [id, name, status, dateCreated] }
+        - name: status
+          in: query
+          schema: { type: string }
+        - { $ref: '#/components/parameters/Search' }
+        - name: include
+          in: query
+          schema: { type: string }
+          description: Send `extended` for the summary fields when `fields` is not given.
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Distributors]
+      operationId: createDistributor
+      summary: Create a distributor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, description, distributionResolver, distributionPoolResolver, status, units]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                distributionResolver: { type: string }
+                distributionPoolResolver: { type: string, example: revenueSinceLastDistribution }
+                status: { type: string, enum: [active, inactive] }
+                units: { type: string }
+                revenuePercentage: { type: number }
+                schedule: { type: array, items: { type: string }, example: [first day of next month] }
+                engagementTypes: { type: object, additionalProperties: true }
+                collaboratorIds: { type: array, items: { type: integer } }
+                collaboratorGroupId: { type: integer }
+                transactionCompilers: { type: object, additionalProperties: true }
+                lineItemFilters: { type: object, additionalProperties: true }
+                postAllocationActions: { type: object, additionalProperties: true }
+                metricFilters: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /distributors/{id}:
+    get:
+      tags: [Distributors]
+      operationId: getDistributor
+      summary: Get a distributor
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/Fields' }
+        - name: include
+          in: query
+          schema: { type: string }
+          description: Send `extended` for the summary fields when `fields` is not given.
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Distributors]
+      operationId: updateDistributor
+      summary: Update a distributor
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                distributionResolver: { type: string }
+                distributionPoolResolver: { type: string, example: revenueSinceLastDistribution }
+                status: { type: string, enum: [active, inactive] }
+                units: { type: string }
+                revenuePercentage: { type: number }
+                schedule: { type: array, items: { type: string }, example: [first day of next month] }
+                engagementTypes: { type: object, additionalProperties: true }
+                collaboratorIds: { type: array, items: { type: integer } }
+                collaboratorGroupId: { type: integer }
+                transactionCompilers: { type: object, additionalProperties: true }
+                lineItemFilters: { type: object, additionalProperties: true }
+                postAllocationActions: { type: object, additionalProperties: true }
+                metricFilters: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Distributors]
+      operationId: deleteDistributor
+      summary: Delete a distributor
+      description: |
+        The first call marks the record `deleted` and returns it. A second call on a
+        deleted record removes it and answers 204.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /distributors/bulk:
+    post:
+      tags: [Distributors]
+      operationId: bulkDistributors
+      summary: Run a bulk action on distributors
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { type: string, enum: [activate, deactivate, restore, delete, permanent_delete] }
+                ids: { type: array, items: { type: integer } }
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /distributors/credit-metric:
+    post:
+      tags: [Distributors]
+      operationId: creditDistributorMetric
+      summary: Credit a manual metric to a collaborator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collaboratorId]
+              properties:
+                collaboratorId: { type: integer }
+      responses:
+        '200':
+          description: Credited.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /currencies/custom:
+    get:
+      tags: [Custom Currencies]
+      operationId: listCustomCurrencies
+      summary: List custom currencies
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Fields' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [code, name, symbol, symbolPosition, type, exchangeRate, dateCreated, dateModified] }
+        - name: type
+          in: query
+          schema: { type: string, enum: [internal, monetary] }
+        - name: code
+          in: query
+          schema: { type: string }
+          description: One currency by its code. `customCurrencies.retrieve()` uses it.
+          example: STORE_CREDIT
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Custom Currencies]
+      operationId: createCustomCurrency
+      summary: Create a custom currency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, symbol, type]
+              properties:
+                code: { type: string, description: Upper case and unique. Real currency codes are refused. }
+                name: { type: string }
+                symbol: { type: string }
+                symbolPosition: { type: string, enum: [before, after] }
+                type: { type: string, enum: [internal, monetary] }
+                exchangeRate: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /currencies/custom/{code}:
+    put:
+      tags: [Custom Currencies]
+      operationId: updateCustomCurrency
+      summary: Update a custom currency
+      description: |
+        The type cannot change. Siren answers 400 when the body sends `type`.
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string }, example: PTS }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                symbol: { type: string }
+                symbolPosition: { type: string, enum: [before, after] }
+                exchangeRate: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Custom Currencies]
+      operationId: deleteCustomCurrency
+      summary: Delete a custom currency
+      description: |
+        Sets every program that pays in the currency to `inactive`, deletes the
+        currency, and answers `{success, deactivatedPrograms}`. With
+        `wipeLedger` true, the ledger entries in the currency are deleted too.
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string }, example: PTS }
+        - name: wipeLedger
+          in: query
+          schema: { type: boolean }
+          description: Also delete the ledger entries that use the currency.
+      responses:
+        '200': { $ref: '#/components/responses/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /credits/adjust:
+    post:
+      tags: [Credits]
+      operationId: adjustCreditBalance
+      summary: Adjust a collaborator's credit balance
+      description: |
+        Only a dashboard session may adjust a balance. Read balances with
+        `GET /credit-balances` and the ledger with `GET /credit-entries`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collaboratorId, currency, amount]
+              properties:
+                collaboratorId: { type: integer }
+                currency: { type: string, description: An internal custom currency code. }
+                amount: { type: integer, description: Minor units. Negative takes credit away. Must not be zero. }
+                description: { type: string }
+      responses:
+        '200':
+          description: Adjusted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /credit-balances:
+    get:
+      tags: [Credits]
+      operationId: getCreditBalances
+      summary: Read a collaborator's store credit for a checkout
+      description: |
+        One row per internal currency. `balance` is the ledger sum, `reserved`
+        the live holds, and `available` the balance less reserved, never below
+        zero, all in minor units. Pass the checkout's own hold reference as
+        `excludeReference` so its hold does not count against itself. A
+        connected site sends the plain reference and Cloud adds its Property.
+      parameters:
+        - { name: collaboratorId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: currency, in: query, schema: { type: string, maxLength: 50 }, description: Just this internal currency. }
+        - name: excludeReference
+          in: query
+          schema: { $ref: '#/components/schemas/HoldReference' }
+      responses:
+        '200':
+          description: The balances.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CreditBalance' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /credit-entries:
+    get:
+      tags: [Credits]
+      operationId: listCreditEntries
+      summary: List store credit ledger entries
+      description: |
+        A query must name `collaboratorId` or `idempotencyKey`, so it never
+        lists a whole organization's ledger. Every filter is an exact match.
+        Only Siren writes the ledger.
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Order' }
+        - { name: orderBy, in: query, schema: { type: string, enum: [id, dateCreated, amount], default: id } }
+        - { name: collaboratorId, in: query, schema: { type: integer } }
+        - { name: currency, in: query, schema: { type: string } }
+        - { name: sourceType, in: query, schema: { type: string } }
+        - { name: sourceId, in: query, schema: { type: string } }
+        - { name: description, in: query, schema: { type: string } }
+        - { name: idempotencyKey, in: query, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /credit-holds:
+    get:
+      tags: [Credits]
+      operationId: listCreditHolds
+      summary: List store credit holds
+      description: |
+        A query must name `collaboratorId`, `reference` or `idempotencyKey`.
+        Every filter is an exact match. A connected site reads only the holds
+        its own checkouts placed, and their references come back with its
+        Property, as in `hold:woocommerce@property:5:{token}`.
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Order' }
+        - { name: orderBy, in: query, schema: { type: string, enum: [id, dateCreated, expiresAt], default: id } }
+        - { name: collaboratorId, in: query, schema: { type: integer } }
+        - { name: currency, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, settled, released, expired] } }
+        - { name: reference, in: query, schema: { $ref: '#/components/schemas/HoldReference' } }
+        - { name: idempotencyKey, in: query, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      tags: [Credits]
+      operationId: placeCreditHold
+      summary: Reserve store credit for a checkout
+      description: |
+        Placing again for the same token and currency replaces that session's
+        hold. The hold's `amount` may be lower than asked, because Siren caps
+        it at the credit available outside this session's own hold. A hold
+        lapses at its `ttl`, the site can release it early with
+        `DELETE /credit-holds/{id}`, and Siren settles it when the order's
+        redemption arrives as an event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collaboratorId, currency, amount, token, platformId]
+              properties:
+                collaboratorId: { type: integer, minimum: 1 }
+                currency: { type: string, description: An internal custom currency code. }
+                amount: { type: integer, minimum: 1, description: Minor units. }
+                token: { $ref: '#/components/schemas/SiteName', description: 'The checkout session, at most 120 characters.' }
+                platformId: { $ref: '#/components/schemas/SiteName', description: 'The commerce platform, such as woocommerce. Plain. Cloud adds the Property (`@property:5`) and then allows at most 60 characters, suffix included.' }
+                ttl: { type: integer, minimum: 60, maximum: 3600, default: 1800 }
+      responses:
+        '201':
+          description: Placed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreditHold' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            No credit is available in that currency (`error.code`
+            `hold_no_credit`), or another site's checkout already holds
+            credit for this collaborator and currency under the same token
+            (`hold_token_in_use`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: |
+            The site spent its request budget (with `Retry-After`). Siren no
+            longer caps how many checkouts hold a collaborator's credit, so it
+            never sends `hold_limit`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /credit-holds/{id}:
+    delete:
+      tags: [Credits]
+      operationId: releaseCreditHold
+      summary: Release a store credit hold early
+      description: |
+        Releases one hold, so the credit it reserved is available again. Call
+        it only when the shopper abandons the credit, or it no longer applies
+        to a cart that never became an order. Never release the hold of a
+        checkout that became an order: settlement consumes that hold, and
+        releasing it first lets another checkout spend the same credit.
+        A hold that already ended (released, expired or settled) comes back
+        unchanged with 200, so a retry is safe. A connected site may release
+        only holds its own checkouts placed, and any other id answers 404.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: The hold, now released, or as it was when it had already ended.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreditHold' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /mappings:
+    get:
+      tags: [Mappings]
+      operationId: listMappings
+      summary: Find links to records outside Siren
+      description: |
+        A query must name a type. A connected site must name `externalType`,
+        reads only its own namespace, and may never use the `user` type.
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Order' }
+        - { name: orderBy, in: query, schema: { type: string, enum: [localId, externalId, localType, externalType], default: localId } }
+        - { name: localId, in: query, schema: { type: integer } }
+        - { name: localType, in: query, schema: { $ref: '#/components/schemas/SiteName' }, example: collaborator }
+        - { name: externalId, in: query, schema: { type: string } }
+        - { name: externalType, in: query, schema: { $ref: '#/components/schemas/SiteName' }, example: wordpress_user }
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      tags: [Mappings]
+      operationId: createMapping
+      summary: Link a collaborator to an outside record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [localId, localType, externalId, externalType]
+              properties:
+                localId: { type: integer, minimum: 1, description: A collaborator id. }
+                localType: { type: string, enum: [collaborator] }
+                externalId: { type: string }
+                externalType: { $ref: '#/components/schemas/SiteName' }
+      responses:
+        '201':
+          description: Linked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Mapping' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The link already exists (`error.code` `mapping_exists`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [Mappings]
+      operationId: deleteMappings
+      summary: Remove collaborator links
+      description: |
+        Send `localId`, or `externalId` with its `externalType`. A connected
+        site always sends `externalType`.
+      parameters:
+        - { name: localType, in: query, required: true, schema: { type: string, enum: [collaborator] } }
+        - { name: localId, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: externalId, in: query, schema: { type: string } }
+        - { name: externalType, in: query, schema: { $ref: '#/components/schemas/SiteName' } }
+      responses:
+        '200': { $ref: '#/components/responses/Deleted' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /configs:
+    get:
+      tags: [Settings]
+      operationId: listSharedConfigs
+      summary: Read the settings shared with a connected site
+      description: |
+        Only named settings leave Cloud. Today that is `collaborator` /
+        `urlReference` / `key`, the referral link's query parameter.
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/Order' }
+        - { name: orderBy, in: query, schema: { type: string, enum: [type, subtype, configKey], default: type } }
+        - { name: type, in: query, required: true, schema: { type: string, enum: [collaborator] } }
+        - { name: subtype, in: query, schema: { type: string }, example: urlReference }
+        - { name: configKey, in: query, schema: { type: string }, example: key }
+      responses:
+        '200': { $ref: '#/components/responses/PaginatedList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /oauth/register:
     post:
       tags: [OAuth]
@@ -2758,6 +3648,52 @@ components:
         deliveredAt: { type: [string, 'null'] }
         dateCreated: { type: [string, 'null'] }
         dateModified: { type: [string, 'null'] }
+    CreditBalance:
+      type: object
+      properties:
+        collaboratorId: { type: integer }
+        currency: { type: string }
+        balance: { type: integer }
+        reserved: { type: integer }
+        available: { type: integer }
+        held:
+          type: integer
+          description: Credit a store's migration imported that waits for an admin's approval. Not part of the balance.
+    CreditHold:
+      type: object
+      properties:
+        id: { type: integer }
+        collaboratorId: { type: integer }
+        currency: { type: string }
+        amount: { type: integer }
+        status: { type: string, enum: [active, settled, released, expired] }
+        reference: { type: string, example: 'hold:woocommerce@property:5:0b6f3c2e-8a1d-4c55-9a0e-0d6c1b7f4e21' }
+        idempotencyKey: { type: [string, 'null'] }
+        expiresAt: { type: string }
+        createdDate: { type: string }
+    HoldReference:
+      type: string
+      pattern: '^hold:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$'
+      description: A checkout session's hold reference, `hold:{platform}:{token}`, as a site sends it.
+      example: hold:woocommerce:0b6f3c2e-8a1d-4c55-9a0e-0d6c1b7f4e21
+    Mapping:
+      type: object
+      properties:
+        localId: { type: integer }
+        localType: { type: string, example: collaborator }
+        externalId: { type: string }
+        externalType: { type: string, description: 'Qualified for a connected site, as in wordpress_user@property:5. The SDK answers the plain type and the Property in propertyId.' }
+    TransactionDetail:
+      type: object
+      required: [name, value]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        type: { type: string, example: credit }
+        value: { type: integer, description: Per-unit value in minor units. }
+        quantity: { type: integer, default: 1 }
+        units: { type: string, example: USD }
+        attributes: { type: object, additionalProperties: true }
   responses:
     PaginatedList:
       description: |

@@ -1,0 +1,150 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/records.ts",
+    "find": "  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId', 'type'] as const;",
+    "replace": "  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: recovery surface > names the filters the recovery reads send"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/records.ts",
+    "find": "Run one recovery per\n   * conversion at a time,",
+    "replace": "Run one recovery for each\n   * conversion at a time,",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/records.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/records.ts",
+    "find": "  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId', 'type'] as const;",
+    "replace": "  static readonly RECOVERY_FILTERS = [['transactionId', 'engagementId', 'collaboratorId', 'type'] as const;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/records.ts",
+    "find": "  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId', 'type'] as const;",
+    "replace": "  static readonly RECOVERY_FILTERS = ['transactionId', 'engagementId', 'collaboratorId'] as const;",
+    "expect": "wrong-reason",
+    "failing": [
+      "4 fix F3: create allow lists surface > names the fields each create sends"
+    ]
+  },
+  {
+    "id": "recovery-id-filters",
+    "file": "src/resources/records.ts",
+    "find": "  static readonly RECOVERY_ID_FILTERS = { one: ['collaboratorId'], many: ['transactionId', 'engagementId'] } as const;",
+    "replace": "  static readonly RECOVERY_ID_FILTERS = { one: ['collaboratorId', 'engagementId'], many: ['transactionId'] } as const;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F1: recovery surface > checks the id filters by how Siren reads them"
+    ]
+  },
+  {
+    "id": "conversion-fields",
+    "file": "src/resources/records.ts",
+    "find": "  static readonly CREATE_FIELDS = ['engagementId', 'type', 'status', 'transactionId', 'obligationId'] as const;",
+    "replace": "  static readonly CREATE_FIELDS = ['engagementId', 'type', 'status', 'transactionId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: create allow lists surface > names the fields each create sends",
+      "4 fix F3: create allow lists surface > conversions.create holds every field its own list names"
+    ]
+  },
+  {
+    "id": "transaction-fields",
+    "file": "src/resources/records.ts",
+    "find": "  static readonly CREATE_FIELDS = ['details', 'bindingId', 'bindingDataType'] as const;",
+    "replace": "  static readonly CREATE_FIELDS = ['details', 'bindingId'] as const;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: create allow lists surface > names the fields each create sends",
+      "4 fix F3: create allow lists surface > transactions.create holds every field its own list names"
+    ]
+  },
+  {
+    "id": "detail-fields",
+    "file": "src/resources/records.ts",
+    "find": "  static readonly DETAIL_FIELDS = ['name', 'description', 'type', 'value', 'quantity', 'units', 'attributes'] as const;",
+    "replace": "  static readonly DETAIL_FIELDS = ['name', 'description', 'type', 'value', 'quantity', 'units'] as const;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: create allow lists surface > names the fields each create sends"
+    ]
+  },
+  {
+    "id": "currency-fields",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "    'scale',\n    'propertyIds',\n  ] as const;",
+    "replace": "    'propertyIds',\n  ] as const;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: create allow lists surface > names the fields each create sends",
+      "4 fix F3: create allow lists surface > customCurrencies.create holds every field its own list names"
+    ]
+  },
+  {
+    "id": "distributor-fields",
+    "file": "src/resources/distributors.ts",
+    "find": "    'postAllocationActions',\n    'metricFilters',\n  ] as const;",
+    "replace": "    'postAllocationActions',\n  ] as const;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: create allow lists surface > names the fields each create sends",
+      "4 fix F3: create allow lists surface > distributors.create holds every field its own list names"
+    ]
+  },
+  {
+    "id": "conversion-create-drops-a-field",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);\n  }\n\n  /**\n   * Sends a conversion create",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...body, obligationId: undefined });\n  }\n\n  /**\n   * Sends a conversion create",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: creates send only the fields Siren reads > conversions.create sends every field Siren reads, as given"
+    ]
+  },
+  {
+    "id": "engagements-refuse-a-day",
+    "file": "src/resources/engagements.ts",
+    "find": "    for (const key of ['from', 'to'] as const) {\n",
+    "replace": "    if (params.from === '2000-02-29') throw new Error('refused');\n    for (const key of ['from', 'to'] as const) {\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F4: engagements.list day filters > sends February 29 in a year divisible by 400 as it is"
+    ]
+  },
+  {
+    "id": "binding-refuses-00",
+    "file": "src/resources/records.ts",
+    "find": "    const bindingId: unknown = params.bindingId;\n",
+    "replace": "    if (params.bindingId === '00') throw new SirenError('refused');\n    const bindingId: unknown = params.bindingId;\n",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > sends a bindingId of \"00\", which Siren reads as set as given"
+    ]
+  },
+  {
+    "id": "details-message",
+    "file": "src/resources/records.ts",
+    "find": "      throw new SirenError('transactions.create() needs details: a list of 1 to 500 lines.');",
+    "replace": "      throw new SirenError('transactions.create() needs details.');",
+    "expect": "caught",
+    "failing": [
+      "4 fix F3: transactions.create lines > keeps the details message for details that are not a list of objects"
+    ]
+  }
+]

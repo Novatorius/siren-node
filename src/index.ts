@@ -111,5 +111,19 @@ export { ProgramsResource } from './resources/programs';
 export { ProgramGroupsResource } from './resources/program-groups';
 export { MAX_BULK_IDS } from './resources/record-requests';
 export type * from './record-types';
+// Slice 4 adds these in their own block so it merges cleanly with slice 5.
+export {
+  ConversionBulkAction,
+  TransactionBulkAction,
+  DistributorBulkAction,
+  CreditHoldStatus,
+} from './taxonomy';
+export { OpportunitiesResource } from './resources/opportunities';
+export { EngagementsResource } from './resources/engagements';
+export { DistributorsResource } from './resources/distributors';
+export { CustomCurrenciesResource } from './resources/custom-currencies';
+export { CreditsResource } from './resources/credits';
+export { MappingsResource } from './resources/mappings';
+export { SettingsResource } from './resources/settings';
 
 export { Siren as default } from './client';

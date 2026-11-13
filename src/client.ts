@@ -9,10 +9,17 @@ import {
 import { ApiKeysResource } from './resources/api-keys';
 import { CollaboratorGroupsResource } from './resources/collaborator-groups';
 import { CollaboratorsResource } from './resources/collaborators';
+import { CreditsResource } from './resources/credits';
+import { CustomCurrenciesResource } from './resources/custom-currencies';
+import { DistributorsResource } from './resources/distributors';
+import { EngagementsResource } from './resources/engagements';
 import { EventsResource } from './resources/events';
+import { MappingsResource } from './resources/mappings';
+import { OpportunitiesResource } from './resources/opportunities';
 import { ProgramGroupsResource } from './resources/program-groups';
 import { ProgramsResource } from './resources/programs';
 import { ConversionsResource, RecordsResource, TransactionsResource } from './resources/records';
+import { SettingsResource } from './resources/settings';
 import { WebhooksResource } from './resources/webhooks';
 import type { AccessTokenSource } from './auth/access-token-source';
 import { StaticAccessToken } from './auth/static-access-token';
@@ -57,9 +64,9 @@ export class Siren {
   readonly webhooks: WebhooksResource;
   /** Manage API keys. Takes a signed-in dashboard session's token. */
   readonly apiKeys: ApiKeysResource;
-  /** Conversions: list a page, or read one by id. An API key needs `ledger:conversions:read`. */
+  /** Conversions: list, read, write and recover a lost create. An API key reads with `ledger:conversions:read`. */
   readonly conversions: ConversionsResource;
-  /** Transactions: list a page, or read one by id. An API key needs `ledger:transactions:read`. */
+  /** Transactions: list, read, write and recover a lost credit. An API key reads with `ledger:transactions:read`. */
   readonly transactions: TransactionsResource;
   /** Reconciliation reader for obligations. An API key needs `ledger:obligations:read`. */
   readonly obligations: RecordsResource;
@@ -73,6 +80,20 @@ export class Siren {
   readonly programs: ProgramsResource;
   /** Program groups, the sets of programs that compete for one engagement. */
   readonly programGroups: ProgramGroupsResource;
+  /** Opportunities, a tracked visitor's chance to convert: list, read and update. */
+  readonly opportunities: OpportunitiesResource;
+  /** Engagements, a collaborator's claim on an opportunity in one program. Read only. */
+  readonly engagements: EngagementsResource;
+  /** Distributors, the revenue pools shared among collaborators on a schedule. */
+  readonly distributors: DistributorsResource;
+  /** Custom currencies, such as points and store credit, keyed by code. */
+  readonly customCurrencies: CustomCurrenciesResource;
+  /** Store credit: balances, the ledger behind them and checkout holds. */
+  readonly credits: CreditsResource;
+  /** Links between collaborators and records outside Siren, such as WordPress users. */
+  readonly mappings: MappingsResource;
+  /** The organization settings Siren shares with a connected site. */
+  readonly settings: SettingsResource;
 
   /**
    * Reads only the options object's own properties: `apiKey`,
@@ -136,6 +157,13 @@ export class Siren {
     this.collaboratorGroups = new CollaboratorGroupsResource(http);
     this.programs = new ProgramsResource(http);
     this.programGroups = new ProgramGroupsResource(http);
+    this.opportunities = new OpportunitiesResource(http);
+    this.engagements = new EngagementsResource(http);
+    this.distributors = new DistributorsResource(http);
+    this.customCurrencies = new CustomCurrenciesResource(http);
+    this.credits = new CreditsResource(http);
+    this.mappings = new MappingsResource(http);
+    this.settings = new SettingsResource(http);
   }
 }
 

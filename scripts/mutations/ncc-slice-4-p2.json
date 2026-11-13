@@ -1,0 +1,146 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/engagements.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/type`);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/engagements.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id, { ...params });",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/engagements.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/engagements.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/types`);;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/engagements.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/type`);",
+    "expect": "wrong-reason",
+    "failing": [
+      "P2: engagements surface"
+    ]
+  },
+  {
+    "id": "p2-list-unchecked",
+    "file": "src/resources/engagements.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS);",
+    "replace": "    return super.list(params as never);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements list and id rules"
+    ]
+  },
+  {
+    "id": "p2-filters-widened",
+    "file": "src/resources/engagements.ts",
+    "find": "params, EngagementsResource.LIST_FILTERS,",
+    "replace": "params, [...EngagementsResource.LIST_FILTERS, 's', 'propertyId', 'programID'],",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements list and id rules"
+    ]
+  },
+  {
+    "id": "p2-ids-dropped",
+    "file": "src/resources/engagements.ts",
+    "find": "EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS)",
+    "replace": "EngagementsResource.LIST_FILTERS)",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements list and id rules"
+    ]
+  },
+  {
+    "id": "p2-ids-one",
+    "file": "src/resources/engagements.ts",
+    "find": "EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS)",
+    "replace": "EngagementsResource.LIST_FILTERS, { one: ['collaboratorId', 'programId', 'opportunityId'] })",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  },
+  {
+    "id": "p2-list-path",
+    "file": "src/resources/engagements.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, '/engagement', params, EngagementsResource.LIST_FILTERS, EngagementsResource.ID_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  },
+  {
+    "id": "p2-retrieve-path",
+    "file": "src/resources/engagements.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, '/engagement', id, params);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  },
+  {
+    "id": "p2-retrieve-params-dropped",
+    "file": "src/resources/engagements.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  },
+  {
+    "id": "p2-calculations-path",
+    "file": "src/resources/engagements.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/calculations`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/calculation`);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  },
+  {
+    "id": "p2-types-not-retried",
+    "file": "src/resources/engagements.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/types`);",
+    "replace": "    return this.http.request({ method: 'GET', path: `${this.path}/types`, retriable: false }).then(async (r) => JSON.parse(await r.text()) as RegistryOptions);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  },
+  {
+    "id": "p2-calculations-unchecked",
+    "file": "src/resources/engagements.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/calculations`);",
+    "replace": "    return this.http.request({ method: 'GET', path: `${this.path}/calculations`, retriable: true }).then(async (r) => JSON.parse(await r.text()) as RegistryOptions);",
+    "expect": "caught",
+    "failing": [
+      "P2: engagements reads"
+    ]
+  }
+]

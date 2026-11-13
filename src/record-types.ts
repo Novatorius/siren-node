@@ -1,4 +1,13 @@
-import type { CollaboratorStatus, ProgramGroupSorter, ProgramStatus } from './taxonomy';
+import type {
+  CollaboratorStatus,
+  ConversionStatus,
+  CreditHoldStatus,
+  CustomCurrencyType,
+  DistributorStatus,
+  OpportunityStatus,
+  ProgramGroupSorter,
+  ProgramStatus,
+} from './taxonomy';
 import type { ListParams } from './types';
 
 /*
@@ -403,3 +412,427 @@ export interface CreateProgramGroupParams {
 
 /** The fields `programGroups.update()` sends. `programs`, when sent, replaces the group's programs. */
 export type UpdateProgramGroupParams = Partial<CreateProgramGroupParams>;
+
+// ---------------------------------------------------------------------------
+// Slice 4: opportunities, engagements, distributors, custom currencies,
+// store credit, mappings, shared settings, and conversion and transaction
+// writes.
+
+/** An opportunity: a tracked visitor's chance to convert. Siren opens them from `site-visited` events. */
+export interface Opportunity {
+  id: number;
+  status?: OpportunityStatus | (string & {});
+  /** When the opportunity was last triggered. */
+  lastTriggered?: string;
+  createdDate?: string;
+  modifiedDate?: string;
+  dateCreated?: string;
+  dateModified?: string;
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `opportunities.list()`. */
+export interface OpportunityListParams extends RecordListParams {
+  status?: OpportunityStatus | ReadonlyArray<OpportunityStatus>;
+  /**
+   * The opportunities a collaborator owns, through Siren's customer links.
+   * A connected site must send this, or read one opportunity by id.
+   */
+  collaboratorId?: number;
+  orderBy?: 'id' | 'status' | 'lastTriggered' | 'dateCreated' | 'dateModified';
+}
+
+/** The fields `opportunities.update()` sends. */
+export interface UpdateOpportunityParams {
+  /** `active` or `inactive`. */
+  status?: 'active' | 'inactive';
+  lastTriggered?: string;
+}
+
+/** An engagement: a collaborator's claim on an opportunity in one program. Siren makes them while it processes events. */
+export interface Engagement {
+  id: number;
+  opportunityId?: number;
+  programId?: number;
+  collaboratorId?: number;
+  /** A default field of `list()`. */
+  collaboratorName?: string;
+  /** A default field of `list()`. */
+  programName?: string;
+  score?: number;
+  status?: string;
+  source?: string;
+  conversionId?: number | null;
+  /** As ISO 8601 with an offset. */
+  dateCreated?: string;
+  /** As ISO 8601 with an offset. */
+  dateModified?: string;
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `engagements.list()`. */
+export interface EngagementListParams extends RecordListParams {
+  status?: string | ReadonlyArray<string>;
+  collaboratorId?: number | ReadonlyArray<number>;
+  programId?: number | ReadonlyArray<number>;
+  opportunityId?: number | ReadonlyArray<number>;
+  /** The first day to include, `YYYY-MM-DD`, by `dateCreated` in the list's time zone. */
+  from?: string;
+  /** The last day to include, `YYYY-MM-DD`. */
+  to?: string;
+  orderBy?:
+    | 'id'
+    | 'opportunityId'
+    | 'programId'
+    | 'collaboratorId'
+    | 'score'
+    | 'status'
+    | 'source'
+    | 'dateCreated'
+    | 'dateModified';
+}
+
+/** A distributor: a pool that shares revenue among the collaborators it covers, on a schedule. */
+export interface Distributor {
+  id: number;
+  name?: string;
+  description?: string;
+  status?: DistributorStatus | (string & {});
+  units?: string;
+  distributionResolver?: string;
+  distributionPoolResolver?: string;
+  /** Date modifiers such as `first day of next month`. Sent by `retrieve()`. */
+  schedule?: string[] | null;
+  engagementTypes?: Array<Record<string, unknown>>;
+  transactionCompilers?: string[];
+  revenuePercentage?: number | null;
+  lineItemFilters?: Record<string, unknown> | null;
+  /** With `include: 'extended'`. */
+  collaboratorCount?: number;
+  /** On a read, as ISO 8601 with an offset. On a write's answer, as Siren stores it, such as `2026-10-16 12:00:00`. */
+  dateCreated?: string | null;
+  /** As `dateCreated`. */
+  dateModified?: string | null;
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `distributors.list()`. */
+export interface DistributorListParams extends RecordListParams {
+  status?: DistributorStatus | ReadonlyArray<DistributorStatus>;
+  /** Searches name and description. */
+  s?: string;
+  /** Distributors that count this metric type. */
+  metricType?: string;
+  orderBy?: 'id' | 'name' | 'status' | 'dateCreated';
+}
+
+/**
+ * The fields `distributors.create()` sends, the fifteen Siren's create route
+ * and its listeners read. `create` refuses any other key before sending.
+ */
+export interface CreateDistributorParams {
+  name: string;
+  description: string;
+  distributionResolver: string;
+  distributionPoolResolver: string;
+  /** `active` or `inactive` on create. */
+  status: DistributorStatus;
+  /** A currency code. */
+  units: string;
+  revenuePercentage?: number;
+  /** Date modifiers such as `first day of next month`. */
+  schedule?: string[];
+  /** The metric types the distributor counts, each `{ type, calculationType, calculationArgs? }`. */
+  engagementTypes?: Array<Record<string, unknown>>;
+  collaboratorIds?: number[];
+  collaboratorGroupId?: number;
+  transactionCompilers?: unknown[];
+  /** A map of line item filters, as Siren reads it. */
+  lineItemFilters?: Record<string, unknown>;
+  postAllocationActions?: unknown[];
+  metricFilters?: unknown[];
+}
+
+/** The fields `distributors.update()` sends. Send only the fields to change. */
+export type UpdateDistributorParams = Partial<CreateDistributorParams>;
+
+/** What `distributors.creditMetric()` answers: the distributors that counted the credit and those that did not. */
+export interface CreditedMetric {
+  success?: boolean;
+  credited?: Array<{ id: number; name?: string }>;
+  notCredited?: Array<{ id: number; name?: string }>;
+  [field: string]: unknown;
+}
+
+/** A custom currency: points, store credit or another unit an organization defines. Keyed by `code`. */
+export interface CustomCurrency {
+  code: string;
+  name?: string;
+  symbol?: string;
+  symbolPosition?: 'before' | 'after' | (string & {});
+  type?: CustomCurrencyType | (string & {});
+  exchangeRate?: number;
+  /** Decimal places. An internal currency counts whole units, so 0. */
+  scale?: number;
+  /** On Siren Cloud, the stores the currency is bound to. */
+  propertyIds?: number[];
+  stores?: Array<{ id: number; name?: string }>;
+  /** On a write's answer, as Siren stores it. */
+  createdDate?: string | null;
+  /** On a write's answer, as Siren stores it. */
+  modifiedDate?: string | null;
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `customCurrencies.list()`. */
+export interface CustomCurrencyListParams extends RecordListParams {
+  type?: CustomCurrencyType | ReadonlyArray<CustomCurrencyType>;
+  code?: string | ReadonlyArray<string>;
+  orderBy?: 'code' | 'name' | 'symbol' | 'symbolPosition' | 'type' | 'exchangeRate' | 'dateCreated' | 'dateModified';
+}
+
+/**
+ * The fields `customCurrencies.create()` sends, the eight Siren's create route
+ * reads. `create` refuses any other key before sending.
+ */
+export interface CreateCustomCurrencyParams {
+  /** Upper case letters, digits and underscores, at most 50, unique, and not a built-in currency's code. */
+  code: string;
+  name: string;
+  /** At most 10 characters, and may be empty. */
+  symbol: string;
+  /** Siren Cloud accepts only `internal` here, and reads a missing type as `internal`. */
+  type?: CustomCurrencyType;
+  symbolPosition?: 'before' | 'after';
+  /** A whole number from 1 to 1,000,000. */
+  exchangeRate?: number;
+  scale?: number;
+  /** The stores to bind it to. Siren Cloud requires at least one. */
+  propertyIds?: number[];
+}
+
+/** The fields `customCurrencies.update()` sends. Siren refuses a change of `type`. */
+export interface UpdateCustomCurrencyParams {
+  name?: string;
+  symbol?: string;
+  symbolPosition?: 'before' | 'after';
+  exchangeRate?: number;
+  /** Replaces the stores the currency is bound to. */
+  propertyIds?: number[];
+}
+
+/** What `customCurrencies.delete()` answers. */
+export interface DeletedCustomCurrency {
+  success?: boolean;
+  /** The active programs that paid in the currency, which Siren set to `inactive`. */
+  deactivatedPrograms?: Array<{ id: number; name?: string }>;
+  [field: string]: unknown;
+}
+
+/** One entry of a collaborator's `creditBalances` field, as `credits.balances()` reads it. */
+export interface CreditBalance {
+  currency: string | number;
+  /** The ledger sum, gross of holds. */
+  balance?: number;
+  onHold?: number;
+  /** The balance less what holds reserve. */
+  available?: number;
+  name?: string;
+  symbol?: string;
+  symbolPosition?: string;
+  exchangeRate?: number;
+  /** On Siren Cloud with store bindings, the stores that hold the credit. */
+  stores?: Array<{ id: number; name?: string }>;
+  /** On Siren Cloud with store bindings, the stores where it can be spent. */
+  redeemAt?: Array<{ id: number; name?: string }>;
+  [field: string]: unknown;
+}
+
+/** One row of `GET /credit-balances`, the read a checkout makes. Amounts are whole minor units. */
+export interface CheckoutBalance {
+  collaboratorId: number;
+  currency: string;
+  /** The ledger sum. */
+  balance: number;
+  /** Credit live holds reserve. */
+  reserved: number;
+  /** `balance` less `reserved`, never below zero. */
+  available: number;
+  [field: string]: unknown;
+}
+
+/** One store credit ledger entry. */
+export interface CreditEntry {
+  id: number;
+  collaboratorId: number;
+  currency: string;
+  amount: number;
+  sourceType?: string;
+  sourceId?: string | number | null;
+  description?: string | null;
+  idempotencyKey?: string | null;
+  createdDate?: string;
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `credits.entries()`. A query must name `collaboratorId` or `idempotencyKey`. */
+export interface CreditEntryListParams extends RecordListParams {
+  collaboratorId?: number;
+  idempotencyKey?: string;
+  currency?: string;
+  sourceType?: string;
+  sourceId?: string | number;
+  description?: string;
+  orderBy?: 'id' | 'dateCreated' | 'amount';
+}
+
+/** A store credit hold a checkout placed. */
+export interface CreditHold {
+  id: number;
+  collaboratorId?: number;
+  currency?: string;
+  amount?: number;
+  status?: CreditHoldStatus | (string & {});
+  /** As Siren stores it, with the site's Property, such as `hold:woocommerce@property:5:{token}`. */
+  reference?: string;
+  idempotencyKey?: string | null;
+  expiresAt?: string;
+  createdDate?: string;
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `credits.holds()`. A query must name `collaboratorId`, `reference` or `idempotencyKey`. */
+export interface CreditHoldListParams extends RecordListParams {
+  collaboratorId?: number;
+  /** As `CreditsResource.holdReference()` builds it. */
+  reference?: string;
+  idempotencyKey?: string;
+  currency?: string;
+  status?: CreditHoldStatus | ReadonlyArray<CreditHoldStatus>;
+  orderBy?: 'id' | 'dateCreated' | 'expiresAt';
+}
+
+/** What `credits.adjust()` answers: the ledger entry it wrote, with its signed amount. */
+export interface CreditAdjustment {
+  success?: boolean;
+  entry?: { id: number; amount: number; currency: string; collaboratorId: number; [field: string]: unknown };
+  [field: string]: unknown;
+}
+
+/** A link between a Siren record and a record outside Siren. */
+export interface Mapping {
+  localId: number;
+  localType: string;
+  externalId: string;
+  /** The plain type, with any `@property:N` taken off. */
+  externalType: string;
+  /** The Property whose namespace holds the link, or `null` for one in no site's namespace. */
+  propertyId?: number | null;
+  [field: string]: unknown;
+}
+
+/**
+ * Filters and sorting for `mappings.list()`. `externalType` is required:
+ * `list()` throws `SirenError` before sending without it.
+ */
+export interface MappingListParams extends RecordListParams {
+  externalType?: string;
+  localType?: string;
+  localId?: number | ReadonlyArray<number>;
+  externalId?: string;
+  orderBy?: 'localId' | 'externalId' | 'localType' | 'externalType';
+}
+
+/** Paging and sorting for `mappings.forExternal()` and `forLocal()`. */
+export type MappingPageParams = Pick<RecordListParams, 'page' | 'perPage' | 'number' | 'offset' | 'order' | 'fields'> & {
+  orderBy?: MappingListParams['orderBy'];
+};
+
+/** One setting Siren shares with a connected site. */
+export interface SharedSetting {
+  type: string;
+  subtype: string;
+  configKey: string;
+  value: unknown;
+  [field: string]: unknown;
+}
+
+/**
+ * The fields `conversions.create()` sends, the five Siren's create route
+ * reads. `create` refuses any other key before sending.
+ */
+export interface CreateConversionParams {
+  engagementId: number;
+  type: string;
+  /** `pending`, `approved`, `rejected` or `expired`. Siren's create and update routes refuse `deleted`. */
+  status: Exclude<ConversionStatus, 'deleted'>;
+  transactionId?: number;
+  obligationId?: number;
+}
+
+/** The fields `conversions.update()` sends. Send only the fields to change. */
+export type UpdateConversionParams = Partial<CreateConversionParams>;
+
+/** One line of a transaction as `transactions.details()` reads it, value in minor units per unit. */
+export interface TransactionDetailRecord {
+  id?: number;
+  transactionId?: number;
+  name?: string;
+  description?: string | null;
+  type?: string | null;
+  value?: number;
+  quantity?: number;
+  units?: string;
+  [field: string]: unknown;
+}
+
+/**
+ * One line `transactions.create()` sends, value in minor units per unit. These
+ * are the seven keys Siren reads on a line, and `create` refuses any other.
+ */
+export interface TransactionDetail {
+  name: string;
+  value: number;
+  quantity?: number;
+  type?: string;
+  description?: string;
+  units?: string;
+  attributes?: Record<string, unknown>;
+}
+
+/** The fields `transactions.create()` sends. `create` refuses any other key. */
+export interface CreateTransactionParams {
+  /** One to 500 lines. */
+  details: TransactionDetail[];
+  /**
+   * The outside record's id, such as an order number. Siren stores it with
+   * `bindingDataType` as a mapping, and finds a resent transaction only by
+   * the two together, so `create` refuses one without the other.
+   */
+  bindingId?: string | number;
+  /** The kind of outside record `bindingId` names, such as `crm_order`. */
+  bindingDataType?: string;
+}
+
+/**
+ * What `conversions.recoverCreate()` answers: the conversion Siren already
+ * holds for the create, as its list reads it, with `created: false`, or the
+ * one it made when it found none, with `created: true`.
+ */
+export interface RecoveredConversion<T = Record<string, unknown>> {
+  conversion: T;
+  created: boolean;
+}
+
+/**
+ * What `transactions.recoverCreditCollaborator()` answers. `alreadyCredited`
+ * holds the asked transactions that already have a conversion of that type
+ * for the collaborator, and `credited` the ones it sent, in the order asked.
+ * `result` is Siren's answer to that send, or `null` when every transaction
+ * was already credited and nothing was sent.
+ */
+export interface RecoveredCredit {
+  alreadyCredited: number[];
+  credited: number[];
+  result: BulkResult | null;
+}
