@@ -99,6 +99,27 @@ export interface EventResult {
   body?: Record<string, unknown>;
 }
 
+/** Options for one `events.ingest` call. */
+export interface IngestOptions {
+  /**
+   * Extra request headers for this call, such as the tracking value a
+   * shopper already holds on a referral visit: a signed token as
+   * `X-Siren-Token` or a bare opportunity id as `X-Siren-Oid`. They go out
+   * on the send and on the one resend after a 401, beneath the SDK's own,
+   * so a name that matches `Authorization`, `Accept`, `User-Agent` or
+   * `Content-Type` in any case is dropped. A name must be an HTTP token,
+   * and a value a string with no control character and no character above
+   * U+00FF.
+   */
+  headers?: Record<string, string>;
+  /**
+   * Milliseconds each send of this call may take, from 1 to 2147483647, in
+   * place of the client's `timeout`. A page that waits on the call, such as
+   * a referral landing, sets a short one.
+   */
+  timeout?: number;
+}
+
 /** A sale line item. `amount` is the per-unit price in major currency units. */
 export interface LineItem {
   /** Your id for this line item. Siren stores a number as text. */

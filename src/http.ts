@@ -28,7 +28,8 @@ export interface HttpRequest {
   /** The raw request body, or `undefined` for none. */
   readonly body?: string;
   /**
-   * Milliseconds to allow for this one send, the SDK's `timeout` option. A
+   * Milliseconds to allow for this one send: the call's own timeout where
+   * it has one, as `events.ingest` takes, else the SDK's `timeout` option. A
    * retry or the resend after a 401 gets the full timeout again.
    */
   readonly timeout: number;
@@ -212,6 +213,11 @@ export interface SirenRequest {
    * dropped.
    */
   headers?: Record<string, string>;
+  /**
+   * Milliseconds for each send of this request, the resend after a 401
+   * included, in place of the client's `timeout`. The resource checks it.
+   */
+  timeout?: number;
 }
 
 /** The headers the SDK sets itself, in lower case. A request's own headers never replace them. */
@@ -334,7 +340,7 @@ export class HttpTransport {
     for (;;) {
       let reply: HttpResponse;
       try {
-        reply = await this.client.send(this.buildRequest(req.method, url, token, body, req.headers));
+        reply = await this.client.send(this.buildRequest(req.method, url, token, body, req.headers, ownTimeout(req)));
       } catch (error) {
         if (!(error instanceof HttpClientError)) throw error;
         if (req.retriable && retries < this.maxRetries) {
@@ -417,6 +423,7 @@ export class HttpTransport {
     token: string,
     body: string | undefined,
     extra: Readonly<Record<string, string>> = {},
+    timeout: number = this.timeout,
   ): HttpRequest {
     const headers: Record<string, string> = {};
     for (const [name, value] of Object.entries(extra)) {
@@ -425,9 +432,9 @@ export class HttpTransport {
     headers.Authorization = `Bearer ${token}`;
     headers.Accept = 'application/json';
     headers['User-Agent'] = 'siren-sdk-typescript/0.3.0';
-    if (body === undefined) return { method, url, headers, timeout: this.timeout };
+    if (body === undefined) return { method, url, headers, timeout };
     headers['Content-Type'] = 'application/json';
-    return { method, url, headers, body, timeout: this.timeout };
+    return { method, url, headers, body, timeout };
   }
 
   private backoffDelay(attempt: number, retryAfterHeader?: string | null): number {
@@ -451,6 +458,14 @@ function scrubTokens(text: string, tokens: readonly string[]): string {
     .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
   return text.replace(new RegExp(pattern, 'g'), '[redacted]');
+}
+
+/**
+ * The request's own `timeout`, or `undefined` when it has none, so a
+ * `timeout` on `Object.prototype` never reaches a send.
+ */
+function ownTimeout(req: SirenRequest): number | undefined {
+  return Object.prototype.hasOwnProperty.call(req, 'timeout') ? req.timeout : undefined;
 }
 
 /** Wraps an {@link HttpResponse} as the {@link ApiResponse} a resource reads. */

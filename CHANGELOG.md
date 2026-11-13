@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `events.ingest` takes an optional third argument, `IngestOptions`, with `headers` for the call
+  and a `timeout` in milliseconds that replaces the client's for this call. A connected site uses it
+  to send a referral visit with the tracking value the shopper already holds, as `X-Siren-Token` or
+  `X-Siren-Oid`, and a short wait of its own. The call is still sent once. The headers go out
+  beneath the SDK's own and ride along on the resend after a 401. A header name that is not an HTTP
+  token, a value with a control character or a character above U+00FF, or a timeout out of range
+  throws `SirenError` before anything is sent.
 - `getApplicationForm`, `submitApplication` and `verifyApplication` in `@novatorius/siren/storefront`,
   for running a Siren Cloud application form on your own site from the visitor's browser. They read
   the form's field definitions, send an application with the referral the visitor arrived with,
