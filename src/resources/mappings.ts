@@ -40,8 +40,8 @@ function plainMapping(row: Mapping | Record<string, unknown>): Mapping {
  * boundary.
  *
  * Every type, `localType` included, must pass `PropertyQualifier.assertName`,
- * or `SirenError` is thrown before sending. Every external id is trimmed and
- * refused when nothing is left. Every local id must be a positive whole
+ * or the method throws `SirenError` before sending. It trims every
+ * external id and refuses one with nothing left. Every local id must be a positive whole
  * number.
  *
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
@@ -73,8 +73,8 @@ export class MappingsResource extends RecordsResource<Mapping> {
    * Lists links with `GET /mappings`, through `listRecords` with
    * {@link LIST_FILTERS} and {@link ID_FILTERS}.
    *
-   * `externalType` is required and must be one plain type, or `SirenError`
-   * is thrown before sending, so a query never lists every link of the
+   * `externalType` is required and must be one plain type, or it throws
+   * `SirenError` before sending, so a query never lists every link of the
    * organization. `localType`, when present and not `undefined`, must be a
    * plain type too, and `localId` a positive whole number or a list of
    * them. Other filters, each an exact match: `externalId`. Sort with `orderBy` (`localId`,

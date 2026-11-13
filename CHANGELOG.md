@@ -133,7 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `siren.customCurrencies` (`CustomCurrenciesResource`), `siren.credits` (`CreditsResource`) for
   store credit balances, the ledger and checkout holds, `siren.mappings` (`MappingsResource`) for
   links to records outside Siren, and `siren.settings` (`SettingsResource`) for the settings Siren
-  shares with a connected site. Every write is sent once, and reads retry.
+  shares with a connected site. The SDK sends every write once and retries reads.
 - Writes on `siren.conversions` (`create`, `recoverCreate`, `update`, `delete`, `bulk`, `types`)
   and on `siren.transactions` (`details`, `create`, `bulk`, `creditCollaborator`,
   `recoverCreditCollaborator`, `sources`). `recoverCreate` and `recoverCreditCollaborator` send a

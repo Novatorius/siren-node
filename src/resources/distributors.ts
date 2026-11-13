@@ -25,8 +25,8 @@ const MAX_METRIC_POINTS = 1_000_000_000_000;
  * Reads retry on a network error, 429 or 5xx, so a caller that runs them
  * from its own durable queue builds the client with `maxRetries: 0`.
  * Every write is sent once, apart from the one resend after a 401 that
- * every request gets. Every id must be a positive whole number, or
- * `SirenError` is thrown before sending.
+ * every request gets. Every id must be a positive whole number, or the
+ * method throws `SirenError` before sending.
  *
  * A write's answer is lost when it throws `ConnectionError` or a 5xx
  * `ApiError`. Siren may have written before the answer failed, so each

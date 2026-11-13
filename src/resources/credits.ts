@@ -224,8 +224,11 @@ export class CreditsResource {
    * included, since Siren answers 400 for a read that names no collaborator.
    */
   async checkoutBalances(collaboratorId: number, currency?: string, excludeReference?: string): Promise<CheckoutBalance[]> {
+    // listRecords leaves out an undefined filter, so a missing collaborator is
+    // refused here. ID_FILTERS refuses every other id that is not one record.
+    if (collaboratorId === undefined) recordId(collaboratorId, 'credits.checkoutBalances', 'collaboratorId');
     const query = {
-      collaboratorId: recordId(collaboratorId, 'credits.checkoutBalances', 'collaboratorId'),
+      collaboratorId,
       currency: currency === undefined ? undefined : currencyCode(currency),
       excludeReference,
     };

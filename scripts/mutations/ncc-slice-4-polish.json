@@ -143,8 +143,8 @@
   {
     "id": "polish-checkout-collaborator-unchecked",
     "file": "src/resources/credits.ts",
-    "find": "      collaboratorId: recordId(collaboratorId, 'credits.checkoutBalances', 'collaboratorId'),\n",
-    "replace": "      collaboratorId,\n",
+    "find": "    if (collaboratorId === undefined) recordId(collaboratorId, 'credits.checkoutBalances', 'collaboratorId');\n",
+    "replace": "",
     "expect": "caught",
     "failing": [
       "4 polish: credits reads refuse before sending > checkoutBalances refuses a missing collaboratorId before sending"

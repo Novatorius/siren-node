@@ -423,8 +423,8 @@ const settings = await siren.settings.collaborator();
 Every write here is sent once, as in the section above, apart from the one resend after a 401.
 Each write's doc says what a second send does and how to check before you send it again. Reads
 retry on a network error, 429 or 5xx inside `maxRetries`, which is 2 unless you set it. A caller
-that runs these calls from its own durable queue builds the client with `maxRetries: 0`, so the
-queue's attempts are not multiplied. Each list throws `SirenError` for a key
+that runs these calls from its own durable queue sets `maxRetries: 0` on the client, so the queue's
+attempts are not multiplied. Each list throws `SirenError` for a key
 its route does not read, and every id must be a positive whole number. The conversion, transaction,
 custom currency and distributor creates send only the fields Siren reads and throw `SirenError`
 for any other key, naming it.
