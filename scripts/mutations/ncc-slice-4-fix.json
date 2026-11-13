@@ -110,8 +110,8 @@
   {
     "id": "conversion-create-drops-a-field",
     "file": "src/resources/records.ts",
-    "find": "    // Stub: slice 4 fix packet F3 (the create allow lists).\n    return writeRecord<T>(this.http, 'POST', this.path, params);\n  }\n\n  /**\n   * Sends a conversion create",
-    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...params, obligationId: undefined });\n  }\n\n  /**\n   * Sends a conversion create",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);\n  }\n\n  /**\n   * Sends a conversion create",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...body, obligationId: undefined });\n  }\n\n  /**\n   * Sends a conversion create",
     "expect": "caught",
     "failing": [
       "4 fix F3: creates send only the fields Siren reads > conversions.create sends every field Siren reads, as given"
@@ -120,8 +120,8 @@
   {
     "id": "engagements-refuse-a-day",
     "file": "src/resources/engagements.ts",
-    "find": "    // Stub: slice 4 fix packet F4 (the day filters).\n",
-    "replace": "    if (params.from === '2000-02-29') throw new Error('refused');\n",
+    "find": "    for (const key of ['from', 'to'] as const) {\n",
+    "replace": "    if (params.from === '2000-02-29') throw new Error('refused');\n    for (const key of ['from', 'to'] as const) {\n",
     "expect": "caught",
     "failing": [
       "4 fix F4: engagements.list day filters > sends February 29 in a year divisible by 400 as it is"
@@ -130,8 +130,8 @@
   {
     "id": "binding-refuses-00",
     "file": "src/resources/records.ts",
-    "find": "    // Stub: slice 4 fix packet F2 (the binding pair).\n",
-    "replace": "    if (params.bindingId === '00') throw new SirenError('refused');\n",
+    "find": "    const bindingId: unknown = params.bindingId;\n",
+    "replace": "    if (params.bindingId === '00') throw new SirenError('refused');\n    const bindingId: unknown = params.bindingId;\n",
     "expect": "caught",
     "failing": [
       "4 fix F2: transactions.create binding pair > sends a bindingId of \"00\", which Siren reads as set as given"

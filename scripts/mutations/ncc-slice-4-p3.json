@@ -12,8 +12,8 @@
   {
     "id": "control-harmless",
     "file": "src/resources/distributors.ts",
-    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
-    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...params });",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, { ...body });",
     "expect": "survives",
     "failing": []
   },
@@ -96,8 +96,8 @@
   {
     "id": "p3-create-put",
     "file": "src/resources/distributors.ts",
-    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
-    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, body);",
     "expect": "caught",
     "failing": [
       "P3: distributors writes"
@@ -106,7 +106,7 @@
   {
     "id": "p3-create-body-dropped",
     "file": "src/resources/distributors.ts",
-    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, body);",
     "replace": "    return writeRecord<T>(this.http, 'POST', this.path, {});",
     "expect": "caught",
     "failing": [
