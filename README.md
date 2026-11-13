@@ -131,6 +131,25 @@ A visit can name the collaborator by one of their tracking codes instead of thei
 await siren.events.siteVisited({ collaboratorId: 'tracking:summer-sale' });
 ```
 
+A connected site that records a referral visit for a shopper who already holds a tracking value
+sends that value with the visit, so Siren adds the visit to the shopper's opportunity.
+`events.ingest` takes an optional third argument for this: `headers` for the call, and a `timeout`
+in milliseconds that replaces the client's for this call alone. Send a signed token as
+`X-Siren-Token` and a bare opportunity id as `X-Siren-Oid`:
+
+```ts
+await siren.events.ingest(
+  'site-visited',
+  { collaboratorId: 'tracking:summer-sale' },
+  { headers: { 'X-Siren-Token': heldToken }, timeout: 2000 },
+);
+```
+
+These headers go beneath the SDK's own, so they never replace `Authorization`, `Accept`,
+`User-Agent` or `Content-Type`. A header name that is not an HTTP token, or a value with a control
+character or a character above U+00FF, throws `SirenError` before anything is sent, and the message
+never quotes the header.
+
 Siren records every visit it receives, so the SDK sends `events.siteVisited` once and never retries
 it. Siren has no key to match a resent custom event either, so `events.ingest` is sent once,
 whatever its slug. A sale with no `externalId` is sent once too, because Siren gives a test sale
@@ -445,7 +464,7 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->events->sale()` | `siren.events.sale()` |  |
 | `$siren->events->refund()` | `siren.events.refund()` |  |
 | `$siren->events->siteVisited()` | `siren.events.siteVisited()` |  |
-| `$siren->events->ingest()` | `siren.events.ingest()` |  |
+| `$siren->events->ingest()` | `siren.events.ingest()` | Node takes an optional third argument, `{ headers, timeout }`, for the call's own request headers and wait. PHP's takes the slug and payload only. |
 | `$siren->webhooks->constructEvent()` | `siren.webhooks.constructEvent()` |  |
 | `$siren->webhooks->constructEventFromHeaders()` | none | Node leaves it out. `constructEvent` takes the request headers, a Fetch `Headers` or Node's `req.headers`, as its fourth argument and reads the event and delivery from them, which is what this PHP method adds. |
 | `$siren->webhooks->verifySignature()` | `siren.webhooks.verifySignature()` |  |

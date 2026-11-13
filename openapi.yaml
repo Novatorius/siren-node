@@ -187,10 +187,24 @@ paths:
 
         Siren records every visit it receives, so send a visit once. A visit
         sent again after a lost reply is recorded twice.
+
+        A visit from a shopper who already holds a tracking value carries it
+        in a request header, so Siren adds the visit to that opportunity.
       security:
         - apiKey: []
         - connectorToken: []
         - dashboardSession: []
+      parameters:
+        - name: X-Siren-Token
+          in: header
+          required: false
+          description: A signed tracking token the shopper already holds, such as `318.4f2a9c`.
+          schema: { type: string }
+        - name: X-Siren-Oid
+          in: header
+          required: false
+          description: A bare opportunity id the shopper already holds, kept from before Siren signed them.
+          schema: { type: string }
       requestBody:
         required: true
         content:

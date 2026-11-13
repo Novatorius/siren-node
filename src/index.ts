@@ -57,6 +57,7 @@ export type {
   SirenApiKeyOptions,
   SirenAccessTokenOptions,
   EventResult,
+  IngestOptions,
   LineItem,
   SaleFields,
   LiveSaleParams,

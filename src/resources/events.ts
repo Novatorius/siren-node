@@ -1,8 +1,9 @@
+import { ownOption, resolveTimeout } from '../client';
 import { SirenError } from '../errors';
 import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import { EventSlug } from '../taxonomy';
-import type { EventResult, RefundParams, SaleParams, SiteVisitedParams } from '../types';
+import type { EventResult, IngestOptions, RefundParams, SaleParams, SiteVisitedParams } from '../types';
 import { ForwardedEventSlug as ForwardedSlugs } from '../connect/forwarded-events';
 import type { ForwardOptions, ForwardedEventEnvelope, ForwardedEventSlug } from '../connect/forwarded-events';
 
@@ -11,6 +12,12 @@ const FORWARDED_SLUGS: ReadonlySet<string> = new Set(Object.values(ForwardedSlug
 
 /** A UUID as `EventWireFormat` reads one, any version, either case. */
 const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** An HTTP header name, an RFC 9110 token. */
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+/** A character a header value never holds: a C0 or C1 control, DEL, or anything above U+00FF. */
+const HEADER_VALUE_REFUSED = /[\u0000-\u001f\u007f-\u009f\u0100-\uffff]/;
 
 /** ISO 8601 to the second, up to microseconds, with `Z` or a `+hh:mm` offset. */
 const OCCURRED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
@@ -84,9 +91,32 @@ export class EventsResource {
    * resent custom event, so a retry after a lost reply would record it twice.
    * This also keeps `ingest('site-visited', ...)` to the same rule as
    * `siteVisited`.
+   *
+   * `options.headers` go out on the send, and on the one resend after a 401,
+   * beneath the SDK's own: a name that matches `Authorization`, `Accept`,
+   * `User-Agent` or `Content-Type` in any case is dropped. A connected site
+   * sends a referral visit with the tracking value the shopper already holds,
+   * a signed token as `X-Siren-Token` or a bare opportunity id as
+   * `X-Siren-Oid`, so Siren adds the visit to that opportunity.
+   *
+   * `options.timeout` is the milliseconds each send of this call may take,
+   * from 1 to 2147483647, in place of the client's `timeout`.
+   *
+   * Throws `SirenError`, and sends nothing, when `options` is not an object,
+   * `headers` is not an object, a header name is not an HTTP token, a header
+   * value is not a string or holds a control character or a character above
+   * U+00FF, or `timeout` is out of range. No message quotes a header. Only
+   * the object's own `headers` and `timeout` are read.
    */
-  ingest(slug: string, payload: Record<string, unknown>): Promise<EventResult> {
-    return this.send(slug, payload, false);
+  async ingest(slug: string, payload: Record<string, unknown>, options?: IngestOptions): Promise<EventResult> {
+    if (options === undefined) return this.send(slug, payload, false);
+    const given: unknown = options;
+    if (!isPlainObject(given)) {
+      throw new SirenError('Siren: events.ingest takes its options as an object.');
+    }
+    const headers = ingestHeaders(ownOption(given, 'headers'));
+    const timeout = ownOption(given, 'timeout');
+    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout));
   }
 
   /**
@@ -158,13 +188,15 @@ export class EventsResource {
   /**
    * POST `payload` to `/event/{slug}`. `retriable` says whether the transport
    * may resend it on a network error, 429 or 5xx. `headers` go out beneath
-   * the SDK's own on every send of this call.
+   * the SDK's own on every send of this call, and `timeout`, when given,
+   * replaces the client's for every send of this call.
    */
   private async send(
     slug: string,
     payload: unknown,
     retriable: boolean,
     headers?: Record<string, string>,
+    timeout?: number,
   ): Promise<EventResult> {
     const response = await this.http.request({
       method: 'POST',
@@ -172,6 +204,7 @@ export class EventsResource {
       body: payload,
       retriable,
       ...(headers !== undefined ? { headers } : {}),
+      ...(timeout !== undefined ? { timeout } : {}),
     });
     const result: EventResult = {};
 
@@ -200,6 +233,29 @@ export class EventsResource {
 
     return result;
   }
+}
+
+/**
+ * The headers `ingest` sends, copied from the caller's own entries, or
+ * `undefined` when none were given. Throws `SirenError`, quoting no header,
+ * when `given` is not an object or holds a name or value a request cannot
+ * carry.
+ */
+function ingestHeaders(given: unknown): Record<string, string> | undefined {
+  if (given === undefined) return undefined;
+  if (!isPlainObject(given)) {
+    throw new SirenError('Siren: events.ingest takes headers as an object of header names to text values.');
+  }
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(given)) {
+    if (!HEADER_NAME.test(name) || typeof value !== 'string' || HEADER_VALUE_REFUSED.test(value)) {
+      throw new SirenError(
+        'Siren: events.ingest takes each header name as an HTTP token and each value as text with no control character and no character above U+00FF.',
+      );
+    }
+    headers[name] = value;
+  }
+  return headers;
 }
 
 /** Whether `value` is an object that is not an array, as a JSON object decodes. */
