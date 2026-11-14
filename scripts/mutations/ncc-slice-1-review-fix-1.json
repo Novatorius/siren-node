@@ -1,0 +1,68 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/api-keys.ts",
+    "find": "    const isGroup = (group: unknown): boolean => Array.isArray(group) && group.every(isObject);",
+    "replace": "    const isGroup = (group: unknown): boolean => Array.isArray(group);",
+    "expect": "caught",
+    "failing": [
+      "throws UnexpectedResponseError for a group holding null or a list"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/api-keys.ts",
+    "find": "    const path = '/api-keys/scopes';",
+    "replace": "    const path = ['/api-keys', 'scopes'].join('/');",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/api-keys.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "scopes-entry-null-allowed",
+    "file": "src/resources/api-keys.ts",
+    "find": "      typeof value === 'object' && value !== null && !Array.isArray(value);",
+    "replace": "      typeof value === 'object' && !Array.isArray(value);",
+    "expect": "caught",
+    "failing": [
+      "throws UnexpectedResponseError for a group holding null or a list"
+    ]
+  },
+  {
+    "id": "scopes-entry-list-allowed",
+    "file": "src/resources/api-keys.ts",
+    "find": "      typeof value === 'object' && value !== null && !Array.isArray(value);",
+    "replace": "      typeof value === 'object' && value !== null;",
+    "expect": "caught",
+    "failing": [
+      "throws UnexpectedResponseError for a group holding null or a list"
+    ]
+  },
+  {
+    "id": "code-conflict-drops-status",
+    "file": "src/errors.ts",
+    "find": "    return new CodeConflictError(conflict.message, code, type, {\n      code: conflict.code,\n      statusCode: conflict.statusCode,\n",
+    "replace": "    return new CodeConflictError(conflict.message, code, type, {\n      code: conflict.code,\n",
+    "expect": "caught",
+    "failing": [
+      "copies the status into a CodeConflictError"
+    ]
+  },
+  {
+    "id": "scope-wording-only-without-code",
+    "file": "src/errors.ts",
+    "find": "    if (this.scope === undefined) {\n      // Trim",
+    "replace": "    if (this.scope === undefined && details.code === undefined) {\n      // Trim",
+    "expect": "caught",
+    "failing": [
+      "reads the scope from the wording when the reply carries the missing_scope code and no context scope"
+    ]
+  }
+]

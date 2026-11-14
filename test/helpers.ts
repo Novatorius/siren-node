@@ -1,6 +1,6 @@
 import { vi, type Mock } from 'vitest';
 import { Siren } from '../src/client';
-import type { SirenOptions } from '../src/types';
+import type { SirenApiKeyOptions } from '../src/types';
 
 export const TEST_API_KEY = `sk_live_${'a'.repeat(64)}`;
 
@@ -40,7 +40,7 @@ export interface TestContext {
  */
 export function makeClient(
   responses: Array<Response | Error>,
-  options: Partial<SirenOptions> = {},
+  options: Partial<SirenApiKeyOptions> = {},
 ): TestContext {
   let index = 0;
   const fetchMock = vi.fn(async () => {

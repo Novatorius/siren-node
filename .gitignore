@@ -1,3 +1,4 @@
 node_modules/
 dist/
 *.tgz
+.mutation-gate.tsconfig.json

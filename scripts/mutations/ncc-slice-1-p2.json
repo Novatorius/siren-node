@@ -1,0 +1,109 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/errors.ts",
+    "find": "    if (isKnownErrorCode(code)) return code === ErrorCode.SiteDisconnected;\n    return message.toLowerCase().includes('no longer connected');",
+    "replace": "    return false;",
+    "expect": "caught",
+    "failing": [
+      "maps a 401 with site_disconnected to SiteDisconnectedError"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/errors.ts",
+    "find": "/** The message Siren sends for a revoked site. */",
+    "replace": "/** The message Siren sends for a revoked site, unchanged. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/errors.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/errors.ts",
+    "find": "    return message.toLowerCase().includes('no longer connected');",
+    "replace": "    return message.toLowerCase().includes('no longer connected';",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "site-drop-known-code-rule",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return code === ErrorCode.SiteDisconnected;",
+    "replace": "if (code === ErrorCode.SiteDisconnected) return true;",
+    "expect": "caught",
+    "failing": [
+      "lets a known code other than site_disconnected decide over the wording",
+      "answers matches() by the same rule"
+    ]
+  },
+  {
+    "id": "site-ignore-code",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return code === ErrorCode.SiteDisconnected;",
+    "replace": "if (isKnownErrorCode(code) && code !== ErrorCode.SiteDisconnected) return false;",
+    "expect": "caught",
+    "failing": [
+      "maps the code whatever the message says"
+    ]
+  },
+  {
+    "id": "site-unknown-code-decides",
+    "file": "src/errors.ts",
+    "find": "if (isKnownErrorCode(code)) return code === ErrorCode.SiteDisconnected;",
+    "replace": "if (code !== undefined) return code === ErrorCode.SiteDisconnected;",
+    "expect": "caught",
+    "failing": [
+      "maps a 401 with an unknown code by its wording"
+    ]
+  },
+  {
+    "id": "site-drop-wording",
+    "file": "src/errors.ts",
+    "find": "    return message.toLowerCase().includes('no longer connected');",
+    "replace": "    return false;",
+    "expect": "caught",
+    "failing": [
+      "maps a 401 with no code by its wording, in any case",
+      "checks the revoked-site wording before the API key wording"
+    ]
+  },
+  {
+    "id": "site-wording-case-sensitive",
+    "file": "src/errors.ts",
+    "find": "    return message.toLowerCase().includes('no longer connected');",
+    "replace": "    return message.includes('no longer connected');",
+    "expect": "caught",
+    "failing": [
+      "maps a 401 with no code by its wording, in any case"
+    ]
+  },
+  {
+    "id": "site-wording-whole-message",
+    "file": "src/errors.ts",
+    "find": "    return message.toLowerCase().includes('no longer connected');",
+    "replace": "    return message.toLowerCase() === SiteDisconnectedError.MESSAGE.toLowerCase();",
+    "expect": "caught",
+    "failing": [
+      "maps a 401 with no code by its wording, in any case",
+      "checks the revoked-site wording before the API key wording"
+    ]
+  },
+  {
+    "id": "site-wording-too-loose",
+    "file": "src/errors.ts",
+    "find": "    return message.toLowerCase().includes('no longer connected');",
+    "replace": "    return message.toLowerCase().includes('');",
+    "expect": "caught",
+    "failing": [
+      "leaves any other 401 an AuthenticationError"
+    ]
+  }
+]

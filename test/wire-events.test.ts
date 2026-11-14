@@ -1,0 +1,276 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError, RefundKind, type SaleParams } from '../src/index';
+import { emptyResponse, jsonResponse, makeClient } from './helpers';
+
+/*
+ * Slice 1 acceptance tests: the event fields Siren reads that the SDK did not
+ * type before. Each test sends one call and asserts the exact JSON body that
+ * reaches the network, which is where Siren reads the field.
+ *
+ * Field rules come from Siren bb49b7d:
+ * - lib/Events/Core/Factories/SaleEventFactory.php (items[].lineId, test)
+ * - lib/Events/Core/Factories/RefundEventFactory.php (refundId, amount,
+ *   currency, lines, whole, kind)
+ * - lib/Collaborators/Service/Middlewares/CollaboratorAliasResolverMiddleware.php
+ *   (collaboratorId as tracking:{code})
+ * - lib/Events/Core/Factories/SiteVisitedFactory.php (every visit received is
+ *   recorded, so a visit is sent once)
+ * - lib/Events/Core/Factories/SaleEventFactory.php line 524 (a test sale with
+ *   no externalId gets the random id `first-call-` plus 8 hex digits, so a
+ *   resent one is a second test sale) and IsBoolean::parse (`test` reads as
+ *   true for true, 1, '1' and 'true')
+ * - Siren matches no key on a custom event, so a resent one is recorded again
+ */
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('events.sale wire fields', () => {
+  it('sends each line item lineId unchanged, beside the defaulted quantity', async () => {
+    const ctx = makeClient([emptyResponse(200, { 'X-Siren-OID': '7' })]);
+    await ctx.client.events.sale({
+      source: 'woocommerce',
+      externalId: 'order-88',
+      total: 59.98,
+      trackingId: 99,
+      items: [
+        { externalId: 'sku-1', lineId: 'line-501', amount: 49.99 },
+        { externalId: 'sku-2', lineId: 502, quantity: 1, amount: 9.99 },
+      ],
+    });
+
+    expect(ctx.lastCall().body).toEqual({
+      source: 'woocommerce',
+      externalId: 'order-88',
+      total: 59.98,
+      trackingId: 99,
+      items: [
+        { externalId: 'sku-1', lineId: 'line-501', amount: 49.99, quantity: 1 },
+        { externalId: 'sku-2', lineId: 502, quantity: 1, amount: 9.99 },
+      ],
+    });
+  });
+
+  it('sends a test sale with test: true and no other field', async () => {
+    const ctx = makeClient([
+      jsonResponse(200, { status: 'created', created: true, transactionId: 12, conversions: [], test: true }),
+    ]);
+    const result = await ctx.client.events.sale({ test: true });
+
+    const call = ctx.lastCall();
+    expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/event/sale');
+    expect(call.body).toEqual({ test: true });
+    expect(result.status).toBe('created');
+  });
+
+  it('sends a test sale with its optional fields and no trackingId', async () => {
+    const ctx = makeClient([jsonResponse(200, { status: 'created', test: true })]);
+    await ctx.client.events.sale({ test: true, source: 'medusa', externalId: 'order_01J', total: 10 });
+
+    expect(ctx.lastCall().body).toEqual({ test: true, source: 'medusa', externalId: 'order_01J', total: 10 });
+  });
+});
+
+describe('events.refund wire fields', () => {
+  it('sends a partial refund with amount, currency and named lines', async () => {
+    const ctx = makeClient([emptyResponse(200)]);
+    await ctx.client.events.refund({
+      source: 'woocommerce',
+      externalId: 1001,
+      refundId: 2201,
+      amount: 12.5,
+      currency: 'EUR',
+      lines: [
+        { lineId: 'line-501', quantity: 1, amount: 10 },
+        { sku: 'HAT-RED', quantity: 1, amount: 2.5 },
+      ],
+    });
+
+    const call = ctx.lastCall();
+    expect(call.method).toBe('POST');
+    expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/event/refund');
+    expect(call.body).toEqual({
+      source: 'woocommerce',
+      externalId: 1001,
+      refundId: 2201,
+      amount: 12.5,
+      currency: 'EUR',
+      lines: [
+        { lineId: 'line-501', quantity: 1, amount: 10 },
+        { sku: 'HAT-RED', quantity: 1, amount: 2.5 },
+      ],
+    });
+  });
+
+  it('sends a whole cancellation with whole: true and kind cancelled', async () => {
+    const ctx = makeClient([emptyResponse(200)]);
+    await ctx.client.events.refund({
+      source: 'medusa',
+      externalId: 'order_01J',
+      refundId: 'cancel:order_01J',
+      whole: true,
+      kind: RefundKind.Cancelled,
+    });
+
+    expect(ctx.lastCall().body).toEqual({
+      source: 'medusa',
+      externalId: 'order_01J',
+      refundId: 'cancel:order_01J',
+      whole: true,
+      kind: 'cancelled',
+    });
+  });
+});
+
+describe('events.siteVisited wire fields', () => {
+  it('sends a tracking code reference as collaboratorId', async () => {
+    const ctx = makeClient([
+      jsonResponse(200, { status: 'attributed', attributed: true, opportunityId: 318 }),
+    ]);
+    const result = await ctx.client.events.siteVisited({ collaboratorId: 'tracking:summer-sale' });
+
+    const call = ctx.lastCall();
+    expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/event/site-visited');
+    expect(call.body).toEqual({ collaboratorId: 'tracking:summer-sale' });
+    expect(result.opportunityId).toBe(318);
+  });
+
+  it('still sends a numeric collaboratorId as a number', async () => {
+    const ctx = makeClient([emptyResponse(200, { 'X-Siren-OID': '5' })]);
+    await ctx.client.events.siteVisited({ collaboratorId: 42, userId: 7 });
+
+    expect(ctx.lastCall().body).toEqual({ collaboratorId: 42, userId: 7 });
+  });
+});
+
+describe('event sends on a 503', () => {
+  const unavailable = () => jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' });
+
+  it('retries a sale, since Siren answers a replay of the same source and externalId with the first result', async () => {
+    const ctx = makeClient([unavailable(), emptyResponse(200)], { maxRetries: 1 });
+    await ctx.client.events.sale({ source: 'woocommerce', externalId: 'order-88', total: 10, trackingId: 9 });
+    expect(ctx.calls()).toHaveLength(2);
+  });
+
+  it('retries a refund, since Siren records each refundId once per order', async () => {
+    const ctx = makeClient([unavailable(), emptyResponse(200)], { maxRetries: 1 });
+    await ctx.client.events.refund({ source: 'woocommerce', externalId: 'order-88', refundId: 2201 });
+    expect(ctx.calls()).toHaveLength(2);
+  });
+
+  it('retries a test sale that carries an externalId, since Siren matches it like a real sale', async () => {
+    const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 1 });
+    await ctx.client.events.sale({ test: true, source: 'medusa', externalId: 'order_01J', total: 10 });
+    expect(ctx.calls()).toHaveLength(2);
+  });
+
+  it('retries a test sale with an empty externalId, which counts as an id', async () => {
+    const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 1 });
+    await ctx.client.events.sale({ test: true, externalId: '' });
+    expect(ctx.calls()).toHaveLength(2);
+  });
+});
+
+describe('P9: events.siteVisited is sent once', () => {
+  it('sends a visit once on a 503, even with retries on, because Siren records every visit it receives', async () => {
+    const ctx = makeClient(
+      [
+        jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' }),
+        jsonResponse(200, { status: 'attributed', attributed: true, opportunityId: 318 }),
+      ],
+      { maxRetries: 2 },
+    );
+    const error = await ctx.client.events.siteVisited({ collaboratorId: 42 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).statusCode).toBe(503);
+    expect(ctx.calls()).toHaveLength(1);
+  });
+
+  it('sends a visit once when the connection fails, even with retries on', async () => {
+    const ctx = makeClient(
+      [new TypeError('fetch failed'), jsonResponse(200, { status: 'recorded', attributed: false, opportunityId: 5 })],
+      { maxRetries: 2 },
+    );
+    await ctx.client.events.siteVisited({ collaboratorId: 42 }).catch(() => undefined);
+    expect(ctx.calls()).toHaveLength(1);
+  });
+});
+
+describe('P10: events.ingest and a sale with no externalId are sent once', () => {
+  const unavailable = () => jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' });
+  const dropped = () => new TypeError('fetch failed');
+
+  it('sends a custom event once on a 503, even with retries on, because Siren has no key to match a resent one', async () => {
+    const ctx = makeClient([unavailable(), emptyResponse(200)], { maxRetries: 2 });
+    const error = await ctx.client.events
+      .ingest('loyalty-points-earned', { userId: 42, points: 100 })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).statusCode).toBe(503);
+    expect(ctx.calls()).toHaveLength(1);
+    expect(ctx.lastCall().url).toBe('https://api.sirenaffiliates.com/siren/v1/event/loyalty-points-earned');
+  });
+
+  it('sends a custom event once when the connection fails, even with retries on', async () => {
+    const ctx = makeClient([dropped(), emptyResponse(200)], { maxRetries: 2 });
+    await ctx.client.events.ingest('loyalty-points-earned', { userId: 42 }).catch(() => undefined);
+    expect(ctx.calls()).toHaveLength(1);
+  });
+
+  it("sends ingest('site-visited') once on a 503, the same rule as siteVisited", async () => {
+    const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'attributed', opportunityId: 318 })], {
+      maxRetries: 2,
+    });
+    const error = await ctx.client.events.ingest('site-visited', { collaboratorId: 42 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).statusCode).toBe(503);
+    expect(ctx.calls()).toHaveLength(1);
+  });
+
+  it("sends ingest('sale') once on a 503, the same rule as every other slug", async () => {
+    const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created' })], { maxRetries: 2 });
+    await ctx.client.events
+      .ingest('sale', { source: 'woocommerce', externalId: 'order-88', total: 10, trackingId: 9 })
+      .catch(() => undefined);
+    expect(ctx.calls()).toHaveLength(1);
+    expect(ctx.lastCall().url).toBe('https://api.sirenaffiliates.com/siren/v1/event/sale');
+  });
+
+  it('sends a test sale with no externalId once on a 503, because Siren gives it a random id', async () => {
+    const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
+    const error = await ctx.client.events.sale({ test: true }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).statusCode).toBe(503);
+    expect(ctx.calls()).toHaveLength(1);
+    expect(ctx.lastCall().body).toEqual({ test: true });
+  });
+
+  it('sends a test sale with no externalId once when the connection fails, even with retries on', async () => {
+    const ctx = makeClient([dropped(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
+    await ctx.client.events.sale({ test: true, source: 'medusa', total: 10 }).catch(() => undefined);
+    expect(ctx.calls()).toHaveLength(1);
+  });
+
+  it('sends a test sale with a null externalId once, since Siren reads null as no id', async () => {
+    const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
+    await ctx.client.events
+      .sale({ test: true, externalId: null as unknown as string })
+      .catch(() => undefined);
+    expect(ctx.calls()).toHaveLength(1);
+  });
+
+  it('sends a test sale with externalId set to undefined once, the same as leaving it out', async () => {
+    const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
+    await ctx.client.events.sale({ test: true, externalId: undefined }).catch(() => undefined);
+    expect(ctx.calls()).toHaveLength(1);
+  });
+
+  it("sends a sale with no externalId once when test is 1 or 'true', which Siren also reads as a test", async () => {
+    for (const test of [1, 'true']) {
+      const ctx = makeClient([unavailable(), jsonResponse(200, { status: 'created', test: true })], { maxRetries: 2 });
+      await ctx.client.events.sale({ test } as unknown as SaleParams).catch(() => undefined);
+      expect(ctx.calls(), String(test)).toHaveLength(1);
+    }
+  });
+});

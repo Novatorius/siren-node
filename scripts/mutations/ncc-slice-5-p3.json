@@ -1,0 +1,534 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('GET', '/connect/plan', undefined, true)",
+    "replace": "this.object('GET', '/connect/plans', undefined, true)",
+    "expect": "caught",
+    "failing": [
+      "plan sends its route once"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const MIN_EMAIL_KEY_BYTES = 16;",
+    "replace": "const MIN_EMAIL_KEY_BYTES: number = 16;",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/connect-resource.ts",
+    "find": "async ping(): Promise<PingResult> {",
+    "replace": "async ping(): Promise<PingResult> {{",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "plan-path",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/plan', undefined, true",
+    "replace": "'/connect/plan/', undefined, true",
+    "expect": "caught",
+    "failing": [
+      "plan sends its route once"
+    ]
+  },
+  {
+    "id": "plan-method",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('GET', '/connect/plan'",
+    "replace": "this.object('POST', '/connect/plan'",
+    "expect": "caught",
+    "failing": [
+      "plan sends its route once"
+    ]
+  },
+  {
+    "id": "plan-not-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/plan', undefined, true",
+    "replace": "'/connect/plan', undefined, false",
+    "expect": "caught",
+    "failing": [
+      "plan is retried after a 503"
+    ]
+  },
+  {
+    "id": "grant-method",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('POST', '/connect/update-grant'",
+    "replace": "this.object('GET', '/connect/update-grant'",
+    "expect": "caught",
+    "failing": [
+      "updateGrant sends its route once"
+    ]
+  },
+  {
+    "id": "grant-not-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/update-grant', undefined, true",
+    "replace": "'/connect/update-grant', undefined, false",
+    "expect": "caught",
+    "failing": [
+      "updateGrant is retried after a 503"
+    ]
+  },
+  {
+    "id": "grant-body-sent",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/update-grant', undefined, true",
+    "replace": "'/connect/update-grant', {}, true",
+    "expect": "caught",
+    "failing": [
+      "updateGrant sends its route once"
+    ]
+  },
+  {
+    "id": "grant-unchecked",
+    "file": "src/connect/connect-resource.ts",
+    "find": "if (!isFilled(answer.grant)) throw unexpected('POST', '/connect/update-grant', 'a non-empty text grant');",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "updateGrant without grant",
+      "updateGrant with an empty grant"
+    ]
+  },
+  {
+    "id": "grant-type-only",
+    "file": "src/connect/connect-resource.ts",
+    "find": "if (!isFilled(answer.grant))",
+    "replace": "if (typeof answer.grant !== 'string')",
+    "expect": "caught",
+    "failing": [
+      "updateGrant with an empty grant"
+    ]
+  },
+  {
+    "id": "state-method",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('PUT', '/connect/site-state'",
+    "replace": "this.object('POST', '/connect/site-state'",
+    "expect": "caught",
+    "failing": [
+      "reportSiteState sends its route once"
+    ]
+  },
+  {
+    "id": "state-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/site-state', body, false",
+    "replace": "'/connect/site-state', body, true",
+    "expect": "caught",
+    "failing": [
+      "reportSiteState is sent once on a 503 and on a network error"
+    ]
+  },
+  {
+    "id": "state-drops-migration",
+    "file": "src/connect/connect-resource.ts",
+    "find": ", migrationComplete: params.migrationComplete }",
+    "replace": " }",
+    "expect": "caught",
+    "failing": [
+      "reportSiteState sends its route once"
+    ]
+  },
+  {
+    "id": "state-drops-forwarding",
+    "file": "src/connect/connect-resource.ts",
+    "find": "{ forwarding: params.forwarding },",
+    "replace": "{},",
+    "expect": "caught",
+    "failing": [
+      "reportSiteState sends only the fields it is given"
+    ]
+  },
+  {
+    "id": "defined-check-truthy",
+    "file": "src/connect/connect-resource.ts",
+    "find": "if (value !== undefined) body[key] = value;",
+    "replace": "if (value) body[key] = value;",
+    "expect": "caught",
+    "failing": [
+      "sends its route once with the bearer token"
+    ]
+  },
+  {
+    "id": "undefined-fields-sent",
+    "file": "src/connect/connect-resource.ts",
+    "find": "if (value !== undefined) body[key] = value;",
+    "replace": "body[key] = value ?? null;",
+    "expect": "caught",
+    "failing": [
+      "reportSiteState sends only the fields it is given",
+      "syncProducts sends only the fields it is given"
+    ]
+  },
+  {
+    "id": "integrations-path",
+    "file": "src/connect/connect-resource.ts",
+    "find": "path: '/connect/integrations'",
+    "replace": "path: '/connect/integration'",
+    "expect": "caught",
+    "failing": [
+      "reportIntegrations sends PUT /connect/integrations"
+    ]
+  },
+  {
+    "id": "integrations-post",
+    "file": "src/connect/connect-resource.ts",
+    "find": "method: 'PUT', path: '/connect/integrations'",
+    "replace": "method: 'POST', path: '/connect/integrations'",
+    "expect": "caught",
+    "failing": [
+      "reportIntegrations sends PUT /connect/integrations"
+    ]
+  },
+  {
+    "id": "integrations-bare-list",
+    "file": "src/connect/connect-resource.ts",
+    "find": "body: { integrations }, retriable: false",
+    "replace": "body: integrations, retriable: false",
+    "expect": "caught",
+    "failing": [
+      "reportIntegrations sends PUT /connect/integrations",
+      "sends an empty list as an empty list"
+    ]
+  },
+  {
+    "id": "integrations-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "body: { integrations }, retriable: false",
+    "replace": "body: { integrations }, retriable: true",
+    "expect": "caught",
+    "failing": [
+      "reportIntegrations is sent once on a 503 and on a network error"
+    ]
+  },
+  {
+    "id": "sync-method",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('PUT', '/connect/products'",
+    "replace": "this.object('POST', '/connect/products'",
+    "expect": "caught",
+    "failing": [
+      "syncProducts sends its route once"
+    ]
+  },
+  {
+    "id": "sync-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/products', body, false",
+    "replace": "'/connect/products', body, true",
+    "expect": "caught",
+    "failing": [
+      "syncProducts is sent once on a 503 and on a network error"
+    ]
+  },
+  {
+    "id": "sync-drops-removed",
+    "file": "src/connect/connect-resource.ts",
+    "find": "{ products: params.products, removed: params.removed, pruneBefore: params.pruneBefore }",
+    "replace": "{ products: params.products, pruneBefore: params.pruneBefore }",
+    "expect": "caught",
+    "failing": [
+      "syncProducts sends its route once"
+    ]
+  },
+  {
+    "id": "sync-drops-prune",
+    "file": "src/connect/connect-resource.ts",
+    "find": "{ products: params.products, removed: params.removed, pruneBefore: params.pruneBefore }",
+    "replace": "{ products: params.products, removed: params.removed }",
+    "expect": "caught",
+    "failing": [
+      "syncProducts sends only the fields it is given"
+    ]
+  },
+  {
+    "id": "disconnect-path",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/disconnect', undefined, false",
+    "replace": "'/connect/disconnected', undefined, false",
+    "expect": "caught",
+    "failing": [
+      "disconnect sends its route once"
+    ]
+  },
+  {
+    "id": "disconnect-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/disconnect', undefined, false",
+    "replace": "'/connect/disconnect', undefined, true",
+    "expect": "caught",
+    "failing": [
+      "disconnect is sent once on a 503",
+      "disconnect is sent once on a network error"
+    ]
+  },
+  {
+    "id": "window-path",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/migration-window', undefined, true",
+    "replace": "'/connect/migration', undefined, true",
+    "expect": "caught",
+    "failing": [
+      "migrationWindow sends its route once"
+    ]
+  },
+  {
+    "id": "window-not-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "'/connect/migration-window', undefined, true",
+    "replace": "'/connect/migration-window', undefined, false",
+    "expect": "caught",
+    "failing": [
+      "migrationWindow is retried after a 503"
+    ]
+  },
+  {
+    "id": "key-path",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('GET', '/connect/customer-email-key', undefined, true)",
+    "replace": "this.object('GET', '/connect/email-key', undefined, true)",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey sends its route once"
+    ]
+  },
+  {
+    "id": "key-not-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('GET', '/connect/customer-email-key', undefined, true)",
+    "replace": "this.object('GET', '/connect/customer-email-key', undefined, false)",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey is retried after a 503"
+    ]
+  },
+  {
+    "id": "ping-path",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('GET', '/ping', undefined, true)",
+    "replace": "this.object('GET', '/connect/ping', undefined, true)",
+    "expect": "caught",
+    "failing": [
+      "ping sends its route once"
+    ]
+  },
+  {
+    "id": "ping-not-retried",
+    "file": "src/connect/connect-resource.ts",
+    "find": "this.object('GET', '/ping', undefined, true)",
+    "replace": "this.object('GET', '/ping', undefined, false)",
+    "expect": "caught",
+    "failing": [
+      "ping is retried after a 503"
+    ]
+  },
+  {
+    "id": "key-id-unchecked",
+    "file": "src/connect/connect-resource.ts",
+    "find": "!isFilled(answer.keyId) || ",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey without keyId",
+      "customerEmailKey with an empty keyId"
+    ]
+  },
+  {
+    "id": "key-id-type-only",
+    "file": "src/connect/connect-resource.ts",
+    "find": "!isFilled(answer.keyId)",
+    "replace": "typeof answer.keyId !== 'string'",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey with an empty keyId"
+    ]
+  },
+  {
+    "id": "key-secret-unchecked",
+    "file": "src/connect/connect-resource.ts",
+    "find": " || !isEmailKey(answer.secret)",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey with an empty secret",
+      "customerEmailKey with a key under 16 bytes"
+    ]
+  },
+  {
+    "id": "key-threshold-15",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const MIN_EMAIL_KEY_BYTES = 16;",
+    "replace": "const MIN_EMAIL_KEY_BYTES = 15;",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey with a 15-byte key"
+    ]
+  },
+  {
+    "id": "key-threshold-17",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const MIN_EMAIL_KEY_BYTES = 16;",
+    "replace": "const MIN_EMAIL_KEY_BYTES = 17;",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey accepts a key of exactly 16 bytes"
+    ]
+  },
+  {
+    "id": "key-length-is-chars",
+    "file": "src/connect/connect-resource.ts",
+    "find": "return Buffer.from(value, 'base64').length >= MIN_EMAIL_KEY_BYTES;",
+    "replace": "return value.length >= MIN_EMAIL_KEY_BYTES;",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey with a 15-byte key"
+    ]
+  },
+  {
+    "id": "key-base64-unchecked",
+    "file": "src/connect/connect-resource.ts",
+    "find": " || !STANDARD_BASE64.test(value)",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey with a secret that is not base64",
+      "customerEmailKey with a base64url secret"
+    ]
+  },
+  {
+    "id": "key-base64url-allowed",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;",
+    "replace": "const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/_-]{4})*(?:[A-Za-z0-9+/_-]{2}==|[A-Za-z0-9+/_-]{3}=)?$/;",
+    "expect": "caught",
+    "failing": [
+      "refuses a base64url key that needs no padding"
+    ]
+  },
+  {
+    "id": "key-unanchored",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;",
+    "replace": "const STANDARD_BASE64 = /(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?/;",
+    "expect": "caught",
+    "failing": [
+      "customerEmailKey with a secret that is not base64"
+    ]
+  },
+  {
+    "id": "object-unchecked",
+    "file": "src/connect/connect-resource.ts",
+    "find": "    if (!isJsonObject(answer)) throw unexpected(method, path, 'a JSON object');\n    return answer;",
+    "replace": "    if (answer === undefined) throw unexpected(method, path, 'a JSON object');\n    return answer as Record<string, unknown>;",
+    "expect": "caught",
+    "failing": [
+      "raises UnexpectedResponseError for a 2xx that is not a JSON object"
+    ]
+  },
+  {
+    "id": "array-accepted",
+    "file": "src/connect/connect-resource.ts",
+    "find": "return typeof value === 'object' && value !== null && !Array.isArray(value);",
+    "replace": "return typeof value === 'object' && value !== null;",
+    "expect": "caught",
+    "failing": [
+      "raises UnexpectedResponseError for a 2xx that is not a JSON object"
+    ]
+  },
+  {
+    "id": "unexpected-quotes-body",
+    "file": "src/connect/connect-resource.ts",
+    "find": "if (!isJsonObject(answer)) throw unexpected(method, path, 'a JSON object');",
+    "replace": "if (!isJsonObject(answer)) throw unexpected(method, path, `a JSON object, not ${JSON.stringify(answer)}`);",
+    "expect": "caught",
+    "failing": [
+      "keeps the secret from the answer out of an UnexpectedResponseError"
+    ]
+  },
+  {
+    "id": "unexpected-data-body",
+    "file": "src/connect/connect-resource.ts",
+    "find": "if (!isJsonObject(answer)) throw unexpected(method, path, 'a JSON object');",
+    "replace": "if (!isJsonObject(answer)) throw new UnexpectedResponseError('Siren: not a JSON object.', { data: answer });",
+    "expect": "caught",
+    "failing": [
+      "keeps the secret from the answer out of an UnexpectedResponseError"
+    ]
+  },
+  {
+    "id": "unexpected-cause-body",
+    "file": "src/connect/connect-resource.ts",
+    "find": "if (!isJsonObject(answer)) throw unexpected(method, path, 'a JSON object');",
+    "replace": "if (!isJsonObject(answer)) throw new UnexpectedResponseError('Siren: not a JSON object.', { cause: answer });",
+    "expect": "caught",
+    "failing": [
+      "keeps the secret from the answer out of an UnexpectedResponseError"
+    ]
+  },
+  {
+    "id": "key-error-quotes-answer",
+    "file": "src/connect/connect-resource.ts",
+    "find": "        `a non-empty text keyId and a secret of at least ${MIN_EMAIL_KEY_BYTES} bytes in standard base64`,",
+    "replace": "        `a usable key, not ${JSON.stringify(answer)}`,",
+    "expect": "caught",
+    "failing": [
+      "shows none of the answer"
+    ]
+  },
+  {
+    "id": "integrations-reads-object",
+    "file": "src/connect/connect-resource.ts",
+    "find": "await this.http.request({ method: 'PUT', path: '/connect/integrations', body: { integrations }, retriable: false });",
+    "replace": "await this.object('PUT', '/connect/integrations', { integrations }, false);",
+    "expect": "caught",
+    "failing": [
+      "reportIntegrations sends PUT /connect/integrations"
+    ]
+  },
+  {
+    "id": "internal-key-no-plus-slash",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;",
+    "replace": "const STANDARD_BASE64 = /^(?:[A-Za-z0-9]{4})*(?:[A-Za-z0-9]{2}==|[A-Za-z0-9]{3}=)?$/;",
+    "expect": "caught",
+    "failing": [
+      "accepts a key written with + and /"
+    ]
+  },
+  {
+    "id": "internal-key-padding-optional",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;",
+    "replace": "const STANDARD_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;",
+    "expect": "caught",
+    "failing": [
+      "refuses a key written without its padding"
+    ]
+  },
+  {
+    "id": "internal-key-padding-anywhere",
+    "file": "src/connect/connect-resource.ts",
+    "find": "const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;",
+    "replace": "const STANDARD_BASE64 = /^[A-Za-z0-9+/=]+$/;",
+    "expect": "caught",
+    "failing": [
+      "refuses a key with padding inside it",
+      "refuses a key written without its padding"
+    ]
+  }
+]

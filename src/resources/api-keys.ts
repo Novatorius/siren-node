@@ -1,5 +1,6 @@
-import type { HttpClient } from '../http';
-import type { ApiKey, CreateApiKeyParams, CreatedApiKey } from '../types';
+import { UnexpectedResponseError } from '../errors';
+import { parseJsonBody, type HttpTransport } from '../http';
+import type { ApiKey, ApiKeyScopeGroups, CreateApiKeyParams, CreatedApiKey } from '../types';
 
 /**
  * Manage API keys (`/api-keys`).
@@ -9,7 +10,7 @@ import type { ApiKey, CreateApiKeyParams, CreatedApiKey } from '../types';
  * 401 that the SDK throws as `ApiKeyNotAcceptedError`.
  */
 export class ApiKeysResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(private readonly http: HttpTransport) {}
 
   /**
    * Create a new API key.
@@ -40,6 +41,32 @@ export class ApiKeysResource {
       path: '/api-keys',
       retriable: true,
     });
+  }
+
+  /**
+   * The scopes a new key may be given, grouped by resource, from
+   * `GET /api-keys/scopes`, such as `events`, `ledger` and
+   * `webhook-subscriptions`, each a list of `{ scope, resource, action, label }`.
+   * Siren answers it for a signed-in dashboard session only, like every
+   * `/api-keys` route. It throws `UnexpectedResponseError` when the
+   * body is not an object, a group is not a list, or an entry is not an
+   * object. It is a retriable read, like `list()`: the transport retries it
+   * on 429 and 5xx up to `maxRetries`.
+   */
+  async scopes(): Promise<ApiKeyScopeGroups> {
+    const path = '/api-keys/scopes';
+    const response = await this.http.request({ method: 'GET', path, retriable: true });
+    const body = await parseJsonBody(response);
+    const isObject = (value: unknown): value is Record<string, unknown> =>
+      typeof value === 'object' && value !== null && !Array.isArray(value);
+    const isGroup = (group: unknown): boolean => Array.isArray(group) && group.every(isObject);
+    if (!isObject(body) || !Object.values(body).every(isGroup)) {
+      throw new UnexpectedResponseError(
+        `Siren answered GET ${path} with a body that is not an object of scope lists.`,
+        { statusCode: response.status, data: body },
+      );
+    }
+    return body as ApiKeyScopeGroups;
   }
 
   /** Revoke an API key. */

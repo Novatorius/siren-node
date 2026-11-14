@@ -1,0 +1,501 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/client.ts",
+    "find": "/** True for a string the transport can join paths onto and send a token to. */",
+    "replace": "/** True for a string the transport can join paths onto. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/client.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/client.ts",
+    "find": "function isHttpUrl(text: string): boolean {",
+    "replace": "function isHttpUrl((text: string): boolean {",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "",
+    "expect": "wrong-reason",
+    "failing": [
+      "accepts a baseUrl that is a URL with a punycode host"
+    ]
+  },
+  {
+    "id": "range-allows-c1",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e\\u0080-\\u009f]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0080, the first C1 control",
+      "refuses a baseUrl with U+0085, next line",
+      "refuses a baseUrl with U+009F, the last C1 control"
+    ]
+  },
+  {
+    "id": "range-allows-latin1",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e\\u00a0-\\u00ff]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+00A0, a no-break space",
+      "refuses a baseUrl with U+00FC in a host not given in punycode"
+    ]
+  },
+  {
+    "id": "range-allows-bmp-above-ff",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e\\u0100-\\uffff]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+010A, which a Latin-1 client",
+      "refuses a baseUrl with U+010A in the host",
+      "refuses a baseUrl with U+2028, line separator",
+      "refuses a baseUrl with an emoji in the path",
+      "refuses a baseUrl with an emoji as the host"
+    ]
+  },
+  {
+    "id": "range-allows-surrogates",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e\\ud800-\\udfff]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with an emoji in the path",
+      "refuses a baseUrl with an emoji as the host"
+    ]
+  },
+  {
+    "id": "range-starts-at-space",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0020-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl that holds a space inside the path"
+    ]
+  },
+  {
+    "id": "range-ends-at-del",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007f]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl that holds a DEL"
+    ]
+  },
+  {
+    "id": "allows-backslash",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with a backslash alone in the path",
+      "refuses a baseUrl with a backslash for every path slash"
+    ]
+  },
+  {
+    "id": "allows-at",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#\\\\]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with an @ in the path",
+      "refuses a baseUrl with an @ at the end",
+      "refuses a baseUrl with an @ with an empty user name before the host"
+    ]
+  },
+  {
+    "id": "allows-backslash-and-at",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with the backslash form that hides a user name and password"
+    ]
+  },
+  {
+    "id": "checks-parsed-href",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;\n  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;\n  let url: URL;\n  try {\n    url = new URL(text);\n  } catch {\n    return false;\n  }\n  return (url.protocol === 'http:' || url.protocol === 'https:') && url.username === '' && url.password === '';",
+    "replace": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;\n  let url: URL;\n  try {\n    url = new URL(text);\n  } catch {\n    return false;\n  }\n  return (url.protocol === 'http:' || url.protocol === 'https:') && url.username === '' && url.password === '' && !/[^\\u0021-\\u007e]|[?#\\\\@]/.test(url.href);",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with U+00FC in a host not given in punycode",
+      "refuses a baseUrl with a backslash alone in the path",
+      "refuses a baseUrl with an @ with an empty user name before the host"
+    ]
+  },
+  {
+    "id": "leak-whole-url-in-message",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl ${String(baseUrl)} must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with the backslash form that hides a user name and password",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "leak-bad-character-in-message",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. ${String(baseUrl).match(/[^\\u0021-\\u007e]/)?.[0] ?? ''} It got ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with U+2028, line separator",
+      "refuses a baseUrl with an emoji in the path"
+    ]
+  },
+  {
+    "id": "any-cause",
+    "file": "src/client.ts",
+    "find": "  throw new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n}",
+    "replace": "  throw new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n    { cause: new Error('bad baseUrl') },\n  );\n}",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with a backslash alone in the path"
+    ]
+  },
+  {
+    "id": "leak-url-in-data",
+    "file": "src/client.ts",
+    "find": "  throw new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n}",
+    "replace": "  throw new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n    { data: { baseUrl } },\n  );\n}",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "leak-url-in-stack",
+    "file": "src/client.ts",
+    "find": "  throw new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n}",
+    "replace": "  const error = new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n  error.stack = `${error.stack}\\n    at ${String(baseUrl)}`;\n  throw error;\n}",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "leak-url-in-hidden-field",
+    "file": "src/client.ts",
+    "find": "  throw new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n}",
+    "replace": "  const error = new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n  Object.defineProperty(error, 'input', { value: baseUrl, enumerable: false });\n  throw error;\n}",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "refuses-percent",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#\\\\@%]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is a URL with a percent-encoded character in the path"
+    ]
+  },
+  {
+    "id": "refuses-tilde",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007d]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is a URL whose path holds U+0021 and U+007E"
+    ]
+  },
+  {
+    "id": "refuses-bang",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0022-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is a URL whose path holds U+0021 and U+007E"
+    ]
+  },
+  {
+    "id": "refuses-punycode",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]|xn--/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is a URL with a punycode host"
+    ]
+  },
+  {
+    "id": "refuses-port",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]|:\\d/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is an http URL with a port"
+    ]
+  },
+  {
+    "id": "refuses-hyphen-and-underscore",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#\\\\@_]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is a URL with a longer path"
+    ]
+  },
+  {
+    "id": "readme-drops-punycode",
+    "file": "README.md",
+    "find": "An international\nhost goes in its punycode form, such as `xn--bcher-kva.example`.",
+    "replace": "Use any host.",
+    "expect": "caught",
+    "failing": [
+      "the README configuration section states the punycode form for an international host"
+    ]
+  },
+  {
+    "id": "changelog-drops-range",
+    "file": "CHANGELOG.md",
+    "find": "visible ASCII, U+0021 to U+007E, with no query, fragment, backslash or `@`",
+    "replace": "visible, with no query or fragment",
+    "expect": "caught",
+    "failing": [
+      "the CHANGELOG Unreleased section states the baseUrl character range",
+      "the CHANGELOG Unreleased section states the baseUrl backslash and @ refusals"
+    ]
+  },
+  {
+    "id": "drop-authority-check",
+    "file": "src/client.ts",
+    "find": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with no slashes after the scheme",
+      "refuses a baseUrl with one slash after the scheme",
+      "refuses a baseUrl with three slashes after the scheme",
+      "refuses a baseUrl with a percent-encoded U+00FC in the host"
+    ]
+  },
+  {
+    "id": "allows-percent-in-host",
+    "file": "src/client.ts",
+    "find": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "replace": "  if (!/^https?:\\/\\/[^/]+(?:\\/|$)/i.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with a percent-encoded U+00FC in the host",
+      "refuses a baseUrl with a percent-encoded full stop in the host"
+    ]
+  },
+  {
+    "id": "allows-missing-slashes",
+    "file": "src/client.ts",
+    "find": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "replace": "  if (!/^https?:\\/{0,2}[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with no slashes after the scheme",
+      "refuses a baseUrl with one slash after the scheme"
+    ]
+  },
+  {
+    "id": "allows-three-slashes",
+    "file": "src/client.ts",
+    "find": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "replace": "  if (!/^https?:\\/\\/\\/?[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with three slashes after the scheme"
+    ]
+  },
+  {
+    "id": "authority-case-sensitive",
+    "file": "src/client.ts",
+    "find": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "replace": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a scheme in upper case"
+    ]
+  },
+  {
+    "id": "refuses-brackets",
+    "file": "src/client.ts",
+    "find": "  if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "  if (/[^\\u0021-\\u007e]|[?#\\\\@\\[]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is an IPv6 loopback URL"
+    ]
+  },
+  {
+    "id": "requires-dot-in-host",
+    "file": "src/client.ts",
+    "find": "  if (!/^https?:\\/\\/[^/%]+(?:\\/|$)/i.test(text)) return false;",
+    "replace": "  if (!/^https?:\\/\\/[^/%]*\\.[^/%]*(?:\\/|$)/i.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is a localhost URL with a port",
+      "accepts a baseUrl that is an IPv6 loopback URL"
+    ]
+  },
+  {
+    "id": "returns-parsed-href",
+    "file": "src/client.ts",
+    "find": "if (typeof baseUrl === 'string' && isHttpUrl(baseUrl)) return baseUrl;",
+    "replace": "if (typeof baseUrl === 'string' && isHttpUrl(baseUrl)) return new URL(baseUrl).href;",
+    "expect": "caught",
+    "failing": [
+      "accepts a baseUrl that is a URL that new URL would rewrite"
+    ]
+  },
+  {
+    "id": "msg-drops-range",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl must be an http or https URL of visible ASCII, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "msg-drops-http-or-https",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl must be a URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "msg-ending-article",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got a ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "msg-drops-backslash",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment or @. It got ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with a backslash alone in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "msg-drops-at",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment or backslash. It got ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with a backslash alone in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "leak-escaped-character",
+    "file": "src/client.ts",
+    "find": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,",
+    "replace": "`Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. ${[...String(baseUrl)].filter((c) => c > '\\u007e').map((c) => 'U+' + c.charCodeAt(0).toString(16).padStart(4, '0').toUpperCase()).join('')} It got ${described(baseUrl)}.`,",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with U+2028, line separator"
+    ]
+  },
+  {
+    "id": "leak-url-in-getter",
+    "file": "src/client.ts",
+    "find": "  throw new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n}",
+    "replace": "  const error = new SirenError(\n    `Siren: baseUrl must be an http or https URL of visible ASCII, U+0021 to U+007E, that starts with http:// or https:// and a host with no %, and holds no user name, password, query, fragment, backslash or @. It got ${described(baseUrl)}.`,\n  );\n  Object.defineProperty(error, 'input', { get: () => baseUrl, enumerable: false });\n  throw error;\n}",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl with U+0085, next line, in the path",
+      "refuses a baseUrl with an @ in the path"
+    ]
+  },
+  {
+    "id": "readme-drops-range",
+    "file": "README.md",
+    "find": "visible ASCII (U+0021 to U+007E)",
+    "replace": "visible ASCII",
+    "expect": "caught",
+    "failing": [
+      "the README configuration section states the baseUrl character range"
+    ]
+  },
+  {
+    "id": "readme-drops-backslash-at",
+    "file": "README.md",
+    "find": "with no query, fragment, backslash\nor `@`.",
+    "replace": "with no query or fragment.",
+    "expect": "caught",
+    "failing": [
+      "the README configuration section states the baseUrl backslash and @ refusals"
+    ]
+  },
+  {
+    "id": "changelog-drops-punycode",
+    "file": "CHANGELOG.md",
+    "find": " and an international host goes in its punycode form",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "the CHANGELOG Unreleased section states the punycode form for an international host"
+    ]
+  }
+]

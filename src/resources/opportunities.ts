@@ -1,0 +1,81 @@
+import type { HttpTransport } from '../http';
+import type { Opportunity, OpportunityListParams, UpdateOpportunityParams } from '../record-types';
+import type { SirenList } from '../types';
+import { listRecords, recordId, writeRecord } from './record-requests';
+import { RecordsResource, retrieveRecord } from './records';
+import type { RetrieveParams } from './records';
+
+/**
+ * Opportunities (`/opportunities`): a tracked visitor's chance to convert.
+ *
+ * Siren opens opportunities itself when it ingests a `site-visited` event,
+ * so there is no create or delete call. The event's `EventResult` carries
+ * the new opportunity's id.
+ *
+ * Reads retry on a network error, 429 or 5xx, so a caller that runs them
+ * from its own durable queue builds the client with `maxRetries: 0`.
+ * {@link update} is sent once, apart from the one resend after a 401 that
+ * every request gets, and setting the same fields again is safe. Every id
+ * must be a positive whole number, or the method throws `SirenError`
+ * before sending.
+ *
+ * A connected site's token reads with `connect:records:read` and must name
+ * the opportunity: by id through {@link retrieve}, or by `collaboratorId`
+ * through {@link list}. Without one Siren answers 403
+ * `site_filter_required`. It cannot update.
+ */
+export class OpportunitiesResource<T = Opportunity> extends RecordsResource<T> {
+  /**
+   * The filters `GET /opportunities` reads. {@link list} refuses any other
+   * key, `propertyId` and `id` included, since Siren ignores both on this
+   * route and would answer every opportunity.
+   */
+  static readonly LIST_FILTERS = ['status', 'collaboratorId'] as const;
+  /**
+   * The id filters {@link list} checks. Siren casts `collaboratorId` to one
+   * whole number (GetOpportunities.php line 138), so it takes one positive
+   * whole number, never a list.
+   */
+  static readonly ID_FILTERS = { one: ['collaboratorId'] } as const;
+
+  constructor(http: HttpTransport) {
+    super(http, '/opportunities');
+  }
+
+  /**
+   * Lists one page of opportunities with `GET /opportunities`. Filters:
+   * `status` (exact match, a list means "any of") and `collaboratorId` (the
+   * opportunities a collaborator owns, a positive whole number). Sort with
+   * `orderBy` (`id`, `status`, `lastTriggered`, `dateCreated`,
+   * `dateModified`) and `order`. Sends through `listRecords` with
+   * {@link LIST_FILTERS} and {@link ID_FILTERS}: any other key, and a
+   * `collaboratorId` that is not one positive whole number, throws
+   * `SirenError` before sending, and a 2xx that is not a list throws
+   * `UnexpectedResponseError`.
+   */
+  override list(params: OpportunityListParams = {}): Promise<SirenList<T>> {
+    return listRecords<T>(this.http, this.path, params, OpportunitiesResource.LIST_FILTERS, OpportunitiesResource.ID_FILTERS);
+  }
+
+  /**
+   * Reads one opportunity with `GET /opportunities/{id}` through
+   * `retrieveRecord`, so it takes `fields`, `include` and `propertyId`.
+   * Throws `NotFoundError` for an unknown id or one a connected site does
+   * not own, and `UnexpectedResponseError` when a 2xx body is not a JSON
+   * object.
+   */
+  retrieve(id: number, params: RetrieveParams = {}): Promise<T> {
+    return retrieveRecord<T>(this.http, this.path, id, params);
+  }
+
+  /**
+   * Updates an opportunity with `PUT /opportunities/{id}`, sent once, and
+   * answers the record as Siren stores it (`dateCreated` and `dateModified`
+   * as `2026-10-16 12:00:00`). Accepts `status` (`active` or `inactive`) and
+   * `lastTriggered`. Throws `NotFoundError` for an unknown id.
+   */
+  async update(id: number, params: UpdateOpportunityParams): Promise<T> {
+    const path = `${this.path}/${recordId(id, 'opportunities.update')}`;
+    return writeRecord<T>(this.http, 'PUT', path, params);
+  }
+}

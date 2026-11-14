@@ -1,0 +1,409 @@
+[
+ {
+  "id": "control-break",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'/connect/webhook/deliveries'",
+  "replace": "'/connect/webhook/delivery'",
+  "expect": "caught",
+  "failing": [
+   "deliveries sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "control-harmless",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /",
+  "replace": "const NONCE: RegExp = /",
+  "expect": "survives",
+  "failing": []
+ },
+ {
+  "id": "control-malformed-absent",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "this text is not in the file",
+  "replace": "x",
+  "expect": "refused",
+  "failing": []
+ },
+ {
+  "id": "control-malformed-syntax",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /",
+  "replace": "const NONCE = = /",
+  "expect": "refused",
+  "failing": []
+ },
+ {
+  "id": "replace-retried",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "      { targetUrl: params.targetUrl, events: params.events },\n      false,",
+  "replace": "      { targetUrl: params.targetUrl, events: params.events },\n      true,",
+  "expect": "caught",
+  "failing": [
+   "sends replace, because each send rotates the signing secret once on a 503 and on a network error"
+  ]
+ },
+ {
+  "id": "test-retried",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "{ nonce }, false, 'object'",
+  "replace": "{ nonce }, true, 'object'",
+  "expect": "caught",
+  "failing": [
+   "sends test, because Cloud allows ten tests a site an hour once on a 503 and on a network error"
+  ]
+ },
+ {
+  "id": "get-sent-once",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'GET', '/connect/webhook', undefined, true",
+  "replace": "'GET', '/connect/webhook', undefined, false",
+  "expect": "caught",
+  "failing": [
+   "retries get after a 503"
+  ]
+ },
+ {
+  "id": "delete-sent-once",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'DELETE', '/connect/webhook', undefined, true",
+  "replace": "'DELETE', '/connect/webhook', undefined, false",
+  "expect": "caught",
+  "failing": [
+   "retries delete after a 503"
+  ]
+ },
+ {
+  "id": "deliveries-sent-once",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'/connect/webhook/deliveries', undefined, true",
+  "replace": "'/connect/webhook/deliveries', undefined, false",
+  "expect": "caught",
+  "failing": [
+   "retries deliveries after a 503"
+  ]
+ },
+ {
+  "id": "replace-method",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "      'PUT',\n      '/connect/webhook',",
+  "replace": "      'POST',\n      '/connect/webhook',",
+  "expect": "caught",
+  "failing": [
+   "replace sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "replace-body-extra",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "{ targetUrl: params.targetUrl, events: params.events }",
+  "replace": "{ targetUrl: params.targetUrl, events: params.events, description: 'Siren connector' }",
+  "expect": "caught",
+  "failing": [
+   "replace sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "delete-method",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'DELETE', '/connect/webhook'",
+  "replace": "'POST', '/connect/webhook'",
+  "expect": "caught",
+  "failing": [
+   "delete sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "test-path",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'/connect/webhook/test'",
+  "replace": "'/connect/webhook/tests'",
+  "expect": "caught",
+  "failing": [
+   "test sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "test-body",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'/connect/webhook/test', { nonce }",
+  "replace": "'/connect/webhook/test', { nonce, n: 1 }",
+  "expect": "caught",
+  "failing": [
+   "test sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "secret-check-dropped",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof answer.signingSecret !== 'string' || answer.signingSecret === ''",
+  "replace": "false",
+  "expect": "caught",
+  "failing": [
+   "replace raises UnexpectedResponseError for an answer without a text signingSecret"
+  ]
+ },
+ {
+  "id": "secret-empty-allowed",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof answer.signingSecret !== 'string' || answer.signingSecret === ''",
+  "replace": "typeof answer.signingSecret !== 'string'",
+  "expect": "caught",
+  "failing": [
+   "replace raises UnexpectedResponseError for an answer without a text signingSecret"
+  ]
+ },
+ {
+  "id": "secret-type-unchecked",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof answer.signingSecret !== 'string' || answer.signingSecret === ''",
+  "replace": "!answer.signingSecret",
+  "expect": "caught",
+  "failing": [
+   "replace raises UnexpectedResponseError for an answer without a text signingSecret"
+  ]
+ },
+ {
+  "id": "body-in-error-data",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "        statusCode: response.status,\n",
+  "replace": "        statusCode: response.status,\n        data: parsed,\n",
+  "expect": "caught",
+  "failing": [
+   "replace keeps the signing secret from the answer out of an UnexpectedResponseError",
+   "carries no body in its data"
+  ]
+ },
+ {
+  "id": "status-dropped",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "        statusCode: response.status,\n",
+  "replace": "",
+  "expect": "caught",
+  "failing": [
+   "names the method, path and status in the error"
+  ]
+ },
+ {
+  "id": "message-names-wrong-route",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "`Siren: Cloud answered ${method} ${path} with",
+  "replace": "`Siren: Cloud answered ${path} with",
+  "expect": "caught",
+  "failing": [
+   "names the method, path and status in the error"
+  ]
+ },
+ {
+  "id": "helper-retriable-fixed",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "request({ method, path, body, retriable })",
+  "replace": "request({ method, path, body, retriable: true })",
+  "expect": "caught",
+  "failing": [
+   "hands the transport the method, path, body and retriable flag false as given"
+  ]
+ },
+ {
+  "id": "object-allows-array",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)",
+  "replace": "typeof parsed === 'object' && parsed !== null",
+  "expect": "caught",
+  "failing": [
+   "raises UnexpectedResponseError for a 2xx that is not a JSON object"
+  ]
+ },
+ {
+  "id": "object-allows-null",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)",
+  "replace": "typeof parsed === 'object' && !Array.isArray(parsed)",
+  "expect": "caught",
+  "failing": [
+   "refuses the JSON scalar null for either shape"
+  ]
+ },
+ {
+  "id": "object-allows-scalar",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)",
+  "replace": "parsed !== undefined && parsed !== null && !Array.isArray(parsed)",
+  "expect": "caught",
+  "failing": [
+   "refuses the JSON scalar \"text\" for either shape",
+   "refuses the JSON scalar 42 for either shape"
+  ]
+ },
+ {
+  "id": "object-requires-keys",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)",
+  "replace": "typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0",
+  "expect": "caught",
+  "failing": [
+   "accepts an empty JSON object for the object shape"
+  ]
+ },
+ {
+  "id": "array-requires-items",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "? Array.isArray(parsed)",
+  "replace": "? Array.isArray(parsed) && parsed.length > 0",
+  "expect": "caught",
+  "failing": [
+   "accepts an empty JSON object for the object shape and an empty JSON array"
+  ]
+ },
+ {
+  "id": "array-allows-object",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "? Array.isArray(parsed)",
+  "replace": "? typeof parsed === 'object' && parsed !== null",
+  "expect": "caught",
+  "failing": [
+   "deliveries raises UnexpectedResponseError for a 2xx that is not a JSON array",
+   "refuses an object for the array shape"
+  ]
+ },
+ {
+  "id": "deliveries-object-shape",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'/connect/webhook/deliveries', undefined, true, 'array'",
+  "replace": "'/connect/webhook/deliveries', undefined, true, 'object'",
+  "expect": "caught",
+  "failing": [
+   "deliveries sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "get-array-shape",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "'GET', '/connect/webhook', undefined, true, 'object'",
+  "replace": "'GET', '/connect/webhook', undefined, true, 'array'",
+  "expect": "caught",
+  "failing": [
+   "get sends its route once with the bearer token"
+  ]
+ },
+ {
+  "id": "nonce-min-15",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_-]{15,128}$/",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of 15 characters with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-max-129",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_-]{16,129}$/",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of 129 characters with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-min-17",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_-]{17,128}$/",
+  "expect": "caught",
+  "failing": [
+   "sends a nonce of 16 characters"
+  ]
+ },
+ {
+  "id": "nonce-max-127",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_-]{16,127}$/",
+  "expect": "caught",
+  "failing": [
+   "sends a nonce of 128 characters"
+  ]
+ },
+ {
+  "id": "nonce-allows-dot",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_.-]{16,128}$/",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of a dot with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-allows-space",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_ -]{16,128}$/",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of a space with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-allows-newline",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_\\n-]{16,128}$/",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of a line break with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-refuses-underscore",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9-]{16,128}$/",
+  "expect": "caught",
+  "failing": [
+   "sends a nonce of letters, digits, hyphens and underscores"
+  ]
+ },
+ {
+  "id": "nonce-no-end-anchor",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "const NONCE = /^[A-Za-z0-9_-]{16,128}$/",
+  "replace": "const NONCE = /^[A-Za-z0-9_-]{16,128}/",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of 129 characters with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-type-unchecked",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof nonce !== 'string' || !NONCE.test(nonce)",
+  "replace": "!NONCE.test(nonce)",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of a value that is not a string with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-check-dropped",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "typeof nonce !== 'string' || !NONCE.test(nonce)",
+  "replace": "false",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of an empty string with SirenError before sending"
+  ]
+ },
+ {
+  "id": "nonce-wrong-error",
+  "file": "src/connect/connect-webhook-resource.ts",
+  "find": "      throw new SirenError('Siren: the webhook test nonce",
+  "replace": "      throw new TypeError('Siren: the webhook test nonce",
+  "expect": "caught",
+  "failing": [
+   "refuses a nonce of 15 characters with SirenError before sending"
+  ]
+ }
+]

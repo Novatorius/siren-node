@@ -1,0 +1,169 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/client.ts",
+    "find": "if (holdsMethod(httpClient, 'send')) return httpClient as HttpClient;",
+    "replace": "return httpClient as HttpClient;",
+    "expect": "caught",
+    "failing": [
+      "refuses an httpClient whose own send is not a function"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/client.ts",
+    "find": "/** True for a string the transport can join paths onto and send a token to. */",
+    "replace": "/** True for a string the transport can join paths onto. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/client.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/client.ts",
+    "find": "function holdsMethod(value: unknown, name: string): boolean {",
+    "replace": "function holdsMethod((value: unknown, name: string): boolean {",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/client.ts",
+    "find": "if (holdsMethod(httpClient, 'send')) return httpClient as HttpClient;",
+    "replace": "return httpClient as HttpClient;",
+    "expect": "wrong-reason",
+    "failing": [
+      "accepts a scheme in upper case"
+    ]
+  },
+  {
+    "id": "walk-reads-holder-value",
+    "file": "src/client.ts",
+    "find": "return typeof (value as Record<string, unknown>)[name] === 'function';",
+    "replace": "if (typeof Object.getOwnPropertyDescriptor(holder, name)?.value === 'function') return true;",
+    "expect": "caught",
+    "failing": [
+      "refuses an httpClient whose own send is not a function"
+    ]
+  },
+  {
+    "id": "walk-any-value",
+    "file": "src/client.ts",
+    "find": "return typeof (value as Record<string, unknown>)[name] === 'function';",
+    "replace": "return true;",
+    "expect": "caught",
+    "failing": [
+      "refuses an httpClient whose own send is not a function",
+      "refuses an accessToken whose own refreshAccessToken is not a function"
+    ]
+  },
+  {
+    "id": "walk-stops-at-null-prototype",
+    "file": "src/client.ts",
+    "find": "holder !== null && holder !== Object.prototype;",
+    "replace": "holder !== null && holder !== Object.prototype && Object.getPrototypeOf(holder) !== null;",
+    "expect": "caught",
+    "failing": [
+      "accepts an httpClient whose send sits on a prototype that has no prototype itself"
+    ]
+  },
+  {
+    "id": "walk-takes-functions",
+    "file": "src/client.ts",
+    "find": "if (typeof value !== 'object' || value === null) return false;\n  for",
+    "replace": "if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return false;\n  for",
+    "expect": "caught",
+    "failing": [
+      "refuses a function as httpClient"
+    ]
+  },
+  {
+    "id": "own-enumerable-only",
+    "file": "src/client.ts",
+    "find": "if (!Object.prototype.hasOwnProperty.call(options, name)) return undefined;",
+    "replace": "if (!Object.keys(options as object).includes(name)) return undefined;",
+    "expect": "caught",
+    "failing": [
+      "reads an option the object holds as a property that is not enumerable"
+    ]
+  },
+  {
+    "id": "own-in-operator",
+    "file": "src/client.ts",
+    "find": "if (!Object.prototype.hasOwnProperty.call(options, name)) return undefined;",
+    "replace": "if (!(name in (options as object)) || !Object.prototype.hasOwnProperty.call(options, name)) return undefined;",
+    "expect": "caught",
+    "failing": [
+      "refuses options that are a string",
+      "refuses options that are a number"
+    ]
+  },
+  {
+    "id": "baseurl-drop-del",
+    "file": "src/client.ts",
+    "find": "if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "if (/[^\\u0021-\\u007f]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl that holds a DEL"
+    ]
+  },
+  {
+    "id": "baseurl-drop-tab-and-space",
+    "file": "src/client.ts",
+    "find": "if (/[^\\u0021-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "replace": "if (/[^\\u0009\\u0020-\\u007e]|[?#\\\\@]/.test(text)) return false;",
+    "expect": "caught",
+    "failing": [
+      "refuses a baseUrl that holds a tab",
+      "refuses a baseUrl that holds a space inside the path"
+    ]
+  },
+  {
+    "id": "baseurl-scheme-by-prefix",
+    "file": "src/client.ts",
+    "find": "return (url.protocol === 'http:' || url.protocol === 'https:') &&",
+    "replace": "return /^https?:/.test(text) &&",
+    "expect": "caught",
+    "failing": [
+      "accepts a scheme in upper case"
+    ]
+  },
+  {
+    "id": "maxretries-coerces",
+    "file": "src/client.ts",
+    "find": "if (typeof maxRetries === 'number' && Number.isInteger(maxRetries) && maxRetries >= 0) return maxRetries;",
+    "replace": "if (Number.isInteger(Number(maxRetries)) && Number(maxRetries) >= 0) return maxRetries as number;",
+    "expect": "caught",
+    "failing": [
+      "names the type of a bigint maxRetries"
+    ]
+  },
+  {
+    "id": "described-bigint-as-number",
+    "file": "src/client.ts",
+    "find": "if (typeof value === 'number') return String(value);\n  return value === null",
+    "replace": "if (typeof value === 'number' || typeof value === 'bigint') return String(value);\n  return value === null",
+    "expect": "caught",
+    "failing": [
+      "names the type of a bigint maxRetries"
+    ]
+  },
+  {
+    "id": "described-article",
+    "file": "src/client.ts",
+    "find": "return value === null ? 'null' : typeof value;",
+    "replace": "return value === null ? 'null' : `a ${typeof value}`;",
+    "expect": "caught",
+    "failing": [
+      "names a function timeout by its type"
+    ]
+  }
+]

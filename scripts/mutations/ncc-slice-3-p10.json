@@ -1,0 +1,117 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/client.ts",
+    "find": "    this.programs = new ProgramsResource(http);",
+    "replace": "    this.programs = new ProgramGroupsResource(http) as unknown as ProgramsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.programs is a ProgramsResource"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/client.ts",
+    "find": "    this.programs = new ProgramsResource(http);",
+    "replace": "    this.programs = new ProgramsResource(http as HttpTransport);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/client.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/client.ts",
+    "find": "    this.programs = new ProgramsResource(http);",
+    "replace": "    this.programs = new ProgramsResource(http);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/client.ts",
+    "find": "    this.programs = new ProgramsResource(http);",
+    "replace": "    this.programs = new ProgramGroupsResource(http) as unknown as ProgramsResource;",
+    "expect": "wrong-reason",
+    "failing": [
+      "siren.collaborators is a CollaboratorsResource"
+    ]
+  },
+  {
+    "id": "p10-collaborators-type",
+    "file": "src/client.ts",
+    "find": "    this.collaborators = new CollaboratorsResource(http);",
+    "replace": "    this.collaborators = new CollaboratorGroupsResource(http) as unknown as CollaboratorsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.collaborators is a CollaboratorsResource"
+    ]
+  },
+  {
+    "id": "p10-collaborator-groups-type",
+    "file": "src/client.ts",
+    "find": "    this.collaboratorGroups = new CollaboratorGroupsResource(http);",
+    "replace": "    this.collaboratorGroups = new CollaboratorsResource(http) as unknown as CollaboratorGroupsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.collaboratorGroups is a CollaboratorGroupsResource"
+    ]
+  },
+  {
+    "id": "p10-program-groups-type",
+    "file": "src/client.ts",
+    "find": "    this.programGroups = new ProgramGroupsResource(http);",
+    "replace": "    this.programGroups = new ProgramsResource(http) as unknown as ProgramGroupsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.programGroups is a ProgramGroupsResource"
+    ]
+  },
+  {
+    "id": "p10-collaborators-own-client",
+    "file": "src/client.ts",
+    "find": "    this.collaborators = new CollaboratorsResource(http);",
+    "replace": "    this.collaborators = new CollaboratorsResource(createHttpTransport({ ...options, httpClient: undefined }));",
+    "expect": "caught",
+    "offline": true,
+    "failing": [
+      "sends a read from every record resource"
+    ]
+  },
+  {
+    "id": "p10-collaborator-groups-other-host",
+    "file": "src/client.ts",
+    "find": "    this.collaboratorGroups = new CollaboratorGroupsResource(http);",
+    "replace": "    this.collaboratorGroups = new CollaboratorGroupsResource(createHttpTransport({ ...options, baseUrl: 'https://other.example.invalid/siren/v1' }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every record resource"
+    ]
+  },
+  {
+    "id": "p10-programs-other-key",
+    "file": "src/client.ts",
+    "find": "    this.programs = new ProgramsResource(http);",
+    "replace": "    this.programs = new ProgramsResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every record resource"
+    ]
+  },
+  {
+    "id": "p10-program-groups-other-key",
+    "file": "src/client.ts",
+    "find": "    this.programGroups = new ProgramGroupsResource(http);",
+    "replace": "    this.programGroups = new ProgramGroupsResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every record resource"
+    ]
+  }
+]

@@ -1,0 +1,109 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/records.ts",
+    "find": "      if (value === '' || value === '0' || value === 0) {",
+    "replace": "      if (value === '' || value === '0') {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > refuses a bindingId of 0"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/records.ts",
+    "find": "   * Siren finds a resent transaction only by both binding fields, and reads",
+    "replace": "   * Siren finds a resent transaction only by both binding fields and reads",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/records.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/records.ts",
+    "find": "    const given = (value: unknown) => value !== undefined && value !== null;",
+    "replace": "    const given = ((value: unknown) => value !== undefined && value !== null;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/records.ts",
+    "find": "      if (value === '' || value === '0' || value === 0) {",
+    "replace": "      if (value === '' || value === '0') {",
+    "expect": "wrong-reason",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > sends both binding fields as given"
+    ]
+  },
+  {
+    "id": "f2-half-allowed",
+    "file": "src/resources/records.ts",
+    "find": "    if (given(bindingId) !== given(bindingDataType)) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > refuses a bindingId alone",
+      "4 fix F2: transactions.create binding pair > refuses a bindingDataType alone"
+    ]
+  },
+  {
+    "id": "f2-null-counts-as-given",
+    "file": "src/resources/records.ts",
+    "find": "    const given = (value: unknown) => value !== undefined && value !== null;",
+    "replace": "    const given = (value: unknown) => value !== undefined;",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > refuses a bindingId with a null bindingDataType"
+    ]
+  },
+  {
+    "id": "f2-empty-allowed",
+    "file": "src/resources/records.ts",
+    "find": "      if (value === '' || value === '0' || value === 0) {",
+    "replace": "      if (value === '0' || value === 0) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > refuses a bindingId of \"\"",
+      "4 fix F2: transactions.create binding pair > refuses a bindingDataType of \"\""
+    ]
+  },
+  {
+    "id": "f2-zero-string-allowed",
+    "file": "src/resources/records.ts",
+    "find": "      if (value === '' || value === '0' || value === 0) {",
+    "replace": "      if (value === '' || value === 0) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > refuses a bindingId of \"0\"",
+      "4 fix F2: transactions.create binding pair > refuses a bindingDataType of \"0\""
+    ]
+  },
+  {
+    "id": "f2-zero-number-allowed",
+    "file": "src/resources/records.ts",
+    "find": "      if (value === '' || value === '0' || value === 0) {",
+    "replace": "      if (value === '' || value === '0') {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > refuses a bindingId of 0"
+    ]
+  },
+  {
+    "id": "f2-refuses-leading-zeros",
+    "file": "src/resources/records.ts",
+    "find": "      if (value === '' || value === '0' || value === 0) {",
+    "replace": "      if (value === '' || /^0+$/.test(String(value)) || value === 0) {",
+    "expect": "caught",
+    "failing": [
+      "4 fix F2: transactions.create binding pair > sends a bindingId of \"00\", which Siren reads as set as given"
+    ]
+  }
+]

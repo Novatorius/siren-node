@@ -1,0 +1,186 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, '/program-group', action, ids);",
+    "expect": "caught",
+    "failing": [
+      "runs the delete bulk action"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, `${this.path}`, action, ids);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/program-groups.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, '/program-group', action, ids);",
+    "expect": "wrong-reason",
+    "failing": [
+      "P9: programGroups reads"
+    ]
+  },
+  {
+    "id": "p9-list-params",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, ProgramGroupsResource.LIST_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, this.path, {}, ProgramGroupsResource.LIST_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "lists GET /program-groups with filters"
+    ]
+  },
+  {
+    "id": "p9-list-filters-loose",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, ProgramGroupsResource.LIST_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, this.path, params, [...ProgramGroupsResource.LIST_FILTERS, 'propertyId']);",
+    "expect": "caught",
+    "failing": [
+      "list refuses propertyId"
+    ]
+  },
+  {
+    "id": "p9-retrieve-params",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id, { fields: params.fields });",
+    "expect": "caught",
+    "failing": [
+      "retrieve sends include and propertyId"
+    ]
+  },
+  {
+    "id": "p9-retrieve-path",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, '/program-group', id, params);",
+    "expect": "caught",
+    "failing": [
+      "retrieves GET /program-groups/{id} with fields"
+    ]
+  },
+  {
+    "id": "p9-create-method",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "creates with POST /program-groups"
+    ]
+  },
+  {
+    "id": "p9-update-method",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', `${this.path}/${group}`, params);",
+    "expect": "caught",
+    "failing": [
+      "updates with PUT /program-groups/{id}"
+    ]
+  },
+  {
+    "id": "p9-update-id",
+    "file": "src/resources/program-groups.ts",
+    "find": "    const group = recordId(id, 'update');",
+    "replace": "    const group = id;",
+    "expect": "caught",
+    "failing": [
+      "update is refused"
+    ]
+  },
+  {
+    "id": "p9-delete-id",
+    "file": "src/resources/program-groups.ts",
+    "find": "    const group = recordId(id, 'delete');",
+    "replace": "    const group = id;",
+    "expect": "caught",
+    "failing": [
+      "delete is refused"
+    ]
+  },
+  {
+    "id": "p9-delete-path",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${group}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${group}/delete`);",
+    "expect": "caught",
+    "failing": [
+      "deletes with DELETE /program-groups/{id}"
+    ]
+  },
+  {
+    "id": "p9-bulk-action",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, 'restore', ids);",
+    "expect": "caught",
+    "failing": [
+      "runs the delete bulk action"
+    ]
+  },
+  {
+    "id": "p9-create-retried",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, params).catch(() => writeRecord<T>(this.http, 'POST', this.path, params));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p9-update-retried",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params).catch(() => writeRecord<T>(this.http, 'PUT', `${this.path}/${group}`, params));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p9-delete-retried",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${group}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${group}`).catch(() => deleteRecord<T>(this.http, `${this.path}/${group}`));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p9-bulk-retried",
+    "file": "src/resources/program-groups.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids).catch(() => bulkRecords<BulkResult>(this.http, this.path, action, ids));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  }
+]

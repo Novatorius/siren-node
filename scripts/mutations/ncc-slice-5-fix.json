@@ -1,0 +1,265 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/types.ts",
+    "find": "  InvalidGrant: 'invalid_grant',",
+    "replace": "  InvalidGrant: 'invalid-grant',",
+    "expect": "caught",
+    "failing": [
+      "names the OAuth error codes"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/connect-webhook-resource.ts",
+    "find": "which is also what a retry after a lost\n   * answer meets",
+    "replace": "which is also what a retry after a lost\n   * answer gets",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/oauth.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/oauth.ts",
+    "find": "export const DEFAULT_OAUTH_TIMEOUT_MS = 15_000;",
+    "replace": "export const DEFAULT_OAUTH_TIMEOUT_MS = = 15_000;",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/connect/types.ts",
+    "find": "  InvalidGrant: 'invalid_grant',",
+    "replace": "  InvalidGrant: 'invalid-grant',",
+    "expect": "wrong-reason",
+    "failing": [
+      "no-network guard check after each test"
+    ]
+  },
+  {
+    "id": "guard-lets-all-through",
+    "file": "test/setup/no-network.ts",
+    "find": "    if (LOOPBACK.has(hostOf(input))) return realFetch(input as string, init);",
+    "replace": "    return realFetch(input as string, init);",
+    "expect": "caught",
+    "failing": [
+      "refuses a host off this machine",
+      "no-network guard check after each test"
+    ],
+    "offline": true
+  },
+  {
+    "id": "guard-forgets-refusals",
+    "file": "test/setup/no-network.ts",
+    "find": "    offMachine(hostOf(input));\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "refuses a host off this machine",
+      "no-network guard check after each test"
+    ],
+    "offline": true
+  },
+  {
+    "id": "after-each-check-gone",
+    "file": "test/setup/no-network.ts",
+    "find": "  expect(hosts, 'hosts a test tried to reach through the global fetch').toEqual([]);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "no-network guard check after each test"
+    ],
+    "offline": true
+  },
+  {
+    "id": "after-each-check-reads-nothing",
+    "file": "test/setup/no-network.ts",
+    "find": "  const hosts = takeRefusedHosts();\n  vi.unstubAllGlobals();",
+    "replace": "  const hosts: string[] = [];\n  takeRefusedHosts();\n  vi.unstubAllGlobals();",
+    "expect": "caught",
+    "failing": [
+      "no-network guard check after each test"
+    ],
+    "offline": true
+  },
+  {
+    "id": "guard-fails-every-test",
+    "file": "test/setup/no-network.ts",
+    "find": "  expect(hosts, 'hosts a test tried to reach through the global fetch').toEqual([]);",
+    "replace": "  expect(hosts, 'hosts a test tried to reach through the global fetch').toEqual(['always']);",
+    "expect": "caught",
+    "failing": [
+      "no-network guard check after each test"
+    ],
+    "offline": true
+  },
+  {
+    "id": "readme-window-gone",
+    "file": "README.md",
+    "find": "Any repeat after 30 seconds makes Cloud revoke the\nwhole token family.",
+    "replace": "Any repeat after that is refused.",
+    "expect": "caught",
+    "failing": [
+      "the README Refresh section states the 30-second window"
+    ]
+  },
+  {
+    "id": "readme-same-attempt-gone",
+    "file": "README.md",
+    "find": "refresh once, with the same `attemptId`, and it sends",
+    "replace": "refresh once, and it sends",
+    "expect": "caught",
+    "failing": [
+      "the README Refresh section states the 30-second window"
+    ]
+  },
+  {
+    "id": "readme-at-once-gone",
+    "file": "README.md",
+    "find": "and it sends that resend at once, as Siren's WordPress\nplugin does. A request that cannot wait hands the resend to a background task that runs straight\naway, never",
+    "replace": "as Siren's WordPress\nplugin does. A request that cannot wait hands it to a background task, never",
+    "expect": "caught",
+    "failing": [
+      "the README Refresh section says the resend goes at once"
+    ]
+  },
+  {
+    "id": "readme-nothing-more-gone",
+    "file": "README.md",
+    "find": "If the resend fails too, the store sends nothing more\nfor that refresh. ",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "the README Refresh section says the resend goes at once"
+    ]
+  },
+  {
+    "id": "readme-resend-later",
+    "file": "README.md",
+    "find": "and it sends that resend at once, as Siren's WordPress",
+    "replace": "and it may send that resend later, as Siren's WordPress",
+    "expect": "caught",
+    "failing": [
+      "the README Refresh section puts no refresh"
+    ]
+  },
+  {
+    "id": "readme-queue-recovery",
+    "file": "README.md",
+    "find": "for that refresh. A refresh refused with",
+    "replace": "for that refresh. Any further recovery goes through its queue with that `attemptId`. A refresh refused with",
+    "expect": "caught",
+    "failing": [
+      "the README Refresh section puts no refresh"
+    ]
+  },
+  {
+    "id": "oauth-doc-review-text",
+    "file": "src/connect/oauth.ts",
+    "find": "   * queue that waits. If the resend fails too, the store sends nothing more\n   * for this refresh.",
+    "replace": "   * queue that waits. Any further recovery goes through its queue with\n   * that `attemptId`.",
+    "expect": "caught",
+    "failing": [
+      "the OAuthClient.refresh doc comment says the resend goes at once",
+      "the OAuthClient.refresh doc comment puts no refresh"
+    ]
+  },
+  {
+    "id": "oauth-doc-at-once-gone",
+    "file": "src/connect/oauth.ts",
+    "find": "   * store may resend that refresh once, with the same `attemptId`, and it\n   * sends that resend at once, as Siren's `OAuthConnectService` does. A\n   * request that cannot wait hands the resend to a background task that\n   * runs straight away, as",
+    "replace": "   * store may resend that refresh once, with the same `attemptId`, as\n   * Siren's `OAuthConnectService` does. A request that cannot wait hands\n   * it to a background task, as",
+    "expect": "caught",
+    "failing": [
+      "the OAuthClient.refresh doc comment says the resend goes at once"
+    ]
+  },
+  {
+    "id": "oauth-doc-window-gone",
+    "file": "src/connect/oauth.ts",
+    "find": "   * pair Cloud already issued, and after it any repeat makes Cloud revoke\n   * the whole token family.",
+    "replace": "   * pair Cloud already issued.",
+    "expect": "caught",
+    "failing": [
+      "the OAuthClient.refresh doc comment states the 30-second window"
+    ]
+  },
+  {
+    "id": "note-same-attempt-gone",
+    "file": "docs/architecture/ncc-slice-5.md",
+    "find": "  may resend that refresh once, with the same `attemptId`, and it sends",
+    "replace": "  may resend that refresh once, and it sends",
+    "expect": "caught",
+    "failing": [
+      "the slice 5 note OAuth wire rule states the 30-second window"
+    ]
+  },
+  {
+    "id": "note-at-once-gone",
+    "file": "docs/architecture/ncc-slice-5.md",
+    "find": "and it sends\n  that resend at once, as Siren's `OAuthConnectService` does. A request\n  that cannot wait hands it to a background task that runs straight away,\n  as",
+    "replace": "as Siren's\n  `OAuthConnectService` does. A request that cannot wait hands it to a\n  background task, as",
+    "expect": "caught",
+    "failing": [
+      "the slice 5 note OAuth wire rule says the resend goes at once"
+    ]
+  },
+  {
+    "id": "note-nothing-more-gone",
+    "file": "docs/architecture/ncc-slice-5.md",
+    "find": "  as Siren's `RetryLostRefresh` does. Nothing resends the refresh after\n  that. The one",
+    "replace": "  as Siren's `RetryLostRefresh` does. The one",
+    "expect": "caught",
+    "failing": [
+      "the slice 5 note OAuth wire rule says the resend goes at once"
+    ]
+  },
+  {
+    "id": "note-review-text",
+    "file": "docs/architecture/ncc-slice-5.md",
+    "find": "Nothing resends the refresh after\n  that.",
+    "replace": "Nothing resends the refresh after\n  that. It recovers further through its queue.",
+    "expect": "caught",
+    "failing": [
+      "the slice 5 note OAuth wire rule puts no refresh"
+    ]
+  },
+  {
+    "id": "check-queue-negation-ignored",
+    "file": "test/docs-refresh.test.ts",
+    "find": "(throughQueue || queueSends) && !/\\b(?:never|not|no)\\b[^.]{0,40}\\bqueue/i.test(sentence);",
+    "replace": "(throughQueue || queueSends);",
+    "expect": "caught",
+    "failing": [
+      "the advice to never queue it"
+    ]
+  },
+  {
+    "id": "check-queue-sends-ignored",
+    "file": "test/docs-refresh.test.ts",
+    "find": "  const queued = (throughQueue || queueSends)",
+    "replace": "  const queued = throughQueue",
+    "expect": "caught",
+    "failing": [
+      "a queue that retries it",
+      "a queued refresh"
+    ]
+  },
+  {
+    "id": "check-later-negation-ignored",
+    "file": "test/docs-refresh.test.ts",
+    "find": "    !/\\b(?:never|not|no|cannot|can't)\\b[^.]{0,40}\\b(?:later|after a (?:while|delay|pause)|next run)\\b/i.test(sentence);",
+    "replace": "    true;",
+    "expect": "caught",
+    "failing": [
+      "the reason to pass attemptId first"
+    ]
+  }
+]

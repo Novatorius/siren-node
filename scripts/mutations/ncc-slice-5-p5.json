@@ -1,0 +1,239 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/connect/siren-connect.ts",
+    "find": "if (read.apiKey !== undefined) {",
+    "replace": "if (false) {",
+    "expect": "caught",
+    "failing": [
+      "refuses an apiKey alone with its own SirenError"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/connect/siren-connect.ts",
+    "find": "const given: unknown = options ?? {};",
+    "replace": "const given: unknown = (options ?? {}) as unknown;",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/connect/siren-connect.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/connect/siren-connect.ts",
+    "find": "const http = createHttpTransport(read as SirenOptions);",
+    "replace": "const http = = createHttpTransport(read as SirenOptions);",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/connect/siren-connect.ts",
+    "find": "if (read.apiKey !== undefined) {",
+    "replace": "if (false) {",
+    "expect": "wrong-reason",
+    "failing": [
+      "says an accessToken is required"
+    ]
+  },
+  {
+    "id": "apikey-empty-allowed",
+    "file": "src/connect/siren-connect.ts",
+    "find": "if (read.apiKey !== undefined) {",
+    "replace": "if (read.apiKey) {",
+    "expect": "caught",
+    "failing": [
+      "refuses an empty apiKey beside an accessToken"
+    ]
+  },
+  {
+    "id": "apikey-inherited-read",
+    "file": "src/connect/siren-connect.ts",
+    "find": "apiKey: ownOption(given, 'apiKey'),",
+    "replace": "apiKey: (given as Record<string, unknown>).apiKey,",
+    "expect": "caught",
+    "failing": [
+      "resolves a polluted Object.prototype exactly as new Siren() does"
+    ]
+  },
+  {
+    "id": "apikey-message-prefix",
+    "file": "src/connect/siren-connect.ts",
+    "find": "\"SirenConnect: an apiKey has no connected-site scope.",
+    "replace": "\"Siren: an apiKey has no connected-site scope.",
+    "expect": "caught",
+    "failing": [
+      "refuses an apiKey alone with its own SirenError"
+    ]
+  },
+  {
+    "id": "apikey-message-quotes-key",
+    "file": "src/connect/siren-connect.ts",
+    "find": "Pass the site's OAuth accessToken instead, and no apiKey.\",",
+    "replace": "Pass the site's OAuth accessToken instead, and no apiKey. \" + String(read.apiKey),",
+    "expect": "caught",
+    "failing": [
+      "refuses an apiKey alone with its own SirenError naming apiKey and accessToken, quoting no key"
+    ]
+  },
+  {
+    "id": "apikey-message-drops-accesstoken",
+    "file": "src/connect/siren-connect.ts",
+    "find": "Pass the site's OAuth accessToken instead, and no apiKey.",
+    "replace": "Pass the site's OAuth token instead, and no apiKey.",
+    "expect": "caught",
+    "failing": [
+      "refuses an apiKey alone with its own SirenError naming apiKey and accessToken"
+    ]
+  },
+  {
+    "id": "accesstoken-unchecked",
+    "file": "src/connect/siren-connect.ts",
+    "find": "if (read.accessToken === undefined) {",
+    "replace": "if (false) {",
+    "expect": "caught",
+    "failing": [
+      "refuses no options with SirenError that says an accessToken is required"
+    ]
+  },
+  {
+    "id": "accesstoken-checked-first",
+    "file": "src/connect/siren-connect.ts",
+    "find": "if (read.apiKey !== undefined) {",
+    "replace": "if (read.accessToken !== undefined && read.apiKey !== undefined) {",
+    "expect": "caught",
+    "failing": [
+      "refuses an apiKey alone with its own SirenError"
+    ]
+  },
+  {
+    "id": "accesstoken-inherited-read",
+    "file": "src/connect/siren-connect.ts",
+    "find": "accessToken: ownOption(given, 'accessToken'),",
+    "replace": "accessToken: (given as Record<string, unknown>).accessToken,",
+    "expect": "caught",
+    "failing": [
+      "resolves a token inherited from the prototype exactly as new Siren() does"
+    ]
+  },
+  {
+    "id": "accesstoken-message-prefix",
+    "file": "src/connect/siren-connect.ts",
+    "find": "\"SirenConnect: an accessToken is required.",
+    "replace": "\"Siren: an accessToken is required.",
+    "expect": "caught",
+    "failing": [
+      "refuses empty options with SirenError that says an accessToken is required"
+    ]
+  },
+  {
+    "id": "accesstoken-message-wording",
+    "file": "src/connect/siren-connect.ts",
+    "find": "\"SirenConnect: an accessToken is required.",
+    "replace": "\"SirenConnect: an access token is needed.",
+    "expect": "caught",
+    "failing": [
+      "refuses an accessToken given as undefined with SirenError that says an accessToken is required"
+    ]
+  },
+  {
+    "id": "httpclient-dropped",
+    "file": "src/connect/siren-connect.ts",
+    "find": "httpClient: ownOption(given, 'httpClient'),",
+    "replace": "httpClient: { send: async () => ({ status: 200, headers: {}, body: '{}' }) },",
+    "expect": "caught",
+    "failing": [
+      "sends connect routes to the default base URL with the access token"
+    ]
+  },
+  {
+    "id": "httpclient-defaulted-when-null",
+    "file": "src/connect/siren-connect.ts",
+    "find": "httpClient: ownOption(given, 'httpClient'),",
+    "replace": "httpClient: ownOption(given, 'httpClient') ?? { send: async () => ({ status: 200, headers: {}, body: '{}' }) },",
+    "expect": "caught",
+    "failing": [
+      "resolves an httpClient of null exactly as new Siren() does"
+    ]
+  },
+  {
+    "id": "baseurl-dropped",
+    "file": "src/connect/siren-connect.ts",
+    "find": "baseUrl: ownOption(given, 'baseUrl'),",
+    "replace": "baseUrl: undefined,",
+    "expect": "caught",
+    "failing": [
+      "honours baseUrl, timeout and maxRetries",
+      "sends the same request new Siren() sends for the same options"
+    ]
+  },
+  {
+    "id": "timeout-dropped",
+    "file": "src/connect/siren-connect.ts",
+    "find": "timeout: ownOption(given, 'timeout'),",
+    "replace": "timeout: undefined,",
+    "expect": "caught",
+    "failing": [
+      "honours baseUrl, timeout and maxRetries",
+      "sends the same request new Siren() sends for the same options"
+    ]
+  },
+  {
+    "id": "maxretries-dropped",
+    "file": "src/connect/siren-connect.ts",
+    "find": "maxRetries: ownOption(given, 'maxRetries'),",
+    "replace": "maxRetries: undefined,",
+    "expect": "caught",
+    "failing": [
+      "honours baseUrl, timeout and maxRetries"
+    ]
+  },
+  {
+    "id": "rereads-options",
+    "file": "src/connect/siren-connect.ts",
+    "find": "const http = createHttpTransport(read as SirenOptions);",
+    "replace": "const http = createHttpTransport(options as SirenOptions);",
+    "expect": "caught",
+    "failing": [
+      "sends the access token it checked, never an apiKey a getter answers later",
+      "reads apiKey, accessToken and httpClient one time each"
+    ]
+  },
+  {
+    "id": "connect-other-transport",
+    "file": "src/connect/siren-connect.ts",
+    "find": "this.connect = new ConnectResource(http);",
+    "replace": "this.connect = new ConnectResource(createHttpTransport({ ...read, accessToken: 'other' } as SirenOptions));",
+    "expect": "caught",
+    "failing": [
+      "sends connect routes to the default base URL with the access token"
+    ]
+  },
+  {
+    "id": "events-other-transport",
+    "file": "src/connect/siren-connect.ts",
+    "find": "this.events = new EventsResource(http);",
+    "replace": "this.events = new EventsResource(createHttpTransport({ ...read, accessToken: 'other' } as SirenOptions));",
+    "expect": "caught",
+    "failing": [
+      "forwards events with the same token, through events.forward"
+    ]
+  },
+  {
+    "id": "siren-own-transport",
+    "file": "src/client.ts",
+    "find": "    const http = createHttpTransport(options);",
+    "replace": "    const http = createHttpTransport({ ...(options as object), timeout: 1 } as SirenOptions);",
+    "expect": "caught",
+    "failing": [
+      "sends the same request new Siren() sends for the same options"
+    ]
+  }
+]

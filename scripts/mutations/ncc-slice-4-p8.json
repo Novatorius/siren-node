@@ -1,0 +1,286 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/record-writes.ts",
+    "find": "  if (text === '') return null;",
+    "replace": "  if (text === '') return {} as T;",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/record-writes.ts",
+    "find": "  if (text === '') return null;",
+    "replace": "  if (text.length === 0) return null;",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/record-writes.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/record-writes.ts",
+    "find": "  if (text === '') return null;",
+    "replace": "  if (text === '') return null;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/record-writes.ts",
+    "find": "  if (text === '') return null;",
+    "replace": "  if (text === '') return {} as T;",
+    "expect": "wrong-reason",
+    "failing": [
+      "P8: conversion writes surface"
+    ]
+  },
+  {
+    "id": "p8-retriable",
+    "file": "src/resources/record-writes.ts",
+    "find": "  const response = await http.request({ method, path, body, retriable: false });",
+    "replace": "  const response = await http.request({ method, path, body, retriable: true });",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-method",
+    "file": "src/resources/record-writes.ts",
+    "find": "  const response = await http.request({ method, path, body, retriable: false });",
+    "replace": "  const response = await http.request({ method: 'POST', path, body, retriable: false });",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-body-dropped",
+    "file": "src/resources/record-writes.ts",
+    "find": "  const response = await http.request({ method, path, body, retriable: false });",
+    "replace": "  const response = await http.request({ method, path, body: undefined, retriable: false });",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-array-ok",
+    "file": "src/resources/record-writes.ts",
+    "find": "  if (!isJsonObject(answer)) {",
+    "replace": "  if (!isJsonObject(answer) && !Array.isArray(answer)) {",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-scalar-ok",
+    "file": "src/resources/record-writes.ts",
+    "find": "  if (!isJsonObject(answer)) {",
+    "replace": "  if (answer === null || Array.isArray(answer)) {",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-null-ok",
+    "file": "src/resources/record-writes.ts",
+    "find": "  if (!isJsonObject(answer)) {",
+    "replace": "  if (!isJsonObject(answer) && answer !== null) {",
+    "expect": "caught",
+    "failing": [
+      "writeRecordOrNothing: a JSON null body"
+    ]
+  },
+  {
+    "id": "p8-not-json-null",
+    "file": "src/resources/record-writes.ts",
+    "find": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not JSON.`, {\n      statusCode: response.status,",
+    "replace": "    return null;\n    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not JSON.`, {\n      statusCode: response.status,",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-not-json-status",
+    "file": "src/resources/record-writes.ts",
+    "find": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not JSON.`, {\n      statusCode: response.status,",
+    "replace": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not JSON.`, {\n      statusCode: 0,",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-not-object-status",
+    "file": "src/resources/record-writes.ts",
+    "find": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`, {\n      statusCode: response.status,",
+    "replace": "    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`, {\n      statusCode: 0,",
+    "expect": "caught",
+    "failing": [
+      "P8: writeRecordOrNothing"
+    ]
+  },
+  {
+    "id": "p8-create-engagement-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    recordId(params?.engagementId, 'conversions.create', 'engagementId');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions create"
+    ]
+  },
+  {
+    "id": "p8-create-transaction-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    if (params?.transactionId !== undefined) recordId(params.transactionId, 'conversions.create', 'transactionId');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions create"
+    ]
+  },
+  {
+    "id": "p8-create-obligation-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    if (params?.obligationId !== undefined) recordId(params.obligationId, 'conversions.create', 'obligationId');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions create"
+    ]
+  },
+  {
+    "id": "p8-create-put",
+    "file": "src/resources/records.ts",
+    "find": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'PUT', this.path, body);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions create"
+    ]
+  },
+  {
+    "id": "p8-create-body-dropped",
+    "file": "src/resources/records.ts",
+    "find": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, {});",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions create"
+    ]
+  },
+  {
+    "id": "p8-update-strict",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecordOrNothing<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'conversions.update')}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'conversions.update')}`, params);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions update"
+    ]
+  },
+  {
+    "id": "p8-update-post",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecordOrNothing<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'conversions.update')}`, params);",
+    "replace": "    return writeRecordOrNothing<T>(this.http, 'POST', `${this.path}/${recordId(id, 'conversions.update')}`, params);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions update"
+    ]
+  },
+  {
+    "id": "p8-update-no-id-check",
+    "file": "src/resources/records.ts",
+    "find": "    return writeRecordOrNothing<T>(this.http, 'PUT', `${this.path}/${recordId(id, 'conversions.update')}`, params);",
+    "replace": "    return writeRecordOrNothing<T>(this.http, 'PUT', `${this.path}/${id}`, params);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "p8-delete-no-id-check",
+    "file": "src/resources/records.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'conversions.delete')}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${id}`);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "p8-delete-path",
+    "file": "src/resources/records.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${recordId(id, 'conversions.delete')}`);",
+    "replace": "    return deleteRecord<T>(this.http, `/conversion/${recordId(id, 'conversions.delete')}`);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "p8-bulk-extra",
+    "file": "src/resources/records.ts",
+    "find": "  bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {\n    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "  bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {\n    return bulkRecords<BulkResult>(this.http, this.path, action, ids, { type: 'sale' });",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "p8-bulk-path",
+    "file": "src/resources/records.ts",
+    "find": "  bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {\n    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "  bulk(action: ConversionBulkAction, ids: readonly number[]): Promise<BulkResult> {\n    return bulkRecords<BulkResult>(this.http, '/conversion', action, ids);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "p8-types-path",
+    "file": "src/resources/records.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/type`);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "p8-types-unchecked",
+    "file": "src/resources/records.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/types`);",
+    "replace": "    return this.http.request({ method: 'GET', path: `${this.path}/types`, retriable: true }).then(async (r) => JSON.parse(await r.text()) as RegistryOptions);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types"
+    ]
+  },
+  {
+    "id": "r1-p8-create-retried",
+    "file": "src/resources/records.ts",
+    "find": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return writeRecord<T>(this.http, 'POST', this.path, body);",
+    "replace": "conversions.create() cannot send \"${key}\". Siren's create route reads only engagementId, type, status, transactionId and obligationId.`,\n    );\n    return this.http.request({ method: 'POST', path: this.path, body: body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "expect": "caught",
+    "failing": [
+      "P8: conversions delete, bulk and types > sends every write once"
+    ]
+  }
+]

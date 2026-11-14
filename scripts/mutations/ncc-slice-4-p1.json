@@ -1,0 +1,146 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', path, {});",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities update"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', path, { ...params });",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/opportunities.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/opportunities.ts",
+    "find": "    const path = `${this.path}/${recordId(id, 'opportunities.update')}`;",
+    "replace": "    const path = `${this.path}/${recordId(id, 'opportunities.update')}`;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', path, {});",
+    "expect": "wrong-reason",
+    "failing": [
+      "P1: opportunities surface"
+    ]
+  },
+  {
+    "id": "p1-list-unchecked",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, OpportunitiesResource.LIST_FILTERS, OpportunitiesResource.ID_FILTERS);",
+    "replace": "    return super.list(params as never);",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities list and id rules"
+    ]
+  },
+  {
+    "id": "p1-filters-widened",
+    "file": "src/resources/opportunities.ts",
+    "find": "params, OpportunitiesResource.LIST_FILTERS,",
+    "replace": "params, [...OpportunitiesResource.LIST_FILTERS, 'id', 's', 'propertyId', 'collaboratorID'],",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities list and id rules"
+    ]
+  },
+  {
+    "id": "p1-ids-dropped",
+    "file": "src/resources/opportunities.ts",
+    "find": "OpportunitiesResource.LIST_FILTERS, OpportunitiesResource.ID_FILTERS)",
+    "replace": "OpportunitiesResource.LIST_FILTERS)",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities list and id rules"
+    ]
+  },
+  {
+    "id": "p1-ids-many",
+    "file": "src/resources/opportunities.ts",
+    "find": "OpportunitiesResource.LIST_FILTERS, OpportunitiesResource.ID_FILTERS)",
+    "replace": "OpportunitiesResource.LIST_FILTERS, { many: ['collaboratorId'] })",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities list and id rules"
+    ]
+  },
+  {
+    "id": "p1-list-path",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, OpportunitiesResource.LIST_FILTERS, OpportunitiesResource.ID_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, '/opportunity', params, OpportunitiesResource.LIST_FILTERS, OpportunitiesResource.ID_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities reads"
+    ]
+  },
+  {
+    "id": "p1-retrieve-path",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, '/opportunity', id, params);",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities reads"
+    ]
+  },
+  {
+    "id": "p1-retrieve-params-dropped",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id);",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities reads"
+    ]
+  },
+  {
+    "id": "p1-update-post",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', path, params);",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities update"
+    ]
+  },
+  {
+    "id": "p1-update-no-id-check",
+    "file": "src/resources/opportunities.ts",
+    "find": "    const path = `${this.path}/${recordId(id, 'opportunities.update')}`;",
+    "replace": "    const path = `${this.path}/${id}`;",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities list and id rules"
+    ]
+  },
+  {
+    "id": "p1-update-retried",
+    "file": "src/resources/opportunities.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', path, params);",
+    "replace": "    return this.http.request({ method: 'PUT', path, body: params, retriable: true }).then(async (r) => JSON.parse(await r.text()) as T);",
+    "expect": "caught",
+    "failing": [
+      "P1: opportunities update"
+    ]
+  }
+]

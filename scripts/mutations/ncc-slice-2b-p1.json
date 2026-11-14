@@ -1,0 +1,256 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/auth/bearer-token.ts",
+    "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "replace": "/[\\u0000-\\u001f\\u007f-\\u009f]/",
+    "expect": "caught",
+    "failing": [
+      "U+0100"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/auth/bearer-token.ts",
+    "find": "value.length === 0) return null;",
+    "replace": "value.length === 0) { return null; }",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/auth/bearer-token.ts",
+    "find": "no such text anywhere",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/auth/bearer-token.ts",
+    "find": "export function usableBearerToken(value: unknown): string | null {",
+    "replace": "export function usableBearerToken((value: unknown): string | null {",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/auth/bearer-token.ts",
+    "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "replace": "/[\\u0000-\\u001f\\u007f-\\u009f]/",
+    "expect": "wrong-reason",
+    "failing": [
+      "sends a token whose characters run from U+0020"
+    ]
+  },
+  {
+    "id": "rule-drop-c1",
+    "file": "src/auth/bearer-token.ts",
+    "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "replace": "/[\\u0000-\\u001f\\u007f\\u0100-\\uffff]/",
+    "expect": "caught",
+    "failing": [
+      "U+0085"
+    ]
+  },
+  {
+    "id": "rule-drop-del",
+    "file": "src/auth/bearer-token.ts",
+    "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "replace": "/[\\u0000-\\u001f\\u0080-\\u009f\\u0100-\\uffff]/",
+    "expect": "caught",
+    "failing": [
+      "a DEL (U+007F)"
+    ]
+  },
+  {
+    "id": "rule-drop-tab",
+    "file": "src/auth/bearer-token.ts",
+    "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "replace": "/[\\u0000-\\u0008\\u000a-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "expect": "caught",
+    "failing": [
+      "a tab (U+0009)"
+    ]
+  },
+  {
+    "id": "rule-drop-ffff",
+    "file": "src/auth/bearer-token.ts",
+    "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "replace": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\ufffe]/",
+    "expect": "caught",
+    "failing": [
+      "U+FFFF"
+    ]
+  },
+  {
+    "id": "rule-over-strict-a0-ff",
+    "file": "src/auth/bearer-token.ts",
+    "find": "/[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]/",
+    "replace": "/[\\u0000-\\u001f\\u007f-\\uffff]/",
+    "expect": "caught",
+    "failing": [
+      "U+00A0"
+    ]
+  },
+  {
+    "id": "rule-allow-empty",
+    "file": "src/auth/bearer-token.ts",
+    "find": "typeof value !== 'string' || value.length === 0",
+    "replace": "typeof value !== 'string'",
+    "expect": "caught",
+    "failing": [
+      "an empty string"
+    ]
+  },
+  {
+    "id": "static-old-check",
+    "file": "src/auth/static-access-token.ts",
+    "find": "usableBearerToken(token) === null",
+    "replace": "typeof token !== 'string' || token === ''",
+    "expect": "caught",
+    "failing": [
+      "when it is built"
+    ]
+  },
+  {
+    "id": "static-quotes-token",
+    "file": "src/auth/static-access-token.ts",
+    "find": "no character above U+00FF.',",
+    "replace": "no character above U+00FF. ' + String(token),",
+    "expect": "caught",
+    "failing": [
+      "never quoting it"
+    ]
+  },
+  {
+    "id": "static-message-drops-u00ff",
+    "file": "src/auth/static-access-token.ts",
+    "find": "no character above U+00FF.',",
+    "replace": "no character above code point 255.',",
+    "expect": "caught",
+    "failing": [
+      "when it is built, naming the rule"
+    ]
+  },
+  {
+    "id": "static-message-drops-option-names",
+    "file": "src/auth/static-access-token.ts",
+    "find": "'Siren: an apiKey or string accessToken must be",
+    "replace": "'Siren: a token must be",
+    "expect": "caught",
+    "failing": [
+      "when it is built, naming the rule"
+    ]
+  },
+  {
+    "id": "callback-collapse-to-null",
+    "file": "src/auth/callback-access-token-source.ts",
+    "find": "return this.refresh(rejectedToken);",
+    "replace": "const answer: unknown = await this.refresh(rejectedToken);\n    return typeof answer === 'string' && answer !== '' ? answer : null;",
+    "expect": "caught",
+    "failing": [
+      "unchanged"
+    ]
+  },
+  {
+    "id": "http-get-skips-rule",
+    "file": "src/http.ts",
+    "find": "let token = usableBearerToken(await this.tokens.getAccessToken());",
+    "replace": "let token: string | null = (await this.tokens.getAccessToken()) || null;",
+    "expect": "caught",
+    "failing": [
+      "the token from getAccessToken"
+    ]
+  },
+  {
+    "id": "http-get-no-refusal",
+    "file": "src/http.ts",
+    "find": "let token = usableBearerToken(await this.tokens.getAccessToken());",
+    "replace": "let token = usableBearerToken(await this.tokens.getAccessToken()) ?? 'fallback-token';",
+    "expect": "caught",
+    "failing": [
+      "the token from getAccessToken"
+    ]
+  },
+  {
+    "id": "http-get-message-drops-u00ff",
+    "file": "src/http.ts",
+    "find": "'Siren: getAccessToken did not answer a usable token. A token must be a non-empty string with no control character and no character above U+00FF.',",
+    "replace": "'Siren: getAccessToken did not answer a usable token. A token must be a non-empty string with no control character.',",
+    "expect": "caught",
+    "failing": [
+      "the token from getAccessToken"
+    ]
+  },
+  {
+    "id": "http-refresh-skips-rule",
+    "file": "src/http.ts",
+    "find": "const fresh = usableBearerToken(answer);",
+    "replace": "const fresh = typeof answer === 'string' && answer !== '' ? answer : null;",
+    "expect": "caught",
+    "failing": [
+      "the token from refreshAccessToken"
+    ]
+  },
+  {
+    "id": "http-drop-cause",
+    "file": "src/http.ts",
+    "find": "if (answer !== null) {",
+    "replace": "if (answer !== null && answer === 0) {",
+    "expect": "caught",
+    "failing": [
+      "with a SirenError cause naming refreshAccessToken"
+    ]
+  },
+  {
+    "id": "http-cause-on-null-too",
+    "file": "src/http.ts",
+    "find": "if (answer !== null) {",
+    "replace": "if (answer !== 7) {",
+    "expect": "caught",
+    "failing": [
+      "with no cause when the refresh answers null"
+    ]
+  },
+  {
+    "id": "http-cause-not-sirenerror",
+    "file": "src/http.ts",
+    "find": "value: new SirenError(\n              'Siren: refreshAccessToken answered",
+    "replace": "value: new Error(\n              'Siren: refreshAccessToken answered",
+    "expect": "caught",
+    "failing": [
+      "with a SirenError cause naming refreshAccessToken"
+    ]
+  },
+  {
+    "id": "http-cause-quotes-answer",
+    "file": "src/http.ts",
+    "find": "no character above U+00FF.',\n            ),\n            writable: true,",
+    "replace": "no character above U+00FF. ' + String(answer),\n            ),\n            writable: true,",
+    "expect": "caught",
+    "failing": [
+      "with a SirenError cause naming refreshAccessToken"
+    ]
+  },
+  {
+    "id": "http-cause-drops-name",
+    "file": "src/http.ts",
+    "find": "'Siren: refreshAccessToken answered neither null",
+    "replace": "'Siren: the token source answered neither null",
+    "expect": "caught",
+    "failing": [
+      "with a SirenError cause naming refreshAccessToken"
+    ]
+  },
+  {
+    "id": "http-refused-raises-sirenerror",
+    "file": "src/http.ts",
+    "find": "        throw refused;",
+    "replace": "        throw refused.cause !== undefined ? refused.cause : refused;",
+    "expect": "caught",
+    "failing": [
+      "raises the 401"
+    ]
+  }
+]

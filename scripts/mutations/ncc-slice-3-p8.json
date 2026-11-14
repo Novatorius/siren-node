@@ -1,0 +1,237 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/programs.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/incentive-types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/incentives`);",
+    "expect": "caught",
+    "failing": [
+      "reads the status types, incentive types and currency types"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/programs.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/incentive-types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/${'incentive-types'}`);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/programs.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/programs.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/incentive-types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/incentive-types`);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/programs.ts",
+    "find": "    return readObject<RegistryOptions>(this.http, `${this.path}/incentive-types`);",
+    "replace": "    return readObject<RegistryOptions>(this.http, `${this.path}/incentives`);",
+    "expect": "wrong-reason",
+    "failing": [
+      "P8: programs list and retrieve rules"
+    ]
+  },
+  {
+    "id": "p8-list-params",
+    "file": "src/resources/programs.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, ProgramsResource.LIST_FILTERS, ProgramsResource.ID_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, this.path, {}, ProgramsResource.LIST_FILTERS, ProgramsResource.ID_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "lists GET /programs with filters"
+    ]
+  },
+  {
+    "id": "p8-list-filters-loose",
+    "file": "src/resources/programs.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, ProgramsResource.LIST_FILTERS, ProgramsResource.ID_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, this.path, params, [...ProgramsResource.LIST_FILTERS, 'propertyId'], ProgramsResource.ID_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "list refuses propertyId"
+    ]
+  },
+  {
+    "id": "p8-list-ids-dropped",
+    "file": "src/resources/programs.ts",
+    "find": "    return listRecords<T>(this.http, this.path, params, ProgramsResource.LIST_FILTERS, ProgramsResource.ID_FILTERS);",
+    "replace": "    return listRecords<T>(this.http, this.path, params, ProgramsResource.LIST_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "list refuses a list of program groups",
+      "list refuses a program group id Cloud would cast to 1"
+    ]
+  },
+  {
+    "id": "p8-retrieve-params",
+    "file": "src/resources/programs.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, this.path, id, { fields: params.fields });",
+    "expect": "caught",
+    "failing": [
+      "retrieve sends include and propertyId"
+    ]
+  },
+  {
+    "id": "p8-retrieve-path",
+    "file": "src/resources/programs.ts",
+    "find": "    return retrieveRecord<T>(this.http, this.path, id, params);",
+    "replace": "    return retrieveRecord<T>(this.http, '/program', id, params);",
+    "expect": "caught",
+    "failing": [
+      "retrieves GET /programs/{id} with fields"
+    ]
+  },
+  {
+    "id": "p8-create-method",
+    "file": "src/resources/programs.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', this.path, params);",
+    "expect": "caught",
+    "failing": [
+      "creates with POST /programs"
+    ]
+  },
+  {
+    "id": "p8-update-method",
+    "file": "src/resources/programs.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${program}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', `${this.path}/${program}`, params);",
+    "expect": "caught",
+    "failing": [
+      "updates with PUT /programs/{id}"
+    ]
+  },
+  {
+    "id": "p8-update-id",
+    "file": "src/resources/programs.ts",
+    "find": "    const program = recordId(id, 'update');",
+    "replace": "    const program = id;",
+    "expect": "caught",
+    "failing": [
+      "update is refused"
+    ]
+  },
+  {
+    "id": "p8-delete-id",
+    "file": "src/resources/programs.ts",
+    "find": "    const program = recordId(id, 'delete');",
+    "replace": "    const program = id;",
+    "expect": "caught",
+    "failing": [
+      "delete is refused"
+    ]
+  },
+  {
+    "id": "p8-delete-null",
+    "file": "src/resources/programs.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${program}`);",
+    "replace": "    await deleteRecord<T>(this.http, `${this.path}/${program}`);\n    return null;",
+    "expect": "caught",
+    "failing": [
+      "deletes in two stages"
+    ]
+  },
+  {
+    "id": "p8-bulk-path",
+    "file": "src/resources/programs.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, '/program', action, ids);",
+    "expect": "caught",
+    "failing": [
+      "runs a bulk action with POST /programs/bulk"
+    ]
+  },
+  {
+    "id": "p8-bulk-action",
+    "file": "src/resources/programs.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, 'delete', ids);",
+    "expect": "caught",
+    "failing": [
+      "runs a bulk action with POST /programs/bulk"
+    ]
+  },
+  {
+    "id": "p8-status-path",
+    "file": "src/resources/programs.ts",
+    "find": "    return readObject<StatusTypes>(this.http, `${this.path}/status-types`);",
+    "replace": "    return readObject<StatusTypes>(this.http, `${this.path}/statuses`);",
+    "expect": "caught",
+    "failing": [
+      "reads the status types, incentive types and currency types"
+    ]
+  },
+  {
+    "id": "p8-currency-object",
+    "file": "src/resources/programs.ts",
+    "find": "    return readList<ProgramCurrency>(this.http, `${this.path}/currency-types`);",
+    "replace": "    return readObject<ProgramCurrency[]>(this.http, `${this.path}/currency-types`);",
+    "expect": "caught",
+    "failing": [
+      "P8: programs reads"
+    ]
+  },
+  {
+    "id": "p8-currency-path",
+    "file": "src/resources/programs.ts",
+    "find": "    return readList<ProgramCurrency>(this.http, `${this.path}/currency-types`);",
+    "replace": "    return readList<ProgramCurrency>(this.http, `${this.path}/currencies`);",
+    "expect": "caught",
+    "failing": [
+      "reads the status types, incentive types and currency types"
+    ]
+  },
+  {
+    "id": "p8-create-retried",
+    "file": "src/resources/programs.ts",
+    "find": "    return writeRecord<T>(this.http, 'POST', this.path, params);",
+    "replace": "    return writeRecord<T>(this.http, 'POST', this.path, params).catch(() => writeRecord<T>(this.http, 'POST', this.path, params));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p8-update-retried",
+    "file": "src/resources/programs.ts",
+    "find": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${program}`, params);",
+    "replace": "    return writeRecord<T>(this.http, 'PUT', `${this.path}/${program}`, params).catch(() => writeRecord<T>(this.http, 'PUT', `${this.path}/${program}`, params));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p8-delete-retried",
+    "file": "src/resources/programs.ts",
+    "find": "    return deleteRecord<T>(this.http, `${this.path}/${program}`);",
+    "replace": "    return deleteRecord<T>(this.http, `${this.path}/${program}`).catch(() => deleteRecord<T>(this.http, `${this.path}/${program}`));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  },
+  {
+    "id": "p8-bulk-retried",
+    "file": "src/resources/programs.ts",
+    "find": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids);",
+    "replace": "    return bulkRecords<BulkResult>(this.http, this.path, action, ids).catch(() => bulkRecords<BulkResult>(this.http, this.path, action, ids));",
+    "expect": "caught",
+    "failing": [
+      "sends every write once"
+    ]
+  }
+]

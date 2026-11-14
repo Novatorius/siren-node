@@ -54,6 +54,16 @@
         "types": "./dist/storefront.d.cts",
         "default": "./dist/storefront.cjs"
       }
+    },
+    "./connect": {
+      "import": {
+        "types": "./dist/connect.d.ts",
+        "default": "./dist/connect.js"
+      },
+      "require": {
+        "types": "./dist/connect.d.cts",
+        "default": "./dist/connect.cjs"
+      }
     }
   },
   "publishConfig": {
@@ -84,6 +94,9 @@
     "*": {
       "storefront": [
         "./dist/storefront.d.ts"
+      ],
+      "connect": [
+        "./dist/connect.d.ts"
       ]
     }
   }
