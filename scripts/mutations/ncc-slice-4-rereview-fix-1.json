@@ -1,0 +1,97 @@
+[
+  {
+    "id": "rr1-transactions-create-own-keys",
+    "file": "src/resources/records.ts",
+    "find": "  async create(params: CreateTransactionParams): Promise<T> {\n    // Each own key read once, so the checks and the body see the same values\n    // and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async create(params: CreateTransactionParams): Promise<T> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 re-review fix 1: checks read the values the request carries > transactions.create refuses an inherited bindingId beside an own bindingDataType, before sending",
+      "4 re-review fix 1: checks read the values the request carries > transactions.create checks the bindingId it sends, when a getter answers \"\" first"
+    ]
+  },
+  {
+    "id": "rr1-recover-create-own-keys",
+    "file": "src/resources/records.ts",
+    "find": "  async recoverCreate(params: CreateConversionParams): Promise<RecoveredConversion<T>> {\n    // Each own key read once, so the checks and the body see the same values\n    // and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async recoverCreate(params: CreateConversionParams): Promise<RecoveredConversion<T>> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 re-review fix 1: checks read the values the request carries > conversions.recoverCreate refuses an inherited transactionId, before reading or sending"
+    ]
+  },
+  {
+    "id": "rr1-conversions-create-own-keys",
+    "file": "src/resources/records.ts",
+    "find": "  async create(params: CreateConversionParams): Promise<T> {\n    // Each own key read once, so the checks and the body see the same values\n    // and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async create(params: CreateConversionParams): Promise<T> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 re-review fix 1: checks read the values the request carries > conversions.create refuses an inherited engagementId, before sending"
+    ]
+  },
+  {
+    "id": "rr1-currencies-create-own-keys",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "  async create(params: CreateCustomCurrencyParams): Promise<T> {\n    // Each own key read once, so the code check and the body see the same\n    // value and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async create(params: CreateCustomCurrencyParams): Promise<T> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 re-review fix 1: checks read the values the request carries > customCurrencies.create refuses an inherited code, before sending"
+    ]
+  },
+  {
+    "id": "rr1-engagements-list-own-keys",
+    "file": "src/resources/engagements.ts",
+    "find": "  override async list(params: EngagementListParams = {}): Promise<SirenList<T>> {\n    // Each own key read once, so the day check and the query see the same\n    // values and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  override async list(params: EngagementListParams = {}): Promise<SirenList<T>> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 re-review fix 1: checks read the values the request carries > engagements.list sends the from it checked, when a getter answers a day first"
+    ]
+  },
+  {
+    "id": "control-break",
+    "file": "src/resources/records.ts",
+    "find": "  async create(params: CreateTransactionParams): Promise<T> {\n    // Each own key read once, so the checks and the body see the same values\n    // and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async create(params: CreateTransactionParams): Promise<T> {\n",
+    "expect": "caught",
+    "failing": [
+      "4 re-review fix 1: checks read the values the request carries > transactions.create refuses an inherited bindingId beside an own bindingDataType, before sending"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/engagements.ts",
+    "find": "    // Each own key read once, so the day check and the query see the same\n",
+    "replace": "    // Each own key is read once, so the day check and the query see the same\n",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/records.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/engagements.ts",
+    "find": "    // Each own key read once, so the day check and the query see the same\n    // values and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "    params = { ...params ;\n",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/custom-currencies.ts",
+    "find": "  async create(params: CreateCustomCurrencyParams): Promise<T> {\n    // Each own key read once, so the code check and the body see the same\n    // value and no inherited key reaches either.\n    params = { ...params };\n",
+    "replace": "  async create(params: CreateCustomCurrencyParams): Promise<T> {\n",
+    "expect": "wrong-reason",
+    "failing": [
+      "4 re-review fix 1: checks read the values the request carries > engagements.list sends the from it checked, when a getter answers a day first"
+    ]
+  }
+]

@@ -1,0 +1,178 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/errors.ts",
+    "find": "    return new HoldConflictError(conflict.message, {",
+    "replace": "    return new HoldConflictError('', {",
+    "expect": "caught",
+    "failing": [
+      "fromConflict keeps the conflict's message, status, code and data, and sets it as the cause"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/errors.ts",
+    "find": "/** Why Siren refused a store credit hold, as {@link HoldConflictError.reason} reports it. */",
+    "replace": "/** Why Siren refused a store credit hold, as {@link HoldConflictError.reason} reports it, unchanged. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/errors.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/errors.ts",
+    "find": "    const wording = message.toLowerCase();\n    if (code === ErrorCode.HoldTokenInUse)",
+    "replace": "    const wording = message.toLowerCase(;\n    if (code === ErrorCode.HoldTokenInUse)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "from-conflict-drops-code",
+    "file": "src/errors.ts",
+    "find": "    return new HoldConflictError(conflict.message, {\n      code: conflict.code,\n",
+    "replace": "    return new HoldConflictError(conflict.message, {\n",
+    "expect": "caught",
+    "failing": [
+      "fromConflict keeps the conflict's message, status, code and data, and sets it as the cause",
+      "reads the reason from the two hold codes, whatever the message says"
+    ]
+  },
+  {
+    "id": "from-conflict-drops-data",
+    "file": "src/errors.ts",
+    "find": "    return new HoldConflictError(conflict.message, {\n      code: conflict.code,\n      statusCode: conflict.statusCode,\n      data: conflict.data,\n",
+    "replace": "    return new HoldConflictError(conflict.message, {\n      code: conflict.code,\n      statusCode: conflict.statusCode,\n",
+    "expect": "caught",
+    "failing": [
+      "fromConflict keeps the conflict's message, status, code and data, and sets it as the cause"
+    ]
+  },
+  {
+    "id": "from-conflict-drops-cause",
+    "file": "src/errors.ts",
+    "find": "      data: conflict.data,\n      cause: conflict,\n    });\n  }\n}\n\n/**\n * 422",
+    "replace": "      data: conflict.data,\n    });\n  }\n}\n\n/**\n * 422",
+    "expect": "caught",
+    "failing": [
+      "fromConflict keeps the conflict's message, status, code and data, and sets it as the cause"
+    ]
+  },
+  {
+    "id": "from-conflict-drops-status",
+    "file": "src/errors.ts",
+    "find": "    return new HoldConflictError(conflict.message, {\n      code: conflict.code,\n      statusCode: conflict.statusCode,\n",
+    "replace": "    return new HoldConflictError(conflict.message, {\n      code: conflict.code,\n",
+    "expect": "caught",
+    "failing": [
+      "copies the status into a HoldConflictError"
+    ]
+  },
+  {
+    "id": "reason-drop-token-code",
+    "file": "src/errors.ts",
+    "find": "    if (code === ErrorCode.HoldTokenInUse) this.reason = HoldConflictReason.TokenInUse;\n    else if",
+    "replace": "    if",
+    "expect": "caught",
+    "failing": [
+      "reads the reason from the two hold codes, whatever the message says"
+    ]
+  },
+  {
+    "id": "reason-drop-credit-code",
+    "file": "src/errors.ts",
+    "find": "    else if (code === ErrorCode.HoldNoCredit) this.reason = HoldConflictReason.NoCredit;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "reads the reason from the two hold codes, whatever the message says"
+    ]
+  },
+  {
+    "id": "reason-drop-known-code-rule",
+    "file": "src/errors.ts",
+    "find": "    else if (isKnownErrorCode(code)) this.reason = null;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "answers null for any other code this SDK knows, whatever the message says"
+    ]
+  },
+  {
+    "id": "reason-unknown-code-decides",
+    "file": "src/errors.ts",
+    "find": "    else if (isKnownErrorCode(code)) this.reason = null;",
+    "replace": "    else if (code !== undefined) this.reason = null;",
+    "expect": "caught",
+    "failing": [
+      "reads the reason from the wording when the code is unknown"
+    ]
+  },
+  {
+    "id": "reason-wording-case-sensitive",
+    "file": "src/errors.ts",
+    "find": "    const wording = message.toLowerCase();\n    if (code === ErrorCode.HoldTokenInUse)",
+    "replace": "    const wording = message;\n    if (code === ErrorCode.HoldTokenInUse)",
+    "expect": "caught",
+    "failing": [
+      "reads the reason from the wording when there is no code, in any case"
+    ]
+  },
+  {
+    "id": "reason-drop-token-wording",
+    "file": "src/errors.ts",
+    "find": "    else if (wording.includes('under that token')) this.reason = HoldConflictReason.TokenInUse;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "reads the reason from the wording when there is no code, in any case",
+      "checks the token wording before the credit wording"
+    ]
+  },
+  {
+    "id": "reason-drop-credit-wording",
+    "file": "src/errors.ts",
+    "find": "    else if (wording.includes('no credit available')) this.reason = HoldConflictReason.NoCredit;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "reads the reason from the wording when there is no code, in any case"
+    ]
+  },
+  {
+    "id": "reason-credit-wording-first",
+    "file": "src/errors.ts",
+    "find": "    else if (wording.includes('under that token')) this.reason = HoldConflictReason.TokenInUse;\n    else if (wording.includes('no credit available')) this.reason = HoldConflictReason.NoCredit;",
+    "replace": "    else if (wording.includes('no credit available')) this.reason = HoldConflictReason.NoCredit;\n    else if (wording.includes('under that token')) this.reason = HoldConflictReason.TokenInUse;",
+    "expect": "caught",
+    "failing": [
+      "checks the token wording before the credit wording"
+    ]
+  },
+  {
+    "id": "reason-token-wording-as-credit",
+    "file": "src/errors.ts",
+    "find": "    else if (wording.includes('under that token')) this.reason = HoldConflictReason.TokenInUse;",
+    "replace": "    else if (wording.includes('under that token')) this.reason = HoldConflictReason.NoCredit;",
+    "expect": "caught",
+    "failing": [
+      "reads the reason from the wording when there is no code, in any case"
+    ]
+  },
+  {
+    "id": "reason-default-not-null",
+    "file": "src/errors.ts",
+    "find": "    else this.reason = null;",
+    "replace": "    else this.reason = HoldConflictReason.NoCredit;",
+    "expect": "caught",
+    "failing": [
+      "answers null for other wording with no code"
+    ]
+  }
+]

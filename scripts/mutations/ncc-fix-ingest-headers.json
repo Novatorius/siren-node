@@ -1,0 +1,216 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/events.ts",
+    "find": "const response = await this.http.request({\n      method: 'POST',",
+    "replace": "const response = await this.http.request({\n      method: 'PUT',",
+    "expect": "caught",
+    "failing": [
+      "sends the caller headers on the one send"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/events.ts",
+    "find": "/** An HTTP header name, an RFC 9110 token. */",
+    "replace": "/** A header name, an RFC 9110 token. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/events.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/events.ts",
+    "find": "const HEADER_NAME = /^",
+    "replace": "const HEADER_NAME = = /^",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "replace": "    return this.send(slug, payload, false, undefined, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "expect": "wrong-reason",
+    "failing": [
+      "takes a timeout of 2147483647"
+    ]
+  },
+  {
+    "id": "ingest-drops-headers",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "replace": "    return this.send(slug, payload, false, undefined, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "expect": "caught",
+    "failing": [
+      "sends the caller headers on the one send",
+      "keeps the headers and the timeout on the resend after a 401"
+    ]
+  },
+  {
+    "id": "ingest-drops-timeout",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "replace": "    return this.send(slug, payload, false, headers);",
+    "expect": "caught",
+    "failing": [
+      "gives each send of the call the caller timeout"
+    ]
+  },
+  {
+    "id": "ingest-skips-timeout-check",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "replace": "    return this.send(slug, payload, false, headers, timeout as number | undefined);",
+    "expect": "caught",
+    "failing": [
+      "refuses a timeout of 0",
+      "refuses a timeout of a string"
+    ]
+  },
+  {
+    "id": "ingest-retries",
+    "file": "src/resources/events.ts",
+    "find": "    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "replace": "    return this.send(slug, payload, true, headers, timeout === undefined ? undefined : resolveTimeout(timeout));",
+    "expect": "caught",
+    "failing": [
+      "sends once on a 503",
+      "sends once on a network error"
+    ]
+  },
+  {
+    "id": "ingest-takes-any-options",
+    "file": "src/resources/events.ts",
+    "find": "    const given: unknown = options;\n    if (!isPlainObject(given)) {",
+    "replace": "    const given: unknown = options;\n    if (given === null) {",
+    "expect": "caught",
+    "failing": [
+      "refuses options that are not an object",
+      "refuses options that are an array"
+    ]
+  },
+  {
+    "id": "ingest-reads-inherited-headers",
+    "file": "src/resources/events.ts",
+    "find": "ingestHeaders(ownOption(given, 'headers'))",
+    "replace": "ingestHeaders((given as Record<string, unknown>).headers)",
+    "expect": "caught",
+    "failing": [
+      "reads only the options object's own headers and timeout"
+    ]
+  },
+  {
+    "id": "ingest-reads-inherited-timeout",
+    "file": "src/resources/events.ts",
+    "find": "const timeout = ownOption(given, 'timeout');",
+    "replace": "const timeout = (given as Record<string, unknown>).timeout;",
+    "expect": "caught",
+    "failing": [
+      "reads only the options object's own headers and timeout"
+    ]
+  },
+  {
+    "id": "headers-takes-any-object",
+    "file": "src/resources/events.ts",
+    "find": "  if (given === undefined) return undefined;\n  if (!isPlainObject(given)) {",
+    "replace": "  if (given === undefined) return undefined;\n  if (given === null) {",
+    "expect": "caught",
+    "failing": [
+      "refuses headers that are not an object",
+      "refuses headers that are an array"
+    ]
+  },
+  {
+    "id": "headers-skip-name-check",
+    "file": "src/resources/events.ts",
+    "find": "if (!HEADER_NAME.test(name) || typeof",
+    "replace": "if (typeof",
+    "expect": "caught",
+    "failing": [
+      "refuses a name with a space",
+      "refuses a name with a colon",
+      "refuses an empty name"
+    ]
+  },
+  {
+    "id": "headers-skip-type-check",
+    "file": "src/resources/events.ts",
+    "find": "    if (!HEADER_NAME.test(name) || typeof value !== 'string' || HEADER_VALUE_REFUSED.test(value)) {\n      throw new SirenError(\n        'Siren: events.ingest takes each header name as an HTTP token and each value as text with no control character and no character above U+00FF.',\n      );\n    }\n    headers[name] = value;\n",
+    "replace": "    if (!HEADER_NAME.test(name) || HEADER_VALUE_REFUSED.test(String(value))) {\n      throw new SirenError(\n        'Siren: events.ingest takes each header name as an HTTP token and each value as text with no control character and no character above U+00FF.',\n      );\n    }\n    headers[name] = value as string;\n",
+    "expect": "caught",
+    "failing": [
+      "refuses a value that is not text"
+    ]
+  },
+  {
+    "id": "headers-skip-value-check",
+    "file": "src/resources/events.ts",
+    "find": " || HEADER_VALUE_REFUSED.test(value)) {",
+    "replace": ") {",
+    "expect": "caught",
+    "failing": [
+      "refuses a value with a line feed",
+      "refuses a value above U+00FF"
+    ]
+  },
+  {
+    "id": "headers-allow-c1-and-del",
+    "file": "src/resources/events.ts",
+    "find": "[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]",
+    "replace": "[\\u0000-\\u001f\\u0100-\\uffff]",
+    "expect": "caught",
+    "failing": [
+      "refuses a value with DEL",
+      "refuses a value with a C1 next line"
+    ]
+  },
+  {
+    "id": "headers-allow-above-latin-1",
+    "file": "src/resources/events.ts",
+    "find": "[\\u0000-\\u001f\\u007f-\\u009f\\u0100-\\uffff]",
+    "replace": "[\\u0000-\\u001f\\u007f-\\u009f]",
+    "expect": "caught",
+    "failing": [
+      "refuses a value above U+00FF"
+    ]
+  },
+  {
+    "id": "send-drops-timeout",
+    "file": "src/resources/events.ts",
+    "find": "      ...(timeout !== undefined ? { timeout } : {}),",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "gives each send of the call the caller timeout"
+    ]
+  },
+  {
+    "id": "transport-ignores-request-timeout",
+    "file": "src/http.ts",
+    "find": "req.headers, ownTimeout(req))",
+    "replace": "req.headers)",
+    "expect": "caught",
+    "failing": [
+      "gives each send of the call the caller timeout",
+      "keeps the headers and the timeout on the resend after a 401"
+    ]
+  },
+  {
+    "id": "transport-reads-inherited-timeout",
+    "file": "src/http.ts",
+    "find": "return Object.prototype.hasOwnProperty.call(req, 'timeout') ? req.timeout : undefined;",
+    "replace": "return req.timeout;",
+    "expect": "caught",
+    "failing": [
+      "keeps the default timeout when Object.prototype carries one"
+    ]
+  }
+]

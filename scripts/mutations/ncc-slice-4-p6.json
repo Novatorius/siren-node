@@ -1,0 +1,257 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/mappings.ts",
+    "find": "const plain = rows.map(plainMapping) as SirenList<Mapping>;",
+    "replace": "const plain = [...rows] as SirenList<Mapping>;",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings reads"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/mappings.ts",
+    "find": "throw new SirenError('Send externalId as a string that is not blank.');",
+    "replace": "throw new SirenError('Send externalId as a string ' + 'that is not blank.');",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/mappings.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/mappings.ts",
+    "find": "return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));",
+    "replace": "return (await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body)) as unknown as Mapping;",
+    "expect": "wrong-reason",
+    "failing": [
+      "P6: mappings surface"
+    ]
+  },
+  {
+    "id": "p6-rows-qualified",
+    "file": "src/resources/mappings.ts",
+    "find": "const plain = rows.map(plainMapping) as SirenList<Mapping>;",
+    "replace": "const plain = [...rows] as SirenList<Mapping>;",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings reads"
+    ]
+  },
+  {
+    "id": "p6-count-dropped",
+    "file": "src/resources/mappings.ts",
+    "find": "    if (rows.estimatedCount !== undefined) {\n      Object.defineProperty(plain, 'estimatedCount', {\n        value: rows.estimatedCount,\n        enumerable: false,\n        writable: true,\n        configurable: true,\n      });\n    }\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings reads"
+    ]
+  },
+  {
+    "id": "p6-external-type-optional",
+    "file": "src/resources/mappings.ts",
+    "find": "externalType: PropertyQualifier.assertName(params.externalType, 'externalType') };",
+    "replace": "externalType: params.externalType };",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-local-type-unchecked",
+    "file": "src/resources/mappings.ts",
+    "find": "    if (params.localType !== undefined) PropertyQualifier.assertName(params.localType, 'localType');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-ids-dropped",
+    "file": "src/resources/mappings.ts",
+    "find": "MappingsResource.LIST_FILTERS, MappingsResource.ID_FILTERS);",
+    "replace": "MappingsResource.LIST_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-list-filters-widened",
+    "file": "src/resources/mappings.ts",
+    "find": "MappingsResource.LIST_FILTERS, MappingsResource.ID_FILTERS);",
+    "replace": "[...MappingsResource.LIST_FILTERS, 'propertyId'], MappingsResource.ID_FILTERS);",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-untrimmed",
+    "file": "src/resources/mappings.ts",
+    "find": "const trimmed = typeof id === 'string' ? id.trim() : '';",
+    "replace": "const trimmed = typeof id === 'string' ? id : '';",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings reads",
+      "P6: mappings writes"
+    ]
+  },
+  {
+    "id": "p6-blank-id-allowed",
+    "file": "src/resources/mappings.ts",
+    "find": "  if (trimmed === '') throw new SirenError(",
+    "replace": "  if (trimmed === '' && typeof id !== 'string') throw new SirenError(",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-for-external-local-type",
+    "file": "src/resources/mappings.ts",
+    "find": "return this.list({ externalId: externalIdOf(externalId), externalType, localType, ...params });",
+    "replace": "return this.list({ externalId: externalIdOf(externalId), externalType, localType: localType ?? 'collaborator', ...params });",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings reads"
+    ]
+  },
+  {
+    "id": "p6-for-local-keys",
+    "file": "src/resources/mappings.ts",
+    "find": "return this.list({ localId, localType, externalType, ...params });",
+    "replace": "return this.list({ localId, externalType, ...params });",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings reads"
+    ]
+  },
+  {
+    "id": "p6-create-raw",
+    "file": "src/resources/mappings.ts",
+    "find": "return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));",
+    "replace": "return (await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body)) as unknown as Mapping;",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes"
+    ]
+  },
+  {
+    "id": "p6-create-id-unchecked",
+    "file": "src/resources/mappings.ts",
+    "find": "localId: recordId(collaboratorId, 'mappings.create', 'collaboratorId'),",
+    "replace": "localId: collaboratorId,",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-create-type-unchecked",
+    "file": "src/resources/mappings.ts",
+    "find": "      externalId: externalIdOf(externalId),\n      externalType: PropertyQualifier.assertName(externalType, 'externalType'),\n    };",
+    "replace": "      externalId: externalIdOf(externalId),\n      externalType,\n    };",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-create-order",
+    "file": "src/resources/mappings.ts",
+    "find": "      localId: recordId(collaboratorId, 'mappings.create', 'collaboratorId'),\n      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,\n",
+    "replace": "      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,\n      localId: recordId(collaboratorId, 'mappings.create', 'collaboratorId'),\n",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes"
+    ]
+  },
+  {
+    "id": "p6-delete-collaborator-id-unchecked",
+    "file": "src/resources/mappings.ts",
+    "find": "localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),",
+    "replace": "localId: collaboratorId,",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-delete-collaborator-type-unchecked",
+    "file": "src/resources/mappings.ts",
+    "find": "      localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),\n      externalType: PropertyQualifier.assertName(externalType, 'externalType'),",
+    "replace": "      localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),\n      externalType,",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-delete-external-type-unchecked",
+    "file": "src/resources/mappings.ts",
+    "find": "      externalId: externalIdOf(externalId),\n      externalType: PropertyQualifier.assertName(externalType, 'externalType'),\n    });",
+    "replace": "      externalId: externalIdOf(externalId),\n      externalType,\n    });",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings names and ids"
+    ]
+  },
+  {
+    "id": "p6-delete-local-type",
+    "file": "src/resources/mappings.ts",
+    "find": "  async deleteForExternal(externalId: string, externalType: string): Promise<DeletedResult> {\n    return this.deleteLinks({\n      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,\n",
+    "replace": "  async deleteForExternal(externalId: string, externalType: string): Promise<DeletedResult> {\n    return this.deleteLinks({\n",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes"
+    ]
+  },
+  {
+    "id": "p6-delete-empty-ok",
+    "file": "src/resources/mappings.ts",
+    "find": "    if (answer === null) {\n      throw new UnexpectedResponseError(`Siren answered DELETE ${this.path} with no body.`, { statusCode: 204 });\n    }\n    return answer;",
+    "replace": "    return answer as DeletedResult;",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes"
+    ]
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/resources/mappings.ts",
+    "find": "    return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));",
+    "replace": "    return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));;;;)",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "r1-p6-create-retried",
+    "file": "src/resources/mappings.ts",
+    "find": "    return plainMapping(await writeRecord<Record<string, unknown>>(this.http, 'POST', this.path, body));",
+    "replace": "    return plainMapping(await this.http.request({ method: 'POST', path: this.path, body, retriable: true }).then(async (r) => JSON.parse(await r.text()) as Record<string, unknown>));",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes > sends every write once"
+    ]
+  },
+  {
+    "id": "r1-p6-delete-local-type",
+    "file": "src/resources/mappings.ts",
+    "find": "      localType: MappingsResource.LOCAL_TYPE_COLLABORATOR,\n      localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),",
+    "replace": "      localType: 'user',\n      localId: recordId(collaboratorId, 'mappings.deleteForCollaborator', 'collaboratorId'),",
+    "expect": "caught",
+    "failing": [
+      "P6: mappings writes > removes a collaborator's links of one type with DELETE /mappings and no body"
+    ]
+  }
+]

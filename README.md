@@ -78,13 +78,83 @@ await siren.events.sale({
 });
 ```
 
-Refunds and referred visits work the same way:
+Give each line a `lineId`, your own id for the order line, and a later refund can name the line by
+it.
+
+To check an integration without a real order, send a test sale. It needs no other field. Siren
+marks it as a test, counts it toward nothing, and ignores `trackingId`, so a real visit is never
+spent. Sending the same test again reads as a pass:
 
 ```ts
-await siren.events.refund({ source: 'stripe', externalId: 'cs_test_a1b2c3' });
+const check = await siren.events.sale({ test: true });
+console.log(check.body?.test); // true
+```
+
+Refunds and referred visits work the same way. A refund names the order by `externalId` and the
+refund by `refundId`, your store's own id for it. Siren requires it and records each refund id once
+per order:
+
+```ts
+await siren.events.refund({ source: 'stripe', externalId: 'cs_test_a1b2c3', refundId: 're_3Nf8a2' });
 await siren.events.siteVisited({ collaboratorId: 88, userId: 12345 });
 await siren.events.ingest('loyalty-points-earned', { userId: 42, points: 100 });
 ```
+
+A refund with neither `amount` nor `lines` refunds the whole order, and `kind` (`RefundKind`) says
+how the order ended: `refund`, `cancelled` or `voided`. A refund that sends `amount` or `lines`
+refunds part of the order. Each line in `lines` is a `RefundLine` that names the sale's line by
+`lineId`, or by `sku`. Send `whole: true` to refund the whole order whatever else you send:
+
+```ts
+import { RefundKind } from '@novatorius/siren';
+
+await siren.events.refund({
+  source: 'woocommerce',
+  externalId: 'order-88',
+  refundId: 2201,
+  currency: 'USD',
+  lines: [{ lineId: 'line-2', quantity: 1, amount: 36.66 }],
+});
+
+await siren.events.refund({
+  source: 'woocommerce',
+  externalId: 'order-91',
+  refundId: 2207,
+  kind: RefundKind.Cancelled,
+});
+```
+
+A visit can name the collaborator by one of their tracking codes instead of their id, written
+`tracking:{code}` (a `TrackingCodeReference`). Siren resolves the code to its collaborator:
+
+```ts
+await siren.events.siteVisited({ collaboratorId: 'tracking:summer-sale' });
+```
+
+A connected site that records a referral visit for a shopper who already holds a tracking value
+sends that value with the visit, so Siren adds the visit to the shopper's opportunity.
+`events.ingest` takes an optional third argument for this: `headers` for the call, and a `timeout`
+in milliseconds that replaces the client's for this call alone. Send a signed token as
+`X-Siren-Token` and a bare opportunity id as `X-Siren-Oid`:
+
+```ts
+await siren.events.ingest(
+  'site-visited',
+  { collaboratorId: 'tracking:summer-sale' },
+  { headers: { 'X-Siren-Token': heldToken }, timeout: 2000 },
+);
+```
+
+These headers go beneath the SDK's own, so they never replace `Authorization`, `Accept`,
+`User-Agent` or `Content-Type`. A header name that is not an HTTP token, or a value with a control
+character or a character above U+00FF, throws `SirenError` before anything is sent, and the message
+never quotes the header.
+
+Siren records every visit it receives, so the SDK sends `events.siteVisited` once and never retries
+it. Siren has no key to match a resent custom event either, so `events.ingest` is sent once,
+whatever its slug. A sale with no `externalId` is sent once too, because Siren gives a test sale
+with no id a random one and refuses a real sale without one. Refunds and sales that carry an
+`externalId` are retried, because Siren records a resent sale or a resent refund id once.
 
 ## Quickstart: verify a webhook
 
@@ -154,16 +224,27 @@ const sub = await siren.webhooks.subscriptions.create({
 await saveSecretSomewhereSafe(sub.signingSecret);
 ```
 
+`webhooks.subscriptions.events()` reads that live list, each entry an `event`, its `category` and a
+readable `label`. It can hold an event this SDK's `WebhookEventType` lacks yet. The key needs
+`webhook-subscriptions:read` or `webhook-subscriptions:manage`:
+
+```ts
+const catalog = await siren.webhooks.subscriptions.events();
+// [{ event: 'sale.created', category: 'Sales', label: 'A sale was recorded' }, ...]
+```
+
 ## Features
 
 - **Event ingestion** — record sales, refunds, referred visits, and custom event types
-  (`events.sale`, `events.refund`, `events.siteVisited`, `events.ingest`). Ingestion is
-  auto-retried on network errors and 429/5xx.
+  (`events.sale`, `events.refund`, `events.siteVisited`, `events.ingest`). Sales and refunds
+  are auto-retried on network errors and 429/5xx. A visit, a custom event sent through
+  `events.ingest` and a sale with no `externalId` are sent once.
 - **Signed-webhook verification and subscriptions** — constant-time signature checks
   (`webhooks.constructEvent`, `webhooks.verifySignature`) plus subscription management
   (`webhooks.subscriptions.create` / `list` / `delete`) with an API key that holds a webhook scope.
-- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`) with a
-  dashboard session's token. The raw key is returned once and cannot be retrieved later.
+- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`), and list the
+  scopes a new key may hold (`apiKeys.scopes()`), with a dashboard session's token. The raw key is
+  returned once and cannot be retrieved later.
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
   `transactions`, `obligations`, and `payouts`, with an API key that holds the ledger scopes.
 - **Browser storefront module** — `@novatorius/siren/storefront` records referred visits and claims
@@ -179,6 +260,325 @@ console.log(conversions.estimatedCount); // total across all pages, if known
 ```
 
 Pages hold up to 200 records, and Siren's default page size is 10.
+
+## Collaborators and programs
+
+The client reads and writes the records a connector works with: collaborators with their codes and
+program enrollments, collaborator groups with their members, programs and program groups. Each
+record resource takes a dashboard session's token, or a connected site's token on the routes Siren
+opens to sites.
+
+```ts
+import { CollaboratorBulkAction, Siren } from '@novatorius/siren';
+
+// siren.collaborators: list, retrieve, create, update, delete, bulk
+const active = await siren.collaborators.list({ status: 'active', perPage: 50 });
+const ada = await siren.collaborators.retrieve(42, { fields: ['id', 'fullName', 'referralCode'] });
+await siren.collaborators.bulk(CollaboratorBulkAction.AddToProgram, [42, 43], { programId: 7 });
+```
+
+A connected site creates a collaborator with `createPending`, which sends `fullName`, `nickname`,
+`email` and an optional `trackingId` with `status: 'pending'` so the organization approves them,
+and throws `SirenError` for any other field. The site changes a collaborator only with `updateDetails`, which sends
+`fullName` and `nickname` and throws `SirenError` for any other key.
+
+```ts
+const pending = await siren.collaborators.createPending({
+  fullName: 'Ada Lovelace',
+  nickname: 'ada',
+  email: 'ada@example.com',
+});
+await siren.collaborators.updateDetails(pending.id, { nickname: 'countess' });
+```
+
+`siren.collaborators.aliases` reads and gives out tracking and coupon codes. Siren files a
+connected site's codes under its Property, as in `coupon@property:5`. `query`, `findByCode`,
+`forCollaborator` and `create` answer each code with the plain type and the Property in
+`propertyId`, through `PropertyQualifier`, so send and compare plain types. `list` reads the
+collaborator record's own `aliases` field and answers each type as Siren stores it, as the PHP SDK
+does. `create` raises `CodeConflictError` when another collaborator already holds
+the code. Siren's 409 does not name the holder, so read `findByCode` before treating the code as
+someone else's.
+
+```ts
+import { CodeConflictError, CollaboratorAliasType } from '@novatorius/siren';
+
+try {
+  await siren.collaborators.aliases.create('SAVE10', CollaboratorAliasType.Coupon, 42);
+} catch (error) {
+  if (!(error instanceof CodeConflictError)) throw error;
+  const holder = await siren.collaborators.aliases.findByCode('SAVE10', CollaboratorAliasType.Coupon);
+  if (holder?.collaboratorId !== 42) throw error;
+}
+```
+
+`siren.collaborators.enrollments` enrolls collaborators in programs and reads who belongs where.
+
+```ts
+await siren.collaborators.enrollments.add(42, 7);
+const enrolled = await siren.collaborators.enrollments.programsFor(42);
+const members = await siren.collaborators.enrollments.collaboratorsIn(7, { status: 'active' });
+```
+
+`siren.collaboratorGroups` manages named sets of collaborators, and `siren.collaboratorGroups.members`
+manages who is in each one.
+
+```ts
+const group = await siren.collaboratorGroups.create({ name: 'Podcasters', structure: 'flat' });
+await siren.collaboratorGroups.members.add(group.id, [{ collaboratorId: 42 }]);
+const inGroup = await siren.collaboratorGroups.members.list(group.id);
+```
+
+`siren.programs` and `siren.programGroups` manage programs and the groups whose programs compete
+for one engagement.
+
+```ts
+import { ProgramGroupSorter } from '@novatorius/siren';
+
+const activePrograms = await siren.programs.list({ status: 'active' });
+const currencies = await siren.programs.currencyTypes();
+await siren.programGroups.create({
+  name: 'Launch partners',
+  description: 'Programs that compete for launch sales',
+  sorter: ProgramGroupSorter.NewestBindingWins,
+});
+```
+
+Every record write is sent once: create, update, delete, bulk, the enrollment and member writes,
+and the code writes. A write's answer is lost when it throws `ConnectionError` or a 5xx `ApiError`,
+and each method's doc says how to find out what Siren did before you send it again. Reads retry on
+a network error, 429 or 5xx, like the other reads. A caller that runs these calls from its own
+durable queue builds the client with `maxRetries: 0`, so the queue owns every retry.
+
+Each list sends only the filters its route reads. A list throws `SirenError` for a key its route
+does not read, before sending, because Siren ignores an unknown key and would answer every record.
+An empty filter list throws `SirenError` too, since leaving it out would also answer every record.
+A filter value holding a comma throws as well, because Siren reads a comma as "any of". Only
+`fields` and the search text `s` may hold one. Every id must be a positive whole number.
+
+## Store credit, mappings and commerce records
+
+The client also carries the rest of the records a store connector reads and writes: opportunities,
+engagements, distributors, custom currencies, store credit, mappings to records outside Siren, and
+the settings Siren shares with a connected site. Conversions and transactions gain their writes.
+
+```ts
+import { ConversionBulkAction, DistributorBulkAction } from '@novatorius/siren';
+
+// siren.opportunities and siren.engagements read the tracking side of the ledger.
+const opportunities = await siren.opportunities.list({ collaboratorId: 42 });
+const engagements = await siren.engagements.list({ collaboratorId: 42, from: '2026-10-01' });
+
+// siren.distributors and siren.customCurrencies manage revenue pools and points.
+await siren.distributors.bulk(DistributorBulkAction.Activate, [3, 4]);
+const points = await siren.customCurrencies.retrieve('POINTS');
+
+// siren.conversions.create and siren.transactions.create write the ledger.
+const transaction = await siren.transactions.create({
+  bindingId: 'invoice-1001',
+  bindingDataType: 'invoice',
+  details: [{ name: 'Consulting', value: 50000, quantity: 1, units: 'USD' }],
+});
+await siren.conversions.bulk(ConversionBulkAction.Approve, [101, 102]);
+```
+
+Send a binding with `transactions.create` whenever the outside record has an id. A resend after a
+lost answer then gets a 409, raised as `ConflictError`, instead of making a second transaction.
+Siren finds the first send only by `bindingId` and `bindingDataType` together, so the SDK refuses
+one without the other, and a binding of `""`, `"0"` or `0`, which Siren reads as none. It refuses
+a binding of `NaN`, `Infinity` or `-Infinity` too, since JSON writes each as `null`.
+
+A conversion create and a collaborator credit take no binding. After either loses its answer, send
+it again through `conversions.recoverCreate` or `transactions.recoverCreditCollaborator`, with the
+same arguments. Each reads the conversions Siren holds and sends the write only for what is
+missing. An answer it cannot read raises `UnexpectedResponseError` and sends nothing, so a broken
+answer never makes a second conversion. An empty page whose `total` says Siren holds matching rows
+raises the same way, since Siren counts the rows in a second query and a first send still in flight
+can land between the two. The read and the send are two requests, so run one recovery
+per record at a time.
+
+```ts
+const { conversion, created } = await siren.conversions.recoverCreate({
+  engagementId: 31,
+  transactionId: 71,
+  type: 'sale',
+  status: 'pending',
+});
+```
+
+`siren.credits` reads a collaborator's store credit and places the checkout holds that reserve it.
+`CreditsResource.holdReference` builds the reference a checkout's holds carry, for the `holds`
+filter and for `checkoutBalances`, which leaves that checkout's own hold out of the balance.
+
+```ts
+import { CreditsResource, HoldConflictError } from '@novatorius/siren';
+
+const reference = CreditsResource.holdReference('woocommerce', cartToken);
+const [balance] = await siren.credits.checkoutBalances(42, 'STORE_CREDIT', reference);
+
+try {
+  await siren.credits.placeHold(42, 'STORE_CREDIT', 1500, cartToken, 'woocommerce');
+} catch (error) {
+  if (!(error instanceof HoldConflictError)) throw error;
+  // error.reason is 'no_credit', 'token_in_use' or null
+}
+```
+
+Calling `placeHold` again for the same checkout token and currency replaces that checkout's hold,
+so a caller may repeat it after a lost answer. A hold ends when its `ttl` runs out, when the order
+settles it, or when `releaseHold` frees it early. Call `releaseHold` only when the shopper drops
+the credit, and never release the hold of a checkout that became an order, because the order's
+settlement spends that hold and the same credit could be spent twice.
+
+`siren.mappings` links collaborators to records outside Siren, such as WordPress users, and
+`siren.settings` reads the settings Siren shares with a connected site.
+
+```ts
+await siren.mappings.create(42, '7', 'wordpress_user');
+const [link] = await siren.mappings.forExternal('7', 'wordpress_user');
+const settings = await siren.settings.collaborator();
+```
+
+Every write here is sent once, as in the section above, apart from the one resend after a 401.
+Each write's doc says what a second send does and how to check before you send it again. Reads
+retry on a network error, 429 or 5xx inside `maxRetries`, which is 2 unless you set it. A caller
+that runs these calls from its own durable queue sets `maxRetries: 0` on the client, so the queue's
+attempts are not multiplied. Each list throws `SirenError` for a key
+its route does not read, and every id must be a positive whole number. The conversion, transaction,
+custom currency and distributor creates send only the fields Siren reads and throw `SirenError`
+for any other key, naming it.
+
+## Parity with the PHP SDK
+
+The Node SDK carries every public method of the Siren PHP SDK 0.3.0 under the same name, with one
+left out. The table lists each PHP method, its Node name, and how the two differ where they do.
+Across every record resource, Node throws `SirenError` before sending where PHP throws
+`InvalidArgumentException`, a list answers a `SirenList` with `estimatedCount` where PHP answers
+a `ListResult`, a 2xx answer of the wrong shape raises `UnexpectedResponseError`, every
+record write is sent once, and a `retrieve` sends only `fields`, `include` and `propertyId`, where
+PHP passes any key. The table covers the resource methods. PHP's `ListResource` also has three
+public static helpers (`listQuery`, `query` and `toListResult`), which Node keeps internal.
+
+| PHP | Node | Difference |
+|---|---|---|
+| `$siren->events->sale()` | `siren.events.sale()` |  |
+| `$siren->events->refund()` | `siren.events.refund()` |  |
+| `$siren->events->siteVisited()` | `siren.events.siteVisited()` |  |
+| `$siren->events->ingest()` | `siren.events.ingest()` | Node takes an optional third argument, `{ headers, timeout }`, for the call's own request headers and wait. PHP's takes the slug and payload only. |
+| `$siren->webhooks->constructEvent()` | `siren.webhooks.constructEvent()` |  |
+| `$siren->webhooks->constructEventFromHeaders()` | none | Node leaves it out. `constructEvent` takes the request headers, a Fetch `Headers` or Node's `req.headers`, as its fourth argument and reads the event and delivery from them, which is what this PHP method adds. |
+| `$siren->webhooks->verifySignature()` | `siren.webhooks.verifySignature()` |  |
+| `$siren->webhooks->subscriptions->create()` | `siren.webhooks.subscriptions.create()` |  |
+| `$siren->webhooks->subscriptions->events()` | `siren.webhooks.subscriptions.events()` |  |
+| `$siren->webhooks->subscriptions->list()` | `siren.webhooks.subscriptions.list()` |  |
+| `$siren->webhooks->subscriptions->delete()` | `siren.webhooks.subscriptions.delete()` |  |
+| `$siren->apiKeys->create()` | `siren.apiKeys.create()` |  |
+| `$siren->apiKeys->list()` | `siren.apiKeys.list()` |  |
+| `$siren->apiKeys->scopes()` | `siren.apiKeys.scopes()` |  |
+| `$siren->apiKeys->revoke()` | `siren.apiKeys.revoke()` |  |
+| `$siren->conversions->list()` | `siren.conversions.list()` |  |
+| `$siren->conversions->retrieve()` | `siren.conversions.retrieve()` |  |
+| `$siren->conversions->create()` | `siren.conversions.create()` | Sends only the five fields Siren reads and refuses any other key, and refuses an `engagementId`, `transactionId` or `obligationId` that is not a positive whole number, where PHP sends the array as given. After a lost answer, `recoverCreate` sends it again only when Siren holds no such conversion. |
+| `$siren->conversions->update()` | `siren.conversions.update()` | Answers `null` for the empty 200 Siren sends, or the record when Siren sends one, where PHP answers `[]`, which would look like a record. Refuses an `engagementId`, `transactionId` or `obligationId` that is not a positive whole number, as `create` does. |
+| `$siren->conversions->delete()` | `siren.conversions.delete()` | Answers `null` for Siren's 204 and throws `UnexpectedResponseError` for an empty 200, where PHP answers `[]` for any empty body. |
+| `$siren->conversions->bulk()` | `siren.conversions.bulk()` |  |
+| `$siren->conversions->types()` | `siren.conversions.types()` |  |
+| `$siren->transactions->list()` | `siren.transactions.list()` |  |
+| `$siren->transactions->retrieve()` | `siren.transactions.retrieve()` |  |
+| `$siren->transactions->details()` | `siren.transactions.details()` | Throws `UnexpectedResponseError` when the `details` field is missing or broken, where PHP answers `[]`, because Siren always sends a field it was asked for. |
+| `$siren->transactions->create()` | `siren.transactions.create()` | Takes 1 to 500 detail lines, each an object, and throws `SirenError` before sending otherwise, where PHP checks only for a non-empty array. Sends only `details`, `bindingId` and `bindingDataType`, and only the seven line keys Siren reads, refusing any other key. Refuses half a binding, or a binding of `""`, `"0"` or `0`, which Siren reads as none. Refuses a binding field of `NaN`, `Infinity` or `-Infinity`, which JSON writes as `null`. |
+| `$siren->transactions->bulk()` | `siren.transactions.bulk()` |  |
+| `$siren->transactions->creditCollaborator()` | `siren.transactions.creditCollaborator()` | Takes 1 to 500 positive whole ids, a positive collaborator id and a non-empty `type`, and throws `SirenError` before sending otherwise. After a lost answer, `recoverCreditCollaborator` credits only the transactions that hold no conversion for the collaborator. A `type` of `null`, which Siren reads as `sale`, is refused, so leave `type` out for a sale. |
+| `$siren->transactions->sources()` | `siren.transactions.sources()` |  |
+| `$siren->obligations->list()` | `siren.obligations.list()` |  |
+| `$siren->payouts->list()` | `siren.payouts.list()` |  |
+| `$siren->collaborators->list()` | `siren.collaborators.list()` | Throws `SirenError` for a key the route does not read, an empty filter list, a comma outside `fields` and `s`, and an id filter that is not a positive whole number. |
+| `$siren->collaborators->retrieve()` | `siren.collaborators.retrieve()` |  |
+| `$siren->collaborators->create()` | `siren.collaborators.create()` |  |
+| `$siren->collaborators->createPending()` | `siren.collaborators.createPending()` | Refuses `programs`, `distributors`, `groups` and `status` whatever their value, where PHP skips a `null` one. |
+| `$siren->collaborators->updateDetails()` | `siren.collaborators.updateDetails()` | Sends only `fullName` and `nickname` and refuses every other key, `fields` and `id` included, where PHP passes `fields` and `id`. |
+| `$siren->collaborators->update()` | `siren.collaborators.update()` |  |
+| `$siren->collaborators->delete()` | `siren.collaborators.delete()` | Answers `null` for Siren's 204 and throws `UnexpectedResponseError` for an empty 200, where PHP answers `[]` for any empty body. |
+| `$siren->collaborators->bulk()` | `siren.collaborators.bulk()` | Each action takes only its own extra, `programId` or `distributorId`, as a positive whole number, and the rest take none. Also runs `reject`, which Siren accepts. |
+| `$siren->collaborators->statusTypes()` | `siren.collaborators.statusTypes()` |  |
+| `$siren->collaborators->generateReferralCode()` | `siren.collaborators.generateReferralCode()` |  |
+| `$siren->collaborators->aliases->list()` | `siren.collaborators.aliases.list()` |  |
+| `$siren->collaborators->aliases->trackingCode()` | `siren.collaborators.aliases.trackingCode()` |  |
+| `$siren->collaborators->aliases->setTrackingCode()` | `siren.collaborators.aliases.setTrackingCode()` | Trims the code and refuses one that is empty once trimmed or holds a comma, where PHP refuses only an empty string. |
+| `$siren->collaborators->aliases->findByCode()` | `siren.collaborators.aliases.findByCode()` | Also sends `orderBy: dateIssued` and `order: DESC`, so the one row Siren answers is the newest. |
+| `$siren->collaborators->aliases->forCollaborator()` | `siren.collaborators.aliases.forCollaborator()` | Also sends `orderBy: dateIssued` and `order: DESC`, so the one row Siren answers is the newest. |
+| `$siren->collaborators->aliases->query()` | `siren.collaborators.aliases.query()` |  |
+| `$siren->collaborators->aliases->create()` | `siren.collaborators.aliases.create()` | Also takes one integration's coupon type, such as `coupon@source:wc`, which Siren accepts on the alias routes. |
+| `$siren->collaborators->aliases->free()` | `siren.collaborators.aliases.free()` |  |
+| `$siren->collaborators->enrollments->programsFor()` | `siren.collaborators.enrollments.programsFor()` |  |
+| `$siren->collaborators->enrollments->collaboratorsIn()` | `siren.collaborators.enrollments.collaboratorsIn()` |  |
+| `$siren->collaborators->enrollments->enroll()` | `siren.collaborators.enrollments.enroll()` |  |
+| `$siren->collaborators->enrollments->unenroll()` | `siren.collaborators.enrollments.unenroll()` |  |
+| `$siren->collaborators->enrollments->replace()` | `siren.collaborators.enrollments.replace()` |  |
+| `$siren->collaborators->enrollments->list()` | `siren.collaborators.enrollments.list()` |  |
+| `$siren->collaborators->enrollments->add()` | `siren.collaborators.enrollments.add()` |  |
+| `$siren->collaborators->enrollments->remove()` | `siren.collaborators.enrollments.remove()` |  |
+| `$siren->collaboratorGroups->list()` | `siren.collaboratorGroups.list()` |  |
+| `$siren->collaboratorGroups->retrieve()` | `siren.collaboratorGroups.retrieve()` |  |
+| `$siren->collaboratorGroups->create()` | `siren.collaboratorGroups.create()` |  |
+| `$siren->collaboratorGroups->update()` | `siren.collaboratorGroups.update()` |  |
+| `$siren->collaboratorGroups->delete()` | `siren.collaboratorGroups.delete()` |  |
+| `$siren->collaboratorGroups->structures()` | `siren.collaboratorGroups.structures()` |  |
+| `$siren->collaboratorGroups->members->list()` | `siren.collaboratorGroups.members.list()` |  |
+| `$siren->collaboratorGroups->members->add()` | `siren.collaboratorGroups.members.add()` |  |
+| `$siren->collaboratorGroups->members->set()` | `siren.collaboratorGroups.members.set()` |  |
+| `$siren->collaboratorGroups->members->remove()` | `siren.collaboratorGroups.members.remove()` |  |
+| `$siren->programs->list()` | `siren.programs.list()` |  |
+| `$siren->programs->retrieve()` | `siren.programs.retrieve()` |  |
+| `$siren->programs->create()` | `siren.programs.create()` |  |
+| `$siren->programs->update()` | `siren.programs.update()` |  |
+| `$siren->programs->delete()` | `siren.programs.delete()` |  |
+| `$siren->programs->bulk()` | `siren.programs.bulk()` |  |
+| `$siren->programs->statusTypes()` | `siren.programs.statusTypes()` |  |
+| `$siren->programs->incentiveTypes()` | `siren.programs.incentiveTypes()` |  |
+| `$siren->programs->currencyTypes()` | `siren.programs.currencyTypes()` |  |
+| `$siren->programGroups->list()` | `siren.programGroups.list()` |  |
+| `$siren->programGroups->retrieve()` | `siren.programGroups.retrieve()` |  |
+| `$siren->programGroups->create()` | `siren.programGroups.create()` |  |
+| `$siren->programGroups->update()` | `siren.programGroups.update()` |  |
+| `$siren->programGroups->delete()` | `siren.programGroups.delete()` |  |
+| `$siren->programGroups->bulk()` | `siren.programGroups.bulk()` |  |
+| `$siren->opportunities->list()` | `siren.opportunities.list()` | Refuses `id` and `s`, which Siren ignores for an organization and so would answer every opportunity. Read one by id with `retrieve`. |
+| `$siren->opportunities->retrieve()` | `siren.opportunities.retrieve()` |  |
+| `$siren->opportunities->update()` | `siren.opportunities.update()` |  |
+| `$siren->engagements->list()` | `siren.engagements.list()` | Also takes `from` and `to`, each a day as `YYYY-MM-DD`, which Siren reads beside the four filters PHP names. Refuses either when it is not a real day, which Siren would leave out and answer every engagement. |
+| `$siren->engagements->retrieve()` | `siren.engagements.retrieve()` |  |
+| `$siren->engagements->types()` | `siren.engagements.types()` |  |
+| `$siren->engagements->calculations()` | `siren.engagements.calculations()` |  |
+| `$siren->distributors->list()` | `siren.distributors.list()` | Refuses a `metricType` of `""`, which Siren reads as no filter. |
+| `$siren->distributors->retrieve()` | `siren.distributors.retrieve()` |  |
+| `$siren->distributors->create()` | `siren.distributors.create()` | Sends only the fifteen fields PHP documents, which Siren reads, and refuses any other key, where PHP sends the array as given. |
+| `$siren->distributors->update()` | `siren.distributors.update()` |  |
+| `$siren->distributors->delete()` | `siren.distributors.delete()` | Answers `null` for Siren's 204 and throws `UnexpectedResponseError` for an empty 200, where PHP answers `[]` for any empty body. |
+| `$siren->distributors->bulk()` | `siren.distributors.bulk()` |  |
+| `$siren->distributors->creditMetric()` | `siren.distributors.creditMetric()` | Also takes `points`, a whole number from 1 to 1,000,000,000,000, which Siren reads for a distributor with no point value. |
+| `$siren->customCurrencies->list()` | `siren.customCurrencies.list()` |  |
+| `$siren->customCurrencies->retrieve()` | `siren.customCurrencies.retrieve()` | Takes only `fields`, and every code must be letters, digits, underscores and hyphens, since the code is a path segment on update and delete. |
+| `$siren->customCurrencies->create()` | `siren.customCurrencies.create()` | Sends only the eight fields Siren reads, `scale` and `propertyIds` included, which PHP does not document, and refuses any other key. The code must be letters, digits, underscores and hyphens. |
+| `$siren->customCurrencies->update()` | `siren.customCurrencies.update()` | The code must be letters, digits, underscores and hyphens, since it is a path segment. |
+| `$siren->customCurrencies->delete()` | `siren.customCurrencies.delete()` | The code must be letters, digits, underscores and hyphens. Throws `UnexpectedResponseError` when a 2xx carries no object, where PHP answers `[]`. |
+| `$siren->credits->adjust()` | `siren.credits.adjust()` | The currency must be letters, digits, underscores and hyphens, where PHP checks only that it is not empty. |
+| `$siren->credits->balances()` | `siren.credits.balances()` | Throws `UnexpectedResponseError` when the `creditBalances` field is missing or broken, where PHP answers `[]`, so "no credit" never stands in for a broken answer. |
+| `$siren->credits->checkoutBalances()` | `siren.credits.checkoutBalances()` | Throws `UnexpectedResponseError` for a body that is not a list, where PHP drops broken rows, and carries no `held` field, since Siren sends none. The currency must be letters, digits, underscores and hyphens. Refuses a missing `collaboratorId`, which Siren answers with a 400. |
+| `$siren->credits->checkoutBalance()` | `siren.credits.checkoutBalance()` | The currency must be letters, digits, underscores and hyphens, where PHP checks only that it is not empty. |
+| `$siren->credits->entries()` | `siren.credits.entries()` | A `collaboratorId` that is not a positive whole number does not count as naming the query, where PHP counts any number. The `currency` filter must be letters, digits, underscores and hyphens. |
+| `$siren->credits->holds()` | `siren.credits.holds()` | A `collaboratorId` that is not a positive whole number does not count as naming the query, where PHP counts any number. The `currency` filter must be letters, digits, underscores and hyphens. `reference` takes only the form `holdReference` builds, so an API key filters a site's hold by `collaboratorId` and `status` instead. |
+| `$siren->credits->placeHold()` | `siren.credits.placeHold()` | A 429 stays `RateLimitError`, where PHP raises `HoldLimitException`, because Siren has no hold cap. Every 409 becomes `HoldConflictError`. The currency must be letters, digits, underscores and hyphens. |
+| `$siren->credits->releaseHold()` | `siren.credits.releaseHold()` | Sent once, where PHP retries. A release is safe to repeat, so the caller's queue repeats it. |
+| `Credits::holdReference()` | `CreditsResource.holdReference()` |  |
+| `$siren->mappings->list()` | `siren.mappings.list()` |  |
+| `$siren->mappings->forExternal()` | `siren.mappings.forExternal()` | Refuses an external id with a comma, which Siren would read as "any of". `forLocal` reads such a link. |
+| `$siren->mappings->forLocal()` | `siren.mappings.forLocal()` |  |
+| `$siren->mappings->create()` | `siren.mappings.create()` |  |
+| `$siren->mappings->deleteForCollaborator()` | `siren.mappings.deleteForCollaborator()` | Throws `UnexpectedResponseError` when a 2xx carries no object, where PHP answers `[]`. |
+| `$siren->mappings->deleteForExternal()` | `siren.mappings.deleteForExternal()` | Throws `UnexpectedResponseError` when a 2xx carries no object, where PHP answers `[]`. |
+| `$siren->settings->collaborator()` | `siren.settings.collaborator()` |  |
+| `$siren->settings->value()` | `siren.settings.value()` | Also refuses a name holding a comma, with one message, since Siren reads a comma as "any of". |
 
 ## Storefront module (browser)
 
@@ -267,8 +667,19 @@ such as `ledger:*`, and older names such as `conversions:read` grant none of the
 before these scopes existed reads nothing until you replace it with one that holds them. A key's
 requests count against the organization's API rate limit.
 
-`apiKeys.create`, `list` and `revoke` take a signed-in dashboard session's token. No API key scope
-reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
+`apiKeys.create`, `list`, `revoke` and `scopes` take a signed-in dashboard session's token. No API
+key scope reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
+
+`apiKeys.scopes()` lists every scope a new key may hold, grouped by resource: the event scopes under
+`events`, with any custom event types your organization added, the ledger scopes under `ledger`,
+the webhook scopes under `webhook-subscriptions`, and the record scopes under one `records:*` group
+each. Each entry carries the `scope` string to pass to `apiKeys.create` and a readable `label`:
+
+```ts
+const groups = await siren.apiKeys.scopes();
+for (const entry of groups.ledger ?? []) console.log(entry.scope, entry.label);
+// ledger:conversions:read Read conversions
+```
 
 ```ts
 import { ApiKeyScope } from '@novatorius/siren';
@@ -293,17 +704,255 @@ const storeConversions = await siren.conversions.list({ propertyId: 5, status: '
 
 ```ts
 const siren = new Siren({
-  apiKey: 'sk_live_...',                                 // required
-  baseUrl: 'https://api.sirenaffiliates.com/siren/v1',   // default; point at staging/local as needed
+  apiKey: 'sk_live_...',                                 // or accessToken, never both
+  baseUrl: 'https://api.sirenaffiliates.com/siren/v1',   // default, point at staging/local as needed
   timeout: 30_000,                                       // ms, default 30s
   maxRetries: 2,                                         // default 2
+  httpClient: new FetchHttpClient(),                     // default, or your own HttpClient
 });
 ```
 
-Idempotent reads and event ingestion automatically retry network errors and 429/5xx responses with
-exponential backoff (honoring `Retry-After`). Management writes — `apiKeys.create` and
-`webhooks.subscriptions.create` — are **never** auto-retried, so a flaky connection can't mint
-duplicate credentials.
+Pass `apiKey` or `accessToken`, never both. Both, neither or an empty one throws `SirenError`
+when you build the client. So does a token with a control character or a character above U+00FF,
+which cannot go in an HTTP header. `baseUrl` takes an http or https URL with no user name or
+password in it, made only of visible ASCII (U+0021 to U+007E) with no query, fragment, backslash
+or `@`. It starts with `http://` or `https://` and the host, which holds no `%`. An international
+host goes in its punycode form, such as `xn--bcher-kva.example`.
+`timeout` takes a number of milliseconds from 1 to 2147483647 for each send, and a retry gets the
+full timeout again. `maxRetries` takes a whole number of 0 or more, with no ceiling.
+Any other value, NaN, Infinity and `null` included, throws `SirenError` that names the option. The
+client reads only the options object's own properties, so a value inherited from a prototype is
+ignored.
+
+### Access tokens
+
+A connected store sends an OAuth access token instead of an API key. `accessToken` takes the token
+as a string, or an `AccessTokenSource` that supplies it and gets a fresh one when Siren refuses it:
+
+```ts
+import { CallbackAccessTokenSource, ConnectorScope, Siren } from '@novatorius/siren';
+
+const siren = new Siren({
+  accessToken: new CallbackAccessTokenSource(
+    () => store.accessToken(),
+    (rejected) => oauth.refresh(rejected), // answer null when the grant is gone
+  ),
+});
+
+// The scopes a connected site asks for in its OAuth flow.
+authorizeUrl.searchParams.set('scope', ConnectorScope.CONNECTED_SITE);
+```
+
+The SDK reads the token once per call, before the first send. When Siren answers a 401, the SDK
+asks the `AccessTokenSource` to refresh once and resends the request once with the new token,
+writes included, because Siren answers a 401 before it records anything. That resend does not
+count against `maxRetries`. A second 401 raises `AuthenticationError`, or `SiteDisconnectedError`
+when the organization revoked the site, which then needs to reconnect. An `apiKey` or a string
+`accessToken` is never refreshed, so its 401 raises after one send. An error the source throws
+reaches you unchanged, so a source whose refresh Siren refuses should answer `null` and let the
+401 surface. Each call refreshes at most once, and a source shared by concurrent callers keeps its
+own lock.
+
+### Retries
+
+Idempotent reads, sales and refunds automatically retry network errors and 429/5xx responses with
+exponential backoff (honoring `Retry-After`). The management writes `apiKeys.create` and
+`webhooks.subscriptions.create` are **never** auto-retried, so a flaky connection can't mint
+duplicate credentials. `events.siteVisited` is never retried either, because Siren records every
+visit it receives. `events.ingest` is sent once for every slug, and a sale with no `externalId` is
+sent once, because Siren has no key to match a resent copy of either. A 403 or 409 is sent once.
+A 401 is resent once after a refresh when the credential is an `AccessTokenSource` that can
+refresh, and a send-once request never goes out again after that resend.
+
+If your app sends events from a durable queue, set `maxRetries: 0`. The queue owns redelivery, and
+an SDK retry inside a queued attempt would multiply the attempts. At 0 a request still goes out a
+second time after a 401 when the `AccessTokenSource` refreshes, because Siren refused the first
+send before it recorded anything. A retriable call makes at most `maxRetries + 2` sends: the first,
+its retries and that one resend. Each send gets its own `timeout`, and the SDK waits at most 8 s
+between retries, so a call can take up to `maxRetries + 2` timeouts plus that backoff. `maxRetries`
+covers a brief network fault inside one call. Work that must survive an outage belongs on a durable
+queue, not on a high `maxRetries`.
+
+### Your own HTTP stack
+
+By default the SDK sends through `FetchHttpClient`, over the global `fetch`. A host with its own
+HTTP stack implements `HttpClient`, one `send(request)` method, and passes it as `httpClient`. The
+request carries the full URL, every header, the body and `timeout` in milliseconds. Answer an
+`HttpResponse` with the status, the headers and the body as text for every status, 3xx, 4xx and
+5xx included. An `HttpClient` must never follow a redirect and answers the 3xx as it is, because a
+followed redirect would send the bearer token to another host. The SDK raises a 3xx as
+`SirenError`. An `HttpClient` keeps the request headers out of every error it throws, because they
+carry the token and the SDK hands that error to you unchanged as `cause`. Reject with
+`HttpClientError` only when no complete response arrived, such as a refused connection or a
+timeout. The SDK may resend those and then raises `ConnectionError`. Any other error reaches you
+unchanged and is never resent.
+
+## Connected sites
+
+A store that connects to Siren Cloud as a site, such as a Medusa store, takes its tools from the
+`@novatorius/siren/connect` entry. It registers an OAuth client, sends the merchant to Cloud's
+consent screen, exchanges the code the callback brings back, and then calls Cloud with the site's
+own access token. The SDK keeps nothing, so the store keeps the client id, the state, the verifier
+and the token pair in its own storage.
+
+### Register and connect
+
+```ts
+import {
+  ConnectorSoftware,
+  OAuthClient,
+  codeChallengeS256,
+  createCodeVerifier,
+  createState,
+} from '@novatorius/siren/connect';
+
+const oauth = new OAuthClient();
+const redirectUri = 'https://store.example/siren/callback';
+
+// Once per store. Keep client_id.
+const registration = await oauth.register({
+  clientName: 'Example Store',
+  redirectUris: [redirectUri],
+  softwareId: ConnectorSoftware.Medusa,
+});
+
+// Each time the merchant connects.
+const verifier = createCodeVerifier();
+const state = createState();
+await store.saveConnectAttempt({ verifier, state });
+const consentUrl = oauth.authorizeUrl({
+  clientId: registration.client_id,
+  redirectUri,
+  state,
+  codeChallenge: codeChallengeS256(verifier),
+});
+```
+
+`new OAuthClient()` takes `baseUrl`, `consentScreenUrl`, `timeout` and `httpClient`, reads only
+the options object's own properties, and checks each as `new Siren()` checks `baseUrl`, `timeout`
+and `httpClient`. Its wait defaults to 15 seconds. `register` makes a new client every time it
+runs, so a store registers once and keeps `client_id`. `authorizeUrl` sends nothing. It builds the consent screen URL from the S256
+challenge and refuses anything else, so the verifier never reaches the merchant's browser.
+
+When the merchant approves, Cloud sends the browser back to the redirect URI with `code` and
+`state`. The store compares the callback's `state` with the one it kept, refuses a mismatch, and
+uses each `state` once. Then it exchanges the code:
+
+```ts
+const tokens = await oauth.exchangeCode({
+  clientId: registration.client_id,
+  code: callback.code,
+  redirectUri,
+  codeVerifier: attempt.verifier,
+});
+await store.saveTokens(tokens); // access_token and refresh_token, as Cloud sent them
+```
+
+A code works once. After a `ConnectionError` from `exchangeCode`, the store cannot know whether
+Cloud spent the code, so it starts the connection over with a new verifier and state.
+
+### Refresh
+
+```ts
+const pair = await oauth.refresh({
+  clientId: registration.client_id,
+  refreshToken: saved.refresh_token,
+  attemptId: createState(),
+});
+await store.saveTokens(pair);
+```
+
+Cloud rotates the refresh token on every refresh, so the store saves the new pair before anything
+else reads it. A refresh is sent exactly once and never retried by the SDK, whatever the answer.
+The store takes its own lock around each refresh, so two refreshes of one token never race. Give
+each refresh a random `attemptId` on its first try, such as one from `createState()`, because a
+resend cannot add one later.
+
+Cloud keeps a 30-second reuse window from the rotation. Inside it, a repeat that carries the same
+`attemptId` gets the pair Cloud already issued. Any repeat after 30 seconds makes Cloud revoke the
+whole token family. So after a `ConnectionError`, a 429 or a 5xx, the store may resend that
+refresh once, with the same `attemptId`, and it sends that resend at once, as Siren's WordPress
+plugin does. A request that cannot wait hands the resend to a background task that runs straight
+away, never to a queue that waits minutes. If the resend fails too, the store sends nothing more
+for that refresh. A refresh refused with `invalid_grant` or `invalid_client` means the grant is
+gone, and the site connects again.
+
+### SirenConnect
+
+```ts
+import { CallbackAccessTokenSource, SirenConnect } from '@novatorius/siren/connect';
+
+const siren = new SirenConnect({
+  accessToken: new CallbackAccessTokenSource(
+    () => store.accessToken(),
+    (rejected) => store.refreshUnderLock(rejected), // answer null when the grant is gone
+  ),
+});
+
+const plan = await siren.connect.plan();
+await siren.connect.reportSiteState({ forwarding: true });
+```
+
+`SirenConnect` is the client a connected site holds once it has tokens. It takes the options
+`new Siren()` takes, with `accessToken` required and no `apiKey`. When `accessToken` is an
+`AccessTokenSource`, a 401 makes the client ask it for a fresh token once and resend once, as
+`new Siren()` does. `siren.connect` holds the `/connect/*` routes and `/ping`, and each method
+names the `ConnectScope` its route needs. `siren.events` forwards the site's events.
+
+The reads, `updateGrant` and `webhook.delete` retry like any read. `webhook.delete` answers
+`deleted: false` when the site had no webhook left to remove, which is also what a retry after a
+lost answer meets, so it counts as success. The three reports, `reportSiteState`,
+`reportIntegrations` and `syncProducts`, are sent once, because the site's task queue sends them
+again. `disconnect` is sent once, because Cloud cuts the client off as it commits, so a 401 after
+a `disconnect` means the site is disconnected. A site that calls a retried route from its own
+queue builds its client with `maxRetries: 0`. `customerEmailKey` answers the key the site hashes
+customer emails with.
+
+### The site's webhook
+
+```ts
+const subscription = await siren.connect.webhook.replace({
+  targetUrl: 'https://store.example/siren/webhook',
+  events: ['conversion.approved', 'payout.paid'],
+});
+await store.saveSigningSecret(subscription.signingSecret);
+```
+
+`replace` creates or replaces the site's subscription and answers a new signing secret, which
+Cloud shows only in that answer. It is sent once, because each send rotates the secret. After a
+`ConnectionError` from `replace`, the site cannot know whether the secret rotated, so it calls
+`replace` again before it trusts the stored secret. The site verifies every delivery with
+`constructEvent` and the signing secret, as in
+[Quickstart: verify a webhook](#quickstart-verify-a-webhook), and drops any delivery that fails.
+Never log the customer email key or the signing secret, and keep both out of error reports.
+
+### Forwarding events
+
+```ts
+import { ForwardedEventSlug } from '@novatorius/siren/connect';
+
+await siren.events.forward(
+  ForwardedEventSlug.ProductDeleted,
+  {
+    version: 1,
+    eventId: row.eventId,
+    origin: 'site',
+    occurredAt: '2026-11-12T09:30:00+00:00',
+    data: { integration: 'medusa', platformId: 'prod_01', changedAt: '2026-11-12T09:30:00+00:00' },
+  },
+  { finalAttempt: row.isLastTry },
+);
+```
+
+`events.forward` sends one of the site's events in Siren's versioned envelope. Before sending, it
+refuses a slug outside `ForwardedEventSlug`, so a typo never becomes a custom event. It also
+refuses an envelope Cloud would refuse. `events.forward` is sent once, whatever `maxRetries` says,
+because the site's outbox owns redelivery. After a 401 it sends again with a refreshed token, and
+only then. Mint the `eventId` once, when the site records the event, and keep it with the event.
+The outbox resends a failed event with that same `eventId` and the same token, and Cloud answers
+an event it already recorded with `status: duplicate`, which the outbox counts as delivered. On
+the outbox's last try, pass `finalAttempt: true`, which adds the `X-Siren-Final-Attempt: 1`
+header.
 
 ## Other SDKs
 
@@ -336,20 +985,31 @@ example, carry no `statusCode`:
 |---|---|
 | `AuthenticationError` | Missing, invalid, expired or revoked API key (401) |
 | `ApiKeyNotAcceptedError` | The route takes a dashboard session and not an API key (401, `code` `api_key_not_accepted`). Extends `AuthenticationError` |
+| `SiteDisconnectedError` | The organization revoked or deleted the connected site's connection (401, `code` `site_disconnected`). Reconnect the site. Extends `AuthenticationError` |
 | `PermissionError` | The credential may not do this (403) |
 | `MissingScopeError` | The key holds none of the route's scopes (403, `code` `missing_scope`). `scope` and `anyOf` name them. Extends `PermissionError` |
 | `StoreKeyNotAllowedError` | A key bound to one store asked for payouts or webhook subscriptions (403, `code` `store_key_not_allowed`). Extends `PermissionError` |
+| `PolicyError` | Siren's policy refused the request, so sending it again fails again (403, one of the `POLICY_ERROR_CODES`). `param` names the refused field when Siren says which. Extends `PermissionError` |
 | `NotFoundError` | The requested resource does not exist (404) |
 | `BadRequestError` | Malformed request or failed validation (400). `fieldErrors` lists each broken rule |
 | `ValidationError` | Request payload failed validation on a route that answers 422 |
 | `ConflictError` | Conflicting state, e.g. a duplicate (409) |
+| `CodeConflictError` | Someone already holds the tracking or coupon code (409, `code` `code_held`). `conflictingCode` and `type` name it. Raised by a resource that assigns codes. Extends `ConflictError` |
+| `HoldConflictError` | Siren refused a store credit hold (409). `reason` is `no_credit`, `token_in_use` or `null` (`HoldConflictReason`). Raised by a resource that places holds. Extends `ConflictError` |
 | `RateLimitError` | Rate limit exceeded (429); honors `Retry-After` |
 | `ApiError` | Unexpected server error (5xx) |
+| `UnexpectedResponseError` | Siren answered with a success status, but the body has the wrong shape, such as an object where a list belongs. `data` holds the body. The deployment is broken, so do not retry. Extends `ApiError` |
 | `ConnectionError` | Network failure reaching Siren |
 | `SignatureVerificationError` | A webhook signature did not verify |
 
 One exception to the subclass rule: constructing a client without an `apiKey` throws the base
-`SirenError` itself. `ErrorCode` holds the codes the SDK raises a dedicated error for.
+`SirenError` itself.
+
+`ErrorCode` holds every `error.code` Siren sends, and `isKnownErrorCode(code)` says whether a code
+is one of them. The SDK picks a 401 or 403 class by the code when it knows it. A reply from an
+older or newer Siren deployment may carry no code or one the SDK does not know, and then the SDK
+reads Siren's wording instead. A reply it cannot place stays a plain `AuthenticationError` or
+`PermissionError`, carrying everything Siren sent.
 
 ```ts
 import {

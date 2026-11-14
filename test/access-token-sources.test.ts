@@ -1,0 +1,83 @@
+import { describe, expect, it, vi } from 'vitest';
+import { CallbackAccessTokenSource, SirenError, StaticAccessToken } from '../src/index';
+
+/*
+ * Slice 2 acceptance tests for packets P1 (StaticAccessToken) and P2
+ * (CallbackAccessTokenSource), each built on its PHP SDK class at 59383e6
+ * (src/Auth). CallbackAccessTokenSource answers its refresh function's
+ * answer unchanged unless it is `null`, and test/bearer-token.test.ts pins
+ * the answers that are not a token.
+ */
+
+describe('P1: StaticAccessToken', () => {
+  it('answers the token it was given', async () => {
+    expect(await new StaticAccessToken('sk_live_abc').getAccessToken()).toBe('sk_live_abc');
+  });
+
+  it('cannot refresh, so it answers null for any refused token', async () => {
+    const source = new StaticAccessToken('sk_live_abc');
+
+    expect(await source.refreshAccessToken('sk_live_abc')).toBeNull();
+    expect(await source.refreshAccessToken('something-else')).toBeNull();
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['a number', 42],
+    ['undefined', undefined],
+  ])('refuses %s with SirenError', (_name, token) => {
+    expect(() => new StaticAccessToken(token as unknown as string)).toThrow(SirenError);
+  });
+});
+
+describe('P2: CallbackAccessTokenSource', () => {
+  it('answers what the get function returns, sync or async, and calls it each time', async () => {
+    let n = 0;
+    const get = vi.fn(() => `tok-${++n}`);
+    const source = new CallbackAccessTokenSource(get);
+
+    expect(await source.getAccessToken()).toBe('tok-1');
+    expect(await source.getAccessToken()).toBe('tok-2');
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(await new CallbackAccessTokenSource(async () => 'tok-async').getAccessToken()).toBe('tok-async');
+  });
+
+  it('passes the refused token to the refresh function and answers its token, sync or async', async () => {
+    const refresh = vi.fn(async (rejected: string) => `${rejected}-fresh`);
+    const source = new CallbackAccessTokenSource(() => 'tok-1', refresh);
+
+    expect(await source.refreshAccessToken('tok-1')).toBe('tok-1-fresh');
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledWith('tok-1');
+    expect(await new CallbackAccessTokenSource(() => 'a', () => 'b').refreshAccessToken('a')).toBe('b');
+  });
+
+  it('answers null without a refresh function', async () => {
+    expect(await new CallbackAccessTokenSource(() => 'tok-1').refreshAccessToken('tok-1')).toBeNull();
+  });
+
+  it('answers null when the refresh function returns null', async () => {
+    const source = new CallbackAccessTokenSource(
+      () => 'tok-1',
+      () => null,
+    );
+
+    expect(await source.refreshAccessToken('tok-1')).toBeNull();
+  });
+
+  it('lets an error from either function through unchanged', async () => {
+    const getFailure = new Error('store offline');
+    const refreshFailure = new Error('grant revoked');
+    const source = new CallbackAccessTokenSource(
+      () => {
+        throw getFailure;
+      },
+      async () => {
+        throw refreshFailure;
+      },
+    );
+
+    await expect(source.getAccessToken()).rejects.toBe(getFailure);
+    await expect(source.refreshAccessToken('tok-1')).rejects.toBe(refreshFailure);
+  });
+});

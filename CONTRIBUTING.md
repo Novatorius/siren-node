@@ -23,6 +23,13 @@ npm run typecheck  # tsc --noEmit
 
 The test suite makes no network calls, so you can run everything locally without credentials.
 
+Two scripts check the tests themselves:
+
+```sh
+node scripts/siren-fixtures.mjs <path-to-siren> --check                   # report a catalog fixture that no longer matches Siren
+node scripts/mutation-proof.mjs scripts/mutations/ncc-slice-1-surface.json   # break each guard once and confirm a test fails
+```
+
 ## Pull requests
 
 1. Fork the repository and create a branch off `main`.

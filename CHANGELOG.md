@@ -7,13 +7,174 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- `events.refund` requires `refundId`, the store's own id for the refund, such as WooCommerce
+  refund 2201. Siren now refuses a refund without one with 400. Siren records each refund id once
+  per order, so sending the same refund again is safe.
+- `SaleParams` is a union of `LiveSaleParams` and `TestSaleParams`, so code that extends it as an
+  interface no longer compiles. Extend `LiveSaleParams` or `SaleFields` instead. A real sale still
+  requires `trackingId`.
+- `new Siren()` throws `SirenError` when `timeout` is not a number from 1 to 2147483647 for each
+  send, when `maxRetries` is not a whole number of 0 or more (it has no ceiling), or when `baseUrl`
+  is not an http or https URL with no user name or password in it. A `baseUrl` must also be
+  visible ASCII, U+0021 to U+007E, with no query, fragment, backslash or `@`, so a space or a
+  control character is refused and an international host goes in its punycode form. It starts with
+  `http://` or `https://` and a host that holds no `%`. NaN, Infinity and strings are refused for
+  `timeout` and `maxRetries`, and `null` for all three. Before, a NaN `maxRetries` turned retries off, Infinity retried without end,
+  a `timeout` above 2147483647 aborted every request after 1 ms, a `null` took the default, and a
+  `baseUrl` that fetch could not use was resent and raised as a lost connection.
+- `new Siren()` reads only the options object's own properties, each once. A `baseUrl`,
+  `httpClient`, credential, `timeout` or `maxRetries` inherited from a prototype is ignored, and a
+  `send` or token method that only `Object.prototype` supplies does not count. Fetch reads its own
+  options, so a host that cannot rule out prototype pollution passes its own `httpClient`.
+- A bearer token with a control character (C0, DEL or C1) or a character above U+00FF is refused
+  before it is sent, because neither can go in an HTTP header. An `apiKey` or string `accessToken`
+  throws `SirenError` when the client is built, and a `getAccessToken` answer raises `SirenError`. A
+  refresh answer that breaks the rule raises the 401 with a `SirenError` cause naming
+  `refreshAccessToken`, and `CallbackAccessTokenSource` hands an empty, `undefined` or non-string
+  refresh answer to that rule instead of reading it as `null`. Before, fetch refused such a token and
+  the SDK resent the request as a lost connection.
+
 ### Added
 
+- `events.ingest` takes an optional third argument, `IngestOptions`, with `headers` for the call
+  and a `timeout` in milliseconds that replaces the client's for this call. A connected site uses it
+  to send a referral visit with the tracking value the shopper already holds, as `X-Siren-Token` or
+  `X-Siren-Oid`, and a short wait of its own. The call is still sent once. The headers go out
+  beneath the SDK's own and ride along on the resend after a 401. A header name that is not an HTTP
+  token, a value with a control character or a character above U+00FF, or a timeout out of range
+  throws `SirenError` before anything is sent.
 - `getApplicationForm`, `submitApplication` and `verifyApplication` in `@novatorius/siren/storefront`,
   for running a Siren Cloud application form on your own site from the visitor's browser. They read
   the form's field definitions, send an application with the referral the visitor arrived with,
   return a message per field on a refusal, and confirm the application from your own confirmation
   page.
+- `events.refund` takes a partial refund: `amount`, `currency`, `lines` (each a `RefundLine` that
+  names the sale's line by `lineId` or `sku`, with `quantity` and `amount`), `whole`, and `kind`
+  (`RefundKind`: `refund`, `cancelled` or `voided`). A refund with neither `amount` nor `lines`
+  still refunds the whole order.
+- `LineItem.lineId`, your own id for an order line, which a later refund names the line by.
+- A test sale: `events.sale({ test: true })` checks an integration. Siren needs no other field,
+  marks it as a test, counts it toward nothing and ignores `trackingId`.
+- `SiteVisitedParams.collaboratorId` takes a tracking code as `tracking:{code}`, typed as
+  `TrackingCodeReference`, as well as a numeric id.
+- `webhooks.subscriptions.events()` reads `GET /webhooks/events`, the event types Siren delivers,
+  and `apiKeys.scopes()` reads `GET /api-keys/scopes`, the scopes a new key may hold, grouped by
+  resource. Both throw `UnexpectedResponseError` when Siren answers with a body of the wrong shape.
+- `WebhookEventType` holds all 64 events in Siren's webhook catalog, 30 more than before, such as
+  `collaborator.applied`, `payout.failed`, `program.updated` and `store.disconnected`.
+- `ErrorCode` holds every code Siren sends, 26 in all, and `isKnownErrorCode` says whether a code is
+  one of them. `POLICY_ERROR_CODES` lists the 403 codes that mean Siren's policy refused the request.
+- New error classes. `SiteDisconnectedError` (401 `site_disconnected`) means the organization
+  revoked or deleted the connected site's connection. `PolicyError` (403, a policy code) means
+  sending the request again fails again, and `param` names the refused field. `CodeConflictError`
+  and `HoldConflictError` wrap a 409 for a held code and a refused credit hold, with
+  `HoldConflictReason`, and the resources that raise them come in a later release.
+  `UnexpectedResponseError`, an `ApiError`, reports a success reply whose body has the wrong shape.
+- Siren's vocabulary as constants with union types of the same name: `EventSlug`, `RefundKind`,
+  `EventStatus`, `EventReason`, `ConversionStatus`, `TransactionStatus`, `ObligationStatus`,
+  `PayoutStatus`, `OpportunityStatus`, `ProgramStatus`, `CollaboratorStatus`, `DistributorStatus`,
+  `FulfillmentStatus`, `ApiKeyStatus`, `WebhookSubscriptionStatus` and `CustomCurrencyType`.
+- `openapi.yaml` documents the new refund, sale, line and visit fields, `RefundLine`,
+  `GET /api-keys/scopes`, every webhook event and an `ErrorCode` schema.
+- `accessToken`, a `new Siren()` option beside `apiKey`, for a connected store's OAuth access token.
+  It takes a string, or an `AccessTokenSource` that supplies the token and a fresh one after a 401.
+  `StaticAccessToken` holds a fixed token and never refreshes. `CallbackAccessTokenSource` builds a
+  source from two functions, for a host that keeps its grant in its own storage. Pass `apiKey` or
+  `accessToken`, never both.
+- `httpClient`, a `new Siren()` option that sends every request through the host's own HTTP stack.
+  `HttpClient` has one method, `send(request)`, with `HttpRequest` and `HttpResponse` as its types.
+  It never follows a redirect and keeps the request headers out of its errors. `FetchHttpClient`
+  is the default, over the global `fetch`, and sends with `redirect: 'manual'`. A client rejects
+  with `HttpClientError` when no complete response arrived.
+- `ConnectorScope` names the OAuth scopes a connected site asks for: `ConnectAll`, `Webhooks`,
+  `RecordsRead`, `RecordsWrite`, the joined `CONNECTED_SITE` value and `forConnectedSite()`.
+- `conversions.retrieve` and `transactions.retrieve` read one record with
+  `GET /conversions/{id}` and `GET /transactions/{id}`, taking `fields`, `include` and
+  `propertyId`. They throw `SirenError` before sending when the id is not a positive whole number,
+  and `UnexpectedResponseError` when a 2xx body is not a JSON object.
+- `openapi.yaml` documents `GET /conversions/{id}` and `GET /transactions/{id}`.
+- `@novatorius/siren/connect`, a new entry for a store that connects to Siren Cloud as a site. It
+  holds the OAuth flow, the connected-site client and the forwarded event vocabulary, and shares
+  its classes with the main entry, so `instanceof SirenError` holds across both.
+- `OAuthClient` registers the site's client (`register`), builds the consent screen URL
+  (`authorizeUrl`), exchanges the callback's code (`exchangeCode`) and refreshes the token pair
+  (`refresh`). Each call is sent once and never retried. A refusal with the RFC error envelope
+  raises `OAuthError`, whose code is one of `OAuthErrorCode`. `ConnectorSoftware` names the
+  connector a site registers as. `new OAuthClient()` reads and checks `baseUrl`, `timeout` and
+  `httpClient` as `new Siren()` does, with the same messages, and `consentScreenUrl` by the
+  `baseUrl` rule, so a URL with an `@`, a backslash, a query or a character outside visible ASCII
+  is refused when the client is built.
+- `createCodeVerifier`, `createState` and `codeChallengeS256` make the PKCE verifier, the state and
+  the S256 challenge `authorizeUrl` takes.
+- `SirenConnect`, the client a connected site holds once it has tokens. It takes `accessToken` and
+  never `apiKey`, and exposes `connect` and `events`.
+- `ConnectResource` sends the `/connect/*` routes and `/ping`: `plan`, `updateGrant`,
+  `reportSiteState`, `reportIntegrations`, `syncProducts`, `disconnect`, `migrationWindow`,
+  `customerEmailKey` and `ping`. `ConnectWebhookResource`, at `connect.webhook`, manages the site's
+  own subscription: `replace`, `get`, `delete`, `test` and `deliveries`. `ConnectScope` names the
+  six scopes those routes need.
+- `events.forward` sends a connected site's event in Siren's versioned envelope, once and never
+  retried. It takes the slug, the envelope and `{ finalAttempt }`. `ForwardedEventSlug` names the
+  28 slugs it takes, `ForwardedEventEnvelope` types the envelope for each, and
+  `FORWARDED_EVENT_VERSION` is 1. `finalAttempt: true` adds `X-Siren-Final-Attempt: 1`.
+- `openapi.yaml` documents `/oauth/register`, `/oauth/token`, every `/connect/*` route with the
+  scope it needs, the `ForwardedEventEnvelope` schema and the `X-Siren-Final-Attempt` header.
+- Record resources on the client: `siren.collaborators` (`CollaboratorsResource`), with their
+  tracking and coupon codes at `siren.collaborators.aliases` (`CollaboratorAliasesResource`) and
+  their program enrollments at `siren.collaborators.enrollments` (`ProgramEnrollmentsResource`),
+  `siren.collaboratorGroups` (`CollaboratorGroupsResource`) with their members at
+  `siren.collaboratorGroups.members` (`CollaboratorGroupMembersResource`), `siren.programs`
+  (`ProgramsResource`) and `siren.programGroups` (`ProgramGroupsResource`). Record writes are sent
+  once, and reads retry. A list throws `SirenError` for a key its route does not read, an empty
+  filter list, a comma outside `fields` and `s`, and an id that is not a positive whole number.
+- `collaborators.createPending` and `collaborators.updateDetails`, the create and update a connected
+  site may send.
+- `PropertyQualifier`, which reads the Property a connected site's code type is filed under, such as
+  `coupon@property:5`, and checks the names and code types a caller sends.
+- `CollaboratorBulkAction`, `CollaboratorAliasType`, `ProgramBulkAction`, `ProgramGroupSorter` and
+  `ProgramGroupBulkAction`, Siren's names for the record actions, code types and group sorters.
+- More record resources on the client: `siren.opportunities` (`OpportunitiesResource`),
+  `siren.engagements` (`EngagementsResource`), `siren.distributors` (`DistributorsResource`),
+  `siren.customCurrencies` (`CustomCurrenciesResource`), `siren.credits` (`CreditsResource`) for
+  store credit balances, the ledger and checkout holds, `siren.mappings` (`MappingsResource`) for
+  links to records outside Siren, and `siren.settings` (`SettingsResource`) for the settings Siren
+  shares with a connected site. The SDK sends every write once and retries reads.
+- Writes on `siren.conversions` (`create`, `recoverCreate`, `update`, `delete`, `bulk`, `types`)
+  and on `siren.transactions` (`details`, `create`, `bulk`, `creditCollaborator`,
+  `recoverCreditCollaborator`, `sources`). `recoverCreate` and `recoverCreditCollaborator` send a
+  write that lost its answer again only for what Siren does not hold, and send nothing on an answer
+  they cannot read, or on an empty page whose total says Siren holds matching rows. The
+  conversion, transaction, custom currency and distributor creates send only the fields Siren reads
+  and refuse any other key. `transactions.create` refuses half a binding, and a binding field of
+  `""`, `"0"`, `0`, `NaN`, `Infinity` or `-Infinity`, which Siren reads as none.
+- `engagements.list` refuses a `from` or `to` that is not a real day written `YYYY-MM-DD`, and
+  `distributors.list` refuses a `metricType` of `""`, before sending. Siren drops either value
+  without a word and answers every record.
+- `CreditsResource.holdReference`, which builds the reference a checkout's credit holds carry.
+- `ConversionBulkAction`, `TransactionBulkAction`, `DistributorBulkAction` and `CreditHoldStatus`,
+  Siren's names for those bulk actions and hold statuses.
+
+### Changed
+
+- A 401 is resent once with a refreshed token when the credential is an `AccessTokenSource` that
+  can refresh, whether or not the request may be retried, because Siren answers a 401 before it
+  records anything. The resend does not count against `maxRetries`. An `apiKey` is never
+  refreshed, and a 403 or 409 is still sent once.
+- A 3xx reply raises `SirenError` with its status. The SDK never follows a redirect, because a
+  followed redirect would send the bearer token to another host.
+- A 401 or 403 class is chosen by `error.code` when the SDK knows the code. A reply with no code,
+  or one the SDK does not know, comes from an older or newer Siren deployment, so the SDK reads
+  Siren's wording instead, as the Siren PHP SDK does.
+- `events.siteVisited` is sent once and never retried, because Siren records every visit it
+  receives. A retry after a lost reply would record the visit twice.
+- `events.ingest` is sent once for every slug, built-in slugs such as `sale` included, because
+  Siren has no key to match a resent custom event. Custom events are no longer retried.
+- A sale with no `externalId`, or a `null` one, is sent once, whatever `test` holds. Siren gives a
+  test sale with no id a random one, so a resent copy would record a second test, and it refuses a
+  real sale with no id. A sale that carries an `externalId`, an empty one included, and a refund
+  are still retried.
 
 ## [0.3.0] - 2026-10-19
 

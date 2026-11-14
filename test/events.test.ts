@@ -100,16 +100,17 @@ describe('events.sale', () => {
 });
 
 describe('events.refund', () => {
-  it('POSTs source and externalId to /event/refund', async () => {
+  it('POSTs source, externalId and refundId to /event/refund', async () => {
     const ctx = makeClient([emptyResponse(200, { 'X-Siren-OID': '12' })]);
     const result = await ctx.client.events.refund({
       source: 'stripe',
       externalId: 'cs_test_a1b2c3',
+      refundId: 're_3Nf8a2',
     });
 
     const call = ctx.lastCall();
     expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/event/refund');
-    expect(call.body).toEqual({ source: 'stripe', externalId: 'cs_test_a1b2c3' });
+    expect(call.body).toEqual({ source: 'stripe', externalId: 'cs_test_a1b2c3', refundId: 're_3Nf8a2' });
     expect(result).toEqual({ opportunityId: 12 });
   });
 });

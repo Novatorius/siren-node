@@ -1,0 +1,207 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/client.ts",
+    "find": "    this.credits = new CreditsResource(http);",
+    "replace": "    this.credits = new SettingsResource(http) as unknown as CreditsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.credits is its resource"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/client.ts",
+    "find": "    this.credits = new CreditsResource(http);",
+    "replace": "    this.credits = new CreditsResource(http as HttpTransport);",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/client.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-syntax",
+    "file": "src/client.ts",
+    "find": "    this.credits = new CreditsResource(http);",
+    "replace": "    this.credits = new CreditsResource(http);)(",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/client.ts",
+    "find": "    this.credits = new CreditsResource(http);",
+    "replace": "    this.credits = new SettingsResource(http) as unknown as CreditsResource;",
+    "expect": "wrong-reason",
+    "failing": [
+      "siren.mappings is its resource"
+    ]
+  },
+  {
+    "id": "p10-opportunities-type",
+    "file": "src/client.ts",
+    "find": "    this.opportunities = new OpportunitiesResource(http);",
+    "replace": "    this.opportunities = new EngagementsResource(http) as unknown as OpportunitiesResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.opportunities is its resource"
+    ]
+  },
+  {
+    "id": "p10-engagements-type",
+    "file": "src/client.ts",
+    "find": "    this.engagements = new EngagementsResource(http);",
+    "replace": "    this.engagements = new OpportunitiesResource(http) as unknown as EngagementsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.engagements is its resource"
+    ]
+  },
+  {
+    "id": "p10-distributors-type",
+    "file": "src/client.ts",
+    "find": "    this.distributors = new DistributorsResource(http);",
+    "replace": "    this.distributors = new CustomCurrenciesResource(http) as unknown as DistributorsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.distributors is its resource"
+    ]
+  },
+  {
+    "id": "p10-customCurrencies-type",
+    "file": "src/client.ts",
+    "find": "    this.customCurrencies = new CustomCurrenciesResource(http);",
+    "replace": "    this.customCurrencies = new DistributorsResource(http) as unknown as CustomCurrenciesResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.customCurrencies is its resource"
+    ]
+  },
+  {
+    "id": "p10-mappings-type",
+    "file": "src/client.ts",
+    "find": "    this.mappings = new MappingsResource(http);",
+    "replace": "    this.mappings = new SettingsResource(http) as unknown as MappingsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.mappings is its resource"
+    ]
+  },
+  {
+    "id": "p10-settings-type",
+    "file": "src/client.ts",
+    "find": "    this.settings = new SettingsResource(http);",
+    "replace": "    this.settings = new MappingsResource(http) as unknown as SettingsResource;",
+    "expect": "caught",
+    "failing": [
+      "siren.settings is its resource"
+    ]
+  },
+  {
+    "id": "p10-opportunities-other-key",
+    "file": "src/client.ts",
+    "find": "    this.opportunities = new OpportunitiesResource(http);",
+    "replace": "    this.opportunities = new OpportunitiesResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-engagements-other-key",
+    "file": "src/client.ts",
+    "find": "    this.engagements = new EngagementsResource(http);",
+    "replace": "    this.engagements = new EngagementsResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-distributors-other-key",
+    "file": "src/client.ts",
+    "find": "    this.distributors = new DistributorsResource(http);",
+    "replace": "    this.distributors = new DistributorsResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-customCurrencies-other-key",
+    "file": "src/client.ts",
+    "find": "    this.customCurrencies = new CustomCurrenciesResource(http);",
+    "replace": "    this.customCurrencies = new CustomCurrenciesResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-credits-other-key",
+    "file": "src/client.ts",
+    "find": "    this.credits = new CreditsResource(http);",
+    "replace": "    this.credits = new CreditsResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-mappings-other-key",
+    "file": "src/client.ts",
+    "find": "    this.mappings = new MappingsResource(http);",
+    "replace": "    this.mappings = new MappingsResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-settings-other-key",
+    "file": "src/client.ts",
+    "find": "    this.settings = new SettingsResource(http);",
+    "replace": "    this.settings = new SettingsResource(createHttpTransport({ apiKey: 'sk_test_another_key', httpClient: options.httpClient, baseUrl: options.baseUrl }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-distributors-own-client",
+    "file": "src/client.ts",
+    "find": "    this.distributors = new DistributorsResource(http);",
+    "replace": "    this.distributors = new DistributorsResource(createHttpTransport({ ...options, httpClient: undefined }));",
+    "expect": "caught",
+    "offline": true,
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-mappings-other-host",
+    "file": "src/client.ts",
+    "find": "    this.mappings = new MappingsResource(http);",
+    "replace": "    this.mappings = new MappingsResource(createHttpTransport({ ...options, baseUrl: 'https://other.example.invalid/siren/v1' }));",
+    "expect": "caught",
+    "failing": [
+      "sends a read from every slice 4 resource"
+    ]
+  },
+  {
+    "id": "p10-settings-new-each-read",
+    "file": "src/client.ts",
+    "find": "  readonly settings: SettingsResource;",
+    "replace": "  private settingsHttp!: HttpTransport;\n  get settings(): SettingsResource {\n    return new SettingsResource(this.settingsHttp);\n  }\n  set settings(value: SettingsResource) {\n    this.settingsHttp = (value as unknown as { http: HttpTransport }).http;\n  }",
+    "expect": "caught",
+    "failing": [
+      "keeps one instance of each resource per client"
+    ]
+  }
+]
