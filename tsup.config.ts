@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsup';
 
-// One config with three entries, so a single clean covers them all. The
+// One config with four entries, so a single clean covers them all. The
 // storefront entry runs in browsers. It must import nothing from the Node
 // entries, and test/storefront-build.test.ts checks the built file for Node
 // built-ins. Splitting puts the code the main and connect entries share in
@@ -11,6 +11,9 @@ export default defineConfig({
     index: 'src/index.ts',
     storefront: 'src/storefront/index.ts',
     connect: 'src/connect/index.ts',
+    // The `siren` command (package.json `bin`). Its first line is the
+    // `#!/usr/bin/env node` of src/cli/index.ts, which the build keeps.
+    cli: 'src/cli/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

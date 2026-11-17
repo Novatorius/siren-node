@@ -310,7 +310,9 @@ describe('P11: README parity table', () => {
  * a later slice can give PHP the same call. The seven calls siren-php's
  * feat/apps added moved to the first table. When this list was checked,
  * siren-php's origin/main was still 59383e6, and neither it nor feat/apps
- * held any of the three left here.
+ * held any of the three left here. The ten `siren.apps` calls are the
+ * apps-cli slice's (docs/architecture/apps-cli.md), and the PHP SDK gains
+ * them after it.
  *
  * The guard below walks a real `Siren` client: every method on the
  * prototype of every resource it carries, nested resources included. Each
@@ -323,6 +325,16 @@ const NODE_ONLY = [
   'siren.events.forward()',
   'siren.conversions.recoverCreate()',
   'siren.transactions.recoverCreditCollaborator()',
+  'siren.apps.declare()',
+  'siren.apps.list()',
+  'siren.apps.retrieve()',
+  'siren.apps.setStatus()',
+  'siren.apps.rotate()',
+  'siren.apps.delete()',
+  'siren.apps.verifyRequest()',
+  'siren.apps.requests.list()',
+  'siren.apps.requests.resend()',
+  'siren.apps.requests.answer()',
 ];
 
 /**

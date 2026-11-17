@@ -3,6 +3,12 @@ import { usableBearerToken } from './auth/bearer-token';
 import { ConnectionError, SirenError, errorFromResponse } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.sirenaffiliates.com/siren/v1';
+/**
+ * The sandbox edition of Siren Cloud, a deployment of its own where keys
+ * start `sk_test_` and nothing moves real money. A client given an
+ * `sk_test_` key and no `baseUrl` sends here.
+ */
+export const SANDBOX_BASE_URL = 'https://sandbox.sirenaffiliates.com/siren/v1';
 export const DEFAULT_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_RETRIES = 2;
 

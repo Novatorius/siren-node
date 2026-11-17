@@ -647,14 +647,25 @@ as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the eleven sc
 
 ### Node methods the PHP SDK does not have yet
 
-Each method below calls a route Siren serves today. Neither PHP 0.3.0 nor the PHP SDK's next
-release has a method for it. The PHP SDK is to gain each one under the same name.
+Each method below calls a route Siren serves today, or, for `siren.apps`, a route the Siren apps
+work adds. Neither PHP 0.3.0 nor the PHP SDK's next release has a method for it. The PHP SDK is to
+gain each one under the same name. The `siren` command-line tool ships with this package only.
 
 | Node | Siren route | What it does |
 |---|---|---|
 | `siren.events.forward()` | `POST /event/{eventSlug}` | Sends a connected site's event in Siren's versioned envelope, once. |
 | `siren.conversions.recoverCreate()` | `GET /conversions`, then `POST /conversions` | After `create` lost its answer, sends it again only when Siren holds no such conversion. |
 | `siren.transactions.recoverCreditCollaborator()` | `GET /conversions`, then `POST /transactions/credit-collaborator` | After `creditCollaborator` lost its answer, credits only the transactions that hold no conversion for the collaborator. |
+| `siren.apps.declare()` | `PUT /apps/{key}` | Declares an app from its whole description, once, and answers its key and signing secret the first time. |
+| `siren.apps.list()` | `GET /apps` | Lists the organization's apps with their items. |
+| `siren.apps.retrieve()` | `GET /apps/{key}` | Reads one app with its items. |
+| `siren.apps.setStatus()` | `POST /apps/{key}/status` | Turns an app on or off. |
+| `siren.apps.rotate()` | `POST /apps/{key}/rotate` | Gives an app a new key and signing secret, shown once. |
+| `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
+| `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
+| `siren.apps.requests.list()` | `GET /apps/requests` | Lists the latest requests Siren sent the organization's apps. |
+| `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
+| `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
 
 ## Storefront module (browser)
 

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "Acme payouts",
+  "description": "The Acme example app: tells a CRM about each approved conversion and pays payouts through Acme's ledger.",
+  "apps": {
+    "acme-payouts": {
+      "name": "Acme",
+      "description": "Siren's example app.",
+      "url": "${ACME_SIREN_URL}",
+      "scopes": [],
+      "events": [],
+      "items": {
+        "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
+        "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 4320 },
+        "acme-split": { "kind": "distributionResolver", "name": "Acme split" }
+      }
+    }
+  }
+}

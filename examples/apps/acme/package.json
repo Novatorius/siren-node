@@ -1,0 +1,15 @@
+{
+  "name": "siren-example-acme",
+  "private": true,
+  "type": "module",
+  "description": "Siren's example app. It checks each request Siren sends and answers every ask.",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node --env-file=.env.sandbox server.mjs"
+  },
+  "dependencies": {
+    "@novatorius/siren": "file:../../.."
+  }
+}

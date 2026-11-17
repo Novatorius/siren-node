@@ -4,9 +4,11 @@ import {
   DEFAULT_MAX_RETRIES,
   DEFAULT_TIMEOUT_MS,
   FetchHttpClient,
+  SANDBOX_BASE_URL,
   HttpTransport,
 } from './http';
 import { ApiKeysResource } from './resources/api-keys';
+import { AppsResource } from './resources/apps';
 import { CollaboratorGroupsResource } from './resources/collaborator-groups';
 import { CollaboratorsResource } from './resources/collaborators';
 import { CreditsResource } from './resources/credits';
@@ -98,6 +100,12 @@ export class Siren {
   readonly mappings: MappingsResource;
   /** The organization settings Siren shares with a connected site. */
   readonly settings: SettingsResource;
+  /**
+   * Siren apps: declare and manage them with a signed-in admin's session
+   * token, check each request Siren sends one, and answer it with the app's
+   * own API key.
+   */
+  readonly apps: AppsResource;
 
   /**
    * Reads only the options object's own properties: `apiKey`,
@@ -169,6 +177,7 @@ export class Siren {
     this.credits = new CreditsResource(http);
     this.mappings = new MappingsResource(http);
     this.settings = new SettingsResource(http);
+    this.apps = new AppsResource(http);
   }
 }
 
@@ -191,10 +200,36 @@ export function createHttpTransport(options: SirenOptions): HttpTransport {
   return new HttpTransport({
     tokens: resolveTokens(apiKey, accessToken),
     client: resolveHttpClient(httpClient),
-    baseUrl: resolveBaseUrl(baseUrl),
+    baseUrl: baseUrlForKey(apiKey, resolveBaseUrl(baseUrl), baseUrl === undefined),
     timeout: resolveTimeout(timeout),
     maxRetries: resolveMaxRetries(maxRetries),
   });
+}
+
+/**
+ * Keeps a sandbox key and the live API apart. `resolved` is the base URL
+ * the options chose, and `defaulted` is true when they named none.
+ *
+ * - An `apiKey` that starts `sk_test_`, with no `baseUrl`, goes to
+ *   {@link SANDBOX_BASE_URL}, where Siren minted it.
+ * - An `sk_test_` key with a `baseUrl` on the live API's origin
+ *   (`https://api.sirenaffiliates.com`) is refused with `SirenError`.
+ * - An `sk_live_` key with a `baseUrl` on the sandbox's origin
+ *   (`https://sandbox.sirenaffiliates.com`) is refused with `SirenError`.
+ *
+ * Any other key or base passes as it is, so a local or UAT Cloud takes
+ * either kind. Origins are compared after `new URL`, so case and a trailing
+ * slash do not matter. No message quotes the key.
+ *
+ * Stub: answers `resolved` unchanged. Packet sdk-sandbox-guard.
+ *
+ * @internal
+ */
+export function baseUrlForKey(apiKey: unknown, resolved: string, defaulted: boolean): string {
+  void apiKey;
+  void defaulted;
+  void SANDBOX_BASE_URL;
+  return resolved;
 }
 
 /**

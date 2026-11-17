@@ -1,4 +1,8 @@
 import type {
+  AppItemKind,
+  AppRequestMode,
+  AppRequestStatus,
+  AppStatus,
   CollaboratorStatus,
   ConversionStatus,
   CreditHoldStatus,
@@ -947,4 +951,178 @@ export interface FulfillmentListParams extends RecordListParams {
   /** The last day to include, `YYYY-MM-DD`. */
   to?: string;
   orderBy?: 'id' | 'status' | 'dateCreated';
+}
+
+/*
+ * Siren apps. Shapes from Siren's app routes (lib/Apps/Service/Rest and
+ * AppSerializer, AppItemAdapter, AppRequestSerializer, read on the
+ * apps-records and apps-exchange branches) and the request envelope
+ * (AppRequestEnvelope, tests/Fixtures/apps-exchange/signed-request.json).
+ */
+
+/** One item an app declares, as `apps.declare()` sends it. */
+export interface AppItemDeclaration {
+  kind: AppItemKind;
+  /** Lowercase letters and digits joined by single dashes, at most 64. Unique within the app and kind. */
+  key: string;
+  /** At most 100 characters. Siren shows it as "{App name}: {item name}" in pickers. */
+  name: string;
+  /** At most 500 characters. */
+  description?: string;
+  /** Required for a `fulfillmentMethod` and refused for any other kind: the currency codes it pays. */
+  currencies?: string[];
+  /** Minutes Siren waits for an answer to an ask, 1 to 43200. Siren's default is 1440, or 60 for a distribution resolver. */
+  answerWindowMinutes?: number;
+}
+
+/** The whole app, as `PUT /apps/{key}` takes it every time. */
+export interface DeclareAppParams {
+  name: string;
+  description?: string;
+  /** The public https address Siren sends each request to. */
+  url: string;
+  /** API key scopes the app's own key holds. An app may hold none. */
+  scopes?: string[];
+  /** Ordinary webhook events the app also receives at the same address with the same secret. */
+  events?: string[];
+  items?: AppItemDeclaration[];
+}
+
+/** An app item as Siren answers it. A record selects it by `ref`. */
+export interface AppItem {
+  id: number;
+  /** `app:{id}`, the value a program, distributor or autofulfiller stores. */
+  ref: string;
+  appId: number;
+  kind: AppItemKind | (string & {});
+  key: string;
+  name: string;
+  description: string;
+  settings: { currencies?: string[]; answerWindowMinutes?: number };
+  status: 'active' | 'archived' | (string & {});
+  dateCreated?: string | null;
+  dateModified?: string | null;
+  [field: string]: unknown;
+}
+
+/** An app as Siren's app routes answer it. No read ever carries its key or secret. */
+export interface App {
+  id: number;
+  key: string;
+  name: string;
+  description: string;
+  status: AppStatus | (string & {});
+  webhookSubscriptionId: number | null;
+  apiKeyId: number | null;
+  url: string | null;
+  events: string[];
+  scopes: string[];
+  /** The first 16 characters of the app's key, `sk_test_` or `sk_live_` and 8 more. */
+  apiKeyPrefix: string | null;
+  items: AppItem[];
+  dateCreated?: string | null;
+  dateModified?: string | null;
+  [field: string]: unknown;
+}
+
+/** The two secrets Siren shows once: on an app's first declaration and on each rotation. */
+export interface AppSecrets {
+  /** The app's API key, `sk_test_` in the sandbox and `sk_live_` on the live deployment. */
+  rawKey: string;
+  /** The secret Siren signs each request to the app with. */
+  signingSecret: string;
+}
+
+/**
+ * What `apps.declare()` answers. `created` is true, and both secrets are
+ * present, only when this call made the app.
+ */
+export type DeclaredApp = App & { created: true } & AppSecrets | App & { created: false };
+
+/** What `apps.rotate()` answers: the app, and its new key and secret, shown this once. */
+export type RotatedApp = App & AppSecrets;
+
+/** A request Siren sent an app, as `GET /apps/requests` lists it. The data and the answer stay out. */
+export interface AppRequestRecord {
+  /** The request key, `apr_` and 32 hex characters, the same on every send. */
+  id: string;
+  appId: number;
+  /** `app:{id}` of the item Siren acted for. */
+  item: string;
+  kind: AppItemKind | (string & {});
+  mode: AppRequestMode | (string & {});
+  subject: { type: string; id: string };
+  status: AppRequestStatus | (string & {});
+  sendCount: number;
+  answerBy: string | null;
+  /** `app:{appId}` or `user:{userId}`. */
+  answeredBy: string | null;
+  answeredAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  [field: string]: unknown;
+}
+
+/** Filters for `apps.requests.list()`. */
+export interface AppRequestListParams {
+  status?: AppRequestStatus;
+}
+
+/**
+ * An app's answer to an ask: a JSON object with an `outcome` the item's kind
+ * reads, such as `{ outcome: 'paid', reference: 'TX-88213' }` for a
+ * fulfillment method. At most 16384 bytes as JSON.
+ */
+export interface AppAnswer {
+  outcome: string;
+  [field: string]: unknown;
+}
+
+/** What the answer route says. `duplicate` is true when Siren already held this same answer. */
+export interface AppAnswerReceipt {
+  status: 'accepted';
+  duplicate: boolean;
+}
+
+/** The fields every request Siren sends an app carries, from its signed body. */
+interface AppRequestBase {
+  version: 1;
+  /** The request key. Drop a repeat by this id, which the signature covers. */
+  id: string;
+  type: 'app.request';
+  /** The app's key. */
+  app: string;
+  item: { kind: AppItemKind | (string & {}); key: string; id: string };
+  createdAt: string;
+  /** The kind's payload. Its fields belong to the item's kind. */
+  data: Record<string, unknown>;
+  /** The signed `t` of `X-Siren-Signature-V2`, in Unix seconds. */
+  timestamp: number;
+  /** The `X-Siren-Delivery` header, `{id}.{send number}`, when the request carried one. */
+  deliveryId?: string;
+}
+
+/** A request that needs no answer. */
+export interface AppTell extends AppRequestBase {
+  mode: 'tell';
+}
+
+/** A request that waits for the app's answer. */
+export interface AppAsk extends AppRequestBase {
+  mode: 'ask';
+  /** When Siren sends the request again, or marks it as needing attention. */
+  answerBy: string;
+  /** Where the answer goes. `apps.requests.answer(id, answer)` posts to the same route. */
+  answerUrl: string;
+}
+
+/** A checked request from Siren, as `apps.verifyRequest()` answers it. */
+export type AppRequest = AppTell | AppAsk;
+
+/** Options for `apps.verifyRequest()`. */
+export interface VerifyAppRequestOptions {
+  /** How far the signed timestamp may be from `now`, either way. Whole seconds from 1 to 3600. Default 300. */
+  toleranceSeconds?: number;
+  /** The receiver's clock in Unix seconds. Default `Date.now() / 1000`. Tests pass a fixed clock. */
+  now?: number;
 }
