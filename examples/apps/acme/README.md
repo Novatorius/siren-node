@@ -8,13 +8,13 @@ It checks every request with `siren.apps.verifyRequest()` and answers every ask 
 
 | File | What it holds |
 | --- | --- |
-| siren.app.json | The app and its three items, which `siren apps apply` declares. |
+| siren.app.json | The app and its three features, which `siren apps apply` declares. The payout feature's kind is `payoutMethod`. |
 | handler.mjs | The request handling: check, answer 200, drop a repeat by its `id`, answer each ask. |
 | server.mjs | The HTTP server around handler.mjs, on `PORT`, 8787 by default. |
 | env.mjs | Finds the env file `siren apps apply` wrote. |
 | sale.mjs and send-sale.mjs | A visit and a sale with the app's own key, so you can make a conversion. |
 
-Each ask item declares the shortest answer window Siren allows, one minute, so an ask nobody answers
+Each ask feature declares the shortest answer window Siren allows, one minute, so an ask nobody answers
 needs attention after about three minutes: Siren sends it three times and waits one minute after
 each send. That wait needs Siren's task worker. A Siren you run yourself needs
 `SIREN_DURABLE_TASKS` on, or the ask is sent once and never needs attention. "Running against your
@@ -31,9 +31,12 @@ From a checkout of this repository, with the `siren` command installed and signe
    `cloudflared tunnel --url http://localhost:8787`, and keep the https address it prints. Against a
    Siren you run in a container, use `http://host.docker.internal:8787` instead, since that Siren
    cannot reach `localhost` on your machine.
-3. Run `export SIREN_APP_URL=<that address>`, then `siren apps apply` in this folder. It declares
-   the app, prints its items, and writes the app's key and signing secret to `.env.sandbox` in this
-   folder, or `.env.live` for a live organization. Siren shows them once. Git ignores both files.
+3. Run `export SIREN_APP_URL=<that address>`, then `siren apps apply` in this folder. It reads the
+   app on Siren, prints what it will make or change, and asks before it writes. Type `yes`, or run
+   `siren apps apply --yes` to skip the question. It then declares the app, prints its features, and
+   writes the app's key and signing secret to `.env.sandbox` in this folder, or `.env.live` for a
+   live organization. Siren shows them once. Git ignores both files. A feature marked `requires Pro`
+   is one your plan cannot use yet, and Siren does not send it requests.
 4. Run `npm start`. The server reads the env file apply wrote, so it talks to the Siren the app was
    applied to, and prints that address and the file. When both env files are here, set
    `SIREN_ENV_FILE` to the one to use.
@@ -47,6 +50,10 @@ From a checkout of this repository, with the `siren` command installed and signe
    a line for each request it acts on and each answer Siren accepts. A tell's `value` is the integer
    Siren stores, not the amount a person reads, so the server reads each amount with
    `siren.apps.shownAmount(value, currency)`: 10000 in yen prints as ¥100.
+
+To change the key or the signing secret later, run `siren apps rotate-key acme-payouts` or
+`siren apps rotate-secret acme-payouts`. Each asks first, writes only its own line of the env file,
+and the server needs a restart to read it.
 
 Without a tunnel, set `SIREN_APP_URL` to any https address. Siren's deliveries then fail, and you
 answer each ask by hand with `siren apps answer` once `siren apps requests --attention` lists it. A

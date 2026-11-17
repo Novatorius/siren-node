@@ -15,7 +15,7 @@
 //   integer Siren stores, so 10000 in yen is 100 yen, never 10000.
 // - An ask gets its 200 at once, and its answer goes to
 //   `siren.apps.requests.answer()` without holding up the 200:
-//   a fulfillment method's payout is marked paid with the reference
+//   a payout method's payout is marked paid with the reference
 //   `acme-<payoutId>`, and a distribution resolver's pool is divided among
 //   its metrics in proportion to each metric's value, in whole minor units.
 //   An ask is counted as handled only once its answer is accepted, so a

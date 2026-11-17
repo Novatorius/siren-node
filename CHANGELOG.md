@@ -337,6 +337,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `items`, `AppItem` and `app:{id}` stay as they are.
 - `apps.shownAmount()` gives `decimal` the sign `text` has, as Siren's `format()` prints it, so a
   negative that rounds to zero reads `-0.00` beside `-$0.00`, where `decimal` read `0.00`.
+- The example app in examples/apps/acme declares its payout feature as `payoutMethod`, and its env
+  reader names `rotate-key`, `add-key` or `rotate-secret` for each missing line. Its README walks
+  through the question apply asks, the split rotation and the `requires Pro` mark. The signed
+  request fixture is Siren's int/preview-apps copy, which carries `payoutMethod`.
 - `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
   refuses the webhook routes for a subscription an app owns.
 - `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,

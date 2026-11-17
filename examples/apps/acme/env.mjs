@@ -35,7 +35,13 @@ export function loadAppEnv(folder, env) {
   }
   const missing = NAMES.filter((name) => !values[name]);
   if (missing.length > 0) {
-    throw new Error(`${path} has no ${missing.join(', ')}. Run siren apps apply, or siren apps rotate, to write them.`);
+    // Each line has its own command, since an app's key and its signing secret change apart.
+    const fixes = {
+      SIREN_BASE_URL: 'siren apps apply writes SIREN_BASE_URL',
+      SIREN_API_KEY: 'siren apps rotate-key writes a new key, or siren apps add-key for an app that holds none',
+      SIREN_SIGNING_SECRET: 'siren apps rotate-secret writes a new signing secret, and an app with no url has none, so give siren.app.json a url and run siren apps apply',
+    };
+    throw new Error(`${path} has no ${missing.join(', ')}. ${missing.map((name) => fixes[name]).join('. ')}.`);
   }
   return { path, values };
 }

@@ -116,6 +116,35 @@ describe('apps-cli: the example app', () => {
     expect(() => loadAppEnv(none, {})).toThrow(/SIREN_API_KEY/);
   });
 
+  // Slice C6 item 9: the key and the signing secret change apart, so each missing line names its own command.
+  it('names the command that writes each missing line, never the old joint rotate', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'acme-env-'));
+    writeFileSync(join(folder, '.env.sandbox'), `SIREN_BASE_URL=${BASE}\nSIREN_API_KEY=${APP_KEY}\n`);
+    expect(() => loadAppEnv(folder, {})).toThrow(
+      'has no SIREN_SIGNING_SECRET. siren apps rotate-secret writes a new signing secret, and an app with no url has none, so give siren.app.json a url and run siren apps apply.',
+    );
+    writeFileSync(join(folder, '.env.sandbox'), `SIREN_BASE_URL=${BASE}\nSIREN_SIGNING_SECRET=${fixture.secret}\n`);
+    expect(() => loadAppEnv(folder, {})).toThrow(
+      'has no SIREN_API_KEY. siren apps rotate-key writes a new key, or siren apps add-key for an app that holds none.',
+    );
+    let message = '';
+    try {
+      loadAppEnv(folder, {});
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).not.toMatch(/siren apps rotate(?!-)/);
+  });
+
+  it("the example's README walks through the question apply asks, the split rotation and features", () => {
+    const readme = readFileSync(new URL('../examples/apps/acme/README.md', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+    for (const text of ['siren apps apply --yes', 'siren apps rotate-key acme-payouts', 'siren apps rotate-secret acme-payouts', 'requires Pro', '`payoutMethod`']) {
+      expect(readme, text).toContain(text);
+    }
+    expect(readme.replace(/`[^`]*`/g, '')).not.toMatch(/\bitems?\b/i);
+    expect(readme).not.toMatch(/siren apps rotate(?!-)/);
+  });
+
   it("sends a real sale with the app's own key: a visit, then a sale on its opportunity", async () => {
     // A real Cloud answers both with `recorded` when no program pays for them
     // (captures events-site-visited-200 and events-sale-200-no-program).
