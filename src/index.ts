@@ -130,7 +130,6 @@ export { CustomCurrenciesResource } from './resources/custom-currencies';
 export { CreditsResource } from './resources/credits';
 export { MappingsResource } from './resources/mappings';
 export { SettingsResource } from './resources/settings';
-// apps-sdk-gaps adds these in their own block so it merges cleanly beside slice 8.
 export { PayoutsResource } from './resources/payouts';
 export { FulfillmentsResource } from './resources/fulfillments';
 
