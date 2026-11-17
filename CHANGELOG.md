@@ -307,6 +307,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret.
 - `App.webhookSubscriptionId` and `App.apiKeyId` are optional and deprecated, since Siren no longer
   sends them. Read `address.id` and `apiKey.id`.
+- `siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, each method naming the app
+  call that replaces it, since an app holds its key and its address now. They stay until Siren
+  removes their routes. `AppErrorCode.AppOwnedSubscription` names Siren's 409
+  `app_owned_subscription` for a webhook call on an address an app owns. The README's apps section
+  describes an app's three parts and says "feature" where the code says item.
 - `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
   refuses the webhook routes for a subscription an app owns.
 - `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,

@@ -217,6 +217,12 @@ export const AppErrorCode = {
   AddressMissing: 'app_address_missing',
   /** 400 with `data.limit`: the organization holds its cap of apps, 250, on or off. */
   AppCapReached: 'app_cap_reached',
+  /**
+   * 409 from a deprecated `webhooks.subscriptions` call on an address an app
+   * owns (AppOwnedSubscriptionException). Use the app's own call, named in
+   * the deprecated method's doc comment.
+   */
+  AppOwnedSubscription: 'app_owned_subscription',
 } as const;
 
 /** Union of the {@link AppErrorCode} strings. */

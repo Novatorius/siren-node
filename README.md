@@ -241,6 +241,9 @@ const catalog = await siren.webhooks.subscriptions.events();
 
 ### Check and change a subscription
 
+These calls are deprecated for a Siren app, which holds its address now. Siren refuses them for an
+address an app owns. See [The old key and webhook calls](#the-old-key-and-webhook-calls).
+
 `retrieve(id)` reads one subscription, and `deliveries(id)` reads its latest 50 deliveries, newest
 first, each with the payload Siren sent, its status (`pending`, `delivered` or `failed`), the tries
 it took and the first 200 bytes of your endpoint's answer. Both take `webhook-subscriptions:read`
@@ -1089,15 +1092,21 @@ header.
 
 ## Siren apps
 
-A Siren app is a service you host that acts as part of Siren's engine. It declares items, and each
-item joins one of Siren's pickers, so an organization chooses it as it chooses a built-in one:
+A Siren app is a service you host that acts as part of Siren's engine. An app holds three parts:
+its API key, its address (where Siren sends requests and events, signed with its signing secret)
+and its features. Each feature joins one of Siren's pickers, so an organization chooses it as it
+chooses a built-in one:
 
-| Item kind | Picked on | Siren sends |
+| Feature kind | Picked on | Siren sends |
 |---|---|---|
 | `postConversionAction` | a program | A tell after each approved conversion. |
 | `postAllocationAction` | a distributor | A tell after each completed allocation. |
 | `payoutMethod` | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
 | `distributionResolver` | a distributor | An ask to divide each pool. |
+
+The code calls a feature an item, so the routes are `/apps/{app}/items` and the types are
+`AppItem` and `AppItemKind`. `AppItemKind.FulfillmentMethod` is an old name for `payoutMethod`,
+and Siren refuses the string `fulfillmentMethod`.
 
 Apps are a Siren Cloud feature. The app routes take a signed-in admin's session token as
 `accessToken`, and refuse an API key with `ApiKeyNotAcceptedError`. The `siren` command below signs
@@ -1106,9 +1115,15 @@ in for you and is the usual way to declare an app. Only the answer route takes t
 ### Declare an app
 
 `apps.declare(key, app)` sends the app's whole description with `PUT /apps/{key}`. The first call
-makes the app, its API key and its webhook subscription, and answers `created: true` with `rawKey`
-and `signingSecret`. Siren shows both this once, so keep them. Each later call updates the app in
-place and answers `created: false`.
+makes the app and its API key, and its address when you give a `url`. It answers `created: true`
+with `rawKey`, and `signingSecret` when it made an address. Siren shows each secret this once, so
+keep them. Each later call updates the app in place and answers `created: false`. A later call
+never makes or revokes a key. It makes an address when the `url` is new, and answers its
+`signingSecret` once, and it removes the address and its delivery log when the `url` is gone.
+
+An app with no `url` is a key-only app, for a script that reads Siren. An app with features needs a
+`url`, since Siren asks the app at its address, so `declare` refuses features with no `url` before
+sending. A feature's kind and key lock once Siren makes it.
 
 ```ts
 const siren = new Siren({ accessToken: adminSessionToken });
@@ -1125,17 +1140,51 @@ const app = await siren.apps.declare('acme-payouts', {
 if (app.created) saveSecrets(app.rawKey, app.signingSecret);
 ```
 
-`apps.list()` and `apps.retrieve(key)` read the apps with their items.
-`apps.setStatus(key, 'inactive')` turns an app off, which takes its items out of every picker and stops Siren sending it
-anything. `apps.rotate(key)` gives the app a new key and signing secret, revokes the old key at
-once, and shows the pair once. `apps.delete(key)` deletes an app that no record selects and that
-has no open ask. Siren refuses one still in use with 409 `app_in_use`, and its `uses` and
+`apps.list()` and `apps.retrieve(key)` read the apps with their key (`apiKey`, never more than its
+prefix and last four characters), their address (`address`, never its secret) and their features.
+`apps.setStatus(key, 'inactive')` turns an app off, which takes its features out of every picker
+and stops Siren sending it anything. `apps.delete(key)` deletes an app that no record selects and
+that has no open ask. Siren refuses one still in use with 409 `app_in_use`, and its `uses` and
 `openRequests` say why.
 
 An app key is lowercase letters and digits joined by single dashes, at most 64 characters, and
-never `requests`. Each call refuses any other key, and any field `PUT /apps/{key}` does not take,
-with `SirenError` before sending. The reads retry on a lost connection, 429 and 5xx. Every write is
-sent once.
+never `requests`, `events`, `scopes` or `kinds`. Each call refuses any other key, and any field its
+route does not take, with `SirenError` before sending. The reads retry on a lost connection, 429
+and 5xx. Every write is sent once.
+
+### Change an app's parts
+
+The dashboard changes an app one part at a time, and so can you:
+
+- `apps.create({ name, url, scopes, events })` makes an app from the dashboard's door, with a key
+  when `scopes` is a list, even `[]`, and an address when `url` is given. Siren picks its key.
+- `apps.update(key, { name, description, url, events, scopes })` changes only the fields you send.
+  `url: null` removes the address.
+- `apps.createKey(key, { scopes })`, `apps.rotateKey(key)` and `apps.revokeKey(key)` make, rotate
+  and revoke the key. A rotated key keeps its scopes, and the signing secret stays.
+- `apps.rotateSecret(key)` gives the address a new signing secret. The key stays.
+- `apps.test(key)` sends the address one signed `webhook.test` and answers what it did, and
+  `apps.deliveries(key)` reads the address's latest 50 deliveries.
+- `apps.items.create(key, feature)`, `apps.items.retrieve(key, id)`, `apps.items.update(key, id,
+  change)` and `apps.items.delete(key, id)` add, read, change and remove one feature. `retrieve`
+  answers how many records select it in `uses`, and which in `usedBy`. `update` refuses a change to
+  its `kind` or `key`.
+- `apps.events()`, `apps.scopes()` and `apps.kinds()` read the events an address may receive, the
+  scopes a key may hold, and the kinds of feature with their settings.
+
+Each call that makes a secret answers it once, as `rawKey` or `signingSecret`. A feature, a kind
+and the app's `eventsAccess` carry `entitled`, `requiredCapability` and `requiredPlan`. Everything
+that goes out of Siren needs Pro, so on Plus an outward feature and the events read
+`{ entitled: false, requiredPlan: 'pro' }`.
+
+### The old key and webhook calls
+
+`siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, because an app holds its key and
+its address now. Each call's doc comment names the app call that replaces it: `apps.createKey()`
+for a key, `apps.update()` for an address's url and events, `apps.deliveries()` for its deliveries,
+and `apps.test()` for a test. Siren already refuses the webhook routes for an address an app owns.
+These calls go when Siren removes their routes. `siren.webhooks.constructEvent()` and
+`verifySignature()` stay, since an app's address receives events signed the same way.
 
 ### Check a request
 
@@ -1258,6 +1307,12 @@ try {
 | Code | Status | What to do |
 |---|---|---|
 | `app_limit_reached` | 403 | Turn another app off, or move to a plan with room. |
+| `app_cap_reached` | 400 | The organization holds 250 apps, on or off. Delete one first. |
+| `app_needs_a_part` | 422, 409 | Give the app a key, an address or both. |
+| `app_items_need_key_and_address` | 422, 409 | An app with features needs a key and an address. `missing` names the part it lacks. |
+| `app_key_exists` | 409 | Rotate the key instead of making one. |
+| `app_key_missing` | 409 | Make a key with `apps.createKey()` first. |
+| `app_address_missing` | 409 | Give the app a `url` first. |
 | `org_access_required` | 403 | Ask an admin who sees every store. |
 | `app_change_in_progress` | 409 | Send it again in a moment. |
 | `app_in_use` | 409 | Turn the app off instead, or move the records in `uses` first. |

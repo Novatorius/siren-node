@@ -93,6 +93,11 @@ function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
  * `retrieve()`, `update()`, `test()` and `deliveries()` refuse an id that is
  * not a positive whole number with `SirenError` before sending, and throw
  * `NotFoundError` for a subscription the organization does not have.
+ *
+ * Deprecated: an app holds its address now, and each method names the app
+ * call that replaces it. Siren refuses these routes for a subscription an
+ * app owns, with 409 `app_owned_subscription`. These calls go when Siren
+ * removes `/webhooks`.
  */
 export class WebhookSubscriptionsResource {
   /** The fields {@link update} sends, the four `PUT /webhooks/{id}` reads (UpdateWebhookSubscription.php). */
@@ -105,6 +110,9 @@ export class WebhookSubscriptionsResource {
    * the signing secret, which Siren shows only once, on create. Retries on a
    * network error, 429 or 5xx, as a read. Throws `UnexpectedResponseError`
    * when a 2xx body is not a JSON object.
+   *
+   * @deprecated An app holds its address now. Read it as the app's `address` from
+   * `apps.retrieve()`. This call goes when Siren removes its route.
    */
   async retrieve(id: number): Promise<WebhookSubscription> {
     const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.retrieve')}`;
@@ -126,6 +134,10 @@ export class WebhookSubscriptionsResource {
    * field and an update with nothing left to change fails there with a 500.
    * Siren answers 400, raised as `BadRequestError`, for a target URL that is
    * not a public https endpoint.
+   *
+   * @deprecated An app holds its address now. Change its `url` or `events` with `apps.update()`.
+   * Siren refuses this route for a subscription an app owns. This call goes when Siren removes its
+   * route.
    */
   async update(id: number, params: UpdateWebhookSubscriptionParams): Promise<WebhookSubscription> {
     const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.update')}`;
@@ -154,6 +166,9 @@ export class WebhookSubscriptionsResource {
    * answers more with 429, raised as `RateLimitError`. It answers 409,
    * raised as `ConflictError`, for a paused subscription. Throws
    * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   *
+   * @deprecated An app holds its address now. Send it a test with `apps.test()`. Siren refuses this
+   * route for a subscription an app owns. This call goes when Siren removes its route.
    */
   async test(id: number): Promise<WebhookTestResult> {
     const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.test')}/test`;
@@ -167,6 +182,9 @@ export class WebhookSubscriptionsResource {
    * answer. Retries on a network error, 429 or 5xx, as a read, through
    * `readList`. Throws `UnexpectedResponseError` when a 2xx body is not a
    * JSON array, or when a row in it is not a JSON object.
+   *
+   * @deprecated An app holds its address now. Read its deliveries with `apps.deliveries()`. Siren
+   * refuses this route for a subscription an app owns. This call goes when Siren removes its route.
    */
   async deliveries(id: number): Promise<WebhookDelivery[]> {
     const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.deliveries')}/deliveries`;
@@ -180,6 +198,9 @@ export class WebhookSubscriptionsResource {
    *
    * The response's `signingSecret` is returned exactly once — store it to
    * verify future deliveries. This write is never auto-retried.
+   *
+   * @deprecated An app holds its address now. Make one with `apps.create()` and a `url`, or add one
+   * to an app with `apps.update()`. This call goes when Siren removes its route.
    */
   create(params: CreateWebhookSubscriptionParams): Promise<CreatedWebhookSubscription> {
     return this.http.requestData<CreatedWebhookSubscription>({
@@ -197,6 +218,9 @@ export class WebhookSubscriptionsResource {
    * when the body is not a list or an entry is not an object. It is a
    * retriable read, like `list()`: the transport retries it on 429 and 5xx
    * up to `maxRetries`.
+   *
+   * @deprecated An app holds its address now. Read the events it may receive from `apps.events()`.
+   * This call goes when Siren removes its route.
    */
   async events(): Promise<WebhookCatalogEntry[]> {
     const path = '/webhooks/events';
@@ -213,7 +237,12 @@ export class WebhookSubscriptionsResource {
     return body as WebhookCatalogEntry[];
   }
 
-  /** List webhook subscriptions. */
+  /**
+   * List webhook subscriptions.
+   *
+   * @deprecated An app holds its address now. Read each app's `address` from `apps.list()`. This
+   * call goes when Siren removes its route.
+   */
   list(): Promise<WebhookSubscription[]> {
     return this.http.requestData<WebhookSubscription[]>({
       method: 'GET',
@@ -222,7 +251,12 @@ export class WebhookSubscriptionsResource {
     });
   }
 
-  /** Delete a webhook subscription. */
+  /**
+   * Delete a webhook subscription.
+   *
+   * @deprecated An app holds its address now. Remove it with `apps.update()` and `url: null`. Siren
+   * refuses this route for a subscription an app owns. This call goes when Siren removes its route.
+   */
   async delete(id: number): Promise<void> {
     await this.http.request({
       method: 'DELETE',
