@@ -74,6 +74,22 @@ export async function appsInit(input: CommandInput): Promise<number> {
 }
 
 /**
+ * True when an app's url names this machine's own address: `localhost` or
+ * `127.0.0.1`, as a person writes it for a server they run. A Siren in a
+ * container reads that address as the container itself, so apply says so
+ * once, before it sends, and names `host.docker.internal`. The url itself is
+ * never printed.
+ */
+function onThisMachine(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * `siren apps apply [file]`: checks the app file, declares its app with
  * `PUT /apps/{key}` once, and prints the app without its url. On the first
  * declaration it writes the key and signing secret Siren shows once to the
@@ -103,6 +119,12 @@ export async function appsApply(input: CommandInput): Promise<number> {
 
   await run.signedIn();
   const { key, params } = declarationFor(parsed.file);
+  if (onThisMachine(params.url)) {
+    run.warn(
+      "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
+        'Use host.docker.internal in its place, and see "Running against your own Siren Cloud" in the README.',
+    );
+  }
   const envPath = join(dirname(path), run.envFileName());
   const problem = await envFileProblem(envPath);
   if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent.`);

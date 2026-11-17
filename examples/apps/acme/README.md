@@ -16,7 +16,9 @@ It checks every request with `siren.apps.verifyRequest()` and answers every ask 
 
 Each ask item declares the shortest answer window Siren allows, one minute, so an ask nobody answers
 needs attention after about three minutes: Siren sends it three times and waits one minute after
-each send.
+each send. That wait needs Siren's task worker. A Siren you run yourself needs
+`SIREN_DURABLE_TASKS` on, or the ask is sent once and never needs attention. "Running against your
+own Siren Cloud" in the package README lists that and the other settings a local Siren needs.
 
 ## Run it against the sandbox
 
@@ -26,7 +28,9 @@ From a checkout of this repository, with the `siren` command installed and signe
 1. Run `npm ci && npm run build` at the repository root, then `npm install` in this folder. The
    example takes the package from the checkout, so it runs in place.
 2. In a second terminal, start a tunnel to port 8787, such as
-   `cloudflared tunnel --url http://localhost:8787`, and keep the https address it prints.
+   `cloudflared tunnel --url http://localhost:8787`, and keep the https address it prints. Against a
+   Siren you run in a container, use `http://host.docker.internal:8787` instead, since that Siren
+   cannot reach `localhost` on your machine.
 3. Run `export SIREN_APP_URL=<that address>`, then `siren apps apply` in this folder. It declares
    the app, prints its items, and writes the app's key and signing secret to `.env.sandbox` in this
    folder, or `.env.live` for a live organization. Siren shows them once. Git ignores both files.

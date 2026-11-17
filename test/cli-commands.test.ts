@@ -362,6 +362,27 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toEqual({ [KEY]: join(h.cwd, '.env.sandbox') });
   });
 
+  it('says once, before sending, that a Siren in a container cannot reach an app on localhost, and names host.docker.internal', async () => {
+    const NOTE =
+      "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
+      'Use host.docker.internal in its place, and see "Running against your own Siren Cloud" in the README.\n';
+    for (const url of ['http://localhost:8787', 'http://127.0.0.1:8787/siren', 'http://localhost']) {
+      const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
+      h.signedIn();
+      h.write('siren.app.json', exampleFile);
+      expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+      expect(h.err(), url).toBe(NOTE);
+      expect(h.printed(), url).not.toContain(url);
+    }
+    for (const url of ['https://acme.example/siren', 'http://host.docker.internal:8787', 'https://localhost.acme.example']) {
+      const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
+      h.signedIn();
+      h.write('siren.app.json', exampleFile);
+      expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+      expect(h.err(), url).toBe('');
+    }
+  });
+
   it('leaves the env file as it is when a later apply answers no secret, and says when this machine holds no key', async () => {
     const h = harness([reply(200, app), reply(200, app)], { env: appEnv });
     h.signedIn();

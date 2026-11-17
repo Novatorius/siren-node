@@ -1271,6 +1271,27 @@ read.
 examples/apps/acme in this repository is a small app that checks each request, answers every ask,
 and sends a sale with the app's own key. Its README walks through running it against the sandbox.
 
+### Running against your own Siren Cloud
+
+The `siren` command and an app work against a Siren Cloud you run yourself, such as the sandbox
+stack in Siren's uat/sandbox/docker-compose.yml. That file as it ships leaves out four things an app
+needs. Set them in a compose override on the `app` service:
+
+| Setting | Why |
+|---|---|
+| `SIREN_SAAS_SIGNUP_ENABLED: "true"` | Without it, `siren signup` gets 404, since Siren answers the sign-up route only when sign-up is on. Build the image with `--build-arg SIREN_SAAS_SIGNUP_ENABLED=true` as well, so the dashboard offers it. |
+| `SIREN_DURABLE_TASKS: "true"` | The sandbox file sets it to `"false"`, so no task worker starts and nothing can wait until later. An ask is sent once, but the wake that should follow when its answer window closes cannot be held, so the ask's job fails there. Siren never sends it again, and it never comes to need attention. With it on, the image starts its worker. |
+| `SIREN_OUTBOUND_DEV_ALLOW_HOSTS: host.docker.internal` | Siren sends only to public https addresses. This lets it send to your app over plain http at that host name. Without it, `siren apps apply` with an http url gets `The URL must start with https://`. |
+| `extra_hosts: ["host.docker.internal:host-gateway"]` | A Siren in a container reads `localhost` and `127.0.0.1` as the container itself, so it cannot reach a server on your machine there. Give the app's url as `http://host.docker.internal:8787`, and this line makes that name reach your machine on Linux. `siren apps apply` says so when the url names `localhost` or `127.0.0.1`. |
+
+Siren's own build, `docker build -f saas/Dockerfile`, fetches private packages and needs a GitHub
+token in `COMPOSER_AUTH`. Without one, run `composer install` in the Siren checkout so its vendor
+folder is filled, and build the UAT image instead, which copies that folder:
+`docker build -f uat/saas/Dockerfile --build-arg SIREN_EDITION=sandbox --build-arg SIREN_SAAS_SIGNUP_ENABLED=true -t siren-sandbox:local .`
+That image seeds a UAT organization when it starts, so give the override `command:
+/usr/local/bin/startup.sh`, Siren's ordinary start. Then point the tool at the stack with
+`--base-url http://localhost:18090/siren/v1`, or `SIREN_BASE_URL`.
+
 ## Other SDKs
 
 Siren ships official SDKs in three languages, all built against the same API:

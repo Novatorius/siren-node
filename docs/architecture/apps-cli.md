@@ -640,7 +640,7 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | 9 | Approve the conversion in the dashboard. Then `siren apps requests --follow`, and in another terminal `siren apps requests <id>` for the tell | The tell's line going from `sent` to `delivered`. The single request shows the send, `HTTP 200`, the app's answer and the body Siren sent. Ctrl-C ends `--follow` with exit 0. | cli-requests, Siren slices 2 and 3 |
 | 10 | Close the program's distribution with slice 4's test route (claim C7) | `--follow` shows the ask `sent`, then `answered`, then `applied`. The server logs the answer, and the distribution completes with the app's shares. | example-app, sdk-verify, sdk-answer, Siren slice 4 |
 | 11 | With slice 5 only: pick "Acme: Acme ledger" on an autofulfiller and run a payout through it | The payout waits, then shows as paid with reference `acme-<payoutId>` | example-app, Siren slice 5 |
-| 12 | Stop the server with Ctrl-C, close another distribution as in step 10, and run `siren apps requests --attention --follow` | Nothing at first. About three minutes later, after three one-minute windows, the ask's line with `needs_attention` and its send error. The Apps screen marks it too. | cli-requests, the shortest window in the example's app file, Siren slices 2 and 3 |
+| 12 | Stop the server with Ctrl-C, close another distribution as in step 10, and run `siren apps requests --attention --follow` | Nothing at first. About three minutes later, after three one-minute windows, the ask's line with `needs_attention` and its send error. The Apps screen marks it too. Each window's end is a wake on Siren's task queue, so this needs a Siren whose worker runs: the public sandbox, or a Siren you run with `SIREN_DURABLE_TASKS` on (README, "Running against your own Siren Cloud"). With it off, the ask is sent once, its job fails at the first wake, and it never needs attention. | cli-requests, the shortest window in the example's app file, Siren slices 2 and 3 |
 | 13 | `npm start` again, then `siren apps resend <id>` | The request's line back at `sent`, then `--follow` shows `answered` and `applied` | cli-requests |
 | 14 | Or, with the server still stopped and the ask still shown by `siren apps requests --attention` after step 12, read the metric ids with `siren apps requests <id>` and run `siren apps answer <id> --body '{"outcome":"resolved","shares":[{"id":"<metric id>","amount":<minor units>}]}'` | `Siren accepted the answer.` Sending it again prints `Siren already had this answer. Nothing changed.` A person may answer only a request that needs attention, so the same answer to an ask still `pending` or `sent` is refused with Siren's line and `See the requests that need attention with siren apps requests --attention.` | cli-requests, sdk-answer |
 | 15 | `siren logout` | `Signed out of <address>.` | cli-session |
@@ -653,11 +653,19 @@ Without a tunnel, step 4 sets `SIREN_APP_URL` to any https address, deliveries f
 A later lane runs this against a local sandbox Cloud. Nothing here ran it.
 
 1. Run `df -h /` and stop below 10 GB. In a Siren worktree of feat/apps with slices 1, 2 and 7
-   merged, build the sandbox image:
-   `docker build -f saas/Dockerfile --build-arg SIREN_EDITION=sandbox --build-arg COMPOSER_AUTH="$COMPOSER_AUTH" -t siren-sandbox:apps-e2e .`
+   merged, build the sandbox image. `saas/Dockerfile` needs a GitHub token in `COMPOSER_AUTH`.
+   Without one, fill the vendor folder with `composer install` and build the UAT image, which copies
+   it: `docker build -f uat/saas/Dockerfile --build-arg SIREN_EDITION=sandbox --build-arg SIREN_SAAS_SIGNUP_ENABLED=true -t siren-sandbox:apps-e2e .`
+   The slice 8 checkpoint built it this way.
 2. Write an override beside uat/sandbox/docker-compose.yml that sets, on `app`,
-   `SIREN_SAAS_SIGNUP_ENABLED: "true"`, `SIREN_OUTBOUND_DEV_ALLOW_HOSTS: host.docker.internal` and
-   `extra_hosts: ["host.docker.internal:host-gateway"]`. Start it as its own project:
+   `SIREN_SAAS_SIGNUP_ENABLED: "true"`, `SIREN_DURABLE_TASKS: "true"`,
+   `SIREN_OUTBOUND_DEV_ALLOW_HOSTS: host.docker.internal`,
+   `extra_hosts: ["host.docker.internal:host-gateway"]`, and, for the UAT image,
+   `command: /usr/local/bin/startup.sh`, so it starts as Siren does and seeds no UAT organization.
+   The sandbox file sets `SIREN_DURABLE_TASKS` to `"false"`, and with it off no worker starts and an
+   ask's job fails at its first wake, so step 8 never sees a second send or `needs_attention`. The
+   README's "Running against your own Siren Cloud" says why each setting matters. Start it as its
+   own project:
    `SIREN_SANDBOX_IMAGE=siren-sandbox:apps-e2e SIREN_SANDBOX_PORT=33918 docker compose -p apps-e2e-cloud -f uat/sandbox/docker-compose.yml -f <override> up -d`.
    Check `curl -s localhost:33918/siren/v1/auth/signup-options` names `"edition":"sandbox"`.
 3. In this repository: `npm ci && npm run build && npm pack`, then install the tarball in an empty

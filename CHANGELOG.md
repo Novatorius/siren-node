@@ -206,7 +206,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `siren apps requests --attention`, and prints the code of any refusal it does not know.
   `WebhookSubscription` gains `appId`, the app that owns the subscription or `null`. The example's
   `send-sale` prints how many conversions a sale made, or Siren's reason and message when it made
-  none, since a real Siren answers `recorded` for a visit or sale no program pays for. It is sent once, and
+  none, since a real Siren answers `recorded` for a visit or sale no program pays for.
+  `siren apps apply` says once, before sending, that a Siren in a container cannot reach an app url
+  on `localhost` or `127.0.0.1`, and names `host.docker.internal`. The README's new "Running against
+  your own Siren Cloud" lists the settings a self-run Siren needs. It is sent once, and
   sending the same answer again after a lost one answers `duplicate: true`. `requests.resend`
   sends nothing to the app for a request that holds an answer Siren has not applied, and Siren
   applies that answer instead. It raises `ConflictError` with `app_request_not_resendable` for an

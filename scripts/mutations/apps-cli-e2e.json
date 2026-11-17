@@ -304,5 +304,25 @@
     "failing": [
       "apps-cli: the fakes carry the fields a real Siren Cloud sends > webhooks-retrieve-200-app-owned"
     ]
+  },
+  {
+    "id": "e2e-7-no-localhost-note",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (onThisMachine(params.url)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > says once, before sending, that a Siren in a container cannot reach an app on localhost"
+    ]
+  },
+  {
+    "id": "e2e-7-note-for-every-url",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    return host === 'localhost' || host === '127.0.0.1';",
+    "replace": "    return host !== '';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > says once, before sending, that a Siren in a container cannot reach an app on localhost"
+    ]
   }
 ]
