@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { SignatureVerificationError, UnexpectedResponseError } from '../errors';
+import { SignatureVerificationError, SirenError, UnexpectedResponseError } from '../errors';
 import { parseJsonBody, type HttpTransport } from '../http';
 import type {
   CreatedWebhookSubscription,
@@ -114,8 +114,11 @@ export class WebhookSubscriptionsResource {
    * gives. Throws `SirenError` before sending when `params` holds any other
    * key, with exactly `webhooks.subscriptions.update() cannot send "{key}".
    * Siren's update route reads only targetUrl, events, status and
-   * description.` Siren answers 400, raised as `BadRequestError`, for a
-   * target URL that is not a public https endpoint.
+   * description.` Also throws `SirenError` before sending when no field is
+   * left that is not `null` or `undefined`, because Siren skips a null
+   * field and an update with nothing left to change fails there with a 500.
+   * Siren answers 400, raised as `BadRequestError`, for a target URL that is
+   * not a public https endpoint.
    */
   async update(id: number, params: UpdateWebhookSubscriptionParams): Promise<WebhookSubscription> {
     const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.update')}`;
@@ -125,6 +128,11 @@ export class WebhookSubscriptionsResource {
       (key) =>
         `webhooks.subscriptions.update() cannot send "${key}". Siren's update route reads only targetUrl, events, status and description.`,
     );
+    if (Object.values(body).every((value) => value === null)) {
+      throw new SirenError(
+        'webhooks.subscriptions.update() needs at least one of targetUrl, events, status or description that is not null or undefined. Siren skips a null field and cannot apply an update with nothing to change.',
+      );
+    }
     return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);
   }
 
