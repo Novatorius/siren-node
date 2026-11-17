@@ -2,7 +2,9 @@ import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SignatureVerificationError, SirenError } from '../src/errors';
-import { verifyAppRequest } from '../src/resources/app-requests';
+import { listAppRequests, verifyAppRequest } from '../src/resources/app-requests';
+import { reply } from './http-fakes';
+import { transportOver } from './record-fakes';
 
 /*
  * Unit tests for the guards src/resources/app-requests.ts adds beyond the
@@ -67,5 +69,13 @@ describe('apps-cli internals: verifyAppRequest', () => {
     const error = refusal(() => verifyAppRequest(fixture.body, headers, fixture.secret, { now: T }, 300));
     expect(error).toBeInstanceOf(SignatureVerificationError);
     expect((error as Error).message).toContain('cannot be read');
+  });
+});
+
+describe('apps-cli internals: listAppRequests', () => {
+  it('refuses filters that are not an object before sending', async () => {
+    const { http, transport } = transportOver([reply(200, { requests: [] })]);
+    await expect(listAppRequests(transport, null as unknown as object, ['status'])).rejects.toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
   });
 });

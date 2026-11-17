@@ -200,7 +200,7 @@ describe.skip('apps-cli: apps reads and changes', () => {
   });
 });
 
-describe.skip('apps-cli: apps.requests', () => {
+describe('apps-cli: apps.requests', () => {
   it('lists requests from their envelope, retried, with a status filter', async () => {
     const { http, apps: resource } = apps([reply(200, { requests: [row] })]);
     expect(await resource.requests.list({ status: 'needs_attention' })).toEqual([row]);

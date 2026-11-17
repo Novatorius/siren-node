@@ -1,5 +1,5 @@
 import type { HttpTransport } from '../http';
-import { verifyAppRequest } from './app-requests';
+import { listAppRequests, resendAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
   AppAnswer,
@@ -56,9 +56,7 @@ export class AppRequestsResource {
    * Packet sdk-requests.
    */
   async list(params: AppRequestListParams = {}): Promise<AppRequestRecord[]> {
-    void this.http;
-    void params;
-    return [];
+    return listAppRequests(this.http, params, AppRequestsResource.LIST_FILTERS);
   }
 
   /**
@@ -76,8 +74,7 @@ export class AppRequestsResource {
    * Packet sdk-requests.
    */
   async resend(id: string): Promise<AppRequestRecord> {
-    void id;
-    return {} as AppRequestRecord;
+    return resendAppRequest(this.http, id);
   }
 
   /**

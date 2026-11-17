@@ -297,9 +297,9 @@
   },
   {
     "id": "requests-rows-unchecked",
-    "file": "src/resources/apps.ts",
-    "find": "        Array.isArray(answer.requests) && answer.requests.every(isJsonObject)",
-    "replace": "        Array.isArray(answer.requests)",
+    "file": "src/resources/app-requests.ts",
+    "find": "    Array.isArray(body.requests) && body.requests.every(isJsonObject)",
+    "replace": "    Array.isArray(body.requests)",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests > refuses an unknown filter or status"
@@ -307,9 +307,9 @@
   },
   {
     "id": "requests-status-unchecked",
-    "file": "src/resources/apps.ts",
-    "find": "    if (query.status !== undefined && !REQUEST_STATUSES.includes(query.status as string)) {",
-    "replace": "    if (false) {",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (status !== undefined && !REQUEST_STATUSES.includes(status as string)) {",
+    "replace": "  if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests > refuses an unknown filter or status"
@@ -317,12 +317,42 @@
   },
   {
     "id": "request-id-loose",
-    "file": "src/resources/apps.ts",
+    "file": "src/resources/app-requests.ts",
     "find": "const REQUEST_ID = /^apr_[0-9a-f]{32}$/;",
     "replace": "const REQUEST_ID = /^apr_[0-9a-fA-F]{32}/;",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests > resends once, and refuses a bad id"
+    ]
+  },
+  {
+    "id": "requests-filter-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (!filters.includes(key)) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests > refuses an unknown filter or status"
+    ]
+  },
+  {
+    "id": "requests-params-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (!isJsonObject(params)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: listAppRequests > refuses filters that are not an object"
+    ]
+  },
+  {
+    "id": "resend-retried",
+    "file": "src/resources/app-requests.ts",
+    "find": "  return writeRecord<AppRequestRecord>(http, 'POST', `/apps/requests/${key}/resend`, undefined);",
+    "replace": "  return writeRecord<AppRequestRecord>({ request: (r) => http.request({ ...r, retriable: true }) }, 'POST', `/apps/requests/${key}/resend`, undefined);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests > resends once"
     ]
   },
   {

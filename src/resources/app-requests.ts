@@ -1,8 +1,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { SignatureVerificationError, SirenError } from '../errors';
-import type { AppRequest, VerifyAppRequestOptions } from '../record-types';
+import type { HttpTransport } from '../http';
+import type {
+  AppRequest,
+  AppRequestListParams,
+  AppRequestRecord,
+  VerifyAppRequestOptions,
+} from '../record-types';
+import { AppRequestStatus } from '../taxonomy';
 import type { WebhookHeaders } from '../types';
-import { isJsonObject } from './record-requests';
+import { isJsonObject, readObject, writeRecord } from './record-requests';
 import { readHeader } from './webhooks';
 
 /*
@@ -18,8 +25,74 @@ import { readHeader } from './webhooks';
 /** A request key: `apr_` and 32 lowercase hex characters (Siren's `AppRequestKey`). */
 const REQUEST_ID = /^apr_[0-9a-f]{32}$/;
 
+/** The statuses `GET /apps/requests?status=` reads. */
+const REQUEST_STATUSES: readonly string[] = Object.values(AppRequestStatus);
+
 /** The longest tolerance `verifyRequest` takes, an hour. */
 const MAX_TOLERANCE_SECONDS = 3600;
+
+/**
+ * Returns `id` when it is a request key. Otherwise throws `SirenError`
+ * before anything is sent, naming `method`.
+ *
+ * @internal
+ */
+export function appRequestId(id: unknown, method: string): string {
+  if (typeof id !== 'string' || !REQUEST_ID.test(id)) {
+    const shown = typeof id === 'string' ? JSON.stringify(id) : String(id);
+    throw new SirenError(`${method} needs a request id of apr_ and 32 lowercase hex characters, and got ${shown}.`);
+  }
+  return id;
+}
+
+/**
+ * Reads `GET /apps/requests`, retried as a read, with `?status=` when the
+ * params name one. Refuses any other key, and a status outside
+ * `AppRequestStatus`, with `SirenError` before sending. Answers the
+ * `requests` list, or throws `UnexpectedResponseError` when the body holds
+ * no list of objects there.
+ *
+ * @internal
+ */
+export async function listAppRequests(
+  http: Pick<HttpTransport, 'request'>,
+  params: AppRequestListParams,
+  filters: readonly string[],
+): Promise<AppRequestRecord[]> {
+  if (!isJsonObject(params)) {
+    throw new SirenError('apps.requests.list() takes an object of filters, such as { status: "needs_attention" }.');
+  }
+  for (const key of Object.keys(params)) {
+    if (!filters.includes(key)) {
+      throw new SirenError(
+        `apps.requests.list() does not read ${key}, and Siren would ignore it and answer every request. It reads ${filters.join(', ')}.`,
+      );
+    }
+  }
+  const status: unknown = params.status;
+  if (status !== undefined && !REQUEST_STATUSES.includes(status as string)) {
+    throw new SirenError(`apps.requests.list() takes a status of ${REQUEST_STATUSES.join(', ')}.`);
+  }
+  const query: Record<string, string> = status === undefined ? {} : { status: status as string };
+
+  const answer = await readObject<{ requests: AppRequestRecord[] }>(http, '/apps/requests', query, (body) =>
+    Array.isArray(body.requests) && body.requests.every(isJsonObject)
+      ? undefined
+      : 'Siren answered GET /apps/requests with no list of requests in `requests`.',
+  );
+  return answer.requests;
+}
+
+/**
+ * Sends `POST /apps/requests/{id}/resend` once and answers the request as it
+ * now stands. Refuses a bad id before sending.
+ *
+ * @internal
+ */
+export async function resendAppRequest(http: Pick<HttpTransport, 'request'>, id: string): Promise<AppRequestRecord> {
+  const key = appRequestId(id, 'apps.requests.resend()');
+  return writeRecord<AppRequestRecord>(http, 'POST', `/apps/requests/${key}/resend`, undefined);
+}
 
 /**
  * Checks a request Siren signed and sent an app, and answers it parsed. The
