@@ -174,5 +174,46 @@
     "failing": [
       "Parity: Node methods the PHP SDK does not have yet"
     ]
+  },
+  {
+    "id": "follow-edition-cached",
+    "file": "src/cli/commands/requests.ts",
+    "find": "      if (poll > 1) await run.recheckEdition();",
+    "replace": "      if (poll < 1) await run.recheckEdition();",
+    "expect": "caught",
+    "failing": [
+      "stops a follow run within one poll when the target turns live",
+      "stops a follow run that is already going once the Cloud reports live"
+    ]
+  },
+  {
+    "id": "follow-edition-read-unchecked",
+    "file": "src/cli/context.ts",
+    "find": "    assertSessionMatches(this.target, this.current(), await this.editionRead);",
+    "replace": "    await this.editionRead;",
+    "expect": "caught",
+    "failing": [
+      "stops a follow run within one poll when a live target turns into a sandbox"
+    ]
+  },
+  {
+    "id": "follow-edition-after-poll",
+    "file": "src/cli/commands/requests.ts",
+    "find": "      if (poll > 1) await run.recheckEdition();\n      const rows = await siren.apps.requests.list(filters);",
+    "replace": "      const rows = await siren.apps.requests.list(filters);\n      if (poll > 1) await run.recheckEdition();",
+    "expect": "caught",
+    "failing": [
+      "stops a follow run within one poll when the target turns live"
+    ]
+  },
+  {
+    "id": "docs-follow-cost",
+    "file": "docs/architecture/apps-cli.md",
+    "find": "That costs one more GET every\n  2 seconds while following.",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "say a follow run reads the edition before each poll"
+    ]
   }
 ]

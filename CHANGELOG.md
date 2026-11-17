@@ -237,7 +237,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompt turns the terminal's echo off before it shows `Password: `, so a password typed the moment
   the prompt appears is never shown, and gives the echo back however the prompt ends. Every command
   that sends anything first reads the edition the Siren reports with `GET /auth/signup-options`,
-  once per run, and refuses a stored session made for another edition or address before it sends
+  and `apps requests --follow` reads it again before each poll, and refuses a stored session made for another edition or address before it sends
   anything with it, with one line that names the `siren login` to run. Every hint that names a
   command carries the flags that reach the same Siren, such as `--live`. A request id, app key or
   answer the command line gets wrong is refused in the tool's own words with exit code 2, before

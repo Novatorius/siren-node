@@ -95,7 +95,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(h.err()).toContain('Run siren login to sign in again.');
   });
 
-  it('reads the edition once per command, before anything else, even while following', async () => {
+  it('reads the edition once per command, before anything else, and again before each poll while following', async () => {
     const apply = harness([reply(200, [app])]);
     apply.signedIn();
     expect(await apply.run(['apps', 'list']), apply.err()).toBe(0);
@@ -104,13 +104,48 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     const follow = harness([reply(200, { requests: [requestRow()] })], { onSleep: (count, abort) => count === 3 && abort() });
     follow.signedIn();
     expect(await follow.run(['apps', 'requests', '--follow']), follow.err()).toBe(0);
-    expect(follow.paths().filter((path) => path === 'GET /apps/requests').length).toBeGreaterThan(1);
-    expect(follow.editionReads).toHaveLength(1);
+    const polls = follow.paths().filter((path) => path === 'GET /apps/requests').length;
+    expect(polls).toBeGreaterThan(1);
+    expect(follow.editionReads).toHaveLength(polls);
     expect(follow.sent()[0]).toBe('GET /auth/signup-options');
+    expect(follow.sent().filter((path) => path !== 'GET /auth/signup-options')).toEqual(follow.paths());
+    for (let at = 0; at < follow.sent().length; at += 2) expect(follow.sent()[at], `request ${at}`).toBe('GET /auth/signup-options');
 
     const login = harness([AuthAnswers.oneOrg(), reply(200, [app])], { stdin: PASSWORD });
     expect(await login.run(['login', '--email', EMAIL, '--password-stdin']), login.err()).toBe(0);
     expect(login.sent()).toEqual(['GET /auth/signup-options', 'POST /auth/login']);
+  });
+
+  it('stops a follow run within one poll when the target turns live, with the line every other command gives', async () => {
+    const h = harness([reply(200, { requests: [requestRow()] }), reply(200, { requests: [requestRow()] }), reply(200, { requests: [requestRow()] })], {
+      edition: (read) => (read <= 2 ? 'sandbox' : 'production'),
+      onSleep: (count, abort) => count === 5 && abort(),
+    });
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', '--follow'])).toBe(1);
+    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests']);
+    expect(h.editionReads).toHaveLength(3);
+    const followed = h.err();
+
+    const other = harness([reply(200, [app])], { edition: 'production' });
+    other.signedIn();
+    expect(await other.run(['apps', 'list'])).toBe(1);
+    expect(followed).toBe(other.err());
+    expect(followed).toBe(
+      `siren: ${SANDBOX_BASE_URL} is now a live Siren, and your session was made when it was a sandbox one, so nothing was sent with it. ` +
+        'Run siren login --live to sign in again.\n',
+    );
+  });
+
+  it('stops a follow run within one poll when a live target turns into a sandbox', async () => {
+    const h = harness([reply(200, { requests: [] }), reply(200, { requests: [] })], {
+      edition: (read) => (read === 1 ? 'production' : 'sandbox'),
+      onSleep: (count, abort) => count === 5 && abort(),
+    });
+    h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE }) });
+    expect(await h.run(['apps', 'requests', '--follow', '--live', '--base-url', BASE])).toBe(1);
+    expect(h.paths()).toEqual(['GET /apps/requests']);
+    expect(h.err()).toContain('is now a sandbox Siren, and your session was made when it was a live one');
   });
 
   it('keeps the edition and the address a session was made for', async () => {
@@ -165,5 +200,27 @@ describe('apps-cli: the edition check against a Cloud whose edition changes betw
     cloud.edition = 'sandbox';
     const again = await runBuilt(cli, ['apps', 'list', ...base], config);
     expect(again.status, again.stderr).toBe(0);
+  }, 60_000);
+
+  it('stops a follow run that is already going once the Cloud reports live, sending the session there no more', async () => {
+    cloud.edition = 'sandbox';
+    const config = configFolder();
+    const base = ['--base-url', cloud.baseUrl];
+    const login = await runBuilt(cli, ['login', ...base, '--email', 'loopback@example.invalid', '--password-stdin'], config, 'made-up-password\n');
+    expect(login.status, login.stderr).toBe(0);
+
+    const before = cloud.seen.length;
+    const following = runBuilt(cli, ['apps', 'requests', '--follow', ...base], config);
+    const polls = () => cloud.seen.slice(before).filter((request) => request.path === '/apps/requests');
+    while (polls().length < 1) await new Promise((resolve) => setTimeout(resolve, 50));
+    cloud.edition = 'production';
+    const flippedAt = cloud.seen.length;
+    const ended = await following;
+
+    expect(ended.status, ended.stderr).toBe(1);
+    expect(ended.stderr).toContain('is now a live Siren, and your session was made when it was a sandbox one');
+    const after = cloud.seen.slice(flippedAt).map((request) => `${request.method} ${request.path}`);
+    expect(after).toEqual(['GET /auth/signup-options']);
+    cloud.edition = 'sandbox';
   }, 60_000);
 });

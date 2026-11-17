@@ -146,7 +146,7 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren apps apply [file]` | `PUT /apps/{key}` once | The app and each item with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate <key>` (AP-A635). |
 | `siren apps list [--json]` | `GET /apps` | One block per app with its items, or the JSON Siren sent. |
 | `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items. |
-| `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, prints each new request or status change once, and ends with 0 on Ctrl-C. |
+| `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
 | `siren apps requests <id>` | `GET /apps/requests`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request, each send with its HTTP status and the app's answer, and the body Siren sent. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend` | The request as it now stands. |
@@ -266,9 +266,11 @@ as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps in
 - Every command that sends anything reads the edition from `GET /auth/signup-options` first, on
   every run, before anything else is sent. `signup` and `login` read it before they ask for the
   password. A Siren that names no edition counts as live. The read costs one GET with no
-  credential, a few dozen bytes, retried like any read. It is made once per run: `CommandContext`
-  keeps the answer, so a refresh, a second call and every loop of `apps requests --follow` use it.
-  `apps init` sends nothing and reads nothing.
+  credential, a few dozen bytes, retried like any read. `CommandContext` keeps the answer for the
+  run, so a refresh and a second call use it. `apps requests --follow` reads it again before each
+  poll after the first (`recheckEdition()`), so a target that changes edition during the run stops
+  it with the same one line before the session is sent there again. That costs one more GET every
+  2 seconds while following. `apps init` sends nothing and reads nothing.
 - A live edition needs `--live` on every command but `logout`, whatever address chose it. Signing
   out sends only the session's own tokens, to revoke them. `--live` against a sandbox is refused.
 - A stored session keeps the edition and the address it was made for (`edition`, `baseUrl`). A
@@ -891,3 +893,18 @@ The asks the example answers carry a currency code, not a currency, and its pool
 stored units, which needs no scale. The tell fakes are `AppTells` and `AppCurrencies` in
 test/apps-siren-answers.ts, each citing its Siren file and line, and the tell in
 test/apps-verify-request.test.ts now has Siren's shape.
+
+### 2. The edition during a follow run
+
+A reviewer flipped a fake target from sandbox to live during `siren apps requests --follow`, and
+the sandbox session was still sent four times in six seconds, because `CommandContext` kept the
+edition it read at the start for the whole run. `appsRequests` now calls
+`CommandContext.recheckEdition()` before each poll after the first. It reads
+`GET /auth/signup-options` again and runs `assertSessionMatches` on the answer. `signedIn()`
+already held `--live` to the session's edition, so any change of edition fails that check first.
+So the run stops with exit code 1 and the line `signedIn()` gives, before the next
+`GET /apps/requests`. The cost is one GET with no credential, a few dozen bytes, every 2 seconds
+while following. The test that pinned one edition read per follow run now pins one read per poll.
+test/cli-edition-check.test.ts covers both directions with the harness, and the built command
+against the loopback Cloud flipped mid-run, where the old code kept polling until the test's
+20-second limit killed it.

@@ -34,7 +34,10 @@ export function requestIdArgument(id: string): string {
  * for every app or the one `--app` names, and only those that need
  * attention with `--attention`. `--follow` reads again every 2 seconds and
  * prints each new request or status change once, until Ctrl-C, which ends
- * it with exit code 0. With a request id it shows that one request instead.
+ * it with exit code 0. Before each poll after the first it reads the
+ * target's edition again, so a target that changed edition stops the run
+ * with exit code 1 before the session is sent there. With a request id it
+ * shows that one request instead.
  */
 export async function appsRequests(input: CommandInput): Promise<number> {
   const id = input.args[0];
@@ -59,7 +62,8 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   const following = () => undefined;
   if (values.follow === true) io.signal?.addEventListener('abort', following);
   try {
-    for (;;) {
+    for (let poll = 1; ; poll += 1) {
+      if (poll > 1) await run.recheckEdition();
       const rows = await siren.apps.requests.list(filters);
       if (appKey !== undefined && appId === undefined) appId = (await siren.apps.retrieve(appKey)).id;
       for (const row of [...rows].reverse()) {

@@ -92,13 +92,28 @@ export class CommandContext {
 
   /**
    * The edition the target reports now, from `GET /auth/signup-options`.
-   * Read once per command run, at the first call, and the same answer is
-   * given to every later call in that run, so `apps requests --follow` and a
-   * refresh never read it again. A Siren that names none counts as live.
+   * Read at the first call, and the same answer is given to every later call
+   * until {@link recheckEdition} reads it again, so a refresh never reads it
+   * twice. A Siren that names none counts as live.
    */
   targetEdition(): Promise<Edition> {
     this.editionRead ??= this.auth.edition();
     return this.editionRead;
+  }
+
+  /**
+   * Reads the target's edition again and checks the session in use against
+   * it with `assertSessionMatches`, for a command that keeps sending:
+   * `apps requests --follow` calls it before each poll. A target that became
+   * live, or became a sandbox, stops the command with the one line every
+   * other command gives, before the next poll is sent. `signedIn()` already
+   * held `--live` to the session's edition, so any change of edition is a
+   * session mismatch first. It costs one GET with no credential, a few dozen
+   * bytes, per poll.
+   */
+  async recheckEdition(): Promise<void> {
+    this.editionRead = this.auth.edition();
+    assertSessionMatches(this.target, this.current(), await this.editionRead);
   }
 
   /**

@@ -22,4 +22,12 @@ describe('apps-sdk-followups-1: the records', () => {
     expect(read('docs/architecture/apps-cli.md')).toContain('`siren.apps.shownAmount(value, currency)`');
     expect(read('examples/apps/acme/README.md')).toContain('siren.apps.shownAmount(value, currency)');
   });
+
+  it('say a follow run reads the edition before each poll, and what that costs', () => {
+    const note = read('docs/architecture/apps-cli.md');
+    expect(note).not.toContain('every loop of `apps requests --follow` use it');
+    expect(note).toContain('reads it again before each poll');
+    expect(note).toContain('one more GET every 2 seconds while following');
+    expect(read('CHANGELOG.md')).toContain('`apps requests --follow` reads it again before each poll');
+  });
 });

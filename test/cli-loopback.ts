@@ -73,6 +73,7 @@ export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbo
         return send(200, capturedBody('auth-login-200', { '<ACCESSTOKEN>': loopbackAccessToken(), '<REFRESHTOKEN>': 'made-up-refresh-token' }));
       }
       if (route === 'GET /apps') return send(200, capturedBody('apps-list-200'));
+      if (route === 'GET /apps/requests') return send(200, capturedBody('apps-requests-list-empty'));
       if (route === 'POST /auth/logout') return send(200, capturedBody('auth-logout-200'));
       return send(404, { error: 'Not found.' });
     });

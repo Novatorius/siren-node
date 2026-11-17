@@ -1281,7 +1281,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
 | `siren apps list` | Lists the apps and their items. `--json` prints what Siren sent. |
 | `siren apps show <key>` | Shows one app and its items. |
-| `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
+| `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
 | `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
 | `siren apps resend <id>` | Sends a request again. |
 | `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |
