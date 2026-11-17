@@ -141,10 +141,12 @@ export const ConfirmationAnswers = {
       emailConfirmation: { pending: true, deadline: nowS + 6 * 86400, closesAt: nowS + 3 * 86400, reminded: true, finalWeek: true, daysUntilClosed: 3 },
     }),
   /**
-   * register-org on a Siren whose SIREN_SAAS_SIGNUP_ENABLED is off: the route
-   * is not registered (saas/public/index.php line 180), so the router answers 404.
+   * register-org on a Siren whose SIREN_SAAS_SIGNUP_ENABLED is off: the
+   * front controller answers 404 with the error as a bare string before any
+   * route runs (saas/public/index.php lines 184 to 190 on pkt/apps-exchange
+   * at 651704b75).
    */
-  signupOff: () => reply(404, { error: { message: 'Not found.', context: [] } }),
+  signupOff: () => reply(404, { error: 'Not found.' }),
   /** login for an unconfirmed address: lib/Users/Service/Rest/Login.php lines 171 to 178. */
   loginUnconfirmed: (email: string) =>
     reply(403, { error: { message: 'Confirm your email address first.', code: 'email_unconfirmed', email, confirmationToken: 'confirm-token' } }),

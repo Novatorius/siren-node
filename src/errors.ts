@@ -153,12 +153,14 @@ export const POLICY_ERROR_CODES: readonly ErrorCode[] = [
 
 /**
  * The codes Siren's app routes send, beside {@link ErrorCode}, which mirrors
- * Siren's shared list and holds none of these. The answer route sends its
- * code as `error.code` (lib/Apps/Core/Models/AppAnswerResult.php), so the
- * SDK's error carries it as `code`. The declare, status and delete routes
- * send theirs as `error.context.reason` (lib/Apps/Service/Services/AppService.php,
- * AppLimitException.php), so the error carries it as `data.reason`. Read
- * both when a route could send either, as the resend route's stub leaves open.
+ * Siren's shared list and holds none of these. Every app route sends its
+ * code as `error.code`, which the SDK's error carries as `code`: the answer
+ * route through lib/Apps/Core/Models/AppAnswerResult.php, and the others
+ * through the exceptions in lib/Apps/Service/Exceptions, each a
+ * `HasApiErrorCode` that saas/Strategies/RestStrategy.php writes to
+ * `error.code`. Those exceptions also send the code as
+ * `error.context.reason`, which the error carries as `data.reason`. Read it
+ * with {@link appErrorCode}, which takes `code` first, then `data.reason`.
  */
 export const AppErrorCode = {
   /** 403 from the answer route: the key's app is off. */
@@ -191,10 +193,10 @@ export type AppErrorCode = (typeof AppErrorCode)[keyof typeof AppErrorCode];
 /**
  * The machine-readable code of an error from an app route: the error's
  * `code` when Siren sent one in `error.code`, else `data.reason` from
- * `error.context.reason`, else `undefined`. Siren is moving the app routes'
- * codes from `context.reason` to `error.code`, so read them through this one
- * function and either shape works. Answers `undefined` for an error this SDK
- * did not raise, and for an empty code or reason.
+ * `error.context.reason`, else `undefined`. Siren's app refusals send the
+ * code, and most send the reason too, so either shape reads. Answers
+ * `undefined` for an error this SDK did not raise, and for an empty code or
+ * reason.
  */
 export function appErrorCode(error: unknown): AppErrorCode | (string & {}) | undefined {
   if (!(error instanceof SirenError)) return undefined;

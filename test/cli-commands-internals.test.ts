@@ -41,6 +41,13 @@ describe('apps-cli internals: the session', () => {
     expect(down.err()).not.toContain('siren login');
     expect(down.credentials().sessions[SANDBOX_BASE_URL]?.refreshToken).toBe(REFRESH_1);
 
+    const unavailable = harness([AuthAnswers.refreshUnavailable()]);
+    unavailable.signedIn({ [SANDBOX_BASE_URL]: session({ accessExpiresAt: NOW_S - 10 }) });
+    expect(await unavailable.run(['apps', 'list'])).toBe(1);
+    expect(unavailable.err()).toMatch(/try again/i);
+    expect(unavailable.err()).not.toContain('siren login');
+    expect(unavailable.credentials().sessions[SANDBOX_BASE_URL]?.refreshToken).toBe(REFRESH_1);
+
     const plan = harness([reply(401, { error: { message: 'Raw entitlement text.', code: 'trial_ended' } })]);
     plan.signedIn({ [SANDBOX_BASE_URL]: session({ accessExpiresAt: NOW_S - 10 }) });
     expect(await plan.run(['apps', 'list'])).toBe(1);

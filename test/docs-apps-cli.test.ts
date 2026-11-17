@@ -48,7 +48,7 @@ const ROUTES: Array<[string, string]> = [
   ['/apps/requests/{id}/resend', 'post'],
 ];
 
-describe.skip('apps-cli docs', () => {
+describe('apps-cli docs', () => {
   it.each(ROUTES)('openapi.yaml documents %s %s for a signed-in admin only', (key, method) => {
     const block = operation(read('openapi.yaml'), key, method);
     expect(block).toContain('dashboardSession: []');

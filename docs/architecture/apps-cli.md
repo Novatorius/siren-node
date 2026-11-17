@@ -8,10 +8,10 @@ an example app. This note is the contract for the packets that build it. It foll
 test was proven a contract the way
 [Proving a Test Is a Contract (KB 730)](https://navigator.novatori.us/r/kb/730) asks.
 
-The architecture commit adds the public surface as stubs that return valid empty values and never
-throw, the acceptance tests marked pending with `describe.skip`, the example's skeleton, the parity
-rows and the mutation list. A packet turns on its tests by changing `describe.skip` to `describe`.
-Nothing here is built yet.
+The architecture commit added the public surface as stubs, the acceptance tests marked pending
+with `describe.skip`, the example's skeleton, the parity rows and the mutation list. Each packet
+turned on its tests by changing `describe.skip` to `describe`. All eleven packets are built, and no
+test of this slice is pending.
 
 Round 2 answers the audit of this contract (the run folder's audit/cli-audit.md). It changes the
 answer call, the error codes, the target and app-file rules, the confirmation and key messages and
@@ -624,12 +624,12 @@ https.
   address, since only `url` is filled and only from `SIREN_APP_` names on the machine that applies
   it. Slice 12 says how a shared recipe carries the app's address: a `${SIREN_APP_URL}` the
   receiver sets, or an address the recipe names outright.
-- Slice 1: `AppInUseException` sends `error.code` and `context.reason` on feat/apps at 1619218d0.
-  Slice 1 gives `org_access_required` and `app_change_in_progress` coded exceptions the same way,
-  so every app refusal carries `error.code`.
-- Slice 2: the answer route's refusals move to `{"error":{"message","code","context"}}`, the shape
-  every other route answers, and packet 6's 409 `app_in_use` carries `openRequests` beside `uses`
-  (docs/architecture/apps-exchange.md at 086615e2a, line 184).
+- Slice 1: met. On pkt/apps-exchange at 651704b75, `AppInUseException`, `AppLimitException`,
+  `AppChangeInProgressException` and `AppOrgAccessRequiredException` each send `error.code` and
+  `context.reason` (saas/Strategies/RestStrategy.php lines 274 to 279 and 354).
+- Slice 2: met. The answer route's refusals are `{"error":{"message","code","context"}}`
+  (lib/Apps/Core/Models/AppAnswerResult.php), the resend route's carry both, and 409 `app_in_use`
+  carries `openRequests` beside `uses`, all on pkt/apps-exchange at 651704b75.
 - AP-A214 and slice 7: the sandbox's public address is `https://sandbox.sirenaffiliates.com/siren/v1`.
   No Siren file names it. If the deployment differs, `SANDBOX_BASE_URL` changes in one place.
 - Siren: `GET /webhooks/{id}/deliveries` answers an admin for an app-owned subscription. Only writes
@@ -645,9 +645,9 @@ https.
    declare the same key twice under two kinds.
 3. There is no `GET /apps/requests/{id}`. `siren apps requests <id>` finds the request among the
    latest 50 and its sends through the app's webhook deliveries. An older request cannot be shown.
-4. The app routes put their code in `error.context.reason` and the exchange routes in `error.code`.
-   `appErrorCode()` reads both in one place, code first, and slices 1 and 2 move every app refusal
-   to carry `error.code` (Claims on others).
+4. The app routes put their code in `error.context.reason` and the exchange routes in `error.code`
+   when this note was written. `appErrorCode()` reads both in one place, code first. Slices 1 and 2
+   have since moved every app refusal to carry `error.code` (Claims on others).
 5. `POST /auth/register-org` answers 404 on a sandbox unless `SIREN_SAAS_SIGNUP_ENABLED` is true,
    and the sandbox compose file leaves it unset. Step 2 of the checkpoint sets it.
 6. The sandbox's public address is in no Siren file (above).

@@ -49,9 +49,24 @@ export const AuthAnswers = {
     reply(200, { verificationToken: 'verification-token', user: { id: 7, email: EMAIL }, memberships: [membershipAcme, membershipTwo] }),
   tokens: (accessToken = ACCESS_2, refreshToken = REFRESH_2) => reply(200, { accessToken, refreshToken, user }),
   wrongPassword: () => reply(401, { error: { message: 'Those details do not match an account.', context: [] } }),
-  refreshRefused: () => reply(401, { error: { message: 'Invalid refresh token.', context: [] } }),
+  /**
+   * A spent or unknown refresh token: AuthService::refreshToken() throws
+   * InvalidCredentialsException('Invalid refresh token.') (AuthService.php
+   * line 1173) and RefreshToken.php line 84 answers it with setError(), a
+   * bare string (saas/Http/Response.php line 112), read on pkt/apps-exchange
+   * at 651704b75.
+   */
+  refreshRefused: () => reply(401, { error: 'Invalid refresh token.' }),
+  /**
+   * The plan check could not reach the entitlement service: AuthService.php
+   * lines 416 to 419 throw this message and code, and RefreshToken.php lines
+   * 75 to 82 answer it with 503, since the refresh token stays good.
+   */
+  refreshUnavailable: () =>
+    reply(503, { error: { message: 'Account service is unavailable. Please try again shortly.', code: 'entitlements_unavailable' } }),
   memberships: () => reply(200, { memberships: [membershipAcme, membershipTwo] }),
-  loggedOut: () => reply(200, { success: true }),
+  /** lib/Users/Service/Rest/Logout.php line 121, on pkt/apps-exchange at 651704b75. */
+  loggedOut: () => reply(200, { message: 'Logged out successfully.' }),
 };
 
 export function session(overrides: Partial<StoredSession> = {}): StoredSession {

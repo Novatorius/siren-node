@@ -23,9 +23,6 @@ import { deleteRecord, isJsonObject, readList, readObject, writeRecord } from '.
  * engine. Contract: docs/architecture/apps-cli.md. Siren's side:
  * docs/architecture/apps-records.md and apps-exchange.md in the Siren
  * repository.
- *
- * Stub. Every body below returns a valid empty value and never throws. The
- * packet named in each docblock builds it.
  */
 
 /** The longest answer Siren takes, in bytes of JSON (`AppRequestService::MAX_ANSWER_BYTES`). */
@@ -55,8 +52,6 @@ export class AppRequestsResource {
    * `status`, or a status outside `AppRequestStatus`. Retries on a network
    * error, 429 or 5xx, as a read. Throws `UnexpectedResponseError` when the
    * 2xx body is not an object holding a `requests` array of objects.
-   *
-   * Packet sdk-requests.
    */
   async list(params: AppRequestListParams = {}): Promise<AppRequestRecord[]> {
     return listAppRequests(this.http, params, AppRequestsResource.LIST_FILTERS);
@@ -73,8 +68,6 @@ export class AppRequestsResource {
    * `app_request_not_resendable` for a request that is answered or applied,
    * or whose app is off, raised as `ConflictError`, and 404 for a request the
    * org does not have, raised as `NotFoundError`.
-   *
-   * Packet sdk-requests.
    */
   async resend(id: string): Promise<AppRequestRecord> {
     return resendAppRequest(this.http, id);
@@ -104,8 +97,6 @@ export class AppRequestsResource {
    * `app_answer_unauthorized` as `AuthenticationError`. Throws
    * `UnexpectedResponseError` when a 2xx body is not `{ status: 'accepted' }`
    * with an optional boolean `duplicate`.
-   *
-   * Packet sdk-answer.
    */
   async answer(id: string, answer: AppAnswer): Promise<AppAnswerReceipt> {
     return answerAppRequest(this.http, id, answer, MAX_APP_ANSWER_BYTES);
@@ -319,8 +310,6 @@ export class AppsResource {
    *
    * Siren may deliver one request more than once. Drop a repeat by the
    * returned `id`, never by the unsigned `Idempotency-Key` header.
-   *
-   * Packet sdk-verify.
    */
   verifyRequest(
     rawBody: string | Uint8Array,

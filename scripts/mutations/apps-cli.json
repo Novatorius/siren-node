@@ -1762,7 +1762,7 @@
   {
     "id": "docs-drop-by-key",
     "file": "README.md",
-    "find": "Drop a repeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a repeat.",
+    "find": "Drop a\nrepeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a\nrepeat.",
     "replace": "Drop a repeat by its `Idempotency-Key` header.",
     "expect": "caught",
     "failing": [
