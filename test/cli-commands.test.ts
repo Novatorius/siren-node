@@ -327,7 +327,7 @@ describe('apps-cli: siren signup, login and the session', () => {
   });
 });
 
-describe.skip('apps-cli: siren apps init, apply and the app key', () => {
+describe('apps-cli: siren apps init, apply and the app key', () => {
   it('writes an app file and keeps env files out of git, and never overwrites one', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'init', '--key', KEY, '--name', 'Acme']), h.err()).toBe(0);

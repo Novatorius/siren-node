@@ -1008,9 +1008,9 @@
   },
   {
     "id": "apply-prints-key",
-    "file": "src/cli/run.ts",
-    "find": "    this.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${path}.`);",
-    "replace": "    this.print(`Key ${rawKey} and its signing secret are in ${path}.`);",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  run.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${envPath}.`);",
+    "replace": "  run.print(`Key ${rawKey} and its signing secret are in ${envPath}.`);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
@@ -1018,9 +1018,9 @@
   },
   {
     "id": "env-fallback-silent",
-    "file": "src/cli/run.ts",
-    "find": "          `SIREN_API_KEY=${rawKey}\\nSIREN_SIGNING_SECRET=${signingSecret}\\n`,",
-    "replace": "          '',",
+    "file": "src/cli/commands/apply.ts",
+    "find": "        `SIREN_API_KEY=${rawKey}\\nSIREN_SIGNING_SECRET=${signingSecret}\\n`,",
+    "replace": "        '',",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > prints the key and secret once"
@@ -1028,7 +1028,7 @@
   },
   {
     "id": "env-file-open-mode",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/apply.ts",
     "find": "  await writeFile(path, `${lines.join('\\n')}\\n`, { mode: 0o600 });\n  await chmod(path, 0o600);",
     "replace": "  await writeFile(path, `${lines.join('\\n')}\\n`);",
     "expect": "caught",
@@ -1038,7 +1038,7 @@
   },
   {
     "id": "env-lines-appended",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/apply.ts",
     "find": "    if (at >= 0) lines[at] = `${name}=${value}`;\n    else lines.push(`${name}=${value}`);",
     "replace": "    lines.push(`${name}=${value}`);",
     "expect": "caught",
@@ -1048,9 +1048,9 @@
   },
   {
     "id": "env-written-on-update",
-    "file": "src/cli/run.ts",
-    "find": "      await run.remember(key, envPath);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
-    "replace": "      const loose = app as unknown as { rawKey: string; signingSecret: string };\n      await run.saveSecrets(envPath, loose.rawKey, loose.signingSecret);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  await run.remember(key, envPath);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "  const loose = app as unknown as { rawKey: string; signingSecret: string };\n  await saveSecrets(run, envPath, loose.rawKey, loose.signingSecret);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
@@ -1058,9 +1058,9 @@
   },
   {
     "id": "problems-without-line",
-    "file": "src/cli/run.ts",
-    "find": "io.stderr(`${name}:${problem.line}:${problem.column}: ",
-    "replace": "io.stderr(`${name}: ",
+    "file": "src/cli/commands/apply.ts",
+    "find": "      io.stderr(`${shown}:${problem.line}:${problem.column}: ",
+    "replace": "      io.stderr(`${shown}: ",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > prints each problem in the app file"
@@ -1068,9 +1068,9 @@
   },
   {
     "id": "init-no-gitignore",
-    "file": "src/cli/run.ts",
-    "find": "      if (!ignored.split('\\n').includes('.env.*')) await writeFile(",
-    "replace": "      if (false) await writeFile(",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (!(ignored ?? '').split(/\\r?\\n/).includes('.env.*')) {",
+    "replace": "  if (ignored === 'never-a-gitignore') {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > writes an app file and keeps env files out of git"
@@ -1078,7 +1078,7 @@
   },
   {
     "id": "init-overwrites",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/apply.ts",
     "find": "{ flag: 'wx' }",
     "replace": "{ flag: 'w' }",
     "expect": "caught",
@@ -1087,20 +1087,40 @@
     ]
   },
   {
+    "id": "init-key-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: apply and the app key > refuses an app key Siren would refuse"
+    ]
+  },
+  {
     "id": "delete-without-yes",
-    "file": "src/cli/run.ts",
-    "find": "      if (values.yes !== true) {",
-    "replace": "      if (false) {",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (values.yes !== true) {",
+    "replace": "  if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > deletes only with --yes"
     ]
   },
   {
+    "id": "delete-typed-key-ignored",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (typed !== key) throw new CliRefusal(",
+    "replace": "    if (typed === undefined) throw new CliRefusal(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: apply and the app key > deletes in a terminal only when the key is typed"
+    ]
+  },
+  {
     "id": "delete-in-use-plain",
-    "file": "src/cli/run.ts",
-    "find": "        if (appErrorCode(error) === 'app_in_use') {",
-    "replace": "        if (appErrorCode(error) === 'never_sent') {",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use')",
+    "replace": "    if (error instanceof ConflictError && appErrorCode(error) === 'never_sent')",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > deletes only with --yes"
@@ -1498,9 +1518,9 @@
   },
   {
     "id": "apply-prints-url",
-    "file": "src/cli/run.ts",
-    "find": "      for (const line of appLines(app, false)) run.print(line);",
-    "replace": "      for (const line of appLines(app)) run.print(line);",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  for (const line of appLines(app, false)) run.print(line);",
+    "replace": "  for (const line of appLines(app)) run.print(line);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
@@ -1508,8 +1528,8 @@
   },
   {
     "id": "apply-no-key-silent",
-    "file": "src/cli/run.ts",
-    "find": "        run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run siren apps rotate ${key} to make a new key and save it there.`);\n",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run siren apps rotate ${key} to make a new key and save it there.`);\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -1518,9 +1538,9 @@
   },
   {
     "id": "apply-no-key-wrong-line",
-    "file": "src/cli/run.ts",
-    "find": "      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
-    "replace": "      if ((await envValue(envPath, 'SIREN_BASE_URL')) === undefined) {",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "  if ((await envValue(envPath, 'SIREN_BASE_URL')) === undefined) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
@@ -1528,9 +1548,9 @@
   },
   {
     "id": "apply-later-sends-more",
-    "file": "src/cli/run.ts",
-    "find": "      await run.remember(key, envPath);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
-    "replace": "      await siren.apps.retrieve(key);\n      await run.remember(key, envPath);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  await run.remember(key, envPath);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "  await siren.apps.retrieve(key);\n  await run.remember(key, envPath);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
@@ -1538,9 +1558,9 @@
   },
   {
     "id": "apply-not-remembered",
-    "file": "src/cli/run.ts",
-    "find": "        await run.remember(key, envPath);\n        return saved ? 0 : 1;",
-    "replace": "        return saved ? 0 : 1;",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    const saved = await saveSecrets(run, envPath, app.rawKey, app.signingSecret);\n    await run.remember(key, envPath);",
+    "replace": "    const saved = await saveSecrets(run, envPath, app.rawKey, app.signingSecret);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
@@ -1548,9 +1568,9 @@
   },
   {
     "id": "rotate-to-cwd",
-    "file": "src/cli/run.ts",
-    "find": ": session.envFiles?.[key];",
-    "replace": ": join(io.cwd, run.envFileName());",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    envPath = session.envFiles?.[key];",
+    "replace": "    envPath = join(io.cwd, run.envFileName());",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
@@ -1558,9 +1578,9 @@
   },
   {
     "id": "rotate-unknown-guesses",
-    "file": "src/cli/run.ts",
-    "find": ": session.envFiles?.[key];",
-    "replace": ": session.envFiles?.[key] ?? join(io.cwd, run.envFileName());",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    envPath = session.envFiles?.[key];",
+    "replace": "    envPath = session.envFiles?.[key] ?? join(io.cwd, run.envFileName());",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
@@ -1568,9 +1588,9 @@
   },
   {
     "id": "rotate-other-siren-silent",
-    "file": "src/cli/run.ts",
-    "find": "      if (before !== undefined && before !== target.baseUrl) {",
-    "replace": "      if (before !== undefined && before === 'never') {",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (before !== undefined && before !== base) run.warn(",
+    "replace": "    if (before !== undefined && before === 'never') run.warn(",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
@@ -1578,19 +1598,29 @@
   },
   {
     "id": "rotate-app-file-unremembered",
-    "file": "src/cli/run.ts",
-    "find": "      await run.remember(key, envPath);\n      return saved ? 0 : 1;",
-    "replace": "      return saved ? 0 : 1;",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const saved = await saveSecrets(run, envPath, rotated.rawKey, rotated.signingSecret);\n  await run.remember(key, envPath);",
+    "replace": "  const saved = await saveSecrets(run, envPath, rotated.rawKey, rotated.signingSecret);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
     ]
   },
   {
+    "id": "rotate-app-file-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (!(await isFile(appFile))) throw new CliRefusal(",
+    "replace": "    if (false) throw new CliRefusal(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: apply and the app key > refuses --app-file that names no file"
+    ]
+  },
+  {
     "id": "saved-path-relative",
-    "file": "src/cli/run.ts",
-    "find": "and its signing secret are in ${path}.`);",
-    "replace": "and its signing secret are in ${path.slice(path.lastIndexOf('/') + 1)}.`);",
+    "file": "src/cli/commands/apply.ts",
+    "find": "and its signing secret are in ${envPath}.`);",
+    "replace": "and its signing secret are in ${envPath.slice(envPath.lastIndexOf('/') + 1)}.`);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
@@ -1598,7 +1628,7 @@
   },
   {
     "id": "delete-open-asks-off",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/apply.ts",
     "find": "Answer them, or wait for them to end: siren apps requests --app ${key}`);",
     "replace": "Turn it off instead with siren apps off ${key}.`);",
     "expect": "caught",

@@ -4,6 +4,7 @@ import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
 import { ACCESS_2, AuthAnswers, EMAIL, NOW_S, PASSWORD, REFRESH_1, harness, membershipAcme, session } from './cli-fakes';
+import { APP_KEY, APP_REQUEST_ID, appRecord } from './apps-siren-answers';
 
 /*
  * Guards of packet cli-session that the acceptance tests in
@@ -75,5 +76,34 @@ describe('apps-cli internals: the session', () => {
     const h = harness([AuthAnswers.sandbox(), AuthAnswers.oneOrg(), apps()], { stdin: ` ${PASSWORD} \r\n` });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
     expect(bodyOf(h.http.requests[1])).toEqual({ email: EMAIL, password: ` ${PASSWORD} ` });
+  });
+});
+
+describe('apps-cli internals: apply and the app key', () => {
+  it('refuses an app key Siren would refuse, and writes nothing', async () => {
+    for (const key of ['Acme', 'requests', 'acme--payouts']) {
+      const h = harness([]);
+      expect(await h.run(['apps', 'init', '--key', key]), key).toBe(2);
+      expect(() => h.file('siren.app.json')).toThrow();
+    }
+  });
+
+  it('refuses --app-file that names no file, before sending', async () => {
+    const h = harness([reply(200, { ...appRecord(), rawKey: `sk_test_${'1b'.repeat(32)}`, signingSecret: '9c'.repeat(32) })]);
+    h.signedIn();
+    expect(await h.run(['apps', 'rotate', APP_KEY, '--app-file', 'missing/siren.app.json'])).toBe(1);
+    expect(h.http.requests).toHaveLength(0);
+  });
+
+  it('deletes in a terminal only when the key is typed', async () => {
+    const wrong = harness([reply(200, { success: true })], { interactive: true, typed: ['acme'] });
+    wrong.signedIn();
+    expect(await wrong.run(['apps', 'delete', APP_KEY])).toBe(1);
+    expect(wrong.http.requests).toHaveLength(0);
+
+    const typed = harness([reply(200, { success: true })], { interactive: true, typed: [APP_KEY] });
+    typed.signedIn();
+    expect(await typed.run(['apps', 'delete', APP_KEY]), typed.err()).toBe(0);
+    expect(typed.paths()).toEqual([`DELETE /apps/${APP_KEY}`]);
   });
 });
