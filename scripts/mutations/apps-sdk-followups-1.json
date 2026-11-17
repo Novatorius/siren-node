@@ -1,0 +1,570 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  return { amount: value / 10 ** scale, decimal, text };",
+    "replace": "  return { amount: value, decimal, text };",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-followups-1: the amount a person reads from a tell"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const sign = value < 0 ? '-' : '';",
+    "replace": "  const sign = value >= 0 ? '' : '-';",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/resources/app-amounts.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  return { amount: value / 10 ** scale, decimal, text };",
+    "replace": "  return { amount: value, decimal, text };",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-cli: the hidden password prompt"
+    ]
+  },
+  {
+    "id": "amount-scale-fixed",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  return { amount: value / 10 ** scale, decimal, text };",
+    "replace": "  return { amount: value / 100, decimal, text };",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-decimal-places-ignored",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const unit = 10 ** decimalPlaces;",
+    "replace": "  const unit = 10 ** scale;",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-truncates",
+    "file": "src/resources/app-amounts.ts",
+    "find": " + ((magnitude % dropped) * 2 >= dropped ? 1 : 0);",
+    "replace": ";",
+    "expect": "caught",
+    "failing": [
+      "rounds to the decimal places shown, halves up"
+    ]
+  },
+  {
+    "id": "amount-symbol-after-touches",
+    "file": "src/resources/app-amounts.ts",
+    "find": "      : `${sign}${grouped} ${symbol !== '' ? symbol : String(currency.id)}`;",
+    "replace": "      : `${sign}${grouped}${symbol !== '' ? symbol : String(currency.id)}`;",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-no-code-without-symbol",
+    "file": "src/resources/app-amounts.ts",
+    "find": "      : `${sign}${grouped} ${symbol !== '' ? symbol : String(currency.id)}`;",
+    "replace": "      : `${sign}${grouped} ${symbol}`;",
+    "expect": "caught",
+    "failing": [
+      "puts a symbol written after the number behind a space"
+    ]
+  },
+  {
+    "id": "amount-ungrouped",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const grouped = `${whole.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')}${fraction}`;",
+    "replace": "  const grouped = `${whole}${fraction}`;",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-value-unchecked",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {",
+    "replace": "  if (typeof value !== 'number') {",
+    "expect": "caught",
+    "failing": [
+      "refuses a value that is not a stored integer"
+    ]
+  },
+  {
+    "id": "amount-scale-range-open",
+    "file": "src/resources/app-amounts.ts",
+    "find": "scale < 0 || scale > MAX_SCALE) {",
+    "replace": "scale < 0) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a value that is not a stored integer"
+    ]
+  },
+  {
+    "id": "amount-places-over-scale",
+    "file": "src/resources/app-amounts.ts",
+    "find": "decimalPlaces < 0 || decimalPlaces > scale) {",
+    "replace": "decimalPlaces < 0) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a value that is not a stored integer"
+    ]
+  },
+  {
+    "id": "example-prints-stored-value",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "    return shown === undefined ? asCame : `${about}, reward ${shown}.`;",
+    "replace": "    return shown === undefined ? asCame : `${about}, reward ${told.reward.value}.`;",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-followups-1: the example app reads the amount in a tell"
+    ]
+  },
+  {
+    "id": "example-allocation-stored-value",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "by distributor ${told.distributor.name}, ${shown}.`;",
+    "replace": "by distributor ${told.distributor.name}, ${allocation.value}.`;",
+    "expect": "caught",
+    "failing": [
+      "logs a completed allocation with its amount"
+    ]
+  },
+  {
+    "id": "example-tell-raw-json",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "): ${describeTell(siren, request)}`);",
+    "replace": "): ${JSON.stringify(request.data)}`);",
+    "expect": "caught",
+    "failing": [
+      "logs the reward of an approved conversion as a person reads it"
+    ]
+  },
+  {
+    "id": "docs-value-not-shown",
+    "file": "README.md",
+    "find": "`value` is not the amount a person reads.",
+    "replace": "`value` is the amount.",
+    "expect": "caught",
+    "failing": [
+      "say plainly that a tell carries the stored integer"
+    ]
+  },
+  {
+    "id": "parity-shown-amount-row",
+    "file": "README.md",
+    "find": "| `siren.apps.shownAmount()` | None.",
+    "replace": "| `siren.apps.shownAmountX()` | None.",
+    "expect": "caught",
+    "failing": [
+      "Parity: Node methods the PHP SDK does not have yet"
+    ]
+  },
+  {
+    "id": "follow-edition-cached",
+    "file": "src/cli/commands/requests.ts",
+    "find": "      if (poll > 1) await run.recheckEdition();",
+    "replace": "      if (poll < 1) await run.recheckEdition();",
+    "expect": "caught",
+    "failing": [
+      "stops a follow run within one poll when the target turns live",
+      "stops a follow run that is already going once the Cloud reports live"
+    ]
+  },
+  {
+    "id": "follow-edition-read-unchecked",
+    "file": "src/cli/context.ts",
+    "find": "    assertSessionMatches(this.target, this.current(), await this.editionRead);",
+    "replace": "    await this.editionRead;",
+    "expect": "caught",
+    "failing": [
+      "stops a follow run within one poll when a live target turns into a sandbox"
+    ]
+  },
+  {
+    "id": "follow-edition-after-poll",
+    "file": "src/cli/commands/requests.ts",
+    "find": "      if (poll > 1) await run.recheckEdition();\n      const rows = await siren.apps.requests.list(filters);",
+    "replace": "      const rows = await siren.apps.requests.list(filters);\n      if (poll > 1) await run.recheckEdition();",
+    "expect": "caught",
+    "failing": [
+      "stops a follow run within one poll when the target turns live"
+    ]
+  },
+  {
+    "id": "docs-follow-cost",
+    "file": "docs/architecture/apps-cli.md",
+    "find": "That costs one more GET every\n  2 seconds while following.",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "say a follow run reads the edition before each poll"
+    ]
+  },
+  {
+    "id": "edition-session-timeout",
+    "file": "src/cli/session-auth.ts",
+    "find": "{ timeout: EDITION_TIMEOUT_MS, retries: EDITION_RETRIES }",
+    "replace": "{ retries: EDITION_RETRIES }",
+    "expect": "caught",
+    "failing": [
+      "gives the edition read a short timeout of its own",
+      "gives up on a target whose edition read hangs well under ten seconds"
+    ]
+  },
+  {
+    "id": "edition-retries-two",
+    "file": "src/cli/session-auth.ts",
+    "find": "const EDITION_RETRIES = 1;",
+    "replace": "const EDITION_RETRIES = 2;",
+    "expect": "caught",
+    "failing": [
+      "gives the edition read a short timeout of its own"
+    ]
+  },
+  {
+    "id": "edition-line-raw",
+    "file": "src/cli/context.ts",
+    "find": "      if (!(error instanceof ConnectionError)) throw error;\n      throw new CliRefusal(",
+    "replace": "      throw error;\n      throw new CliRefusal(",
+    "expect": "caught",
+    "failing": [
+      "gives the edition read a short timeout of its own",
+      "with a line that says it did not answer"
+    ]
+  },
+  {
+    "id": "docs-edition-timeout",
+    "file": "docs/architecture/apps-cli.md",
+    "find": "so a target that hangs is given up after 6.5 seconds with the line",
+    "replace": "so a target that hangs is refused with the line",
+    "expect": "caught",
+    "failing": [
+      "say the edition read gives up well under ten seconds"
+    ]
+  },
+  {
+    "id": "quote-already-answered-short",
+    "file": "test/apps-siren-answers.ts",
+    "find": "'This request already has a different answer, and the first answer stands.'",
+    "replace": "'This request already has a different answer.'",
+    "expect": "caught",
+    "failing": [
+      "alreadyAnswered quotes"
+    ]
+  },
+  {
+    "id": "quote-admin-not-found-old",
+    "file": "test/apps-siren-answers.ts",
+    "find": "caller === 'admin' ? 'This organization has no request with this key.' :",
+    "replace": "caller === 'admin' ? 'No request with this key was sent to this app.' :",
+    "expect": "caught",
+    "failing": [
+      "notFoundForAdmin quotes",
+      "prints the line Siren gives an admin"
+    ]
+  },
+  {
+    "id": "docs-not-found-one-wording",
+    "file": "README.md",
+    "find": "Siren tells an admin \"This organization has no request with this key.\" and an app's key",
+    "replace": "Siren tells an app's key",
+    "expect": "caught",
+    "failing": [
+      "give both of Siren's wordings"
+    ]
+  },
+  {
+    "id": "archived-not-marked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "item.status === 'archived' ? '  archived, so Siren no longer calls it' : ''",
+    "replace": "''",
+    "expect": "caught",
+    "failing": [
+      "apply marks the archived item beside it",
+      "show and list mark the archived item beside it"
+    ]
+  },
+  {
+    "id": "archived-note-always",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (app.items.some((item) => item.status === 'archived')) {",
+    "replace": "  if (app.items.length > 0) {",
+    "expect": "caught",
+    "failing": [
+      "says nothing about archiving when no item is archived"
+    ]
+  },
+  {
+    "id": "archived-note-no-flags",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);",
+    "replace": "    const again = 'siren apps apply';",
+    "expect": "caught",
+    "failing": [
+      "keeps the target flags in the apply hint",
+      "apply that leaves an archived item"
+    ]
+  },
+  {
+    "id": "docs-archived-readme",
+    "file": "README.md",
+    "find": "An item the file no longer names while a record still selects it is archived",
+    "replace": "An item the file drops is archived",
+    "expect": "caught",
+    "failing": [
+      "say what an archived item is"
+    ]
+  },
+  {
+    "id": "retrieve-id-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const key = appRequestId(id, 'apps.requests.retrieve()');\n  const path = `/apps/requests/${key}`;",
+    "replace": "  const key = id;\n  const path = `/apps/requests/${key}`;",
+    "expect": "caught",
+    "failing": [
+      "refuses an id that is not a request key before sending"
+    ]
+  },
+  {
+    "id": "retrieve-data-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (!isJsonObject(body.data)) return",
+    "replace": "    if (body.data === undefined) return",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "retrieve-answer-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (body.answer !== null && !isJsonObject(body.answer)) return",
+    "replace": "    if (body.answer === undefined) return",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "retrieve-user-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (user !== null && !(isJsonObject(user) && typeof user.id === 'number' && typeof user.email === 'string')) {",
+    "replace": "    if (user === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "retrieve-id-mismatch-ok",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (body.id !== key) return",
+    "replace": "    if (typeof body.id !== 'string') return",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "show-from-list",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    request = await siren.apps.requests.retrieve(id);",
+    "replace": "    request = { ...(await siren.apps.requests.list()).find((row) => row.id === id)!, data: {}, answer: null, answeredByUser: null };",
+    "expect": "caught",
+    "failing": [
+      "reads it with GET /apps/requests/{id}"
+    ]
+  },
+  {
+    "id": "show-no-data",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  run.print(JSON.stringify(request.data, null, 2));",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "reads it with GET /apps/requests/{id}"
+    ]
+  },
+  {
+    "id": "show-no-person",
+    "file": "src/cli/commands/requests.ts",
+    "find": "request.answeredByUser !== null ? `${request.answeredByUser.email} (user ${request.answeredByUser.id})` :",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "shows the answer Siren took and the person who gave it"
+    ]
+  },
+  {
+    "id": "show-tell-no-answer-yet",
+    "file": "src/cli/commands/requests.ts",
+    "find": "request.mode === 'tell' ? 'A tell takes no answer.' : 'No answer yet.'",
+    "replace": "'No answer yet.'",
+    "expect": "caught",
+    "failing": [
+      "reads it with GET /apps/requests/{id}"
+    ]
+  },
+  {
+    "id": "show-404-raw",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    if (error instanceof NotFoundError && appErrorCode(error) === AppErrorCode.RequestNotFound) {",
+    "replace": "    if (error instanceof NotFoundError && appErrorCode(error) === 'made_up') {",
+    "expect": "caught",
+    "failing": [
+      "refuses a request the organization does not have"
+    ]
+  },
+  {
+    "id": "parity-retrieve-row",
+    "file": "README.md",
+    "find": "| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` |",
+    "replace": "| `siren.apps.requests.fetch()` | `GET /apps/requests/{requestKey}` |",
+    "expect": "caught",
+    "failing": [
+      "puts every public method of the Siren client in exactly one of the two tables"
+    ]
+  },
+  {
+    "id": "attention-never-shown",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (typeof count !== 'number' || count <= 0) return;",
+    "replace": "  return;",
+    "expect": "caught",
+    "failing": [
+      "list says how many need attention under an app",
+      "show says the count when it is above zero"
+    ]
+  },
+  {
+    "id": "attention-shown-at-zero",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (typeof count !== 'number' || count <= 0) return;",
+    "replace": "  if (typeof count !== 'number') return;",
+    "expect": "caught",
+    "failing": [
+      "show says the count when it is above zero, and nothing when it is zero"
+    ]
+  },
+  {
+    "id": "attention-hint-no-flags",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const command = run.command(`apps requests --app ${app.key} --attention`);",
+    "replace": "  const command = `siren apps requests --app ${app.key} --attention`;",
+    "expect": "caught",
+    "failing": [
+      "list says how many need attention under an app",
+      "list with an app whose requests need attention"
+    ]
+  },
+  {
+    "id": "attention-show-missing",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    for (const line of appLines(app)) run.print(line);\n    attentionLine(run, app);\n  }\n  return 0;\n}\n\n/**\n * Under an app",
+    "replace": "    for (const line of appLines(app)) run.print(line);\n  }\n  return 0;\n}\n\n/**\n * Under an app",
+    "expect": "caught",
+    "failing": [
+      "show says the count when it is above zero"
+    ]
+  },
+  {
+    "id": "docs-attention-openapi",
+    "file": "openapi.yaml",
+    "find": "        needsAttention: { type: integer, minimum: 0,",
+    "replace": "        attention: { type: integer, minimum: 0,",
+    "expect": "caught",
+    "failing": [
+      "name needsAttention and where the command shows it"
+    ]
+  },
+  {
+    "id": "in-use-always-turn-off",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (status === 'active') lines.push(turnOff);",
+    "replace": "    if (status !== 'made_up') lines.push(turnOff);",
+    "expect": "caught",
+    "failing": [
+      "a delete records still hold says to turn the app off only while it is on"
+    ]
+  },
+  {
+    "id": "in-use-off-no-flags",
+    "file": "src/cli/commands/apply.ts",
+    "find": "then run ${run.command(`apps delete ${key} --yes`)}.`;",
+    "replace": "then run siren apps delete ${key} --yes.`;",
+    "expect": "caught",
+    "failing": [
+      "a delete records still hold says to turn the app off only while it is on",
+      "delete of an app that is off and records use"
+    ]
+  },
+  {
+    "id": "resend-off-raw",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    if (error instanceof ConflictError && appErrorCode(error) === AppErrorCode.NotResendable) throw",
+    "replace": "    if (error instanceof ConflictError && appErrorCode(error) === 'made_up') throw",
+    "expect": "caught",
+    "failing": [
+      "a resend refused because the app is off says to turn it on",
+      "a resend refused for an applied request"
+    ]
+  },
+  {
+    "id": "resend-applied-reads-more",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (data.status === 'applied') return",
+    "replace": "  if (data.status === 'made_up') return",
+    "expect": "caught",
+    "failing": [
+      "a resend refused for an applied request says there is nothing to send"
+    ]
+  },
+  {
+    "id": "resend-on-no-flags",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    `Turn it on with ${run.command(`apps on ${key}`)}, then",
+    "replace": "    `Turn it on with siren apps on ${key}, then",
+    "expect": "caught",
+    "failing": [
+      "a resend refused because the app is off says to turn it on",
+      "resend of a request whose app is off"
+    ]
+  },
+  {
+    "id": "answer-401-siren-message",
+    "file": "src/resources/app-requests.ts",
+    "find": "  return new AuthenticationError(UNAUTHORIZED_ANSWER, {",
+    "replace": "  return new AuthenticationError(error.message, {",
+    "expect": "caught",
+    "failing": [
+      "the uncoded 401 on the answer route names siren apps rotate",
+      "gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized"
+    ]
+  },
+  {
+    "id": "docs-hints-section",
+    "file": "docs/architecture/apps-cli.md",
+    "find": "### 9. Three hints that sent a person the wrong way",
+    "replace": "### 9. Three hints",
+    "expect": "caught",
+    "failing": [
+      "say which fix each of the three hints names"
+    ]
+  }
+]

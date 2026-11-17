@@ -13,7 +13,8 @@ import { WebhookAnswers } from './sdk-gaps-fakes';
 /*
  * The hand-written fakes for the apps-cli routes, held against what a real
  * Siren Cloud answered (test/fixtures/cloud-captures, from Novatorius/siren
- * feat/apps at 1557b0030). A fake must carry the same fields, at every
+ * feat/apps at 1557b0030, and at 57999d085 for the second run's captures,
+ * whose `cloud` field says so). A fake must carry the same fields, at every
  * depth, as the capture of the same route and case. Values may differ, since
  * ids and names are made up.
  *
@@ -36,6 +37,15 @@ function body(response: HttpResponse | unknown): unknown {
   return response;
 }
 
+/**
+ * The app fake as Siren sent it at 1557b0030, before AppSerializer added
+ * `needsAttention`, for the captures taken then.
+ */
+function before27169452a(overrides: Record<string, unknown> = {}) {
+  const { needsAttention: _, ...app } = appRecord(overrides);
+  return app;
+}
+
 /** Each fake, by the capture of the same route and case. */
 const HELD: Record<string, () => unknown> = {
   'auth-signup-options-sandbox': AuthAnswers.sandbox,
@@ -48,15 +58,18 @@ const HELD: Record<string, () => unknown> = {
   'auth-refresh-401': AuthAnswers.refreshRefused,
   'auth-memberships-200': AuthAnswers.memberships,
   'auth-logout-200': AuthAnswers.loggedOut,
-  'apps-retrieve-200': () => appRecord(),
-  'apps-list-200': () => [appRecord()],
-  'apps-status-200-active': () => appRecord(),
-  'apps-status-200-inactive': () => appRecord({ status: 'inactive' }),
-  'apps-declare-200-update': () => appRecord(),
-  'apps-declare-200-changed-items': () => appRecord(),
-  'apps-declare-201-first': () => appRecord({ rawKey: 'k', signingSecret: 's' }),
-  'apps-rotate-200': () => appRecord({ rawKey: 'k', signingSecret: 's' }),
-  'apps-rotate-200-production-edition': () => appRecord({ rawKey: 'k', signingSecret: 's' }),
+  'apps-retrieve-200': () => before27169452a(),
+  'apps-list-200': () => [before27169452a()],
+  'apps-status-200-active': () => before27169452a(),
+  'apps-status-200-inactive': () => before27169452a({ status: 'inactive' }),
+  'apps-declare-200-update': () => before27169452a(),
+  'apps-declare-200-changed-items': () => before27169452a(),
+  'apps-declare-201-first': () => before27169452a({ rawKey: 'k', signingSecret: 's' }),
+  'apps-rotate-200': () => before27169452a({ rawKey: 'k', signingSecret: 's' }),
+  'apps-rotate-200-production-edition': () => before27169452a({ rawKey: 'k', signingSecret: 's' }),
+  'apps-retrieve-200-with-count': () => appRecord(),
+  'apps-list-200-with-counts': () => [appRecord()],
+  'apps-list-200-count-1': () => [appRecord({ needsAttention: 1 })],
   'apps-list-after-logout-with-old-access-token': () => CloudAnswers.authenticationRequired,
   'webhooks-retrieve-200-app-owned': () => WebhookAnswers.subscription,
   'webhooks-list-200': () => [WebhookAnswers.paused],
@@ -81,6 +94,11 @@ const REPLAYED: Record<string, string> = {
   'auth-logout-200': 'test/cli-loopback.ts, the fake Cloud',
   'webhooks-delete-409-app-owned': 'this file, the app-owned subscription',
   'webhooks-update-409-app-owned': 'this file, the app-owned subscription',
+  'apps-declare-200-dropped-selected-item': 'test/cli-apps-followups.test.ts, the archived item',
+  'apps-request-one-200-needs-attention': 'test/apps-request-retrieve.test.ts and test/cli-apps-followups.test.ts, one request',
+  'apps-delete-409-in-use': 'test/cli-apps-followups.test.ts, a delete records still hold',
+  'apps-resend-409-app-off': 'test/cli-apps-followups.test.ts, a resend while the app is off',
+  'apps-request-one-404': 'test/apps-request-retrieve.test.ts and test/cli-apps-followups.test.ts, a request the organization does not have',
 };
 
 /**
@@ -90,7 +108,7 @@ const REPLAYED: Record<string, string> = {
  */
 const UNFAKED: Record<string, string> = {
   'api-keys-create-201': 'Made an org key for the checkpoint. The apps tests never make one.',
-  'apps-answer-404-admin': 'app_request_not_found, which the answer refusal table fakes with a generic message.',
+  'apps-answer-404-admin': 'app_request_not_found as Siren worded it for everyone at 1557b0030. At 27169452a an admin gets "This organization has no request with this key." (AppAnswers.notFound, held in test/apps-siren-quotes.test.ts).',
   'apps-answer-404-app-key': 'The same body as apps-answer-404-admin.',
   'apps-answer-404-over-16kb-unknown-id': 'The same body: Siren looks the id up before it reads the size.',
   'apps-answer-404-plain-org-key': 'The same body: an org key that is no app\'s.',
@@ -99,7 +117,7 @@ const UNFAKED: Record<string, string> = {
   'apps-declare-400-http-url': 'A RestException 400 with context.field. The CLI prints Siren\'s message, as for any 400.',
   'apps-declare-400-unresolvable-url': 'The same envelope as apps-declare-400-http-url.',
   'apps-delete-200': '{"success":true}, which the delete tests already send.',
-  'apps-request-one-404-no-route': 'GET /apps/requests/{id} has no route. The SDK reads one request from the list.',
+  'apps-request-one-404-no-route': 'Siren had no GET /apps/requests/{id} at 1557b0030. It has GET /apps/requests/{requestKey} since, which apps-request-one-200-needs-attention and apps-request-one-404 record.',
   'apps-requests-list-400-bad-status': 'VALIDATION_FAILED, which the SDK refuses before sending for any status it does not know.',
   'apps-requests-list-401-app-key': 'api_key_not_accepted, the same body as apps-list-401-app-key.',
   'apps-requests-list-attention-empty': '{"requests":[]}. No capture holds a request row, since no ask ran.',

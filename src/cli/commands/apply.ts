@@ -141,6 +141,14 @@ export async function appsApply(input: CommandInput): Promise<number> {
   run.print(`Declared ${key} on ${run.target.baseUrl}.`);
   for (const line of appLines(app, false)) run.print(line);
   for (const name of parsed.filled) run.print(`Its url came from ${name}.`);
+  if (app.items.some((item) => item.status === 'archived')) {
+    const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);
+    run.print(
+      `An archived item is one ${shown} no longer names while a record still selects it. ` +
+        'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
+        `To bring it back, name it in ${shown} again with the same kind and key, and run ${again}.`,
+    );
+  }
 
   if (app.created) {
     const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);
@@ -164,7 +172,10 @@ export async function appsList(input: CommandInput): Promise<number> {
     return 0;
   }
   if (apps.length === 0) run.print(`No apps on ${run.target.baseUrl} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
-  for (const app of apps) for (const line of appLines(app)) run.print(line);
+  for (const app of apps) {
+    for (const line of appLines(app)) run.print(line);
+    attentionLine(run, app);
+  }
   return 0;
 }
 
@@ -175,8 +186,23 @@ export async function appsShow(input: CommandInput): Promise<number> {
   await run.signedIn();
   const app = await run.siren().apps.retrieve(key);
   if (input.values.json === true) run.print(JSON.stringify(app, null, 2));
-  else for (const line of appLines(app)) run.print(line);
+  else {
+    for (const line of appLines(app)) run.print(line);
+    attentionLine(run, app);
+  }
   return 0;
+}
+
+/**
+ * Under an app with requests that need a person, how many, and the command
+ * that lists them. Prints nothing for a count of zero, or for a Siren that
+ * sends no count.
+ */
+function attentionLine(run: CommandContext, app: App): void {
+  const count = app.needsAttention;
+  if (typeof count !== 'number' || count <= 0) return;
+  const command = run.command(`apps requests --app ${app.key} --attention`);
+  run.print(count === 1 ? `  1 request needs attention. See it with ${command}.` : `  ${count} requests need attention. See them with ${command}.`);
 }
 
 /** `siren apps on <key>`: turns the app on. */
@@ -250,7 +276,7 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   try {
     await run.siren().apps.delete(key);
   } catch (error) {
-    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(inUseLines(run, key, error));
+    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(await inUseLines(run, key, error));
     throw error;
   }
   run.print(`Deleted ${key} from ${run.target.baseUrl}. Its key no longer works.`);
@@ -259,13 +285,18 @@ export async function appsDelete(input: CommandInput): Promise<number> {
 
 /**
  * An app's lines: its key, name, state and, when `showUrl`, its url, then
- * one line per item with its `app:{id}`. `apply` leaves the url out, since
- * it may have come from the environment.
+ * one line per item with its `app:{id}`. An item Siren archived, because a
+ * later declaration left it out while a record still selects it, says so
+ * beside it. `apply` leaves the url out, since it may have come from the
+ * environment.
  */
 export function appLines(app: App, showUrl = true): string[] {
   const state = app.status === 'active' ? 'on' : 'off';
   const lines = [`${app.key}  ${app.name}  ${state}${showUrl && app.url ? `  ${app.url}` : ''}`];
-  for (const item of app.items) lines.push(`  ${item.ref}  ${item.kind}  ${item.key}  ${item.name}`);
+  for (const item of app.items) {
+    const archived = item.status === 'archived' ? '  archived, so Siren no longer calls it' : '';
+    lines.push(`  ${item.ref}  ${item.kind}  ${item.key}  ${item.name}${archived}`);
+  }
   return lines;
 }
 
@@ -279,15 +310,28 @@ async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Pr
   return 0;
 }
 
-/** The lines a delete that records or open asks still hold gets. */
-function inUseLines(run: CommandContext, key: string, error: ConflictError): string {
+/**
+ * The lines a delete that records or open asks still hold gets. When records
+ * hold it, it reads the app with `GET /apps/{key}`: an app that is on is
+ * told to turn off instead, and one already off is told to change the
+ * records. When that read fails, both ways are named.
+ */
+async function inUseLines(run: CommandContext, key: string, error: ConflictError): Promise<string> {
   const data = (typeof error.data === 'object' && error.data !== null ? error.data : {}) as { uses?: unknown; openRequests?: unknown };
   const uses = typeof data.uses === 'object' && data.uses !== null && !Array.isArray(data.uses) ? Object.entries(data.uses as Record<string, unknown>) : [];
   const open = typeof data.openRequests === 'number' ? data.openRequests : 0;
   const lines = [`Siren kept ${key}.`];
   if (uses.length > 0) {
     lines.push(`Records still select its items: ${uses.map(([ref, count]) => `${ref} (${String(count)})`).join(', ')}.`);
-    lines.push(`Turn it off instead with ${run.command(`apps off ${key}`)}. Siren then stops calling it and keeps what it already did.`);
+    const status = await run
+      .siren()
+      .apps.retrieve(key)
+      .then((app) => app.status, () => undefined);
+    const turnOff = `Turn it off instead with ${run.command(`apps off ${key}`)}. Siren then stops calling it and keeps what it already did.`;
+    const change = `To delete it, change each record that selects those items to another choice, then run ${run.command(`apps delete ${key} --yes`)}.`;
+    if (status === 'active') lines.push(turnOff);
+    else if (status !== undefined) lines.push(`It is already off, so Siren no longer calls it. ${change}`);
+    else lines.push(`If it is on, ${turnOff.charAt(0).toLowerCase()}${turnOff.slice(1)} ${change}`);
   }
   if (open > 0) {
     lines.push(`It has ${open} open ${open === 1 ? 'ask' : 'asks'}. Answer them, or wait for them to end: ${run.command(`apps requests --app ${key}`)}`);

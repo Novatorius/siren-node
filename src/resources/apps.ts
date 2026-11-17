@@ -1,15 +1,19 @@
 import type { HttpTransport } from '../http';
-import { answerAppRequest, listAppRequests, resendAppRequest, verifyAppRequest } from './app-requests';
+import { shownAmount } from './app-amounts';
+import { answerAppRequest, listAppRequests, resendAppRequest, retrieveAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
+  AppCurrency,
   AppAnswer,
   AppAnswerReceipt,
   AppRequest,
   AppRequestListParams,
+  AppRequestDetail,
   AppRequestRecord,
   DeclareAppParams,
   DeclaredApp,
   RotatedApp,
+  ShownAmount,
   VerifyAppRequestOptions,
 } from '../record-types';
 import type { AppStatus } from '../taxonomy';
@@ -55,6 +59,26 @@ export class AppRequestsResource {
    */
   async list(params: AppRequestListParams = {}): Promise<AppRequestRecord[]> {
     return listAppRequests(this.http, params, AppRequestsResource.LIST_FILTERS);
+  }
+
+  /**
+   * One request by its id, with `GET /apps/requests/{id}`, however old: the
+   * list's fields, the `data` Siren sent the app, the `answer` it took or
+   * null, and `answeredByUser`, `{ id, email }` of the person who answered
+   * by hand or null. The route takes an admin's session, as every app route
+   * does. An app's key gets 401 `api_key_not_accepted`, raised as
+   * `ApiKeyNotAcceptedError`.
+   *
+   * Refuses an `id` that is not `apr_` and 32 lowercase hex characters with
+   * `SirenError` before sending. Retries on a network error, 429 or 5xx, as
+   * a read. Siren answers 404 `app_request_not_found` for a request the
+   * organization does not have, raised as `NotFoundError`
+   * (GetAppRequest.php on Siren's feat/apps at 27169452a). Throws
+   * `UnexpectedResponseError` when the 2xx body is not this request with an
+   * object in `data`.
+   */
+  async retrieve(id: string): Promise<AppRequestDetail> {
+    return retrieveAppRequest(this.http, id);
   }
 
   /**
@@ -324,5 +348,26 @@ export class AppsResource {
     options: VerifyAppRequestOptions = {},
   ): AppRequest {
     return verifyAppRequest(rawBody, headers, secret, options, DEFAULT_APP_REQUEST_TOLERANCE_SECONDS);
+  }
+
+  /**
+   * The amount a person reads from a stored `value` and its `currency`, as
+   * a tell carries them: `reward.value` and `reward.currency` on an approved
+   * conversion, `allocation.value` and `allocation.currency` on a completed
+   * allocation. `value` is the stored integer, and the shown amount is
+   * `value / 10^currency.scale`, so 1500 in dollars is $15.00, 10000 in yen
+   * is ¥100, and 10000 in a points currency at scale 0 is 10,000 points.
+   *
+   * Answers `{ amount, decimal, text }`, the three ways Siren's own
+   * `CurrencyAmountService` reads an amount: a number for arithmetic, plain
+   * text with the currency's decimal places, and the text the dashboard
+   * shows. Sends nothing.
+   *
+   * Throws `SirenError` naming the field for a `value` that is not a safe
+   * integer, a currency that is not an object, a `scale` outside 0 to 8, or
+   * `decimalPlaces` outside 0 to the scale.
+   */
+  shownAmount(value: number, currency: AppCurrency): ShownAmount {
+    return shownAmount(value, currency, 'apps.shownAmount()');
   }
 }

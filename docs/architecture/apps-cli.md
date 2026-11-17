@@ -37,6 +37,7 @@ slice copies), and 55b9ea76a with the apps-sandbox branch at ec1b3a190 (`sk_test
 | `siren.apps.delete(key)` | `DELETE /apps/{key}` | admin session | src/resources/apps.ts |
 | `siren.apps.verifyRequest(rawBody, headers, secret, options)` | none, it reads what Siren sent | the app's signing secret | src/resources/apps.ts |
 | `siren.apps.requests.list(params)` | `GET /apps/requests` | admin session | src/resources/apps.ts |
+| `siren.apps.requests.retrieve(id)` | `GET /apps/requests/{requestKey}` | admin session | src/resources/apps.ts |
 | `siren.apps.requests.resend(id)` | `POST /apps/requests/{id}/resend` | admin session | src/resources/apps.ts |
 | `siren.apps.requests.answer(id, answer)` | `POST /apps/requests/{id}/answer` | the app's key, or an admin session | src/resources/apps.ts |
 
@@ -86,10 +87,10 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 409 `app_request_not_resendable` | `ConflictError` | Reads the request. It is applied, or it would be sent and its app is off. A request that holds an answer not yet applied, `answered` or `needs_attention`, is never refused: Siren applies the stored answer, even while the app is off. |
 | 409 `app_request_already_answered` | `ConflictError` | Stops. A different answer came first, and it stands. |
 | 409 `app_request_not_needing_attention` | `ConflictError` | A person answered an ask that does not need attention, such as one `pending` or `sent`. Waits for the app, or answers once `siren apps requests --attention` lists the ask. The app's own key answers its own ask at any time before it is applied. Siren checks the status before the answer's fit, so a misfit answer gets this and not 422. The code is named by Siren (lib/Apps/Service/Services/AppRequestService.php lines 680 to 687 on pkt/apps-screen-a at fcf19b1f0). |
-| 404 `app_request_not_found` | `NotFoundError` | Checks the id and the key's app. |
+| 404 `app_request_not_found` | `NotFoundError` | Checks the id. The answer route tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers another app's request (AppRequestService.php line 698 at 27169452a). The resend and read routes say "App request not found." |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
 | 422 `app_answer_invalid` | `ValidationError` | Fixes the answer for the item's kind. |
-| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
+| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized`, and a message that names `siren apps rotate <app key>` in place of Siren's "make a new one under API keys", which is kept as `cause` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
 | a bad signature, an old timestamp, or no V2 header | `SignatureVerificationError` from `verifyRequest` | Answers 400 and does nothing else. |
 
 `appErrorCode(error)` in src/errors.ts reads the code in one place: the error's `code` (Siren's
@@ -144,15 +145,15 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren use <slug or id>` | memberships, then `POST /auth/switch-org` | The organization now in use. |
 | `siren apps init [--key] [--name]` | nothing | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
 | `siren apps apply [file]` | `PUT /apps/{key}` once | The app and each item with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate <key>` (AP-A635). |
-| `siren apps list [--json]` | `GET /apps` | One block per app with its items, or the JSON Siren sent. |
-| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items. |
-| `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, prints each new request or status change once, and ends with 0 on Ctrl-C. |
-| `siren apps requests <id>` | `GET /apps/requests`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request, each send with its HTTP status and the app's answer, and the body Siren sent. |
+| `siren apps list [--json]` | `GET /apps` | One block per app with its items, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
+| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
+| `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
+| `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request's line, the data Siren sent, the answer Siren took and who gave it, or that none came yet, then each send with its HTTP status and what the app said back. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
-| `siren apps resend <id>` | `POST /apps/requests/{id}/resend` | The request as it now stands. |
+| `siren apps resend <id>` | `POST /apps/requests/{id}/resend`, and on 409 `app_request_not_resendable` for a request not `applied`, `GET /apps/requests/{requestKey}` and `GET /apps` | The request as it now stands. On that 409, that its app is off, with `siren apps on <key>` and the resend to run after. An `applied` request is told there is nothing to send. |
 | `siren apps rotate <key> [--app-file <path>]` | `POST /apps/{key}/rotate` | The new prefix and the absolute path of the env file. Writes the new key and secret where `apply` wrote the first pair, or beside the named app file (AP-A634). |
 | `siren apps on <key>` and `siren apps off <key>` | `POST /apps/{key}/status` | The app's new state. |
-| `siren apps delete <key> --yes` | `DELETE /apps/{key}` | That it is gone. On 409 `app_in_use`: the records in `uses` with the `siren apps off` command, and when `openRequests` is above 0, `siren apps requests --app <key>` and the advice to answer or wait for the open asks (AP-A641). |
+| `siren apps delete <key> --yes` | `DELETE /apps/{key}`, and `GET /apps/{key}` after a 409 that names records | That it is gone. On 409 `app_in_use`: the records in `uses` with the `siren apps off` command while the app is on, or, once it is off, that those records must change before a delete, and when `openRequests` is above 0, `siren apps requests --app <key>` and the advice to answer or wait for the open asks (AP-A641). |
 
 Every command takes `--sandbox`, `--live`, `--base-url <url>` and `--help`. Exit codes: 0 for done,
 1 when Siren or the tool refused, 2 for a command line the tool cannot read, with nothing sent.
@@ -266,9 +267,14 @@ as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps in
 - Every command that sends anything reads the edition from `GET /auth/signup-options` first, on
   every run, before anything else is sent. `signup` and `login` read it before they ask for the
   password. A Siren that names no edition counts as live. The read costs one GET with no
-  credential, a few dozen bytes, retried like any read. It is made once per run: `CommandContext`
-  keeps the answer, so a refresh, a second call and every loop of `apps requests --follow` use it.
-  `apps init` sends nothing and reads nothing.
+  credential, a few dozen bytes. Each attempt may take 3 seconds and it is sent once more after a
+  network error, 429 or 5xx, so a target that hangs is given up after 6.5 seconds with the line
+  `<address> did not answer when the tool asked which edition it is, so nothing was sent.`
+  `CommandContext` keeps the answer for the
+  run, so a refresh and a second call use it. `apps requests --follow` reads it again before each
+  poll after the first (`recheckEdition()`), so a target that changes edition during the run stops
+  it with the same one line before the session is sent there again. That costs one more GET every
+  2 seconds while following. `apps init` sends nothing and reads nothing.
 - A live edition needs `--live` on every command but `logout`, whatever address chose it. Signing
   out sends only the session's own tokens, to revoke them. `--live` against a sandbox is refused.
 - A stored session keeps the edition and the address it was made for (`edition`, `baseUrl`). A
@@ -751,8 +757,10 @@ https.
 2. Siren lets one app hold two items with the same key under two kinds. The file keys items by key,
    so a key is unique within an app, which keeps `app:<appKey>/<itemKey>` unambiguous. A file cannot
    declare the same key twice under two kinds.
-3. There is no `GET /apps/requests/{id}`. `siren apps requests <id>` finds the request among the
-   latest 50 and its sends through the app's webhook deliveries. An older request cannot be shown.
+3. Siren had no `GET /apps/requests/{id}` at 1557b0030 (capture apps-request-one-404-no-route).
+   It has `GET /apps/requests/{requestKey}` on feat/apps at 27169452a, and
+   `siren.apps.requests.retrieve(id)` reads it, so `siren apps requests <id>` shows any request
+   however old ("Follow-ups after the merge", section 7).
 4. The app routes put their code in `error.context.reason` and the exchange routes in `error.code`
    when this note was written. `appErrorCode()` reads both in one place, code first. Slices 1 and 2
    have since moved every app refusal to carry `error.code` (Claims on others).
@@ -853,3 +861,150 @@ side.
    Unreleased, Added, and under Changed for `new Siren()`, and openapi.yaml's app paths under the
    `dashboardSession` scheme, with `apiKey: []` on the answer route. Turns on
    test/docs-apps-cli.test.ts (12).
+
+## Follow-ups after the merge (pkt/apps-sdk-followups-1)
+
+A fix lane made these changes after the slice merged, each with a test that failed first on
+`feat/apps` at 934169a and a mutation in scripts/mutations/apps-sdk-followups-1.json. Siren was
+read on `feat/apps` at 27169452a.
+
+### 1. The amount in a tell
+
+Both tells now carry the reward's currency beside its value (AppActionSubjects.php lines 34 to 41,
+128 to 137 and 179 to 190). `reward` on an approved conversion is `{ value, units, currency }` or
+null, and `allocation` on a completed allocation gains `currency`. `currency` is
+`CurrencyAdapter::toArray()`: `id`, `symbol`, `position`, `name`, `scale`, `decimalPlaces` and
+`type`. `value` is the stored integer and the shown amount is `value / 10^scale`, so 10000 in yen,
+which Siren stores at scale 2 and shows with 0 decimal places, is ¥100.
+
+| Call or type | What it is | File |
+| --- | --- | --- |
+| `siren.apps.shownAmount(value, currency)` | Answers `{ amount, decimal, text }`. Sends nothing. | src/resources/apps.ts, src/resources/app-amounts.ts |
+| `AppCurrency` | The currency a tell carries, every field present. It extends `ProgramCurrency`, the same shape `programs.currencyTypes()` lists. | src/record-types.ts |
+| `AppConversionApprovedData`, `AppAllocationCompletedData` | The data of the two tells. | src/record-types.ts |
+| `ShownAmount` | What `shownAmount` answers. | src/record-types.ts |
+
+`shownAmount` copies Siren's `CurrencyAmountService` (lib/Commerce/Services/CurrencyAmountService.php):
+`amount` is `toFloat()`, `decimal` is `toDecimalString()`, and `text` is `format()` with `.` and
+`,`, rounding halves up to `decimalPlaces` with integer arithmetic. It refuses a `value` that is
+not a safe integer, a currency that is not an object, a `scale` outside 0 to 8
+(`Currency::MAX_SCALE`) and `decimalPlaces` outside 0 to the scale, which `Currency`'s constructor
+also refuses. `AppRequest.data` stays `Record<string, unknown>`, since its fields belong to the
+item's kind, and a caller narrows it by `item.kind`. openapi.yaml documents the routes the SDK
+calls, and a tell is a request Siren sends the app, so it gains no schema.
+
+The example's handler logs each tell through `describeTell()`, which reads the amount with
+`shownAmount` and logs the data as it came for a kind it does not know or a tell with no currency.
+The asks the example answers carry a currency code, not a currency, and its pool split works in
+stored units, which needs no scale. The tell fakes are `AppTells` and `AppCurrencies` in
+test/apps-siren-answers.ts, each citing its Siren file and line, and the tell in
+test/apps-verify-request.test.ts now has Siren's shape.
+
+### 2. The edition during a follow run
+
+A reviewer flipped a fake target from sandbox to live during `siren apps requests --follow`, and
+the sandbox session was still sent four times in six seconds, because `CommandContext` kept the
+edition it read at the start for the whole run. `appsRequests` now calls
+`CommandContext.recheckEdition()` before each poll after the first. It reads
+`GET /auth/signup-options` again and runs `assertSessionMatches` on the answer. `signedIn()`
+already held `--live` to the session's edition, so any change of edition fails that check first.
+So the run stops with exit code 1 and the line `signedIn()` gives, before the next
+`GET /apps/requests`. The cost is one GET with no credential, a few dozen bytes, every 2 seconds
+while following. The test that pinned one edition read per follow run now pins one read per poll.
+test/cli-edition-check.test.ts covers both directions with the harness, and the built command
+against the loopback Cloud flipped mid-run, where the old code kept polling until the test's
+20-second limit killed it.
+
+### 3. An edition read that hangs
+
+The edition read went through the session client's ordinary read: a 30-second timeout and two
+retries, so a target that took the connection and never answered held every command for 92
+seconds (30 + 0.5 + 30 + 1 + 30) before the transport's line. `SessionAuthClient.edition()` now
+sends with `EDITION_TIMEOUT_MS`, 3 seconds, and `EDITION_RETRIES`, 1, which gives up after 6.5
+seconds. `CommandContext` turns the `ConnectionError` into one line: the address did not answer
+when the tool asked which edition it is, so nothing was sent, and to check the address or try
+again in a minute. The other session calls keep the 30-second timeout, since a sign-in waits on
+Siren's password hashing and a refresh must not be cut short. test/cli-edition-check.test.ts pins
+the timeout and the line with the harness, and runs the built command against the loopback Cloud
+with its edition route hanging, where the old code ran into the test's 20-second limit.
+
+### 5. Siren's messages, word for word
+
+Siren's merged exchange words some refusals differently from the commits this slice first read.
+The answer route's 404 now tells an admin "This organization has no request with this key." and
+an app's key "No request with this key was sent to this app." with the same status and code. The
+409 for a different answer reads "This request already has a different answer, and the first
+answer stands." test/apps-siren-quotes.test.ts holds every message of the exchange this
+repository quotes, each with its Siren file and line at 27169452a. It checks each fake against
+the quoted text everywhere, and with `SIREN_CHECKOUT` set it reads each line from Siren with
+`git show`. The fake for a different answer had cut Siren's message short to fit an assertion,
+and both now carry Siren's whole sentence. The captures in test/fixtures/cloud-captures stay as
+recorded at 1557b0030, so apps-answer-404-admin keeps the older wording, and its note says so.
+
+### 6. An archived item
+
+When a declaration leaves out an item a record still selects, Siren keeps the item with
+`"status": "archived"`, never calls it, and deletes it once nothing selects it. Naming its kind
+and key again makes the same row active, so its `app:{id}` stays (lib/Apps/Core/Models/AppItem.php
+and AppService::redeclareItems() at 27169452a). The second Cloud run found that `apply` and
+`show` printed such an item like any other (capture apps-declare-200-dropped-selected-item, step
+22i). `appLines()` now adds "archived, so Siren no longer calls it" beside it, which `apply`,
+`list` and `show` share. `apply` then says once what archiving means and that naming the item in
+the file again, then running `apply`, brings it back. That hint carries the target flags and the
+file as it was typed.
+
+### 7. Reading one request
+
+Siren's feat/apps at 27169452a answers `GET /apps/requests/{requestKey}` for an admin with
+AppRequestSerializer::toDetail(): the list's fields plus `data` (`{}` when empty), `answer` or
+null, and `answeredByUser`, `{ id, email }` or null (GetAppRequest.php, AppRequestSerializer.php
+lines 87 to 97). An API key gets 401 `api_key_not_accepted`, and a request the organization does
+not have gets 404 `app_request_not_found` with "App request not found." (captures
+apps-request-one-200-needs-attention and apps-request-one-404 from the second run).
+
+`siren.apps.requests.retrieve(id)` reads it through `readObject`, so it retries as a read. It
+refuses a bad id with `SirenError` before sending, and raises `UnexpectedResponseError` for a 2xx
+body whose `id` is another request's, whose `data` is not an object, or whose `answer` or
+`answeredByUser` has the wrong shape. Its answer is `AppRequestDetail`.
+
+`siren apps requests <id>` used to look for the request among the latest 50 and refuse an older
+one with "not among the latest 50". It now reads the request by its id and prints its line, the
+data Siren sent, and the answer with who gave it, then the sends from the app's webhook
+deliveries as before. The data comes from the request, not from the last delivery's payload, so it
+shows even when the deliveries have moved past it. The test that pinned the list read now pins the
+one-request read.
+
+### 8. How many requests need attention
+
+Every app Siren answers now carries `needsAttention`, how many of its requests need a person, from
+AppAttention::count() (AppSerializer.php line 57 at 27169452a, captures apps-list-200-count-1 and
+apps-retrieve-200-with-count). The `App` type, the `appRecord` fake and openapi's `App` schema
+carry it. The fakes held against the captures taken at 1557b0030 leave it out, since Siren did
+not send it then. `siren apps list` and `siren apps show` print, under an app whose count is above
+0, "1 request needs attention. See it with siren apps requests --app <key> --attention." or the
+plural, with the target flags. A count of 0 prints nothing. The hint names `--app` beside
+`--attention` so the list holds only that app's requests.
+
+### 9. Three hints that sent a person the wrong way
+
+The second Cloud run found three hints that named the wrong fix.
+
+- A delete that records still hold said "Turn it off instead" even for an app already off (step
+  22d, capture apps-delete-409-in-use). After that 409, `siren apps delete` reads the app with
+  `GET /apps/{key}`. An app that is on gets the turn-off hint as before. One that is off is told
+  that Siren no longer calls it and that the records selecting its items must change before
+  `siren apps delete <key> --yes` can work. When the read fails, the line names both ways.
+- A resend Siren refused because the app is off printed Siren's "it is applied, or its app is off"
+  and nothing more (step 13a, capture apps-resend-409-app-off, whose `context.status` is the
+  request's own, `needs_attention`). `siren apps resend` now says an `applied` request has
+  nothing to send. For any other status it reads the request and the apps to name the app, and
+  says to turn it on with `siren apps on <key>`, then to resend.
+- The uncoded 401 on the answer route kept Siren's "Copy the key from Siren again, or make a new
+  one under API keys" (step 24a). An org key made there gets 404 on the answer route, so that
+  advice cannot work for an app. `requests.answer()` now gives that 401 a message that names
+  `siren apps rotate <app key>`, and keeps Siren's error as `cause`. The SDK holds no target, so
+  that message carries no flags. The command's own answer with an admin's session already ends in
+  "Your session has ended. Run siren login to sign in again." with the target flags, and a test
+  now pins that.
+
+Every hint above that names a command carries the target flags (test/cli-hints.test.ts).

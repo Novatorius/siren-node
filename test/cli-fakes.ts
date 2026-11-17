@@ -94,14 +94,19 @@ export function session(overrides: Partial<StoredSession> = {}): StoredSession {
   };
 }
 
+/** What the harness answers on `GET /auth/signup-options`. */
+export type EditionAnswer = 'sandbox' | 'production' | 'none' | HttpResponse | Error;
+
 export interface HarnessOptions {
   /**
    * What the target's `GET /auth/signup-options` answers, which every command
    * that sends anything reads first: `sandbox` (the default), `production`,
    * `none` for a Siren that names no edition, or any reply or error. The
-   * harness answers that route itself, apart from the queued replies.
+   * harness answers that route itself, apart from the queued replies. A
+   * function is asked at each read, with the number of the read from 1, so
+   * a test can change the edition during a run.
    */
-  edition?: 'sandbox' | 'production' | 'none' | HttpResponse | Error;
+  edition?: EditionAnswer | ((read: number) => EditionAnswer);
   env?: Record<string, string>;
   interactive?: boolean;
   /** Lines typed at each `prompt`, in order. */
@@ -129,9 +134,11 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
   let sleeps = 0;
   const editionReads: HttpRequest[] = [];
   const sent: string[] = [];
-  const edition = options.edition ?? 'sandbox';
-  const editionAnswer = (): HttpResponse | Error =>
-    edition === 'sandbox' ? AuthAnswers.sandbox() : edition === 'production' ? AuthAnswers.production() : edition === 'none' ? AuthAnswers.noEdition() : edition;
+  const editionOption = options.edition ?? 'sandbox';
+  const editionAnswer = (): HttpResponse | Error => {
+    const edition = typeof editionOption === 'function' ? editionOption(editionReads.length) : editionOption;
+    return edition === 'sandbox' ? AuthAnswers.sandbox() : edition === 'production' ? AuthAnswers.production() : edition === 'none' ? AuthAnswers.noEdition() : edition;
+  };
   const pathOf = (request: HttpRequest) => `${request.method} ${new URL(request.url).pathname.replace(/^\/siren\/v1/, '')}`;
   // The edition read goes to its own list, so `http.requests` and `paths()` hold what the command itself sent.
   const client: HttpClient = {

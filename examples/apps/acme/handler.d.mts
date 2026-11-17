@@ -27,3 +27,5 @@ export function createRequestListener(
 ): (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void;
 
 export function answerFor(request: Pick<AppRequest, 'item' | 'data'>): AppAnswer | null;
+
+export function describeTell(siren: Siren, request: { item: { kind: string }; data: Record<string, unknown> }): string;

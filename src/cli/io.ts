@@ -144,8 +144,13 @@ function askVisible(question: string): Promise<string> {
  * already written (libuv sets the mode with TCSADRAIN), so a question written
  * first lets a person who types the instant it appears get in before echo is
  * off, and the terminal shows what they typed. The email prompt before this
- * one leaves the terminal echoing, as readline does when it closes. Node
- * itself also gives the terminal its mode back when the process exits.
+ * one leaves the terminal echoing, as readline does when it closes.
+ *
+ * The mode goes back as soon as the prompt ends, not only when the process
+ * exits, so a command that asks again or keeps running after the prompt
+ * leaves the terminal echoing. test/cli-hidden-prompt.test.ts ("gives the
+ * mode back after Enter") fails when the restore is removed, mutation
+ * e2e-1-mode-not-restored in scripts/mutations/apps-cli-e2e.json.
  */
 export function askHidden(
   question: string,

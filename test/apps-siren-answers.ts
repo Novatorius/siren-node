@@ -14,7 +14,10 @@ export const APP_REQUEST_ID = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
  * An app as the app routes answer it: lib/Apps/Service/Services/AppSerializer.php
  * lines 15 to 30, with `rawKey` and `signingSecret` only on a first declare.
  * Each item as lib/Apps/Core/Models/Adapters/AppItemAdapter.php lines 43 to 53
- * gives it, on `feat/apps` at 1557b0030.
+ * gives it, on `feat/apps` at 1557b0030. `needsAttention` is the count
+ * AppSerializer.php line 57 adds on `feat/apps` at 27169452a, from
+ * AppAttention::count() (captures apps-retrieve-200-with-count and
+ * apps-list-200-count-1, from the second Cloud run at 57999d085).
  */
 export function appRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -59,6 +62,7 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
         dateModified: '2026-11-16 21:00:00',
       },
     ],
+    needsAttention: 0,
     ...overrides,
   };
 }
@@ -91,7 +95,7 @@ export const AppAnswers = {
   /**
    * 409 on a delete while records select the app's items:
    * lib/Apps/Service/Exceptions/AppInUseException.php lines 30 to 50 on
-   * `feat/apps` at 1557b0030, which always sends `openRequests`. The code
+   * `feat/apps` at 27169452a, which always sends `openRequests`. The code
    * sits in `error.code` and in `context.reason`.
    */
   inUse: (uses: Record<string, number> = { 'app:12': 2 }) =>
@@ -104,7 +108,7 @@ export const AppAnswers = {
     }),
   /**
    * The same 409 while asks are open and nothing selects the items:
-   * AppInUseException.php lines 41 to 47 on `feat/apps` at 1557b0030 word
+   * AppInUseException.php lines 41 to 47 on `feat/apps` at 27169452a word
    * it for the open asks, and `uses` is an empty PHP array, which JSON
    * writes as `[]`.
    */
@@ -122,20 +126,46 @@ export const AppAnswers = {
   uncoded: () => reply(409, { error: { message: 'Conflict.', context: [] } }),
   /**
    * The answer route's refusal of a different answer, in `error.code`:
-   * AppAnswerResult::refused() (lib/Apps/Core/Models/AppAnswerResult.php
-   * line 51 on `feat/apps` at 1557b0030) sends `context` as an empty PHP
-   * array, `[]`. The message is shorter than Siren's (AppRequestService.php
-   * line 608, "..., and the first answer stands."), since an assertion in
-   * test/cli-commands.test.ts pins it.
+   * lib/Apps/Service/Services/AppRequestService.php line 642 on `feat/apps`
+   * at 27169452a, through AppAnswerResult::refused()
+   * (lib/Apps/Core/Models/AppAnswerResult.php line 53), which sends
+   * `context` as an empty PHP array, `[]`.
    */
-  alreadyAnswered: () => reply(409, { error: { message: 'This request already has a different answer.', code: 'app_request_already_answered', context: [] } }),
+  alreadyAnswered: () =>
+    reply(409, {
+      error: { message: 'This request already has a different answer, and the first answer stands.', code: 'app_request_already_answered', context: [] },
+    }),
+  /**
+   * The answer route's 404 for a request the caller cannot reach:
+   * AppRequestService::notFound() (AppRequestService.php line 698 on
+   * `feat/apps` at 27169452a) words it for an admin, whose organization has
+   * no such request, and for an app's key, which also covers a request sent
+   * to another app. The status and the code are the same for both.
+   */
+  notFound: (caller: 'admin' | 'app') =>
+    reply(404, {
+      error: {
+        message: caller === 'admin' ? 'This organization has no request with this key.' : 'No request with this key was sent to this app.',
+        code: 'app_request_not_found',
+        context: [],
+      },
+    }),
+  /**
+   * The 404 of the resend route and of `GET /apps/requests/{requestKey}`:
+   * AppRequestRefusedException::notFound()
+   * (lib/Apps/Service/Exceptions/AppRequestRefusedException.php line 34 on
+   * `feat/apps` at 27169452a), with the code in `error.code` and in
+   * `context.reason` (capture apps-request-one-404).
+   */
+  requestNotFound: () =>
+    reply(404, { error: { message: 'App request not found.', code: 'app_request_not_found', context: { reason: 'app_request_not_found' } } }),
   /**
    * The answer route's refusal of a person's answer to an ask that does not
    * need attention, such as one `pending` or `sent`, which the app may still
    * answer: AppRequestService::notNeedingAttention()
-   * (lib/Apps/Service/Services/AppRequestService.php lines 680 to 687) through
+   * (lib/Apps/Service/Services/AppRequestService.php lines 678 to 686) through
    * AppAnswerResult::refused() (lib/Apps/Core/Models/AppAnswerResult.php
-   * lines 51 to 54), on pkt/apps-screen-a at fcf19b1f0. Siren checks the
+   * lines 51 to 54), on `feat/apps` at 27169452a. Siren checks the
    * status before the answer's fit, so a misfit answer to such an ask gets
    * this 409 too.
    */
@@ -152,8 +182,10 @@ export const AppAnswers = {
   /**
    * The resend route's 409 for an `applied` request, or one it would send
    * while its app is off: lib/Apps/Service/Rest/ResendAppRequest.php lines
-   * 82 to 87 on `feat/apps` at 1557b0030, through AppRequestRefusedException
-   * (line 29), which puts the code in `context.reason` beside the status.
+   * 82 to 87 on `feat/apps` at 27169452a, through AppRequestRefusedException,
+   * which puts the code in `context.reason` beside the status. While the app
+   * is off the status is the request's own, such as `needs_attention`
+   * (capture apps-resend-409-app-off).
    */
   notResendable: (status = 'applied') =>
     reply(409, {
@@ -163,6 +195,53 @@ export const AppAnswers = {
         context: { reason: 'app_request_not_resendable', status },
       },
     }),
+};
+
+/**
+ * Currencies as Siren's API describes one, `CurrencyAdapter::toArray()`
+ * (lib/Commerce/Adapters/CurrencyAdapter.php lines 25 to 33), which both
+ * tells send as `currency`, on Novatorius/siren `feat/apps` at 27169452a.
+ */
+export const AppCurrencies = {
+  /** lib/Configs/Core/Listeners/RegisterCoreCurrencies.php line 26: scale 2, and decimal places default to the scale. */
+  usd: () => ({ id: 'USD', symbol: '$', position: 'before', name: 'US Dollar', scale: 2, decimalPlaces: 2, type: 'monetary' }),
+  /** RegisterCoreCurrencies.php line 29: yen is stored in hundredths, scale 2, and shown with 0 decimal places. */
+  jpy: () => ({ id: 'JPY', symbol: '¥', position: 'before', name: 'Japanese Yen', scale: 2, decimalPlaces: 0, type: 'monetary' }),
+  /**
+   * A points currency an org defined: StoredCustomCurrencies::toCurrency()
+   * (lib/Configs/Service/Datastores/CustomCurrency/StoredCustomCurrencies.php
+   * lines 71 to 80) takes its symbol, position, name and scale from the
+   * stored row, decimal places from the scale, and type `internal`.
+   */
+  points: () => ({ id: 'POINTS', symbol: 'pts', position: 'after', name: 'Points', scale: 0, decimalPlaces: 0, type: 'internal' }),
+};
+
+/** A currency as the fakes above give one. */
+type FakeCurrency = ReturnType<typeof AppCurrencies.usd>;
+
+/**
+ * The data of the two tells, as AppActionSubjects builds it
+ * (lib/Apps/Service/Services/AppActionSubjects.php, forConversion() lines
+ * 128 to 152 and forAllocation() lines 179 to 190, on `feat/apps` at
+ * 27169452a). `value` is the stored integer and `currency` is the reward's
+ * currency (currencyOf(), lines 202 to 205).
+ */
+export const AppTells = {
+  conversionApproved: (value = 1500, currency: FakeCurrency = AppCurrencies.usd()) => ({
+    conversion: { id: 51, type: 'sale', status: 'complete', engagementId: 7, opportunityId: 9, collaboratorId: 4, transactionId: 12, obligationId: 33 },
+    reward: { value, units: currency.id, currency },
+    program: { id: 3, name: 'Partners' },
+  }),
+  /** A conversion with no reward: `reward` is null (AppActionSubjects.php lines 128 to 137). */
+  conversionWithoutReward: () => ({
+    conversion: { id: 52, type: 'lead', status: 'complete', engagementId: 8, opportunityId: 9, collaboratorId: 4, transactionId: null, obligationId: null },
+    reward: null,
+    program: { id: 3, name: 'Partners' },
+  }),
+  allocationCompleted: (value = 2500, currency: FakeCurrency = AppCurrencies.usd()) => ({
+    allocation: { distributionId: 21, obligationId: 40, collaboratorId: 4, status: 'complete', value, units: currency.id, currency },
+    distributor: { id: 2, name: 'Partner pool' },
+  }),
 };
 
 /**

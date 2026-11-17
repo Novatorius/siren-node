@@ -1020,6 +1020,8 @@ export interface App {
   /** The first 16 characters of the app's key, `sk_test_` or `sk_live_` and 8 more. */
   apiKeyPrefix: string | null;
   items: AppItem[];
+  /** How many of the app's requests need a person now, as Siren's AppAttention counts them. */
+  needsAttention: number;
   dateCreated?: string | null;
   dateModified?: string | null;
   [field: string]: unknown;
@@ -1061,6 +1063,20 @@ export interface AppRequestRecord {
   lastError: string | null;
   createdAt: string;
   [field: string]: unknown;
+}
+
+/**
+ * One request as `GET /apps/requests/{requestKey}` answers it
+ * (AppRequestSerializer::toDetail()): the list's fields, the data Siren
+ * sent, the answer it took, and the person who gave that answer.
+ */
+export interface AppRequestDetail extends AppRequestRecord {
+  /** The `data` Siren sent the app, `{}` when there was none. */
+  data: Record<string, unknown>;
+  /** The answer Siren took, or null before one. A tell takes none. */
+  answer: Record<string, unknown> | null;
+  /** The person behind a `user:{id}` answer, or null when the app answered, before an answer, or when that user is gone. */
+  answeredByUser: { id: number; email: string } | null;
 }
 
 /** Filters for `apps.requests.list()`. */
@@ -1118,6 +1134,85 @@ export interface AppAsk extends AppRequestBase {
 
 /** A checked request from Siren, as `apps.verifyRequest()` answers it. */
 export type AppRequest = AppTell | AppAsk;
+
+/**
+ * A currency as Siren's API describes one (`CurrencyAdapter::toArray()`),
+ * the shape `programs.currencyTypes()` lists, with every field present. A
+ * stored amount is the shown amount times `10^scale`. `decimalPlaces` is how
+ * many digits a person sees, never more than `scale`. Read an amount with
+ * `apps.shownAmount(value, currency)`.
+ */
+export interface AppCurrency extends ProgramCurrency {
+  /** The currency code, such as `USD`, or the code of an organization's own currency, such as `POINTS`. */
+  id: string;
+  symbol: string;
+  position: 'before' | 'after' | (string & {});
+  name: string;
+  /** Digits of a stored amount that sit after the decimal point, 0 to 8. Every built-in currency is 2, yen included. */
+  scale: number;
+  /** Digits a person sees after the decimal point, 0 to `scale`. Yen shows 0. */
+  decimalPlaces: number;
+  /** `monetary` for money, `internal` for points or store credit an organization defined. */
+  type: CustomCurrencyType | (string & {});
+}
+
+/**
+ * The data of a `postConversionAction` tell, sent after a conversion is
+ * approved (Siren's `AppActionSubjects::forConversion()`).
+ */
+export interface AppConversionApprovedData {
+  conversion: {
+    id: number;
+    type: string;
+    status: string;
+    engagementId: number;
+    opportunityId: number;
+    collaboratorId: number;
+    transactionId: number | null;
+    obligationId: number | null;
+  };
+  /**
+   * The reward, or null when the conversion has none. `value` is the stored
+   * integer, not the amount a person reads: 10000 in yen is 100 yen. Read it
+   * with `apps.shownAmount(reward.value, reward.currency)`. `units` is the
+   * currency code.
+   */
+  reward: { value: number; units: string; currency: AppCurrency } | null;
+  program: { id: number; name: string };
+}
+
+/**
+ * The data of a `postAllocationAction` tell, sent after an allocation
+ * completes (Siren's `AppActionSubjects::forAllocation()`). The subject id is
+ * `{distributionId}:{obligationId}`.
+ */
+export interface AppAllocationCompletedData {
+  allocation: {
+    distributionId: number;
+    obligationId: number;
+    collaboratorId: number;
+    status: string;
+    /** The stored integer, not the amount a person reads. Read it with `apps.shownAmount(value, currency)`. */
+    value: number;
+    /** The currency code. */
+    units: string;
+    currency: AppCurrency;
+  };
+  distributor: { id: number; name: string };
+}
+
+/**
+ * A stored amount as a person reads it, from `apps.shownAmount()`, the three
+ * ways Siren's own `CurrencyAmountService` gives one.
+ */
+export interface ShownAmount {
+  /** `value / 10^scale` as a number, for arithmetic: 15 for 1500 in dollars, 100 for 10000 in yen. */
+  amount: number;
+  /** Plain text with the currency's decimal places, no symbol and no grouping: `15.00`, `100`. */
+  decimal: string;
+  /** The text a person reads: `$15.00`, `¥100`, `10,000 pts`. */
+  text: string;
+}
 
 /** Options for `apps.verifyRequest()`. */
 export interface VerifyAppRequestOptions {

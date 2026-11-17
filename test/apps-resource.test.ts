@@ -350,7 +350,7 @@ describe('apps-cli: apps.requests.answer', () => {
   // Siren's key check answers a missing or unknown bearer with 401 and no code, before the answer
   // route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key, from
   // saas/Auth/ApiKeyAuthMiddleware.php line 133 on feat/apps at 1557b0030).
-  it('gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized, with Siren\'s message', async () => {
+  it('gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized, with a message that names siren apps rotate', async () => {
     for (const name of ['apps-answer-401-no-bearer', 'apps-answer-401-unknown-key']) {
       const { http, apps: resource } = apps([capturedReply(name)]);
       const error = await refused(() => resource.requests.answer(REQUEST, { outcome: 'paid' }));
@@ -358,7 +358,8 @@ describe('apps-cli: apps.requests.answer', () => {
       expect((error as SirenError).code, name).toBe('app_answer_unauthorized');
       expect(appErrorCode(error), name).toBe('app_answer_unauthorized');
       expect((error as SirenError).statusCode).toBe(401);
-      expect((error as Error).message).toBe(capturedBody<{ error: { message: string } }>(name).error.message);
+      expect((error as Error).message).toContain('run siren apps rotate <app key>');
+      expect(((error as Error).cause as Error).message).toBe(capturedBody<{ error: { message: string } }>(name).error.message);
       expect(http.requests.length, name).toBeLessThanOrEqual(2);
     }
 

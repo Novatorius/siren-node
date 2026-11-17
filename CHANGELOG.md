@@ -237,7 +237,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompt turns the terminal's echo off before it shows `Password: `, so a password typed the moment
   the prompt appears is never shown, and gives the echo back however the prompt ends. Every command
   that sends anything first reads the edition the Siren reports with `GET /auth/signup-options`,
-  once per run, and refuses a stored session made for another edition or address before it sends
+  and `apps requests --follow` reads it again before each poll. That read gives up after 6.5
+  seconds and says the Siren did not answer. The tool refuses a stored session made for another edition or address before it sends
   anything with it, with one line that names the `siren login` to run. Every hint that names a
   command carries the flags that reach the same Siren, such as `--live`. A request id, app key or
   answer the command line gets wrong is refused in the tool's own words with exit code 2, before
@@ -246,9 +247,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the app's own key.
 - `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppItem`,
   `AppRequestRecord`, `AppAnswer` and `AppAnswerReceipt` schemas, and the sandbox server.
+- `siren.apps.shownAmount(value, currency)` reads a stored amount and its currency as a person
+  reads them, and answers `{ amount, decimal, text }`, such as `{ amount: 100, decimal: '100',
+  text: '¥100' }` for 10000 in yen. It sends nothing, and throws `SirenError` for a `value` that is
+  not a safe integer or a currency whose `scale` or `decimalPlaces` it cannot read.
+- `AppConversionApprovedData` and `AppAllocationCompletedData` type the data of the two tells, and
+  `AppCurrency` the `currency` Siren sends beside each `value`. `value` is the stored integer, not
+  the amount a person reads. `ShownAmount` types what `shownAmount` answers. The example app logs
+  each tell's amount through `shownAmount`.
+- `siren.apps.requests.retrieve(id)` reads one request, however old, with
+  `GET /apps/requests/{requestKey}`, and answers `AppRequestDetail`: the list's fields, the `data`
+  Siren sent, the `answer` it took or `null`, and `answeredByUser`. It refuses a bad id before
+  sending, retries as a read, and raises 404 `app_request_not_found` as `NotFoundError`. openapi
+  gains the route and the `AppRequestDetail` schema. `siren apps requests <id>` reads it, so it
+  shows a request older than the latest 50, with its data, its answer and who gave it.
+- `App.needsAttention`, how many of the app's requests need a person, which Siren now sends on
+  every app, and in openapi's `App` schema. `siren apps list` and `siren apps show` print the count
+  under an app when it is above 0, with `siren apps requests --app <key> --attention`.
 
 ### Changed
 
+- `siren apps delete` says to turn an app off only while it is on, and otherwise that the records
+  selecting its items must change. `siren apps resend` names `siren apps on <key>` when Siren refuses
+  because the request's app is off. `requests.answer()` gives Siren's uncoded 401 a message that
+  names `siren apps rotate <app key>` in place of "make a new one under API keys", with Siren's
+  error as `cause`.
+- `siren apps apply`, `list` and `show` mark an archived item beside it, and `apply` says once that
+  Siren keeps such an item while a record selects it, never calls it, and brings it back when the
+  app file names it again.
+- README and the architecture note give both of Siren's wordings of the answer route's 404
+  `app_request_not_found`: "This organization has no request with this key." for an admin and
+  "No request with this key was sent to this app." for an app's key, as Siren's feat/apps says at
+  27169452a. The status and the code did not change.
 - `engines` asks for Node 18.3 or later, since the `siren` command uses `util.parseArgs`.
 - `new Siren()` sends an `sk_test_` key to the sandbox when no `baseUrl` is given, and throws for a
   test key with the live address or a live key with the sandbox.

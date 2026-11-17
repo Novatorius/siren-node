@@ -10,7 +10,9 @@
 //   received. A repeat of a request already handled gets 200 too, and is
 //   not acted on again. A repeat is found by the body's `id`, which the
 //   signature covers, never by the unsigned `Idempotency-Key` header.
-// - A tell needs nothing more.
+// - A tell needs nothing more. The example logs what it says, with each
+//   amount read by `siren.apps.shownAmount()`: a tell's `value` is the
+//   integer Siren stores, so 10000 in yen is 100 yen, never 10000.
 // - An ask gets its 200 at once, and its answer goes to
 //   `siren.apps.requests.answer()` without holding up the 200:
 //   a fulfillment method's payout is marked paid with the reference
@@ -55,7 +57,7 @@ export function createAcmeApp({ siren, signingSecret, log = () => {}, now }) {
 
       if (request.mode === 'tell') {
         handled.add(request.id);
-        log(`${request.id}: told about ${request.item.key} (${request.item.kind}): ${JSON.stringify(request.data)}`);
+        log(`${request.id}: told about ${request.item.key} (${request.item.kind}): ${describeTell(siren, request)}`);
         return { status: 200, body: received };
       }
 
@@ -111,6 +113,46 @@ export function createRequestListener(app, log) {
       );
     });
   };
+}
+
+/**
+ * One line about a tell, with its amount as a person reads it. A tell's
+ * `value` is the stored integer, and `siren.apps.shownAmount()` reads it by
+ * the currency Siren sent beside it. A tell of a kind the example does not
+ * know, or one with no currency to read its amount by, is logged as it
+ * came, so the example never prints a stored integer as an amount.
+ *
+ * @param {import('@novatorius/siren').Siren} siren
+ * @param {{ item: { kind: string }, data: Record<string, unknown> }} request
+ * @returns {string}
+ */
+export function describeTell(siren, request) {
+  const { data } = request;
+  const asCame = JSON.stringify(data);
+  const read = (value, currency) => {
+    try {
+      return siren.apps.shownAmount(value, currency).text;
+    } catch {
+      return undefined;
+    }
+  };
+  if (request.item.kind === 'postConversionAction' && data.conversion && data.program) {
+    /** @type {import('@novatorius/siren').AppConversionApprovedData} */
+    const told = /** @type {any} */ (data);
+    const about = `conversion ${told.conversion.id} approved for collaborator ${told.conversion.collaboratorId} in program ${told.program.name}`;
+    if (told.reward === null) return `${about}, with no reward.`;
+    const shown = read(told.reward?.value, told.reward?.currency);
+    return shown === undefined ? asCame : `${about}, reward ${shown}.`;
+  }
+  if (request.item.kind === 'postAllocationAction' && data.allocation && data.distributor) {
+    /** @type {import('@novatorius/siren').AppAllocationCompletedData} */
+    const told = /** @type {any} */ (data);
+    const { allocation } = told;
+    const shown = read(allocation.value, allocation.currency);
+    if (shown === undefined) return asCame;
+    return `allocation ${allocation.distributionId}:${allocation.obligationId} ${allocation.status === 'complete' ? 'completed' : allocation.status} for collaborator ${allocation.collaboratorId} by distributor ${told.distributor.name}, ${shown}.`;
+  }
+  return asCame;
 }
 
 /**

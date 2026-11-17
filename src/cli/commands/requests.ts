@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { AppErrorCode, ErrorCode, SirenError, appErrorCode } from '../../errors';
-import type { AppAnswer, AppRequestListParams, AppRequestRecord } from '../../record-types';
+import { AppErrorCode, ConflictError, ErrorCode, NotFoundError, SirenError, appErrorCode } from '../../errors';
+import type { AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument } from './apply';
 import { contextOf } from '../context';
@@ -34,7 +34,10 @@ export function requestIdArgument(id: string): string {
  * for every app or the one `--app` names, and only those that need
  * attention with `--attention`. `--follow` reads again every 2 seconds and
  * prints each new request or status change once, until Ctrl-C, which ends
- * it with exit code 0. With a request id it shows that one request instead.
+ * it with exit code 0. Before each poll after the first it reads the
+ * target's edition again, so a target that changed edition stops the run
+ * with exit code 1 before the session is sent there. With a request id it
+ * shows that one request instead.
  */
 export async function appsRequests(input: CommandInput): Promise<number> {
   const id = input.args[0];
@@ -59,7 +62,8 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   const following = () => undefined;
   if (values.follow === true) io.signal?.addEventListener('abort', following);
   try {
-    for (;;) {
+    for (let poll = 1; ; poll += 1) {
+      if (poll > 1) await run.recheckEdition();
       const rows = await siren.apps.requests.list(filters);
       if (appKey !== undefined && appId === undefined) appId = (await siren.apps.retrieve(appKey)).id;
       for (const row of [...rows].reverse()) {
@@ -82,11 +86,13 @@ export async function appsRequests(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren apps requests <id>`: finds the request among the latest 50, its
- * app, and the app's webhook deliveries whose event id is `<id>.<send>`, and
- * prints each send with its HTTP status and the app's answer, then the body
- * Siren sent. There is no route for one request, so an older one cannot be
- * shown.
+ * `siren apps requests <id>`: reads the request with
+ * `GET /apps/requests/{id}`, however old, and prints its line, the data
+ * Siren sent, and the answer Siren took with who gave it. Then it finds the
+ * app's webhook deliveries whose event id is `<id>.<send>` and prints each
+ * send with its HTTP status and what the app said back. A request the
+ * organization does not have is refused in one line that says where to see
+ * the latest.
  */
 async function showRequest(input: CommandInput, id: string): Promise<number> {
   requestIdArgument(id);
@@ -94,11 +100,27 @@ async function showRequest(input: CommandInput, id: string): Promise<number> {
   await run.signedIn();
   const siren = run.siren();
 
-  const row = (await siren.apps.requests.list()).find((request) => request.id === id);
-  if (row === undefined) throw new CliRefusal(`${id} is not among the latest 50 requests, and Siren shows no older one.`);
-  run.print(requestLine(row));
+  let request: AppRequestDetail;
+  try {
+    request = await siren.apps.requests.retrieve(id);
+  } catch (error) {
+    if (error instanceof NotFoundError && appErrorCode(error) === AppErrorCode.RequestNotFound) {
+      throw new CliRefusal(`This organization has no request ${id}. See the latest with ${run.command('apps requests')}.`);
+    }
+    throw error;
+  }
+  run.print(requestLine(request));
+  run.print('The data Siren sent:');
+  run.print(JSON.stringify(request.data, null, 2));
+  if (request.answer !== null) {
+    const who = request.answeredByUser !== null ? `${request.answeredByUser.email} (user ${request.answeredByUser.id})` : request.answeredBy?.startsWith('app:') ? 'the app' : (request.answeredBy ?? 'no one Siren names');
+    run.print(`The answer Siren took, from ${who}${request.answeredAt ? ` at ${request.answeredAt}` : ''}:`);
+    run.print(JSON.stringify(request.answer, null, 2));
+  } else {
+    run.print(request.mode === 'tell' ? 'A tell takes no answer.' : 'No answer yet.');
+  }
 
-  const app = (await siren.apps.list()).find((candidate) => candidate.id === row.appId);
+  const app = (await siren.apps.list()).find((candidate) => candidate.id === request.appId);
   if (app === undefined || app.webhookSubscriptionId === null) {
     run.print('Its app is gone, so its sends cannot be shown.');
     return 0;
@@ -114,8 +136,6 @@ async function showRequest(input: CommandInput, id: string): Promise<number> {
     run.print(`Send ${send.eventId}: ${send.status}, ${send.httpStatusCode === null ? 'no HTTP answer' : `HTTP ${send.httpStatusCode}`}${send.errorMessage ? `, ${send.errorMessage}` : ''}`);
     if (send.responseBody !== null && send.responseBody !== '') run.print(`  The app answered: ${send.responseBody}`);
   }
-  run.print('The body Siren sent:');
-  run.print(JSON.stringify(sends[sends.length - 1]?.payload, null, 2));
   return 0;
 }
 
@@ -164,9 +184,37 @@ export async function appsResend(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const id = requestIdArgument(input.args[0] ?? '');
   await run.signedIn();
-  const row = await run.siren().apps.requests.resend(id);
+  const siren = run.siren();
+  let row: AppRequestRecord;
+  try {
+    row = await siren.apps.requests.resend(id);
+  } catch (error) {
+    if (error instanceof ConflictError && appErrorCode(error) === AppErrorCode.NotResendable) throw new CliRefusal(await notResendableLine(run, id, error));
+    throw error;
+  }
   run.print(requestLine(row));
   return 0;
+}
+
+/**
+ * What a resend Siren refused with 409 `app_request_not_resendable` says.
+ * An `applied` request has nothing left to send. Any other status means
+ * its app is off, so it reads the request and the apps to name the app and
+ * the `siren apps on` that turns it on.
+ */
+async function notResendableLine(run: ReturnType<typeof contextOf>, id: string, error: ConflictError): Promise<string> {
+  const data = (typeof error.data === 'object' && error.data !== null ? error.data : {}) as { status?: unknown };
+  if (data.status === 'applied') return `Siren sent nothing: ${id} is applied, so its answer already did its work.`;
+  const siren = run.siren();
+  const app = await siren.apps.requests
+    .retrieve(id)
+    .then(async (request) => (await siren.apps.list()).find((candidate) => candidate.id === request.appId))
+    .catch(() => undefined);
+  const key = app?.key ?? '<app key>';
+  return (
+    `Siren sent nothing: ${app?.key ?? 'its app'} is off, and Siren sends nothing to an app that is off. ` +
+    `Turn it on with ${run.command(`apps on ${key}`)}, then run ${run.command(`apps resend ${id}`)}.`
+  );
 }
 
 /** Every code this SDK knows, so a refusal with any other one prints the code beside Siren's message. */

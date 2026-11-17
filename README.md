@@ -654,7 +654,8 @@ as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the eleven sc
 ### Node methods the PHP SDK does not have yet
 
 Each method below calls a route Siren serves today, or, for `siren.apps`, a route the Siren apps
-work adds. Neither PHP 0.3.0 nor the PHP SDK's next release has a method for it. The PHP SDK is to
+work adds. `siren.apps.verifyRequest()` and `siren.apps.shownAmount()` read what Siren sends an app
+and send nothing. Neither PHP 0.3.0 nor the PHP SDK's next release has a method for it. The PHP SDK is to
 gain each one under the same name. The `siren` command-line tool ships with this package only.
 
 | Node | Siren route | What it does |
@@ -669,7 +670,9 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.rotate()` | `POST /apps/{key}/rotate` | Gives an app a new key and signing secret, shown once. |
 | `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
 | `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
+| `siren.apps.shownAmount()` | None. It reads the value and currency of a tell, which Siren sends as `POST /` to the app's own address | Reads a stored amount and its currency as a person reads them, such as `$15.00` for 1500 in dollars and `¥100` for 10000 in yen. |
 | `siren.apps.requests.list()` | `GET /apps/requests` | Lists the latest requests Siren sent the organization's apps. |
+| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` | Reads one request, however old, with the data Siren sent, the answer it took and the person who answered by hand. |
 | `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
 | `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
 
@@ -1155,6 +1158,35 @@ answer once. An ask it cannot answer, such as a pool with no metrics, gets 500 a
 that says why, never a guessed answer, so Siren sends it again on its deadline and then shows it as
 needing attention. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
 
+### Read what a tell says
+
+A tell's `data` belongs to the item's kind. A `postConversionAction` gets
+`AppConversionApprovedData`: the `conversion`, its `reward` as `{ value, units, currency }` or
+`null` when it has none, and the `program`. A `postAllocationAction` gets
+`AppAllocationCompletedData`: the `allocation`, with `value`, `units` and `currency`, and the
+`distributor`.
+
+`value` is not the amount a person reads. It is the integer Siren stores, and the shown amount is
+`value / 10^currency.scale`. Siren stores yen in hundredths, so a `value` of 10000 in yen is 100
+yen, and a points currency an organization defines usually has scale 0, so 10000 is 10,000 points.
+`units` is the currency code. Read an amount with `apps.shownAmount(value, currency)`, which answers
+`{ amount, decimal, text }` the way Siren's dashboard reads it: `{ amount: 15, decimal: '15.00',
+text: '$15.00' }` for 1500 in dollars, `{ amount: 100, decimal: '100', text: '¥100' }` for 10000 in
+yen.
+
+```ts
+import type { AppConversionApprovedData } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'tell' && request.item.kind === 'postConversionAction') {
+  const { conversion, reward } = request.data as unknown as AppConversionApprovedData;
+  if (reward !== null) {
+    const shown = siren.apps.shownAmount(reward.value, reward.currency);
+    crm.note(conversion.collaboratorId, `Earned ${shown.text}`); // "Earned ¥100", never "Earned 10000"
+  }
+}
+```
+
 ### Answer an ask
 
 `apps.requests.answer(id, answer)` posts the answer with `POST /apps/requests/{id}/answer`, from a
@@ -1179,7 +1211,11 @@ sets none.
 
 `apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
 `pending`, `sent`, `delivered` (a tell the app received), `answered`, `applied` (an ask whose answer
-did its work) or `needs_attention`. `apps.requests.resend(id)` sends a request again under the same
+did its work) or `needs_attention`. `apps.requests.retrieve(id)` reads one request, however old,
+with `GET /apps/requests/{requestKey}`: the list's fields, the `data` Siren sent the app, the
+`answer` Siren took or `null`, and `answeredByUser`, `{ id, email }` of the person who answered by
+hand or `null`. It is a read, retried like one, and an admin's session only. Siren answers 404
+`app_request_not_found` for a request the organization does not have. `apps.requests.resend(id)` sends a request again under the same
 id with a new answer window. A request that holds an answer Siren has not applied, in
 `needs_attention` after its apply ran out of tries or still `answered` because the wake after the
 answer was lost, is not sent to the app again. Siren applies the stored answer instead, even while
@@ -1214,10 +1250,10 @@ try {
 | `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
 | `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
 | `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
-| `app_request_not_found` | 404 | Check the id, and that the key is the app's the request went to. |
+| `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
 | `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
-| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code. |
+| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate <app key>` when the app's key is lost or revoked. |
 
 ### The sandbox
 
@@ -1247,15 +1283,16 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren orgs` | Lists your organizations, `*` on the one in use. |
 | `siren use <slug or id>` | Switches to another of your organizations. |
 | `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
-| `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
-| `siren apps list` | Lists the apps and their items. `--json` prints what Siren sent. |
-| `siren apps show <key>` | Shows one app and its items. |
-| `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
+| `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. An item the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the item and says that naming it in the file again brings it back. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
+| `siren apps list` | Lists the apps and their items, and under an app with requests that need attention, how many and the `siren apps requests --app <key> --attention` that lists them. `--json` prints what Siren sent. |
+| `siren apps show <key>` | Shows one app and its items, with each archived item marked beside it, and how many of its requests need attention when any do. |
+| `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
+| `siren apps requests <id>` | Shows one request, however old: its line, the data Siren sent, the answer Siren took and who gave it, then each send with its HTTP status and what the app said back. |
 | `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
-| `siren apps resend <id>` | Sends a request again. |
+| `siren apps resend <id>` | Sends a request again. When Siren refuses because the request's app is off, it names the `siren apps on <key>` that turns it on. |
 | `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
-| `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them and the command to turn the app off. |
+| `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
 
 siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its items keyed by
 item key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment, from a variable
