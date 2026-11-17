@@ -316,7 +316,7 @@ later without a rewrite (design AP-A215):
       "events": [],
       "items": {
         "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
-        "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
+        "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
         "acme-split": { "kind": "distributionResolver", "name": "Acme split", "answerWindowMinutes": 1 }
       }
     }
@@ -331,12 +331,19 @@ column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url: ...` 
 - Any other recipe stanza, such as `programs`, is refused by name. Recipes made of apps and
   programs wait for slice 12. Any other key is refused as not a recipe key.
 - `apps` holds exactly one app, keyed by its app key.
-- An app takes `name`, `description`, `url`, `scopes`, `events` and `items`, and nothing else.
-  `url` starts with `https://`, or with `http://` for `localhost`, `127.0.0.1` or
-  `host.docker.internal`, which only a local Cloud reaches (AP-A616).
-- `items` is an object keyed by item key, so a key is unique within the app. An item takes `kind`,
-  `name`, `description`, `currencies` and `answerWindowMinutes`. `currencies` is required for a
-  `fulfillmentMethod` and refused for any other kind. `answerWindowMinutes` runs from 1 to 43200.
+- An app takes `name`, `description`, `url`, `scopes`, `events` and `items`, and nothing else. Its
+  key is never `requests`, `events`, `scopes` or `kinds`, which Siren keeps for its own routes.
+  `url` is optional, and an app with none is a key-only app (slice C6). When given, it starts with
+  `https://`, or with `http://` for `localhost`, `127.0.0.1` or `host.docker.internal`, which only a
+  local Cloud reaches (AP-A616).
+- `items` holds the app's features, an object keyed by feature key, so a key is unique within the
+  app. A feature takes `kind`, `name`, `description`, `currencies` and `answerWindowMinutes`.
+  `currencies` is required for a `payoutMethod` and refused for any other kind. The old word
+  `fulfillmentMethod` is refused with a message that names `payoutMethod`. `answerWindowMinutes`
+  runs from 1 to 43200. A file with features and no `url` is refused before anything is sent, since
+  Siren asks a feature at the app's address. A feature's kind and key lock once Siren makes it:
+  Siren matches the file's features to its own by kind and key, so a renamed key is a new feature,
+  and the old one is archived while a record selects it and deleted otherwise.
 - `${NAME}` is filled from the environment only in the app's `url`, and only from a variable whose
   name starts with `SIREN_APP_` (AP-A633). A placeholder anywhere else, any other name, or a name
   that is not set is a problem at that key, naming the place and never a value. `parseAppFile`
@@ -348,8 +355,9 @@ column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url: ...` 
   tests: it reads what `JSON.parse` reads, and refuses a trailing comma, single quotes, a comment,
   `NaN`, text after the object and a raw line break, each at its place.
 
-`declarationFor(file)` turns the one app into what `PUT /apps/{key}` takes: the same fields, and
-`items` as a list in the file's order, each with its `key`.
+`declarationFor(file)` turns the one app into what `PUT /apps/{key}` takes: the same fields, a
+field the file leaves out left out, `url` included, and `items` as a list in the file's order, each
+with its `key`.
 
 ## The example app
 

@@ -1363,10 +1363,14 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
 
-siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its items keyed by
-item key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment, from a variable
-whose name starts with `SIREN_APP_`, and only there. A mistake in the file is printed with its line
-and column, and nothing is sent.
+siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its features in
+`items`, keyed by feature key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment,
+from a variable whose name starts with `SIREN_APP_`, and only there. `url` is optional: a file with
+no `url` declares a key-only app, which holds no features. A file with features and no `url` is
+refused. A feature's kind and key lock once Siren makes it, so renaming a key makes a new feature
+and archives or deletes the old one. The payout kind is `payoutMethod`, and the old
+`fulfillmentMethod` is refused with a message that names it. A mistake in the file is printed with
+its line and column, and nothing is sent.
 
 The tool talks to `SIREN_BASE_URL`, else the sandbox. `--base-url <url>` names another Siren, and
 takes plain http only for `localhost`, `127.0.0.1` and `host.docker.internal`. A live organization

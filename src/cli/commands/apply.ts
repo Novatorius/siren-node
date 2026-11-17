@@ -151,11 +151,13 @@ export async function appsApply(input: CommandInput): Promise<number> {
   }
 
   if (app.created) {
-    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret ?? '', false);
+    const saved = await saveSecrets(run, key, envPath, { rawKey: app.rawKey, signingSecret: app.signingSecret }, false);
     await run.remember(key, envPath);
     return saved ? 0 : 1;
   }
   await run.remember(key, envPath);
+  // A later declaration that gave the app its first address answers the address's secret once.
+  if (app.signingSecret !== undefined && !(await saveSecrets(run, key, envPath, { signingSecret: app.signingSecret }, false))) return 1;
   if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
     run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate ${key}`)} to make a new key and save it there.`);
   }
@@ -253,7 +255,7 @@ export async function appsRotate(input: CommandInput): Promise<number> {
 
   const siren = run.siren();
   const rotated = { rawKey: (await siren.apps.rotateKey(key)).rawKey, signingSecret: (await siren.apps.rotateSecret(key)).signingSecret };
-  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret, true);
+  const saved = await saveSecrets(run, key, envPath, rotated, true);
   await run.remember(key, envPath);
   if (saved) run.print(`Siren revoked the old key. Restart your app so it reads the new pair.`);
   return saved ? 0 : 1;
@@ -341,46 +343,63 @@ async function inUseLines(run: CommandContext, key: string, error: ConflictError
   return lines.join('\n');
 }
 
+/** The secrets one answer showed once. An app with no address gets no signing secret. */
+interface ShownSecrets {
+  rawKey?: string;
+  signingSecret?: string;
+}
+
 /**
- * Writes the key and secret Siren showed once to the env file, replacing
- * only its three lines, mode 0600, and prints the key's prefix and the
- * file's absolute path. `apply` and `rotate` have already refused a file
+ * Writes the key, the secret or both, as Siren showed them once, to the env
+ * file, replacing only `SIREN_BASE_URL` and the lines it has a value for,
+ * mode 0600, and prints the key's prefix and the file's absolute path. It
+ * never writes an empty line for a secret Siren did not send. `apply` and `rotate` have already refused a file
  * that holds another Siren's key. When a write the checks before sending
  * could not foresee fails, says on standard error that Siren issued a pair
  * it could not save and that `siren apps rotate` issues a new one, and,
  * after a rotate, that the old key left in the file is revoked. Never
  * prints either value, and answers false.
  */
-async function saveSecrets(run: CommandContext, key: string, envPath: string, rawKey: string, signingSecret: string, revoked: boolean): Promise<boolean> {
+async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<boolean> {
+  const { rawKey, signingSecret } = secrets;
+  const both = rawKey !== undefined && signingSecret !== undefined;
   try {
-    await writeEnvLines(envPath, { SIREN_BASE_URL: run.target.baseUrl, SIREN_API_KEY: rawKey, SIREN_SIGNING_SECRET: signingSecret });
+    await writeEnvLines(envPath, {
+      SIREN_BASE_URL: run.target.baseUrl,
+      ...(rawKey === undefined ? {} : { SIREN_API_KEY: rawKey }),
+      ...(signingSecret === undefined ? {} : { SIREN_SIGNING_SECRET: signingSecret }),
+    });
   } catch (error) {
+    const what = both ? 'a new key and signing secret' : rawKey !== undefined ? 'a new key' : 'a new signing secret';
     run.warn(
-      `Siren issued a new key and signing secret for ${key}, and they could not be saved to ${envPath} (${(error as Error).message}). ` +
+      `Siren issued ${what} for ${key}, and ${both ? 'they' : 'it'} could not be saved to ${envPath} (${(error as Error).message}). ` +
         (revoked ? `The old key in ${envPath} was revoked when Siren rotated it, so stop using it. ` : '') +
-        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,
+        `Siren shows ${both ? 'a pair' : 'each secret'} only once, so ${both ? 'this one is' : 'it is'} lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,
     );
     return false;
   }
-  run.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${envPath}.`);
+  if (both) run.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${envPath}.`);
+  else if (rawKey !== undefined) run.print(`Key ${rawKey.slice(0, 16)} is in ${envPath}.`);
+  else run.print(`Its new signing secret is in ${envPath}.`);
   return true;
 }
 
 /**
- * Replaces each named line of the env file, or adds it at the end, keeping
- * every other line. Writes the whole text to a new file made with mode 0600
+ * Replaces each line `entries` names, or adds it at the end, keeping every
+ * other line, the lines it leaves out included. Writes the whole text to a new file made with mode 0600
  * beside it and renames that over the env file, as `CredentialStore` writes
  * credentials.json, so the key is never in a wider file, a crash leaves the
  * old file whole, and a link planted at the path is replaced, not followed.
  * Refuses a path that is a symbolic link or not a regular file.
  */
-async function writeEnvLines(path: string, entries: Readonly<Record<(typeof ENV_NAMES)[number], string>>): Promise<void> {
+async function writeEnvLines(path: string, entries: Readonly<Partial<Record<(typeof ENV_NAMES)[number], string>>>): Promise<void> {
   const problem = await envFileProblem(path);
   if (problem !== undefined) throw new Error(problem.line);
   const text = (await readText(path)) ?? '';
   const lines = text === '' ? [] : text.replace(/\n$/, '').split('\n');
   for (const name of ENV_NAMES) {
     const value = entries[name];
+    if (value === undefined) continue;
     const at = lines.findIndex((line) => line.startsWith(`${name}=`));
     if (at >= 0) lines[at] = `${name}=${value}`;
     else lines.push(`${name}=${value}`);

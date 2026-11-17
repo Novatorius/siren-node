@@ -312,6 +312,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removes their routes. `AppErrorCode.AppOwnedSubscription` names Siren's 409
   `app_owned_subscription` for a webhook call on an address an app owns. The README's apps section
   describes an app's three parts and says "feature" where the code says item.
+- The app file's `url` is optional, so it can declare a key-only app. A file with features and no
+  `url` is refused before anything is sent. The file takes `payoutMethod` and refuses
+  `fulfillmentMethod` with a message that names the new word, refuses the app keys `events`,
+  `scopes` and `kinds` beside `requests`, and its messages say feature where they said item.
+  `siren apps apply` writes only the secrets Siren sent, so a key-only app gets no empty
+  `SIREN_SIGNING_SECRET` line, and a later apply that adds a `url` saves the new signing secret.
 - `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
   refuses the webhook routes for a subscription an app owns.
 - `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,
