@@ -1,0 +1,179 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/apps.ts",
+    "find": "  if (kind === OLD_PAYOUT_KIND) {",
+    "replace": "  if (kind === 'never') {",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container: one feature > refuses a change to a feature's kind or key, the old payout kind, and a bad id, before sending"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/apps.ts",
+    "find": "    const path = appPath(key, 'apps.update()');",
+    "replace": "    const path = String(appPath(key, 'apps.update()'));",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/resources/apps.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "examples/apps/acme/env.mjs",
+    "find": "'siren apps rotate-secret writes a new signing secret",
+    "replace": "'siren apps rotate writes a new signing secret",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-sdk-container item 6: plans in the output > apply prints the marks on the app it declared"
+    ]
+  },
+  {
+    "id": "item1-reserved-key-sent",
+    "file": "src/resources/apps.ts",
+    "find": " || (RESERVED_APP_KEYS as readonly string[]).includes(key)) {",
+    "replace": ") {",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container: declaring from a file > refuses features with no url, the old payout kind, and a reserved key, before sending"
+    ]
+  },
+  {
+    "id": "item1-created-always",
+    "file": "src/resources/apps.ts",
+    "find": "    const created = app.rawKey !== undefined;",
+    "replace": "    const created = true;",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container: declaring from a file > answers created: false with the signing secret when a later declaration adds the address"
+    ]
+  },
+  {
+    "id": "item1-update-puts",
+    "file": "src/resources/apps.ts",
+    "find": "    const app = await writeRecord<Record<string, unknown>>(this.http, 'PATCH', path, sent);",
+    "replace": "    const app = await writeRecord<Record<string, unknown>>(this.http, 'PUT', path, sent);",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container: the dashboard doors > changes only the fields sent with PATCH once"
+    ]
+  },
+  {
+    "id": "item2-revoke-undeprecated",
+    "file": "src/resources/api-keys.ts",
+    "find": "   * @deprecated An app holds its key now. Revoke it with",
+    "replace": "   * An app holds its key now. Revoke it with",
+    "expect": "caught",
+    "failing": [
+      "ApiKeysResource.revoke is deprecated and names apps.revokeKey()"
+    ]
+  },
+  {
+    "id": "item3-features-without-url",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (app.url === undefined && Object.keys(app.items).length > 0) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container item 3: a key-only app from the file > refuses a file with features and no url before anything is sent",
+      "apps-sdk-container: the app file > refuses features with no url, in plain words at the features"
+    ]
+  },
+  {
+    "id": "item3-old-kind-unnamed",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (entry.kind === OLD_PAYOUT_KIND) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container: the app file > accepts payoutMethod, and refuses fulfillmentMethod with a message that names the new word"
+    ]
+  },
+  {
+    "id": "item4-never-asks",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (input.values.yes !== true) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container item 4: apply shows what it will change and asks > sends nothing when the person does not type yes"
+    ]
+  },
+  {
+    "id": "item4-no-op-writes",
+    "file": "src/cli/commands/apply.ts",
+    "find": "already matches ${shown}, so nothing was sent.`);\n    return 0;",
+    "replace": "already matches ${shown}, so nothing was sent.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container item 4: apply shows what it will change and asks > reads the app first, and with nothing to change says so and writes nothing"
+    ]
+  },
+  {
+    "id": "item5-rotate-key-rotates-secret",
+    "file": "src/cli/commands/apply.ts",
+    "find": "{ rawKey: (await siren.apps.rotateKey(key)).rawKey }",
+    "replace": "{ signingSecret: (await siren.apps.rotateSecret(key)).signingSecret }",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container item 5: siren apps rotate splits in two > rotate-key asks first, then writes only the new key"
+    ]
+  },
+  {
+    "id": "item5-rotation-never-asks",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (part !== 'add-key' && values.yes !== true) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container item 5: siren apps rotate splits in two > each sends nothing when the person declines"
+    ]
+  },
+  {
+    "id": "item6-guesses-pro",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (plan === undefined) return `  your plan cannot use it${then}`;",
+    "replace": "  if (plan === undefined) return `  requires Pro${then}`;",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container item 6: plans in the output > names the plan Siren names, says only that the plan cannot use it when Siren names none, and never guesses"
+    ]
+  },
+  {
+    "id": "item7-archived-item",
+    "file": "src/cli/commands/apply.ts",
+    "find": "      `An archived feature is one ${shown}",
+    "replace": "      `An archived item is one ${shown}",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container item 7: a person reads feature, never item > the tool says feature in what it prints"
+    ]
+  },
+  {
+    "id": "item8-decimal-drops-sign",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const decimal = `${sign}${whole}${fraction}`;",
+    "replace": "  const decimal = `${shown === 0 ? '' : sign}${whole}${fraction}`;",
+    "expect": "caught",
+    "failing": [
+      "gives decimal the sign text has, as format() prints a negative that rounds to zero"
+    ]
+  },
+  {
+    "id": "item9-example-names-joint-rotate",
+    "file": "examples/apps/acme/env.mjs",
+    "find": "SIREN_API_KEY: 'siren apps rotate-key writes a new key",
+    "replace": "SIREN_API_KEY: 'siren apps rotate writes a new key",
+    "expect": "caught",
+    "failing": [
+      "names the command that writes each missing line, never the old joint rotate"
+    ]
+  }
+]

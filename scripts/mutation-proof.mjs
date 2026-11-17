@@ -34,6 +34,13 @@
  *    A text may name a test or the describe it sits in.
  * 4. Restores the file, whatever happened.
  *
+ * `MUTATION_VITEST_ARGS`, when set, replaces `npm test` with
+ * `npx vitest run <those args>`, so a lane on a shared machine can run the
+ * test files its list names with a bounded worker count, such as
+ * `--maxWorkers=4 --minWorkers=1 test/apps-container.test.ts`. A mutation a
+ * test outside those files would catch then scores `survives`, so the list
+ * names only tests inside them.
+ *
  * Include four controls every run: one break the suite must catch, one
  * harmless change it must not, one malformed mutation it must refuse, and
  * one break whose `failing` text names a test that stays green, which must
@@ -93,7 +100,8 @@ function score(mutation) {
   writeFileSync(path, original.replace(mutation.find, mutation.replace));
   try {
     if (!srcCompiles()) return { result: 'refused', why: 'src does not compile' };
-    const test = run('npm', ['test', '--silent']);
+    const narrowed = (process.env.MUTATION_VITEST_ARGS ?? '').split(/\s+/).filter(Boolean);
+    const test = narrowed.length > 0 ? run('npx', ['vitest', 'run', ...narrowed]) : run('npm', ['test', '--silent']);
     const typecheck = test.status === 0 ? run('npm', ['run', 'typecheck', '--silent']) : { status: 0, output: '' };
     const output = test.output + typecheck.output;
     if (test.status === 0 && typecheck.status === 0) return { result: 'survives', why: 'verification passed' };
