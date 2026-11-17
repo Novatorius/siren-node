@@ -1,6 +1,6 @@
-import type { ApiKeyScope } from './api-key-scopes';
+import type { ApiKeyRecordScope, ApiKeyScope } from './api-key-scopes';
 import type { WebhookEventType } from './event-types';
-import type { RefundKind } from './taxonomy';
+import type { RefundKind, WebhookSubscriptionStatus } from './taxonomy';
 import type { AccessTokenSource } from './auth/access-token-source';
 import type { HttpClient } from './http';
 
@@ -316,6 +316,63 @@ export interface CreateWebhookSubscriptionParams {
   description?: string;
 }
 
+/**
+ * Parameters for `webhooks.subscriptions.update`. Send only the fields to
+ * change. Siren leaves a field it is not sent as it is.
+ */
+export interface UpdateWebhookSubscriptionParams {
+  /** The URL Siren will POST deliveries to. It must be a public https endpoint. */
+  targetUrl?: string;
+  /** Event types to subscribe to, replacing the current list. `["*"]` subscribes to all. */
+  events?: Array<WebhookEventType | (string & {})>;
+  /** `paused` stops deliveries and `active` starts them again. */
+  status?: WebhookSubscriptionStatus;
+  /** A note for the dashboard. Send `''` to clear it, since Siren ignores `null` here. */
+  description?: string;
+}
+
+/**
+ * What `webhooks.subscriptions.test` answers. Siren sends one signed
+ * `webhook.test` delivery at once and answers 200 whatever the endpoint did,
+ * so read `delivered` to know whether it arrived.
+ */
+export interface WebhookTestResult {
+  /** `true` when the endpoint answered 2xx. */
+  delivered: boolean;
+  /** The status the endpoint answered, or `null` when Siren could not reach it. */
+  httpStatus: number | null;
+  /** Why the delivery did not arrive, or `null`. */
+  error: string | null;
+  /** Always `webhook.test`. */
+  eventType: string;
+}
+
+/**
+ * One delivery attempt record, as `webhooks.subscriptions.deliveries` lists
+ * it. Dates are `Y-m-d H:i:s` in UTC, as Siren stores them.
+ */
+export interface WebhookDelivery {
+  id: number;
+  webhookSubscriptionId: number;
+  eventType: WebhookEventType | (string & {});
+  /** The `X-Siren-Delivery` value the endpoint received. */
+  eventId: string;
+  /** The body Siren sent, decoded. */
+  payload: Record<string, unknown>;
+  /** `pending`, `delivered` or `failed`. */
+  status: 'pending' | 'delivered' | 'failed' | (string & {});
+  attemptCount: number;
+  httpStatusCode: number | null;
+  /** The first 200 bytes of the endpoint's answer, or `null` when it gave no HTTP answer. */
+  responseBody: string | null;
+  errorMessage: string | null;
+  /** An estimate of the next try. The queue decides the real wait. */
+  nextRetryAt: string | null;
+  deliveredAt: string | null;
+  dateCreated: string | null;
+  dateModified: string | null;
+}
+
 /** An API key as returned by list (never includes raw key material). */
 export interface ApiKey {
   id: number;
@@ -352,15 +409,16 @@ export interface CreateApiKeyParams {
   /** Human-readable label, e.g. `"Production server"`. Optional, and left out of the request when not given. */
   label?: string;
   /**
-   * Scopes to grant, from {@link ApiKeyScope}. At least one is required.
-   * Event scopes (`event:*` or `event:{slug}`) send events. The ledger scopes,
-   * such as `ledger:conversions:read`, read conversions, transactions,
-   * obligations and payouts. `webhook-subscriptions:read` and
-   * `webhook-subscriptions:manage` read and manage webhook subscriptions.
+   * Scopes to grant, from {@link ApiKeyScope} and {@link ApiKeyRecordScope}.
+   * At least one is required. Event scopes (`event:*` or `event:{slug}`) send
+   * events. The ledger scopes, such as `ledger:conversions:read`, read the
+   * ledger, payouts and fulfillments included. `webhook-subscriptions:read`
+   * and `webhook-subscriptions:manage` read and manage webhook subscriptions.
+   * The `records:` scopes read and manage the records a merchant sets up.
    * Siren answers 400 for an older resource scope such as `programs:read` or
    * `conversions:read`.
    */
-  scopes: Array<ApiKeyScope | (string & {})>;
+  scopes: Array<ApiKeyScope | ApiKeyRecordScope | (string & {})>;
   /** When the key stops working, as an ISO 8601 date. Omit for a key that never expires. */
   expiresAt?: string;
   /**
@@ -432,7 +490,7 @@ export interface WebhookCatalogEntry {
  */
 export interface ApiKeyScopeEntry {
   /** The scope string to pass to `apiKeys.create`. */
-  scope: ApiKeyScope | (string & {});
+  scope: ApiKeyScope | ApiKeyRecordScope | (string & {});
   /** The group the scope belongs to, such as `events` or `ledger`. */
   resource: string;
   /** What the scope allows within its group, such as `conversions:read`. */

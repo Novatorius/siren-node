@@ -1,6 +1,7 @@
 export { Siren } from './client';
 export { WebhookEventType } from './event-types';
 export { ApiKeyScope, LEDGER_READ_SCOPES, eventScope } from './api-key-scopes';
+export { ApiKeyRecordScope, API_KEY_RECORD_SCOPES } from './api-key-scopes';
 export { ConnectorScope } from './auth/connector-scope';
 export type { AccessTokenSource } from './auth/access-token-source';
 export { StaticAccessToken } from './auth/static-access-token';
@@ -73,6 +74,9 @@ export type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
   WebhookCatalogEntry,
+  UpdateWebhookSubscriptionParams,
+  WebhookTestResult,
+  WebhookDelivery,
   ApiKey,
   ApiKeyScopeEntry,
   ApiKeyScopeGroups,
@@ -126,5 +130,8 @@ export { CustomCurrenciesResource } from './resources/custom-currencies';
 export { CreditsResource } from './resources/credits';
 export { MappingsResource } from './resources/mappings';
 export { SettingsResource } from './resources/settings';
+// apps-sdk-gaps adds these in their own block so it merges cleanly beside slice 8.
+export { PayoutsResource } from './resources/payouts';
+export { FulfillmentsResource } from './resources/fulfillments';
 
 export { Siren as default } from './client';

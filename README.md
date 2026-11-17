@@ -22,8 +22,8 @@ This SDK is the Node.js and TypeScript integration point for Siren. In a few lin
 - **Record events** (`events.sale`, `events.refund`, `events.siteVisited`) so conversions and
   payouts compute.
 - **Verify signed webhooks** (`webhooks.constructEvent`) so you can trust inbound deliveries.
-- **Read the ledger** (`conversions`, `transactions`, `obligations`, `payouts`) and **manage webhook
-  subscriptions** with an API key that holds the ledger and webhook scopes.
+- **Read the ledger** (`conversions`, `transactions`, `obligations`, `payouts`, `fulfillments`) and
+  **manage webhook subscriptions** with an API key that holds the ledger and webhook scopes.
 
 It runs on Node 18+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
 CJS, and full type declarations.
@@ -233,6 +233,33 @@ const catalog = await siren.webhooks.subscriptions.events();
 // [{ event: 'sale.created', category: 'Sales', label: 'A sale was recorded' }, ...]
 ```
 
+### Check and change a subscription
+
+`retrieve(id)` reads one subscription, and `deliveries(id)` reads its latest 50 deliveries, newest
+first, each with the payload Siren sent, its status (`pending`, `delivered` or `failed`), the tries
+it took and the first 200 bytes of your endpoint's answer. Both take `webhook-subscriptions:read`
+or `webhook-subscriptions:manage`.
+
+`update(id, params)` changes the target URL, the events, the status or the description, and sends
+only the fields you give. `test(id)` makes Siren send one signed `webhook.test` delivery now and
+answers what your endpoint did. Siren answers 200 either way, so read `delivered`. Both take
+`webhook-subscriptions:manage`, and each is sent once.
+
+```ts
+const result = await siren.webhooks.subscriptions.test(sub.id);
+if (!result.delivered) {
+  const [latest] = await siren.webhooks.subscriptions.deliveries(sub.id);
+  console.log(latest?.httpStatusCode, latest?.errorMessage, latest?.responseBody);
+}
+
+// Stop deliveries while you fix the endpoint, then start them again.
+await siren.webhooks.subscriptions.update(sub.id, { status: 'paused' });
+await siren.webhooks.subscriptions.update(sub.id, { status: 'active' });
+```
+
+Siren refuses a test for a paused subscription with a 409, raised as `ConflictError`. It allows 20
+tests an hour for one subscription, and answers more with a 429, raised as `RateLimitError`.
+
 ## Features
 
 - **Event ingestion** — record sales, refunds, referred visits, and custom event types
@@ -241,12 +268,14 @@ const catalog = await siren.webhooks.subscriptions.events();
   `events.ingest` and a sale with no `externalId` are sent once.
 - **Signed-webhook verification and subscriptions** — constant-time signature checks
   (`webhooks.constructEvent`, `webhooks.verifySignature`) plus subscription management
-  (`webhooks.subscriptions.create` / `list` / `delete`) with an API key that holds a webhook scope.
+  (`webhooks.subscriptions.create` / `list` / `retrieve` / `update` / `delete` / `test` /
+  `deliveries`) with an API key that holds a webhook scope.
 - **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`), and list the
   scopes a new key may hold (`apiKeys.scopes()`), with a dashboard session's token. The raw key is
   returned once and cannot be retrieved later.
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
-  `transactions`, `obligations`, and `payouts`, with an API key that holds the ledger scopes.
+  `transactions`, `obligations`, `payouts` and `fulfillments`, with an API key that holds the
+  ledger scopes. `payouts.retrieve` and `fulfillments.retrieve` read one record.
 - **Browser storefront module** — `@novatorius/siren/storefront` records referred visits and claims
   orders from a shopper's browser, and runs Siren Cloud application forms on your own site, with no
   API key and no Node built-ins.
@@ -260,6 +289,20 @@ console.log(conversions.estimatedCount); // total across all pages, if known
 ```
 
 Pages hold up to 200 records, and Siren's default page size is 10.
+
+Payouts sit inside fulfillments, the batches Siren pays out in. `payouts.retrieve(id)` reads one
+payout, with `waitingReason` set when it waits on the collaborator's payout setup.
+`fulfillments.list()` filters by `status`, by `payoutStatus` (only batches holding a payout in that
+status) and by `currency`, `from` and `to`, and `fulfillments.retrieve(id, { include: 'extended' })`
+adds the payout counts, the total and each payout. A payout's `value` is a whole number in the
+currency's smallest unit. The key needs `ledger:payouts:read` or `ledger:fulfillments:read`, and
+must be organization-wide. Both resources only read, since every payout write moves money.
+
+```ts
+const needAttention = await siren.fulfillments.list({ payoutStatus: 'failed' });
+const batch = await siren.fulfillments.retrieve(needAttention[0]!.id, { include: 'extended' });
+const payout = await siren.payouts.retrieve(batch.payouts![0]!.id);
+```
 
 ## Collaborators and programs
 
@@ -658,14 +701,37 @@ An API key does what its scopes allow. `ApiKeyScope` names each one:
 | `ApiKeyScope.LedgerConversionsRead` (`ledger:conversions:read`) | `conversions.list()` |
 | `ApiKeyScope.LedgerTransactionsRead` (`ledger:transactions:read`) | `transactions.list()` |
 | `ApiKeyScope.LedgerObligationsRead` (`ledger:obligations:read`) | `obligations.list()` |
-| `ApiKeyScope.LedgerPayoutsRead` (`ledger:payouts:read`) | `payouts.list()` |
-| `ApiKeyScope.WebhookSubscriptionsRead` (`webhook-subscriptions:read`) | `webhooks.subscriptions.list()` |
-| `ApiKeyScope.WebhookSubscriptionsManage` (`webhook-subscriptions:manage`) | Every `webhooks.subscriptions` call, and a test delivery (`POST /webhooks/{id}/test`, which the SDK has no method for) |
+| `ApiKeyScope.LedgerPayoutsRead` (`ledger:payouts:read`) | `payouts.list()`, `payouts.retrieve()` |
+| `ApiKeyScope.WebhookSubscriptionsRead` (`webhook-subscriptions:read`) | `webhooks.subscriptions.list()`, `events()`, `retrieve()`, `deliveries()` |
+| `ApiKeyScope.WebhookSubscriptionsManage` (`webhook-subscriptions:manage`) | Every `webhooks.subscriptions` call, `update()` and `test()` included |
 
-Siren grants the ledger and webhook scopes only by their exact names. `*`, `event:*`, wildcards
-such as `ledger:*`, and older names such as `conversions:read` grant none of them, so a key made
-before these scopes existed reads nothing until you replace it with one that holds them. A key's
-requests count against the organization's API rate limit.
+`ApiKeyRecordScope` names all thirty record scopes Siren issues, in the order the dashboard offers
+them, and `API_KEY_RECORD_SCOPES` lists them. Each name is the constant's name in Siren's
+`ApiKeyRecordScopes` in Pascal case, so `FULFILLMENTS_READ` is `ApiKeyRecordScope.FulfillmentsRead`.
+The six above carry the same strings under both names.
+
+| Group | `ApiKeyRecordScope` names |
+|---|---|
+| The ledger, read only | `EngagementsRead`, `OpportunitiesRead`, `ConversionsRead`, `TransactionsRead`, `ObligationsRead`, `FulfillmentsRead`, `PayoutsRead` |
+| Webhook subscriptions | `WebhooksRead`, `WebhooksManage` |
+| Records a merchant sets up | `ProductsRead`, `ProductsManage`, `CouponsRead`, `CouponsManage`, `CollaboratorsRead`, `CollaboratorsManage`, `CollaboratorGroupsRead`, `CollaboratorGroupsManage`, `ProgramsRead`, `ProgramsManage`, `ProgramGroupsRead`, `ProgramGroupsManage`, `DistributorsRead`, `DistributorsManage`, `ApplicationFormsRead`, `ApplicationFormsManage`, `ApplicationsRead`, `ApplicationsManage`, `NotificationRulesRead`, `NotificationRulesManage`, `PropertiesRead` |
+
+`ApiKeyRecordScope.FulfillmentsRead` (`ledger:fulfillments:read`) opens `fulfillments.list()` and
+`fulfillments.retrieve()`. A manage scope reads everything its read scope reads.
+
+```ts
+import { ApiKeyRecordScope } from '@novatorius/siren';
+
+const key = await siren.apiKeys.create({
+  label: 'Payout app',
+  scopes: [ApiKeyRecordScope.PayoutsRead, ApiKeyRecordScope.FulfillmentsRead, ApiKeyRecordScope.WebhooksManage],
+});
+```
+
+Siren grants the ledger, webhook and record scopes only by their exact names. `*`, `event:*`,
+wildcards such as `ledger:*`, and older names such as `conversions:read` grant none of them, so a
+key made before these scopes existed reads nothing until you replace it with one that holds them.
+A key's requests count against the organization's API rate limit.
 
 `apiKeys.create`, `list`, `revoke` and `scopes` take a signed-in dashboard session's token. No API
 key scope reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
@@ -692,8 +758,8 @@ const key = await siren.apiKeys.create({
 ```
 
 A key created with a `propertyId` is bound to that store. It reads only its own store's
-conversions, transactions and obligations, and Siren refuses it on payouts and webhook
-subscriptions with a `StoreKeyNotAllowedError`. An organization-wide key reads the whole
+conversions, transactions and obligations, and Siren refuses it on payouts, fulfillments and
+webhook subscriptions with a `StoreKeyNotAllowedError`. An organization-wide key reads the whole
 organization, and narrows a ledger read to one store with `propertyId`:
 
 ```ts
@@ -988,7 +1054,7 @@ example, carry no `statusCode`:
 | `SiteDisconnectedError` | The organization revoked or deleted the connected site's connection (401, `code` `site_disconnected`). Reconnect the site. Extends `AuthenticationError` |
 | `PermissionError` | The credential may not do this (403) |
 | `MissingScopeError` | The key holds none of the route's scopes (403, `code` `missing_scope`). `scope` and `anyOf` name them. Extends `PermissionError` |
-| `StoreKeyNotAllowedError` | A key bound to one store asked for payouts or webhook subscriptions (403, `code` `store_key_not_allowed`). Extends `PermissionError` |
+| `StoreKeyNotAllowedError` | A key bound to one store asked for payouts, fulfillments or webhook subscriptions (403, `code` `store_key_not_allowed`). Extends `PermissionError` |
 | `PolicyError` | Siren's policy refused the request, so sending it again fails again (403, one of the `POLICY_ERROR_CODES`). `param` names the refused field when Siren says which. Extends `PermissionError` |
 | `NotFoundError` | The requested resource does not exist (404) |
 | `BadRequestError` | Malformed request or failed validation (400). `fieldErrors` lists each broken rule |

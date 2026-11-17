@@ -14,8 +14,10 @@ import { CustomCurrenciesResource } from './resources/custom-currencies';
 import { DistributorsResource } from './resources/distributors';
 import { EngagementsResource } from './resources/engagements';
 import { EventsResource } from './resources/events';
+import { FulfillmentsResource } from './resources/fulfillments';
 import { MappingsResource } from './resources/mappings';
 import { OpportunitiesResource } from './resources/opportunities';
+import { PayoutsResource } from './resources/payouts';
 import { ProgramGroupsResource } from './resources/program-groups';
 import { ProgramsResource } from './resources/programs';
 import { ConversionsResource, RecordsResource, TransactionsResource } from './resources/records';
@@ -70,8 +72,10 @@ export class Siren {
   readonly transactions: TransactionsResource;
   /** Reconciliation reader for obligations. An API key needs `ledger:obligations:read`. */
   readonly obligations: RecordsResource;
-  /** Reconciliation reader for payouts. An API key needs `ledger:payouts:read`. */
-  readonly payouts: RecordsResource;
+  /** Payouts: list and read one. An API key needs `ledger:payouts:read`. */
+  readonly payouts: PayoutsResource;
+  /** Fulfillments, the batches payouts are grouped in: list and read one. An API key needs `ledger:fulfillments:read`. */
+  readonly fulfillments: FulfillmentsResource;
   /** Collaborators, with their codes at `aliases` and program enrollments at `enrollments`. */
   readonly collaborators: CollaboratorsResource;
   /** Collaborator groups, with their members at `members`. */
@@ -152,7 +156,8 @@ export class Siren {
     this.conversions = new ConversionsResource(http);
     this.transactions = new TransactionsResource(http);
     this.obligations = new RecordsResource(http, '/obligations');
-    this.payouts = new RecordsResource(http, '/payouts');
+    this.payouts = new PayoutsResource(http);
+    this.fulfillments = new FulfillmentsResource(http);
     this.collaborators = new CollaboratorsResource(http);
     this.collaboratorGroups = new CollaboratorGroupsResource(http);
     this.programs = new ProgramsResource(http);
