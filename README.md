@@ -1278,9 +1278,9 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren orgs` | Lists your organizations, `*` on the one in use. |
 | `siren use <slug or id>` | Switches to another of your organizations. |
 | `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
-| `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
+| `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. An item the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the item and says that naming it in the file again brings it back. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
 | `siren apps list` | Lists the apps and their items. `--json` prints what Siren sent. |
-| `siren apps show <key>` | Shows one app and its items. |
+| `siren apps show <key>` | Shows one app and its items, with each archived item marked beside it. |
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
 | `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
 | `siren apps resend <id>` | Sends a request again. |

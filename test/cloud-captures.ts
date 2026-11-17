@@ -17,6 +17,11 @@ import type { HttpResponse } from '../src/http';
  * Its body and time are those of step 20b, the first signup-options read
  * after the switch to the production edition (e2e/steps/20b in the run
  * folder).
+ *
+ * The SDK follow-ups lane added captures from the second run, against a
+ * local sandbox Cloud built from feat/apps at 57999d085 on 2026-11-17 (the
+ * run folder's e2e2/captures, copied as they are). Each one's `cloud` field
+ * names its commit.
  */
 
 /** One capture: the route, what was sent, and Siren's answer. */

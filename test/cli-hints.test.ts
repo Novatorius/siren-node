@@ -59,6 +59,18 @@ const LIVE_CASES: Case[] = [
     },
     command: `siren apps rotate ${KEY}${LIVE}`,
   },
+  {
+    name: 'apply that leaves an archived item',
+    argv: ['apps', 'apply'],
+    replies: [reply(200, appRecord({ items: app.items.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) }))],
+    options: { env: appEnv },
+    setup: (h) => {
+      h.signedIn(signedInLive);
+      h.write('siren.app.json', exampleFile);
+      h.write('.env.live', 'SIREN_API_KEY=sk_live_made_up\n');
+    },
+    command: `name it in siren.app.json again with the same kind and key, and run siren apps apply${LIVE}`,
+  },
   { name: 'apply with no app file', argv: ['apps', 'apply'], setup: (h) => h.signedIn(signedInLive), command: `siren apps init${LIVE}` },
   {
     name: "apply where the env file holds another Siren's key",

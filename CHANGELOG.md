@@ -258,6 +258,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `siren apps apply`, `list` and `show` mark an archived item beside it, and `apply` says once that
+  Siren keeps such an item while a record selects it, never calls it, and brings it back when the
+  app file names it again.
 - README and the architecture note give both of Siren's wordings of the answer route's 404
   `app_request_not_found`: "This organization has no request with this key." for an admin and
   "No request with this key was sent to this app." for an app's key, as Siren's feat/apps says at

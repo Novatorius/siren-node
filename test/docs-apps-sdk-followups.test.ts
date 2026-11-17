@@ -45,4 +45,12 @@ describe('apps-sdk-followups-1: the records', () => {
     }
     expect(read('README.md')).not.toContain("and that the key is the app's the request went to");
   });
+
+  it('say what an archived item is and how to bring it back', () => {
+    const readme = read('README.md');
+    expect(readme).toContain('An item the file no longer names while a record still selects it is archived');
+    expect(readme).toContain('naming it in the file again brings it back');
+    expect(read('docs/architecture/apps-cli.md')).toContain('"archived, so Siren no longer calls it"');
+    expect(read('CHANGELOG.md')).toContain('`siren apps apply`, `list` and `show` mark an archived item');
+  });
 });

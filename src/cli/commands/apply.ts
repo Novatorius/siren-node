@@ -141,6 +141,14 @@ export async function appsApply(input: CommandInput): Promise<number> {
   run.print(`Declared ${key} on ${run.target.baseUrl}.`);
   for (const line of appLines(app, false)) run.print(line);
   for (const name of parsed.filled) run.print(`Its url came from ${name}.`);
+  if (app.items.some((item) => item.status === 'archived')) {
+    const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);
+    run.print(
+      `An archived item is one ${shown} no longer names while a record still selects it. ` +
+        'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
+        `To bring it back, name it in ${shown} again with the same kind and key, and run ${again}.`,
+    );
+  }
 
   if (app.created) {
     const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);
@@ -259,13 +267,18 @@ export async function appsDelete(input: CommandInput): Promise<number> {
 
 /**
  * An app's lines: its key, name, state and, when `showUrl`, its url, then
- * one line per item with its `app:{id}`. `apply` leaves the url out, since
- * it may have come from the environment.
+ * one line per item with its `app:{id}`. An item Siren archived, because a
+ * later declaration left it out while a record still selects it, says so
+ * beside it. `apply` leaves the url out, since it may have come from the
+ * environment.
  */
 export function appLines(app: App, showUrl = true): string[] {
   const state = app.status === 'active' ? 'on' : 'off';
   const lines = [`${app.key}  ${app.name}  ${state}${showUrl && app.url ? `  ${app.url}` : ''}`];
-  for (const item of app.items) lines.push(`  ${item.ref}  ${item.kind}  ${item.key}  ${item.name}`);
+  for (const item of app.items) {
+    const archived = item.status === 'archived' ? '  archived, so Siren no longer calls it' : '';
+    lines.push(`  ${item.ref}  ${item.kind}  ${item.key}  ${item.name}${archived}`);
+  }
   return lines;
 }
 

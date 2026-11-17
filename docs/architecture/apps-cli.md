@@ -145,7 +145,7 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren apps init [--key] [--name]` | nothing | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
 | `siren apps apply [file]` | `PUT /apps/{key}` once | The app and each item with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate <key>` (AP-A635). |
 | `siren apps list [--json]` | `GET /apps` | One block per app with its items, or the JSON Siren sent. |
-| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items. |
+| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it. |
 | `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
 | `siren apps requests <id>` | `GET /apps/requests`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request, each send with its HTTP status and the app's answer, and the body Siren sent. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
@@ -937,3 +937,15 @@ the quoted text everywhere, and with `SIREN_CHECKOUT` set it reads each line fro
 `git show`. The fake for a different answer had cut Siren's message short to fit an assertion,
 and both now carry Siren's whole sentence. The captures in test/fixtures/cloud-captures stay as
 recorded at 1557b0030, so apps-answer-404-admin keeps the older wording, and its note says so.
+
+### 6. An archived item
+
+When a declaration leaves out an item a record still selects, Siren keeps the item with
+`"status": "archived"`, never calls it, and deletes it once nothing selects it. Naming its kind
+and key again makes the same row active, so its `app:{id}` stays (lib/Apps/Core/Models/AppItem.php
+and AppService::redeclareItems() at 27169452a). The second Cloud run found that `apply` and
+`show` printed such an item like any other (capture apps-declare-200-dropped-selected-item, step
+22i). `appLines()` now adds "archived, so Siren no longer calls it" beside it, which `apply`,
+`list` and `show` share. `apply` then says once what archiving means and that naming the item in
+the file again, then running `apply`, brings it back. That hint carries the target flags and the
+file as it was typed.

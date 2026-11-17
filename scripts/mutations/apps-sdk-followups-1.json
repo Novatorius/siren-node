@@ -288,5 +288,47 @@
     "failing": [
       "give both of Siren's wordings"
     ]
+  },
+  {
+    "id": "archived-not-marked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "item.status === 'archived' ? '  archived, so Siren no longer calls it' : ''",
+    "replace": "''",
+    "expect": "caught",
+    "failing": [
+      "apply marks the archived item beside it",
+      "show and list mark the archived item beside it"
+    ]
+  },
+  {
+    "id": "archived-note-always",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (app.items.some((item) => item.status === 'archived')) {",
+    "replace": "  if (app.items.length > 0) {",
+    "expect": "caught",
+    "failing": [
+      "says nothing about archiving when no item is archived"
+    ]
+  },
+  {
+    "id": "archived-note-no-flags",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);",
+    "replace": "    const again = 'siren apps apply';",
+    "expect": "caught",
+    "failing": [
+      "keeps the target flags in the apply hint",
+      "apply that leaves an archived item"
+    ]
+  },
+  {
+    "id": "docs-archived-readme",
+    "file": "README.md",
+    "find": "An item the file no longer names while a record still selects it is archived",
+    "replace": "An item the file drops is archived",
+    "expect": "caught",
+    "failing": [
+      "say what an archived item is"
+    ]
   }
 ]

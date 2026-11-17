@@ -13,7 +13,8 @@ import { WebhookAnswers } from './sdk-gaps-fakes';
 /*
  * The hand-written fakes for the apps-cli routes, held against what a real
  * Siren Cloud answered (test/fixtures/cloud-captures, from Novatorius/siren
- * feat/apps at 1557b0030). A fake must carry the same fields, at every
+ * feat/apps at 1557b0030, and at 57999d085 for the second run's captures,
+ * whose `cloud` field says so). A fake must carry the same fields, at every
  * depth, as the capture of the same route and case. Values may differ, since
  * ids and names are made up.
  *
@@ -81,6 +82,7 @@ const REPLAYED: Record<string, string> = {
   'auth-logout-200': 'test/cli-loopback.ts, the fake Cloud',
   'webhooks-delete-409-app-owned': 'this file, the app-owned subscription',
   'webhooks-update-409-app-owned': 'this file, the app-owned subscription',
+  'apps-declare-200-dropped-selected-item': 'test/cli-apps-followups.test.ts, the archived item',
 };
 
 /**

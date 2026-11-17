@@ -1,0 +1,110 @@
+{
+  "capturedAt": "2026-11-17T12:41:58.981Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 57999d085, http://localhost:33918",
+  "route": "PUT /siren/v1/apps/acme-payouts",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": {
+      "name": "Acme",
+      "description": "Siren's example app.",
+      "url": "http://host.docker.internal:33915",
+      "scopes": [
+        "event:site-visited",
+        "event:sale"
+      ],
+      "events": [],
+      "items": [
+        {
+          "kind": "fulfillmentMethod",
+          "key": "acme-ledger",
+          "name": "Acme ledger",
+          "currencies": [
+            "USD"
+          ],
+          "answerWindowMinutes": 1
+        },
+        {
+          "kind": "distributionResolver",
+          "key": "acme-split",
+          "name": "Acme split",
+          "answerWindowMinutes": 1
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "id": 1,
+      "key": "acme-payouts",
+      "name": "Acme",
+      "description": "Siren's example app.",
+      "status": "active",
+      "webhookSubscriptionId": 1,
+      "apiKeyId": 1,
+      "dateCreated": "2026-11-17 12:16:03",
+      "dateModified": "2026-11-17 12:16:03",
+      "url": "http://host.docker.internal:33915",
+      "events": [],
+      "scopes": [
+        "event:site-visited",
+        "event:sale"
+      ],
+      "apiKeyPrefix": "sk_test_6cce5aa0",
+      "items": [
+        {
+          "id": 1,
+          "ref": "app:1",
+          "appId": 1,
+          "kind": "postConversionAction",
+          "key": "notify-crm",
+          "name": "Tell the CRM",
+          "description": "",
+          "settings": {},
+          "status": "archived",
+          "dateCreated": "2026-11-17 12:16:03",
+          "dateModified": "2026-11-17 12:16:03"
+        },
+        {
+          "id": 2,
+          "ref": "app:2",
+          "appId": 1,
+          "kind": "fulfillmentMethod",
+          "key": "acme-ledger",
+          "name": "Acme ledger",
+          "description": "",
+          "settings": {
+            "currencies": [
+              "USD"
+            ],
+            "answerWindowMinutes": 1
+          },
+          "status": "active",
+          "dateCreated": "2026-11-17 12:16:03",
+          "dateModified": "2026-11-17 12:16:03"
+        },
+        {
+          "id": 3,
+          "ref": "app:3",
+          "appId": 1,
+          "kind": "distributionResolver",
+          "key": "acme-split",
+          "name": "Acme split",
+          "description": "",
+          "settings": {
+            "answerWindowMinutes": 1
+          },
+          "status": "active",
+          "dateCreated": "2026-11-17 12:16:03",
+          "dateModified": "2026-11-17 12:16:03"
+        }
+      ],
+      "needsAttention": 0
+    }
+  }
+}
