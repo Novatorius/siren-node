@@ -22,7 +22,8 @@ export class FulfillmentsResource<T = Fulfillment> extends RecordsResource<T> {
   /**
    * The filters `GET /fulfillments` reads (GetFulfillments.php and
    * PayoutStatusFilterMiddleware.php). {@link list} refuses any other key,
-   * `propertyId` included.
+   * `propertyId` included. No filter takes an id, so there is no
+   * `ID_FILTERS`.
    */
   static readonly LIST_FILTERS = ['status', 'payoutStatus', 'currency', 'from', 'to'] as const;
 
@@ -45,10 +46,29 @@ export class FulfillmentsResource<T = Fulfillment> extends RecordsResource<T> {
    * `fulfillments.list() needs {key} as a day, YYYY-MM-DD, and got {value}.`
    * `{value}` is a string in JSON quotes and anything else through
    * `String()`.
+   *
+   * PayoutStatusFilterMiddleware.php reads `payoutStatus` and `currency` as
+   * one value each, and reads `""` as no filter, which answers every
+   * fulfillment. So either one throws `SirenError` before sending when it is
+   * `""`, as `distributors.list()` refuses a `metricType` of `""`, and when
+   * it is not a string, a list included, since Siren would match the joined
+   * list as one value and answer none.
    */
   override async list(params: FulfillmentListParams = {}): Promise<SirenList<T>> {
-    // Each own key read once, so the day check and the query see the same values.
+    // Each own key read once, so the checks and the query see the same values.
     params = { ...params };
+    for (const key of ['payoutStatus', 'currency'] as const) {
+      const value: unknown = (params as Record<string, unknown>)[key];
+      if (value === undefined) continue;
+      if (value === '') {
+        throw new SirenError(
+          `fulfillments.list() cannot send a ${key} of "", which Siren reads as no filter and answers every fulfillment.`,
+        );
+      }
+      if (typeof value !== 'string') {
+        throw new SirenError(`fulfillments.list() takes one ${key} as a string, since Siren matches it as one value.`);
+      }
+    }
     for (const key of ['from', 'to'] as const) {
       const value: unknown = (params as Record<string, unknown>)[key];
       if (value === undefined) continue;
