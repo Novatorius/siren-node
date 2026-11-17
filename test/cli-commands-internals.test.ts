@@ -107,3 +107,22 @@ describe('apps-cli internals: apply and the app key', () => {
     expect(typed.paths()).toEqual([`DELETE /apps/${APP_KEY}`]);
   });
 });
+
+describe('apps-cli internals: requests', () => {
+  it('refuses a request id it cannot read, or one given with list options, before sending', async () => {
+    for (const argv of [['apps', 'requests', 'apr_1'], ['apps', 'requests', APP_REQUEST_ID, '--follow']]) {
+      const h = harness([reply(200, { requests: [] })]);
+      h.signedIn();
+      expect(await h.run(argv), argv.join(' ')).toBe(2);
+      expect(h.http.requests).toHaveLength(0);
+    }
+  });
+
+  it('refuses an answer given both as --body and --file, before sending', async () => {
+    const h = harness([reply(200, { status: 'accepted' })]);
+    h.signedIn();
+    h.write('answer.json', '{"outcome":"paid"}');
+    expect(await h.run(['apps', 'answer', APP_REQUEST_ID, '--body', '{"outcome":"paid"}', '--file', 'answer.json'])).toBe(2);
+    expect(h.http.requests).toHaveLength(0);
+  });
+});

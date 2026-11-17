@@ -483,7 +483,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 });
 
-describe.skip('apps-cli: siren apps requests, answer and resend', () => {
+describe('apps-cli: siren apps requests, answer and resend', () => {
   it('lists the latest requests, for one app or those that need attention', async () => {
     const other = { ...row, id: 'apr_0123456789abcdef0123456789abcdef', appId: 9, status: 'delivered' };
     const h = harness([

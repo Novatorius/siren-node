@@ -1128,8 +1128,8 @@
   },
   {
     "id": "requests-app-unfiltered",
-    "file": "src/cli/run.ts",
-    "find": "          if (appId !== undefined && row.appId !== appId) continue;\n",
+    "file": "src/cli/commands/requests.ts",
+    "find": "        if (appId !== undefined && row.appId !== appId) continue;\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -1138,7 +1138,7 @@
   },
   {
     "id": "requests-attention-ignored",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/requests.ts",
     "find": "values.attention ? { status: 'needs_attention' } : {}",
     "replace": "{}",
     "expect": "caught",
@@ -1148,8 +1148,8 @@
   },
   {
     "id": "follow-repeats",
-    "file": "src/cli/run.ts",
-    "find": "          if (seen.get(row.id) === row.status) continue;\n",
+    "file": "src/cli/commands/requests.ts",
+    "find": "        if (seen.get(row.id) === row.status) continue;\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -1158,9 +1158,9 @@
   },
   {
     "id": "follow-ignores-ctrl-c",
-    "file": "src/cli/run.ts",
-    "find": "        await io.sleep(2000);\n        if (io.signal?.aborted) return 0;",
-    "replace": "        await io.sleep(2000);",
+    "file": "src/cli/commands/requests.ts",
+    "find": "      await io.sleep(FOLLOW_EVERY_MS);\n      if (io.signal?.aborted) return 0;",
+    "replace": "      await io.sleep(FOLLOW_EVERY_MS);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps requests, answer and resend > follows the requests"
@@ -1168,8 +1168,8 @@
   },
   {
     "id": "show-other-requests",
-    "file": "src/cli/run.ts",
-    "find": ".filter((delivery) =>\n          delivery.eventId.startsWith(`${id}.`),\n        )",
+    "file": "src/cli/commands/requests.ts",
+    "find": "\n    .filter((delivery) => delivery.eventId.startsWith(`${id}.`))",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -1177,13 +1177,43 @@
     ]
   },
   {
+    "id": "show-id-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (!REQUEST_ID.test(id)) throw new CliUsageError(",
+    "replace": "  if (id === 'never') throw new CliUsageError(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: requests > refuses a request id it cannot read"
+    ]
+  },
+  {
+    "id": "show-id-with-list-options",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    if (values.app !== undefined || values.attention === true || values.follow === true) {",
+    "replace": "    if (values.app === 'never') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: requests > refuses a request id it cannot read"
+    ]
+  },
+  {
     "id": "answer-duplicate-hidden",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/requests.ts",
     "find": "receipt.duplicate ? 'Siren already had this answer. Nothing changed.' : ",
     "replace": "",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps requests, answer and resend > posts an answer with the session"
+    ]
+  },
+  {
+    "id": "answer-both-sources",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if ((body === undefined) === (file === undefined)) throw",
+    "replace": "  if (body === undefined && file === undefined) throw",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: requests > refuses an answer given both as --body and --file"
     ]
   },
   {
