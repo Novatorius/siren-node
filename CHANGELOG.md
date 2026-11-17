@@ -220,7 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `delete`. It keeps the session in credentials.json, mode 0600, and saves an app's key and
   signing secret in `.env.sandbox` or `.env.live` beside siren.app.json, written as a new 0600
   file renamed over the old one. It refuses an env file that is a symbolic link, and a later
-  `apps apply` stops before sending when the env file holds another Siren's key. `signup` and
+  `apps apply` and `apps rotate` stop before sending when the env file holds another Siren's key. `signup` and
   `login` refuse a credentials file others can read before the password is sent. It talks to the
   sandbox unless told otherwise, and needs `--live` for a live organization.
 - examples/apps/acme, an example app that checks each request, answers every ask and sends a sale

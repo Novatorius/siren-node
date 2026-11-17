@@ -87,6 +87,25 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     for (const mark of watch.marks) expect(mark.mode, mark.path).toBe(0o600);
   });
 
+  it('names every file that ever holds the key so the ignore line apps init writes covers it', async () => {
+    const init = harness([]);
+    expect(await init.run(['apps', 'init', '--key', APP_KEY, '--name', 'Acme']), init.err()).toBe(0);
+    const patterns = init
+      .file('.gitignore')
+      .split('\n')
+      .filter((line) => line.trim() !== '' && !line.startsWith('#'))
+      .map((line) => new RegExp(`^${line.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`));
+
+    const rotate = harness([rotated()]);
+    rotate.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: join(rotate.cwd, '.env.sandbox') } }) });
+    rotate.write('.env.sandbox', OLD_ENV);
+    watch.key = RAW_KEY_2;
+    expect(await rotate.run(['apps', 'rotate', APP_KEY]), rotate.err()).toBe(0);
+    const names = [...new Set(watch.marks.map((mark) => mark.path.slice(mark.path.lastIndexOf('/') + 1)))];
+    expect(names.length).toBeGreaterThan(1);
+    for (const name of names) expect(patterns.some((pattern) => pattern.test(name)), name).toBe(true);
+  });
+
   it('refuses an env file that is a symbolic link or not a regular file, before anything is sent or written', async () => {
     const rotate = harness([rotated()]);
     rotate.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: join(rotate.cwd, '.env.sandbox') } }) });
@@ -130,6 +149,7 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     expect(h.err()).toMatch(/Siren issued/);
     expect(h.err()).toMatch(/could not be saved/);
     expect(h.err()).toContain(`siren apps rotate ${APP_KEY}`);
+    expect(h.err()).toMatch(/old key .*revoked/);
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
 

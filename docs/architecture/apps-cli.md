@@ -221,10 +221,9 @@ An app's key and secret go to `.env.sandbox`, or `.env.live` for a live session,
 file. `apply` records that path in `envFiles` on every apply. `rotate` writes the new pair to the
 recorded path, or beside the app file named with `--app-file`, and never to the working folder.
 With neither, it refuses before sending, since the new pair would have nowhere known to go and
-Siren shows it once. When the file already names another `SIREN_BASE_URL`, `rotate` says on
-standard error which Siren's key it replaced (AP-A636). A later `apply` stops before sending when
-the file names another `SIREN_BASE_URL`, says which Siren's key it holds, and says to move the file
-aside and apply again, so a key the machine still needs is never replaced and the app never talks
+Siren shows it once. A later `apply`, and `rotate`, stop before sending when the file names
+another `SIREN_BASE_URL`, say which Siren's key it holds, and say to move the file aside and run the
+command again (AP-A906), so a key the machine still needs is never replaced and the app never talks
 to the wrong Siren unnoticed. Only the three lines `SIREN_BASE_URL`, `SIREN_API_KEY` and
 `SIREN_SIGNING_SECRET` are replaced, and every other line is kept. The whole text goes to a new
 file made with mode 0600 beside the env file, which is then renamed over it, as credentials.json is
@@ -237,6 +236,8 @@ Siren issues a pair once (the orchestrator's ruling in the fix round, AP-A904). 
 the key's 16-character prefix and the file name, never the key or the secret. When a write the
 check could not foresee still fails, it says on standard error that Siren issued a pair it could
 not save and that `siren apps rotate <key>` issues a new one, prints neither value, and answers 1.
+After a rotate it also says that the old key left in the file is revoked. The new file is written
+as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps init` writes covers.
 
 ## Sandbox and live
 
@@ -712,7 +713,7 @@ Each item of the audit, taken or declined, with its reason.
 | M3, filling from the environment | Taken. Only `url`, only `SIREN_APP_` names, never printed or written back (AP-A633). |
 | S1, the answer retried | Taken. Sent once, and the caller resends the same answer (AP-A630). |
 | S2, email confirmation | Taken. "Confirmation and plan answers". A confirm command waits for a later slice. |
-| S3, the key issued once | Taken. The no-key line on `apply`, `envFiles`, `rotate --app-file`, and the line when another Siren's key is replaced (AP-A634 to AP-A636). |
+| S3, the key issued once | Taken. The no-key line on `apply`, `envFiles`, `rotate --app-file`, and the line when another Siren's key is replaced (AP-A634 to AP-A636), now a refusal before sending (AP-A906). |
 | S4(a), the later apply test | Taken. It now asserts `paths()` is one `PUT`, and mutation `apply-later-sends-more` proves it. |
 | S4(b), the drop-by-id docs test | Taken. The README test asserts the drop-by-`id` sentence and that every `Idempotency-Key` sentence says not or never. Mutation `docs-drop-by-key` proves it. |
 | S5, the delete advice | Taken. `openRequests` above 0 names `siren apps requests --app <key>` (AP-A641). |
@@ -752,6 +753,10 @@ The review of the built slice (the run folder's review/cli-review.md) read it ag
 | 13, control characters in `apps requests <id>` | Declined for now. The app's own answer is shown as Siren stored it, and a later slice can escape it. |
 | After the review, the example server | Taken. An ask the example cannot answer gets 500 and a logged reason, and the server's listener survives a handler that throws (AP-A905). |
 | After the review, an env path that is a folder | Taken by ruling. `apply` and `rotate` refuse before sending an env path they cannot write as a regular file, and a later failure names the lost pair and `siren apps rotate` without printing it (AP-A904). |
+| Re-review, the temp file's name | Taken. `.env.sandbox.<hex>.tmp`, which `.env.*` covers, so a crash before the rename leaves nothing git would stage (AP-A906). |
+| Re-review, rotate over another Siren's key | Taken by ruling. `rotate` stops before sending, as `apply` does (AP-A906). |
+| Re-review, a failed rotate | Taken. The message says the old key in the file is revoked. |
+| Re-review, the example's Node | Taken. Its package.json asks for Node 18.3, as the SDK does. |
 | 13, the example logs a tell's data | Declined. The example is a demonstration on a sandbox, and its comment says a real app keeps its own store. |
 
 ## Packets in build order

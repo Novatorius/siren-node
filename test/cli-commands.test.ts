@@ -420,21 +420,32 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
   });
 
-  it('refuses to rotate before sending when it does not know where the key lives, and names a key for another Siren it replaces', async () => {
+  // The orchestrator's ruling after the fix round's re-review (AP-A906): rotate stops before sending
+  // when the env file holds another Siren's key, as apply does, where it used to replace that key.
+  it('refuses to rotate before sending when it does not know where the key lives, or when the env file holds another Siren\'s key', async () => {
     const unknown = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
     unknown.signedIn();
     expect(await unknown.run(['apps', 'rotate', KEY])).toBe(1);
     expect(unknown.http.requests).toHaveLength(0);
     expect(unknown.err()).toContain('--app-file');
 
+    const held = `SIREN_BASE_URL=http://localhost:33918/siren/v1\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`;
     const other = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
     other.signedIn();
     other.write('siren.app.json', exampleFile);
-    other.write('.env.sandbox', `SIREN_BASE_URL=http://localhost:33918/siren/v1\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
-    expect(await other.run(['apps', 'rotate', KEY, '--app-file', 'siren.app.json']), other.err()).toBe(0);
-    expect(other.file('.env.sandbox')).toContain(`SIREN_API_KEY=${RAW_KEY_2}`);
+    other.write('.env.sandbox', held);
+    expect(await other.run(['apps', 'rotate', KEY, '--app-file', 'siren.app.json'])).toBe(1);
+    expect(other.http.requests).toHaveLength(0);
+    expect(other.file('.env.sandbox')).toBe(held);
     expect(other.err()).toContain('http://localhost:33918/siren/v1');
-    expect(other.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toEqual({ [KEY]: join(other.cwd, '.env.sandbox') });
+
+    const named = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
+    named.signedIn();
+    named.write('siren.app.json', exampleFile);
+    named.write('.env.sandbox', `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
+    expect(await named.run(['apps', 'rotate', KEY, '--app-file', 'siren.app.json']), named.err()).toBe(0);
+    expect(named.file('.env.sandbox')).toContain(`SIREN_API_KEY=${RAW_KEY_2}`);
+    expect(named.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toEqual({ [KEY]: join(named.cwd, '.env.sandbox') });
   });
 
   it('turns an app on and off, lists the apps and shows one', async () => {

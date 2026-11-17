@@ -107,7 +107,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   for (const name of parsed.filled) run.print(`Its url came from ${name}.`);
 
   if (app.created) {
-    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret);
+    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);
     await run.remember(key, envPath);
     return saved ? 0 : 1;
   }
@@ -180,9 +180,16 @@ export async function appsRotate(input: CommandInput): Promise<number> {
   }
   const problem = await envFileProblem(envPath);
   if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);
+  const held = await envValue(envPath, 'SIREN_BASE_URL');
+  if (held !== undefined && held !== run.target.baseUrl) {
+    throw new CliRefusal(
+      `${envPath} holds the key for ${held}, and this rotate is for ${run.target.baseUrl}, so nothing was sent and both keys still work. ` +
+        `Move that file aside to keep its key, then run siren apps rotate ${key} again.`,
+    );
+  }
 
   const rotated = await run.siren().apps.rotate(key);
-  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret);
+  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret, true);
   await run.remember(key, envPath);
   if (saved) run.print(`Siren revoked the old key. Restart your app so it reads the new pair.`);
   return saved ? 0 : 1;
@@ -254,21 +261,20 @@ function inUseLines(key: string, error: ConflictError): string {
 /**
  * Writes the key and secret Siren showed once to the env file, replacing
  * only its three lines, mode 0600, and prints the key's prefix and the
- * file's absolute path. Says on standard error when the file held a key for
- * another Siren. When a write the checks before sending could not foresee
- * fails, says on standard error that Siren issued a pair it could not save
- * and that `siren apps rotate` issues a new one, never printing either
- * value, and answers false.
+ * file's absolute path. `apply` and `rotate` have already refused a file
+ * that holds another Siren's key. When a write the checks before sending
+ * could not foresee fails, says on standard error that Siren issued a pair
+ * it could not save and that `siren apps rotate` issues a new one, and,
+ * after a rotate, that the old key left in the file is revoked. Never
+ * prints either value, and answers false.
  */
-async function saveSecrets(run: CommandContext, key: string, envPath: string, rawKey: string, signingSecret: string): Promise<boolean> {
-  const base = run.target.baseUrl;
+async function saveSecrets(run: CommandContext, key: string, envPath: string, rawKey: string, signingSecret: string, revoked: boolean): Promise<boolean> {
   try {
-    const before = await envValue(envPath, 'SIREN_BASE_URL');
-    await writeEnvLines(envPath, { SIREN_BASE_URL: base, SIREN_API_KEY: rawKey, SIREN_SIGNING_SECRET: signingSecret });
-    if (before !== undefined && before !== base) run.warn(`${envPath} held a key for ${before}. It now holds the key for ${base}.`);
+    await writeEnvLines(envPath, { SIREN_BASE_URL: run.target.baseUrl, SIREN_API_KEY: rawKey, SIREN_SIGNING_SECRET: signingSecret });
   } catch (error) {
     run.warn(
       `Siren issued a new key and signing secret for ${key}, and they could not be saved to ${envPath} (${(error as Error).message}). ` +
+        (revoked ? `The old key in ${envPath} was revoked when Siren rotated it, so stop using it. ` : '') +
         `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair.`,
     );
     return false;
@@ -296,7 +302,9 @@ async function writeEnvLines(path: string, entries: Readonly<Record<(typeof ENV_
     if (at >= 0) lines[at] = `${name}=${value}`;
     else lines.push(`${name}=${value}`);
   }
-  const temporary = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);
+  // `.env.sandbox.<hex>.tmp`, which the `.env.*` line apps init writes to .gitignore covers, so a
+  // crash before the rename cannot leave a key git would stage.
+  const temporary = join(dirname(path), `${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);
   try {
     await writeFile(temporary, `${lines.join('\n')}\n`, { mode: 0o600, flag: 'wx' });
     await rename(temporary, path);

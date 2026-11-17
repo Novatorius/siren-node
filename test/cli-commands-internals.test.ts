@@ -158,6 +158,21 @@ describe('apps-cli internals: the stored files before a secret is sent', () => {
     }
   });
 
+  it('stops rotate before sending when the env file holds the key of another Siren or the live target', async () => {
+    for (const other of ['http://localhost:33918/siren/v1', LIVE_BASE_URL]) {
+      const held = `SIREN_BASE_URL=${other}\nSIREN_API_KEY=sk_test_${'0a'.repeat(32)}\nSIREN_SIGNING_SECRET=${'ef'.repeat(32)}\n`;
+      const h = harness([reply(200, { ...appRecord(), rawKey: `sk_test_${'1b'.repeat(32)}`, signingSecret: '9c'.repeat(32) })]);
+      h.signedIn();
+      h.write('siren.app.json', '{}');
+      h.write('.env.sandbox', held);
+      expect(await h.run(['apps', 'rotate', APP_KEY, '--app-file', 'siren.app.json']), other).toBe(1);
+      expect(h.http.requests, other).toHaveLength(0);
+      expect(h.err()).toContain(other);
+      expect(h.err()).toContain(SANDBOX_BASE_URL);
+      expect(h.file('.env.sandbox')).toBe(held);
+    }
+  });
+
   it('stops a later apply before sending when the env file holds the key of another Siren', async () => {
     const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
     const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');

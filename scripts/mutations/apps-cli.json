@@ -1610,8 +1610,8 @@
   {
     "id": "apply-not-remembered",
     "file": "src/cli/commands/apply.ts",
-    "find": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret);\n    await run.remember(key, envPath);",
-    "replace": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret);",
+    "find": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);\n    await run.remember(key, envPath);",
+    "replace": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
@@ -1640,18 +1640,19 @@
   {
     "id": "rotate-other-siren-silent",
     "file": "src/cli/commands/apply.ts",
-    "find": "    if (before !== undefined && before !== base) run.warn(",
-    "replace": "    if (before !== undefined && before === 'never') run.warn(",
+    "find": "  if (held !== undefined && held !== run.target.baseUrl) {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this rotate is for",
+    "replace": "  if (held !== undefined && held === '') {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this rotate is for",
     "expect": "caught",
     "failing": [
-      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
+      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending",
+      "apps-cli internals: the stored files before a secret is sent > stops rotate before sending when the env file holds the key of another Siren"
     ]
   },
   {
     "id": "rotate-app-file-unremembered",
     "file": "src/cli/commands/apply.ts",
-    "find": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret);\n  await run.remember(key, envPath);",
-    "replace": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret);",
+    "find": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret, true);\n  await run.remember(key, envPath);",
+    "replace": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret, true);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
@@ -1856,8 +1857,8 @@
   {
     "id": "apply-other-siren-unchecked",
     "file": "src/cli/commands/apply.ts",
-    "find": "  if (held !== undefined && held !== run.target.baseUrl) {",
-    "replace": "  if (held !== undefined && held === '') {",
+    "find": "  if (held !== undefined && held !== run.target.baseUrl) {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this apply is for",
+    "replace": "  if (held !== undefined && held === '') {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this apply is for",
     "expect": "caught",
     "failing": [
       "apps-cli internals: the stored files before a secret is sent > stops a later apply before sending when the env file holds the key of another Siren"
@@ -2024,6 +2025,26 @@
     "expect": "caught",
     "failing": [
       "apps-cli: the example app keeps serving > the server's listener answers 500"
+    ]
+  },
+  {
+    "id": "env-temp-name-hidden",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const temporary = join(dirname(path), `${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);",
+    "replace": "  const temporary = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > names every file that ever holds the key so the ignore line apps init writes covers it"
+    ]
+  },
+  {
+    "id": "rotate-revoked-silent",
+    "file": "src/cli/commands/apply.ts",
+    "find": "        (revoked ? `The old key in ${envPath} was revoked when Siren rotated it, so stop using it. ` : '') +",
+    "replace": "        (revoked ? '' : '') +",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
     ]
   }
 ]
