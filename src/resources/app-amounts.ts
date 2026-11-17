@@ -4,10 +4,19 @@ import type { AppCurrency, ShownAmount } from '../record-types';
 /*
  * Reading a stored amount the way Siren does. Siren stores an amount as an
  * integer, the shown amount times 10^scale, and its CurrencyAmountService
- * (lib/Commerce/Services/CurrencyAmountService.php on feat/apps at
- * 27169452a) is the one place that turns it back: toFloat(),
- * toDecimalString() and format(). This copies those three, integer
- * arithmetic throughout, so an app reads the same text the dashboard shows.
+ * (lib/Commerce/Services/CurrencyAmountService.php on int/preview-apps at
+ * a22547327, last changed in 2d104f289) is the one place that turns it
+ * back: toFloat(), toDecimalString() and format(). This copies those three,
+ * integer arithmetic throughout, so an app reads the same text the
+ * dashboard shows.
+ *
+ * Siren's two text forms disagree on one edge: a negative amount that
+ * rounds to zero. format() (lines 88 to 99) takes its sign from the stored
+ * value, so -49 in a currency of scale 4 and 2 places prints "-$0.00".
+ * toDecimalString() goes through toText() (lines 116 to 134), which drops
+ * the sign when the shown value is 0, and prints "0.00". `decimal` and
+ * `text` here both follow format(), so the two fields always agree on the
+ * sign: "-0.00" and "-$0.00".
  */
 
 /** The largest scale a currency may declare (`Currency::MAX_SCALE`). */
@@ -18,7 +27,8 @@ const MAX_SCALE = 8;
  *
  * - `amount` is `value / 10^scale` (`toFloat()`).
  * - `decimal` rounds to `decimalPlaces`, halves up, with no symbol and no
- *   grouping (`toDecimalString()`).
+ *   grouping (`toDecimalString()`), and the sign `format()` gives, which
+ *   keeps the sign of a negative that rounds to zero.
  * - `text` adds the symbol touching the number when it sits before, after a
  *   space when it sits after, or the currency's `id` after a space when it
  *   has none, and groups thousands with commas (`format()`).
@@ -53,9 +63,8 @@ export function shownAmount(value: number, currency: AppCurrency, method: string
   const unit = 10 ** decimalPlaces;
   const whole = String(Math.floor(shown / unit));
   const fraction = decimalPlaces > 0 ? `.${String(shown % unit).padStart(decimalPlaces, '0')}` : '';
-  const shownSign = sign !== '' && shown !== 0 ? '-' : '';
-
-  const decimal = `${shownSign}${whole}${fraction}`;
+  // The sign comes from the stored value, as format() takes it, for both fields.
+  const decimal = `${sign}${whole}${fraction}`;
   const grouped = `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction}`;
   const symbol = typeof currency.symbol === 'string' ? currency.symbol.trim() : '';
   const text =

@@ -1381,7 +1381,11 @@ export interface AppAllocationCompletedData {
 export interface ShownAmount {
   /** `value / 10^scale` as a number, for arithmetic: 15 for 1500 in dollars, 100 for 10000 in yen. */
   amount: number;
-  /** Plain text with the currency's decimal places, no symbol and no grouping: `15.00`, `100`. */
+  /**
+   * Plain text with the currency's decimal places, no symbol and no
+   * grouping: `15.00`, `100`. Its sign is `text`'s, so a negative that
+   * rounds to zero reads `-0.00`, as Siren's `format()` prints it.
+   */
   decimal: string;
   /** The text a person reads: `$15.00`, `¥100`, `10,000 pts`. */
   text: string;

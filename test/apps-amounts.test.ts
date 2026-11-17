@@ -23,6 +23,18 @@ describe('apps-sdk-followups-1: the amount a person reads from a tell', () => {
     expect(siren.apps.shownAmount(10000, AppCurrencies.points())).toEqual({ amount: 10000, decimal: '10000', text: '10,000 pts' });
   });
 
+  // Slice C6 item 8. Siren's CurrencyAmountService::format() (lines 88 to 99 on int/preview-apps at
+  // a22547327) takes its sign from the stored value, so a negative that rounds to zero prints
+  // "-$0.00". Its toDecimalString() drops that sign. decimal and text both follow format().
+  it('gives decimal the sign text has, as format() prints a negative that rounds to zero', () => {
+    const fine = { ...AppCurrencies.usd(), scale: 4, decimalPlaces: 2 };
+    expect(siren.apps.shownAmount(-49, fine)).toEqual({ amount: -0.0049, decimal: '-0.00', text: '-$0.00' });
+    expect(siren.apps.shownAmount(-50, fine)).toEqual({ amount: -0.005, decimal: '-0.01', text: '-$0.01' });
+    expect(siren.apps.shownAmount(-49, AppCurrencies.jpy())).toEqual({ amount: -0.49, decimal: '-0', text: '-¥0' });
+    expect(siren.apps.shownAmount(-4, { ...AppCurrencies.points(), scale: 1 })).toEqual({ amount: -0.4, decimal: '-0', text: '-0 pts' });
+    expect(siren.apps.shownAmount(0, fine)).toEqual({ amount: 0, decimal: '0.00', text: '$0.00' });
+  });
+
   it('rounds to the decimal places shown, halves up, and groups thousands, as Siren formats an amount', () => {
     expect(siren.apps.shownAmount(10050, AppCurrencies.jpy())).toEqual({ amount: 100.5, decimal: '101', text: '¥101' });
     expect(siren.apps.shownAmount(10049, AppCurrencies.jpy()).text).toBe('¥100');
