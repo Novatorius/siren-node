@@ -594,7 +594,11 @@ async function writeEnvLines(path: string, entries: Readonly<Partial<Record<(typ
 /**
  * Why the tool cannot write a key to `path` as a regular file: it is a
  * symbolic link, it is there and not a regular file, its folder does not
- * exist, or its folder cannot be written to, which the rename needs.
+ * exist, or its folder cannot be written to, which the rename needs. Or why
+ * it will not: the file holds one of the names the tool writes on more than
+ * one line. The tool would replace one, and a loader that reads the other,
+ * as examples/apps/acme/env.mjs reads the last, would keep a key Siren just
+ * revoked, so every command refuses before it sends.
  * Undefined when the path is a regular file or not there, in a folder the
  * tool can write to. `apply` and `rotate` ask before sending, by the
  * orchestrator's ruling in the slice 8 fix round (AP-A904), since Siren
@@ -619,6 +623,19 @@ async function envFileProblem(path: string): Promise<{ kind: 'link' | 'other'; l
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT' || code === 'ENOTDIR') return { kind: 'other', line: `${folder} does not exist, so the tool cannot write ${path}.` };
     return { kind: 'other', line: `The tool cannot write to ${folder}, so it cannot save ${path}.` };
+  }
+  if (found !== undefined) {
+    const lines = ((await readText(path)) ?? '').split(/\r?\n/);
+    for (const name of ENV_NAMES) {
+      const at = lines.flatMap((line, index) => (line.startsWith(`${name}=`) ? [index + 1] : []));
+      if (at.length > 1) {
+        const shown = `${at.slice(0, -1).join(', ')} and ${at.at(-1)}`;
+        return {
+          kind: 'other',
+          line: `${path} holds ${name} on lines ${shown}, and a program that reads it takes only one of them. Keep the line you use, delete the other, then run the command again.`,
+        };
+      }
+    }
   }
   return undefined;
 }

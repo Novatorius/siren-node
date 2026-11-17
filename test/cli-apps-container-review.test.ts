@@ -123,3 +123,35 @@ describe('apps-sdk-container review fix 2: apply says what will change, and clai
     expect(h.out()).not.toContain('made in the dashboard');
   });
 });
+
+describe('apps-sdk-container review fix 3: a name the env file holds twice', () => {
+  const OLD_KEY = `sk_test_${'2c'.repeat(32)}`;
+  const twice = `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nPORT=8787\nSIREN_API_KEY=${OLD_KEY}\n`;
+
+  it('rotate-key, rotate-secret and add-key refuse before sending, name the lines, and leave the file and the key as they are', async () => {
+    for (const command of ['rotate-key', 'rotate-secret', 'add-key']) {
+      const h = harness([reply(200, { ...appRecord(), rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })]);
+      h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [KEY]: join(h.cwd, '.env.sandbox') } }) });
+      h.write('.env.sandbox', twice);
+      expect(await h.run(['apps', command, KEY, ...(command === 'add-key' ? [] : ['--yes'])]), command).toBe(1);
+      expect(h.http.requests, command).toHaveLength(0);
+      expect(h.file('.env.sandbox')).toBe(twice);
+      expect(h.err(), command).toContain(
+        `${join(h.cwd, '.env.sandbox')} holds SIREN_API_KEY on lines 2 and 4, and a program that reads it takes only one of them. Keep the line you use, delete the other, then run the command again.`,
+      );
+      expect(h.printed()).not.toContain(RAW_KEY);
+      expect(h.printed()).not.toContain(OLD_KEY);
+    }
+  });
+
+  it('apply refuses before it reads the app', async () => {
+    const h = harness([reply(200, appRecord())], { env: URL_ENV });
+    h.signedIn();
+    h.write('.env.sandbox', twice);
+    h.write('siren.app.json', exampleFile());
+    expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
+    expect(h.http.requests).toHaveLength(0);
+    expect(h.err()).toContain('holds SIREN_API_KEY on lines 2 and 4');
+    expect(h.err()).toContain('Nothing was sent.');
+  });
+});

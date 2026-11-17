@@ -330,7 +330,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `siren apps rotate`, `requests.answer()`'s 401 message included, names `rotate-key` when the app
   holds a key and `add-key` when it holds none. Apply on an app with no key names `add-key`, and
   `rotate-key`, `rotate-secret` and `add-key` turn Siren's 409 for a missing or existing part into
-  the one command that fits the app.
+  the one command that fits the app. Apply and the three key commands refuse, before they send, an
+  env file that holds `SIREN_BASE_URL`, `SIREN_API_KEY` or `SIREN_SIGNING_SECRET` on more than one
+  line, and name the lines, so a rotation never leaves the revoked key on a line a loader reads.
 - `siren apps show`, `list` and `apply` print `requires Pro`, or the plan Siren names in
   `requiredPlan`, beside a feature or the events the plan cannot use, and print the app's events.
   `apply` warns when the file names scopes and the app holds no key, and names
