@@ -4,11 +4,16 @@ import { parseJsonBody, type HttpTransport } from '../http';
 import type {
   CreatedWebhookSubscription,
   CreateWebhookSubscriptionParams,
+  UpdateWebhookSubscriptionParams,
+  WebhookDelivery,
   WebhookEvent,
   WebhookCatalogEntry,
   WebhookHeaders,
   WebhookSubscription,
+  WebhookTestResult,
 } from '../types';
+import { pickFields } from './create-fields';
+import { isJsonObject, readObject, recordId, writeRecord } from './record-requests';
 
 const SIGNATURE_PREFIX = 'sha256=';
 const HEX_DIGEST_PATTERN = /^[0-9a-f]{64}$/i;
@@ -72,13 +77,93 @@ function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
  * Manage webhook subscriptions (`/webhooks`).
  *
  * Takes an API key with a webhook scope, or a signed-in dashboard session's
- * access token. `webhook-subscriptions:read` opens `list()`, and
- * `webhook-subscriptions:manage` opens every method here. The key must be
- * organization-wide, because subscriptions are not kept by store. A key bound
- * to one store gets a `StoreKeyNotAllowedError`.
+ * access token. `webhook-subscriptions:read` opens `list()`, `events()`,
+ * `retrieve()` and `deliveries()`, and `webhook-subscriptions:manage` opens
+ * every method here. The key must be organization-wide, because
+ * subscriptions are not kept by store. A key bound to one store gets a
+ * `StoreKeyNotAllowedError`.
+ *
+ * `retrieve()`, `update()`, `test()` and `deliveries()` refuse an id that is
+ * not a positive whole number with `SirenError` before sending, and throw
+ * `NotFoundError` for a subscription the organization does not have.
  */
 export class WebhookSubscriptionsResource {
+  /** The fields {@link update} sends, the four `PUT /webhooks/{id}` reads (UpdateWebhookSubscription.php). */
+  static readonly UPDATE_FIELDS = ['targetUrl', 'events', 'status', 'description'] as const;
+
   constructor(private readonly http: HttpTransport) {}
+
+  /**
+   * Reads one subscription with `GET /webhooks/{id}`. The answer never holds
+   * the signing secret, which Siren shows only once, on create. Retries on a
+   * network error, 429 or 5xx, as a read. Throws `UnexpectedResponseError`
+   * when a 2xx body is not a JSON object.
+   */
+  async retrieve(id: number): Promise<WebhookSubscription> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.retrieve')}`;
+    return readObject<WebhookSubscription>(this.http, path);
+  }
+
+  /**
+   * Changes a subscription with `PUT /webhooks/{id}`, sent once, and answers
+   * it as it now stands. Send only the fields to change. `status: 'paused'`
+   * stops deliveries and `'active'` starts them again. Sending the same
+   * update again after a lost answer sets the same values, so it is safe.
+   *
+   * Sends a new object holding only the {@link UPDATE_FIELDS} that `params`
+   * gives. Throws `SirenError` before sending when `params` holds any other
+   * key, with exactly `webhooks.subscriptions.update() cannot send "{key}".
+   * Siren's update route reads only targetUrl, events, status and
+   * description.` Siren answers 400, raised as `BadRequestError`, for a
+   * target URL that is not a public https endpoint.
+   */
+  async update(id: number, params: UpdateWebhookSubscriptionParams): Promise<WebhookSubscription> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.update')}`;
+    const body = pickFields(
+      params,
+      WebhookSubscriptionsResource.UPDATE_FIELDS,
+      (key) =>
+        `webhooks.subscriptions.update() cannot send "${key}". Siren's update route reads only targetUrl, events, status and description.`,
+    );
+    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);
+  }
+
+  /**
+   * Sends the subscription one signed `webhook.test` delivery now, with
+   * `POST /webhooks/{id}/test`, and answers what the endpoint did. Siren
+   * answers 200 whether or not the delivery arrived, so read `delivered`.
+   * The test shows in {@link deliveries}.
+   *
+   * Sent once, since each call makes Siren send a request. Siren allows 20
+   * tests an hour for one subscription and 60 in all from one address, and
+   * answers more with 429, raised as `RateLimitError`. It answers 409,
+   * raised as `ConflictError`, for a paused subscription. Throws
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   */
+  async test(id: number): Promise<WebhookTestResult> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.test')}/test`;
+    return writeRecord<WebhookTestResult>(this.http, 'POST', path, undefined);
+  }
+
+  /**
+   * The subscription's latest deliveries, newest first, at most 50, from
+   * `GET /webhooks/{id}/deliveries`. Each holds the payload Siren sent, its
+   * status, how many tries it took and the first 200 bytes of the endpoint's
+   * answer. Retries on a network error, 429 or 5xx, as a read. Throws
+   * `UnexpectedResponseError` when a 2xx body is not a list of objects.
+   */
+  async deliveries(id: number): Promise<WebhookDelivery[]> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.deliveries')}/deliveries`;
+    const response = await this.http.request({ method: 'GET', path, retriable: true });
+    const body = await parseJsonBody(response);
+    if (!Array.isArray(body) || !body.every(isJsonObject)) {
+      throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a list of deliveries.`, {
+        statusCode: response.status,
+        data: body,
+      });
+    }
+    return body as unknown as WebhookDelivery[];
+  }
 
   /**
    * Register a URL to receive event callbacks.

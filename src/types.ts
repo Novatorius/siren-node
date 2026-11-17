@@ -1,6 +1,6 @@
 import type { ApiKeyRecordScope, ApiKeyScope } from './api-key-scopes';
 import type { WebhookEventType } from './event-types';
-import type { RefundKind } from './taxonomy';
+import type { RefundKind, WebhookSubscriptionStatus } from './taxonomy';
 import type { AccessTokenSource } from './auth/access-token-source';
 import type { HttpClient } from './http';
 
@@ -314,6 +314,63 @@ export interface CreateWebhookSubscriptionParams {
   /** Event types to subscribe to. `["*"]` subscribes to all. */
   events: Array<WebhookEventType | (string & {})>;
   description?: string;
+}
+
+/**
+ * Parameters for `webhooks.subscriptions.update`. Send only the fields to
+ * change. Siren leaves a field it is not sent as it is.
+ */
+export interface UpdateWebhookSubscriptionParams {
+  /** The URL Siren will POST deliveries to. It must be a public https endpoint. */
+  targetUrl?: string;
+  /** Event types to subscribe to, replacing the current list. `["*"]` subscribes to all. */
+  events?: Array<WebhookEventType | (string & {})>;
+  /** `paused` stops deliveries and `active` starts them again. */
+  status?: WebhookSubscriptionStatus;
+  /** A note for the dashboard. Send `''` to clear it, since Siren ignores `null` here. */
+  description?: string;
+}
+
+/**
+ * What `webhooks.subscriptions.test` answers. Siren sends one signed
+ * `webhook.test` delivery at once and answers 200 whatever the endpoint did,
+ * so read `delivered` to know whether it arrived.
+ */
+export interface WebhookTestResult {
+  /** `true` when the endpoint answered 2xx. */
+  delivered: boolean;
+  /** The status the endpoint answered, or `null` when Siren could not reach it. */
+  httpStatus: number | null;
+  /** Why the delivery did not arrive, or `null`. */
+  error: string | null;
+  /** Always `webhook.test`. */
+  eventType: string;
+}
+
+/**
+ * One delivery attempt record, as `webhooks.subscriptions.deliveries` lists
+ * it. Dates are `Y-m-d H:i:s` in UTC, as Siren stores them.
+ */
+export interface WebhookDelivery {
+  id: number;
+  webhookSubscriptionId: number;
+  eventType: WebhookEventType | (string & {});
+  /** The `X-Siren-Delivery` value the endpoint received. */
+  eventId: string;
+  /** The body Siren sent, decoded. */
+  payload: Record<string, unknown>;
+  /** `pending`, `delivered` or `failed`. */
+  status: 'pending' | 'delivered' | 'failed' | (string & {});
+  attemptCount: number;
+  httpStatusCode: number | null;
+  /** The first 200 bytes of the endpoint's answer, or `null` when it gave no HTTP answer. */
+  responseBody: string | null;
+  errorMessage: string | null;
+  /** An estimate of the next try. The queue decides the real wait. */
+  nextRetryAt: string | null;
+  deliveredAt: string | null;
+  dateCreated: string | null;
+  dateModified: string | null;
 }
 
 /** An API key as returned by list (never includes raw key material). */
