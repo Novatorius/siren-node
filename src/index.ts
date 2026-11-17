@@ -6,7 +6,7 @@ export { ConnectorScope } from './auth/connector-scope';
 export type { AccessTokenSource } from './auth/access-token-source';
 export { StaticAccessToken } from './auth/static-access-token';
 export { CallbackAccessTokenSource } from './auth/callback-access-token-source';
-export { FetchHttpClient, HttpClientError } from './http';
+export { FetchHttpClient, HttpClientError, DEFAULT_BASE_URL, SANDBOX_BASE_URL } from './http';
 export type { HttpClient, HttpRequest, HttpResponse, HttpMethod } from './http';
 export {
   EventSlug,
@@ -132,5 +132,13 @@ export { MappingsResource } from './resources/mappings';
 export { SettingsResource } from './resources/settings';
 export { PayoutsResource } from './resources/payouts';
 export { FulfillmentsResource } from './resources/fulfillments';
+export { AppItemKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
+export { AppErrorCode, appErrorCode } from './errors';
+export {
+  AppsResource,
+  AppRequestsResource,
+  MAX_APP_ANSWER_BYTES,
+  DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,
+} from './resources/apps';
 
 export { Siren as default } from './client';

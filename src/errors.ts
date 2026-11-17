@@ -151,6 +151,64 @@ export const POLICY_ERROR_CODES: readonly ErrorCode[] = [
   ErrorCode.NotPermitted,
 ];
 
+/**
+ * The codes Siren's app routes send, beside {@link ErrorCode}, which mirrors
+ * Siren's shared list and holds none of these. Every app route sends its
+ * code as `error.code`, which the SDK's error carries as `code`: the answer
+ * route through lib/Apps/Core/Models/AppAnswerResult.php, and the others
+ * through the exceptions in lib/Apps/Service/Exceptions, each a
+ * `HasApiErrorCode` that saas/Strategies/RestStrategy.php writes to
+ * `error.code`. Those exceptions also send the code as
+ * `error.context.reason`, which the error carries as `data.reason`. Read it
+ * with {@link appErrorCode}, which takes `code` first, then `data.reason`.
+ */
+export const AppErrorCode = {
+  /** 403 from the answer route: the key's app is off. */
+  AppInactive: 'app_inactive',
+  /** 404 from the answer and resend routes: no such request in the org, or one sent to another app. */
+  RequestNotFound: 'app_request_not_found',
+  /** 409 from the answer route: a different answer was accepted first, and it stands. */
+  AlreadyAnswered: 'app_request_already_answered',
+  /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the item's kind refuses. */
+  AnswerInvalid: 'app_answer_invalid',
+  /** 401 from the answer route: a bearer that is no app's key, such as a legacy org key. */
+  AnswerUnauthorized: 'app_answer_unauthorized',
+  /** 403 from the answer route: a signed-in person who may not change apps. */
+  AnswerForbidden: 'app_answer_forbidden',
+  /** 409 from the resend route: the request is applied, or it would be sent and its app is off. */
+  NotResendable: 'app_request_not_resendable',
+  /** 409 `data.reason` from `DELETE /apps/{key}`: a record still selects one of the app's items, or an ask is open. */
+  AppInUse: 'app_in_use',
+  /** 403 `data.reason` from declaring or turning on an app: the plan has no room for another active app. */
+  AppLimitReached: 'app_limit_reached',
+  /** 409 `data.reason`: another change to the org's apps held the lock for 5 seconds. Send again. */
+  AppChangeInProgress: 'app_change_in_progress',
+  /** 403 `data.reason`: a member limited to some stores may not change apps. */
+  OrgAccessRequired: 'org_access_required',
+} as const;
+
+/** Union of the {@link AppErrorCode} strings. */
+export type AppErrorCode = (typeof AppErrorCode)[keyof typeof AppErrorCode];
+
+/**
+ * The machine-readable code of an error from an app route: the error's
+ * `code` when Siren sent one in `error.code`, else `data.reason` from
+ * `error.context.reason`, else `undefined`. Siren's app refusals send the
+ * code, and most send the reason too, so either shape reads. Answers
+ * `undefined` for an error this SDK did not raise, and for an empty code or
+ * reason.
+ */
+export function appErrorCode(error: unknown): AppErrorCode | (string & {}) | undefined {
+  if (!(error instanceof SirenError)) return undefined;
+  if (typeof error.code === 'string' && error.code !== '') return error.code;
+  const data = error.data;
+  if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    const reason = (data as { reason?: unknown }).reason;
+    if (typeof reason === 'string' && reason !== '') return reason;
+  }
+  return undefined;
+}
+
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<string>(Object.values(ErrorCode));
 
 /**

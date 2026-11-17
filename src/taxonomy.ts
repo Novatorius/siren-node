@@ -329,3 +329,55 @@ export const CreditHoldStatus = {
 
 /** Union of the {@link CreditHoldStatus} strings. */
 export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHoldStatus];
+
+/**
+ * The registries an app item can join, as Siren names them
+ * (lib/Apps/Core/Enums/AppItemKinds.php). A record selects an item by
+ * `app:{id}`: a program for a post-conversion action, a distributor for a
+ * post-allocation action or a distribution resolver, and an autofulfiller
+ * for a fulfillment method.
+ */
+export const AppItemKind = {
+  PostConversionAction: 'postConversionAction',
+  PostAllocationAction: 'postAllocationAction',
+  FulfillmentMethod: 'fulfillmentMethod',
+  DistributionResolver: 'distributionResolver',
+} as const;
+
+/** Union of the {@link AppItemKind} strings. */
+export type AppItemKind = (typeof AppItemKind)[keyof typeof AppItemKind];
+
+/** Whether an app is on (`active`) or off (`inactive`). Siren sends an off app nothing. */
+export const AppStatus = {
+  Active: 'active',
+  Inactive: 'inactive',
+} as const;
+
+/** Union of the {@link AppStatus} strings. */
+export type AppStatus = (typeof AppStatus)[keyof typeof AppStatus];
+
+/**
+ * The statuses of a request Siren sent an app (lib/Apps/Core/Models/AppRequest.php).
+ * A tell ends at `delivered`. An ask ends at `applied`, once its answer has
+ * done its work. `needs_attention` waits for a person or a late answer.
+ */
+export const AppRequestStatus = {
+  Pending: 'pending',
+  Sent: 'sent',
+  Delivered: 'delivered',
+  Answered: 'answered',
+  Applied: 'applied',
+  NeedsAttention: 'needs_attention',
+} as const;
+
+/** Union of the {@link AppRequestStatus} strings. */
+export type AppRequestStatus = (typeof AppRequestStatus)[keyof typeof AppRequestStatus];
+
+/** A `tell` needs no answer. An `ask` waits for the app to post one. */
+export const AppRequestMode = {
+  Tell: 'tell',
+  Ask: 'ask',
+} as const;
+
+/** Union of the {@link AppRequestMode} strings. */
+export type AppRequestMode = (typeof AppRequestMode)[keyof typeof AppRequestMode];

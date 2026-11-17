@@ -18,7 +18,14 @@ import { isJsonObject, readList, readObject, recordId, writeRecord } from './rec
 const SIGNATURE_PREFIX = 'sha256=';
 const HEX_DIGEST_PATTERN = /^[0-9a-f]{64}$/i;
 
-function readHeader(headers: WebhookHeaders | undefined, name: string): string | undefined {
+/**
+ * Reads one header in any case, from a Fetch `Headers` object or Node's
+ * `req.headers`, taking an array value's first item. Answers `undefined`
+ * for a missing or empty header. `apps.verifyRequest()` reads the same way.
+ *
+ * @internal
+ */
+export function readHeader(headers: WebhookHeaders | undefined, name: string): string | undefined {
   if (!headers) return undefined;
   if (typeof (headers as Headers).get === 'function') {
     const value = (headers as Headers).get(name);

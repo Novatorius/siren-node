@@ -180,9 +180,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CreateApiKeyParams.scopes` and `ApiKeyScopeEntry.scope` take them.
 - `openapi.yaml` documents `GET /payouts/{id}`, `GET /fulfillments`, `GET /fulfillments/{id}`,
   `PUT /webhooks/{id}`, `GET /webhooks/{id}/deliveries` and the `WebhookDelivery` schema.
+- `siren.apps` (`AppsResource`) for Siren apps, each call taking a signed-in admin's session
+  token: `declare` (`PUT /apps/{key}`, sent once, answering `created: true` with `rawKey` and
+  `signingSecret` the first time), `list` (`GET /apps`), `retrieve` (`GET /apps/{key}`),
+  `setStatus` (`POST /apps/{key}/status`), `rotate` (`POST /apps/{key}/rotate`) and `delete`
+  (`DELETE /apps/{key}`). Each throws `SirenError` before sending for an app key that is not
+  lowercase letters and digits joined by single dashes, at most 64 characters, or that is
+  `requests`, and `declare` for a field or item field Siren does not take, whatever its value. The
+  reads retry, the writes are sent once, and a 2xx body that is not an app raises
+  `UnexpectedResponseError`.
+- `siren.apps.verifyRequest(rawBody, headers, secret, options)` checks a request Siren sends an app:
+  the `X-Siren-Signature-V2` signature in constant time, a signed time within `toleranceSeconds`
+  (300 by default) either way, `X-Siren-Event` `app.request`, and a body of version 1. It throws
+  `SignatureVerificationError` otherwise and never falls back to `X-Siren-Signature`.
+- `siren.apps.requests`: `list` (`GET /apps/requests`, the latest 50, filtered by `status`),
+  `resend` (`POST /apps/requests/{id}/resend`, sent once) and `answer`
+  (`POST /apps/requests/{id}/answer`, with the app's own key or an admin's session).
+  `requests.answer` throws
+  `SirenError` before sending for an id that is not `apr_` and 32 hex characters, or an answer that
+  is not a plain object with a text `outcome` of at most 16384 bytes as JSON. It is sent once, and
+  sending the same answer again after a lost one answers `duplicate: true`. `requests.resend`
+  sends nothing to the app for a request that holds an answer Siren has not applied, and Siren
+  applies that answer instead. It raises `ConflictError` with `app_request_not_resendable` for an
+  applied request, or one Siren would send while its app is off.
+- `AppRequestsResource`, the class behind `siren.apps.requests`, for typing it.
+- `MAX_APP_ANSWER_BYTES`, 16384, the most an answer may hold as JSON.
+- `DEFAULT_APP_REQUEST_TOLERANCE_SECONDS`, 300, how far a signed time may be from the receiver's
+  clock when `verifyRequest` gets no `toleranceSeconds`.
+- `DEFAULT_BASE_URL`, the live address `https://api.sirenaffiliates.com/siren/v1`.
+- `AppErrorCode` names the codes the app routes send, and `appErrorCode(error)` reads one from an
+  error's `code`, else `data.reason`. `AppItemKind`, `AppStatus`, `AppRequestStatus` and
+  `AppRequestMode` are Siren's app vocabularies, and `App`, `AppItem`, `DeclareAppParams`,
+  `DeclaredApp`, `RotatedApp`, `AppRequest`, `AppRequestRecord`, `AppAnswer` and
+  `AppAnswerReceipt` type the calls.
+- The sandbox's address, `https://sandbox.sirenaffiliates.com/siren/v1`, as an exported constant. A
+  client built with an `sk_test_` key and no `baseUrl` goes to `SANDBOX_BASE_URL`.
+- The `siren` command-line tool, this package's bin: `signup`, `login`, `logout`, `orgs`, `use`,
+  and `apps init`, `apply`, `list`, `show`, `requests`, `answer`, `resend`, `rotate`, `on`, `off`
+  and `delete`. It keeps the session in credentials.json, mode 0600, and saves an app's key and
+  signing secret in `.env.sandbox` or `.env.live` beside siren.app.json, written as a new 0600
+  file renamed over the old one. It refuses an env file that is a symbolic link, and a later
+  `apps apply` and `apps rotate` stop before sending when the env file holds another Siren's key. `signup` and
+  `login` refuse a credentials file others can read before the password is sent. It talks to the
+  sandbox unless told otherwise, and needs `--live` for a live organization.
+- examples/apps/acme, an example app that checks each request, answers every ask and sends a sale
+  with the app's own key.
+- `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppItem`,
+  `AppRequestRecord`, `AppAnswer` and `AppAnswerReceipt` schemas, and the sandbox server.
 
 ### Changed
 
+- `engines` asks for Node 18.3 or later, since the `siren` command uses `util.parseArgs`.
+- `new Siren()` sends an `sk_test_` key to the sandbox when no `baseUrl` is given, and throws for a
+  test key with the live address or a live key with the sandbox.
 - A 401 is resent once with a refreshed token when the credential is an `AccessTokenSource` that
   can refresh, whether or not the request may be retried, because Siren answers a 401 before it
   records anything. The resend does not count against `maxRetries`. An `apiKey` is never

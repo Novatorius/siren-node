@@ -24,8 +24,10 @@ This SDK is the Node.js and TypeScript integration point for Siren. In a few lin
 - **Verify signed webhooks** (`webhooks.constructEvent`) so you can trust inbound deliveries.
 - **Read the ledger** (`conversions`, `transactions`, `obligations`, `payouts`, `fulfillments`) and
   **manage webhook subscriptions** with an API key that holds the ledger and webhook scopes.
+- **Build a Siren app** (`apps`, `apps.verifyRequest`, `apps.requests.answer`) that acts as part of
+  Siren's engine, and declare it with the `siren` command-line tool.
 
-It runs on Node 18+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
+It runs on Node 18.3+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
 CJS, and full type declarations.
 
 ## Install
@@ -501,8 +503,8 @@ for any other key, naming it.
 
 The first table compares this SDK with the Siren PHP SDK's next release, which adds seven calls and
 the record scope list to PHP 0.3.0. The Node SDK carries every public method of that release under
-the same name, with one left out. It also has three methods the PHP SDK does not have yet, listed in
-the second table below.
+the same name, with one left out. It also has thirteen methods the PHP SDK does not have yet, listed
+in the second table below.
 The first table lists each PHP method, its Node name, and how the two differ where they do.
 Across every record resource, Node throws `SirenError` before sending where PHP throws
 `InvalidArgumentException`, a list answers a `SirenList` with `estimatedCount` where PHP answers
@@ -647,14 +649,25 @@ as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the eleven sc
 
 ### Node methods the PHP SDK does not have yet
 
-Each method below calls a route Siren serves today. Neither PHP 0.3.0 nor the PHP SDK's next
-release has a method for it. The PHP SDK is to gain each one under the same name.
+Each method below calls a route Siren serves today, or, for `siren.apps`, a route the Siren apps
+work adds. Neither PHP 0.3.0 nor the PHP SDK's next release has a method for it. The PHP SDK is to
+gain each one under the same name. The `siren` command-line tool ships with this package only.
 
 | Node | Siren route | What it does |
 |---|---|---|
 | `siren.events.forward()` | `POST /event/{eventSlug}` | Sends a connected site's event in Siren's versioned envelope, once. |
 | `siren.conversions.recoverCreate()` | `GET /conversions`, then `POST /conversions` | After `create` lost its answer, sends it again only when Siren holds no such conversion. |
 | `siren.transactions.recoverCreditCollaborator()` | `GET /conversions`, then `POST /transactions/credit-collaborator` | After `creditCollaborator` lost its answer, credits only the transactions that hold no conversion for the collaborator. |
+| `siren.apps.declare()` | `PUT /apps/{key}` | Declares an app from its whole description, once, and answers its key and signing secret the first time. |
+| `siren.apps.list()` | `GET /apps` | Lists the organization's apps with their items. |
+| `siren.apps.retrieve()` | `GET /apps/{key}` | Reads one app with its items. |
+| `siren.apps.setStatus()` | `POST /apps/{key}/status` | Turns an app on or off. |
+| `siren.apps.rotate()` | `POST /apps/{key}/rotate` | Gives an app a new key and signing secret, shown once. |
+| `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
+| `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
+| `siren.apps.requests.list()` | `GET /apps/requests` | Lists the latest requests Siren sent the organization's apps. |
+| `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
+| `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
 
 ## Storefront module (browser)
 
@@ -1052,6 +1065,205 @@ The outbox resends a failed event with that same `eventId` and the same token, a
 an event it already recorded with `status: duplicate`, which the outbox counts as delivered. On
 the outbox's last try, pass `finalAttempt: true`, which adds the `X-Siren-Final-Attempt: 1`
 header.
+
+## Siren apps
+
+A Siren app is a service you host that acts as part of Siren's engine. It declares items, and each
+item joins one of Siren's pickers, so an organization chooses it as it chooses a built-in one:
+
+| Item kind | Picked on | Siren sends |
+|---|---|---|
+| `postConversionAction` | a program | A tell after each approved conversion. |
+| `postAllocationAction` | a distributor | A tell after each completed allocation. |
+| `fulfillmentMethod` | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
+| `distributionResolver` | a distributor | An ask to divide each pool. |
+
+Apps are a Siren Cloud feature. The app routes take a signed-in admin's session token as
+`accessToken`, and refuse an API key with `ApiKeyNotAcceptedError`. The `siren` command below signs
+in for you and is the usual way to declare an app. Only the answer route takes the app's own key.
+
+### Declare an app
+
+`apps.declare(key, app)` sends the app's whole description with `PUT /apps/{key}`. The first call
+makes the app, its API key and its webhook subscription, and answers `created: true` with `rawKey`
+and `signingSecret`. Siren shows both this once, so keep them. Each later call updates the app in
+place and answers `created: false`.
+
+```ts
+const siren = new Siren({ accessToken: adminSessionToken });
+
+const app = await siren.apps.declare('acme-payouts', {
+  name: 'Acme',
+  url: 'https://acme.example/siren',
+  scopes: ['event:sale'],
+  items: [
+    { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
+    { kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] },
+  ],
+});
+if (app.created) saveSecrets(app.rawKey, app.signingSecret);
+```
+
+`apps.list()` and `apps.retrieve(key)` read the apps with their items.
+`apps.setStatus(key, 'inactive')` turns an app off, which takes its items out of every picker and stops Siren sending it
+anything. `apps.rotate(key)` gives the app a new key and signing secret, revokes the old key at
+once, and shows the pair once. `apps.delete(key)` deletes an app that no record selects and that
+has no open ask. Siren refuses one still in use with 409 `app_in_use`, and its `uses` and
+`openRequests` say why.
+
+An app key is lowercase letters and digits joined by single dashes, at most 64 characters, and
+never `requests`. Each call refuses any other key, and any field `PUT /apps/{key}` does not take,
+with `SirenError` before sending. The reads retry on a lost connection, 429 and 5xx. Every write is
+sent once.
+
+### Check a request
+
+Siren sends each request as a `POST` to the app's `url`, signed with the app's signing secret in
+`X-Siren-Signature-V2: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">`.
+`apps.verifyRequest(rawBody, headers, secret)` checks it against the exact bytes received and
+answers the parsed request. It refuses a signature that does not match, a time more than 300
+seconds from the receiver's clock either way, an `X-Siren-Event` other than `app.request`, and a
+body that is not a request of version 1, each with `SignatureVerificationError`. It never falls back
+to the older `X-Siren-Signature`, which signs no time.
+
+```ts
+// createAcmeApp is the example app's handler, examples/apps/acme/handler.mjs. Copy it, or write your own in its shape.
+import { createAcmeApp } from './handler.mjs';
+
+const appSiren = new Siren({ apiKey: process.env.SIREN_API_KEY! }); // the app's own key
+const acme = createAcmeApp({ siren: appSiren, signingSecret: process.env.SIREN_SIGNING_SECRET!, log: console.log });
+
+app.post('/siren', express.raw({ type: 'application/json' }), (req, res, next) => {
+  acme.handle(req.body, req.headers).then((reply) => res.status(reply.status).type('application/json').send(reply.body), next);
+});
+```
+
+Answer 200 as soon as the request checks out. Siren may deliver one request more than once. Drop a
+repeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a
+repeat.
+
+The example's handler, which test/apps-example.test.ts drives with Siren's signed fixture, does the
+parts that are easy to get wrong. It answers an ask after the 200, outside the request, and catches
+an answer that fails, so a 5xx or a dropped connection is logged and never ends the process. It counts
+an ask as handled only once Siren accepts the answer, so the next delivery answers again. A repeat that
+arrives while the first answer is in flight waits for that answer, so two deliveries close together
+answer once. An ask it cannot answer, such as a pool with no metrics, gets 500 and a logged line
+that says why, never a guessed answer, so Siren sends it again on its deadline and then shows it as
+needing attention. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
+
+### Answer an ask
+
+`apps.requests.answer(id, answer)` posts the answer with `POST /apps/requests/{id}/answer`, from a
+`Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand. The
+answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
+`{ status: 'accepted', duplicate }`.
+
+The answer is sent once. When it is lost to a dropped connection or a 5xx, send the same answer
+again. Siren takes each answer once, so `duplicate: true` means the first had already landed and
+nothing more was applied. A different answer after an accepted one gets 409
+`app_request_already_answered`, and the first one stands.
+
+An ask carries `answerBy`. Siren sends an unanswered ask again when its window closes, three sends
+in all, then marks it `needs_attention`. An item's `answerWindowMinutes` sets the window, from 1 to
+43200 minutes. A fulfillment method waits a day and a distribution resolver an hour when the item
+sets none.
+
+### See what Siren sent
+
+`apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
+`pending`, `sent`, `delivered` (a tell the app received), `answered`, `applied` (an ask whose answer
+did its work) or `needs_attention`. `apps.requests.resend(id)` sends a request again under the same
+id with a new answer window. A request that holds an answer Siren has not applied, in
+`needs_attention` after its apply ran out of tries or still `answered` because the wake after the
+answer was lost, is not sent to the app again. Siren applies the stored answer instead, even while
+the app is off. Siren refuses an `applied` request, and one it would have to send while its app is
+off, with 409 `app_request_not_resendable`.
+
+### Error codes
+
+The app codes are in `AppErrorCode`, apart from `ErrorCode`, which holds Siren's shared list.
+`appErrorCode(error)` reads the code from any app call's error.
+
+```ts
+import { AppErrorCode, appErrorCode, ConflictError } from '@novatorius/siren';
+
+try {
+  await siren.apps.delete('acme-payouts');
+} catch (err) {
+  if (err instanceof ConflictError && appErrorCode(err) === AppErrorCode.AppInUse) {
+    await siren.apps.setStatus('acme-payouts', 'inactive');
+  } else {
+    throw err;
+  }
+}
+```
+
+| Code | Status | What to do |
+|---|---|---|
+| `app_limit_reached` | 403 | Turn another app off, or move to a plan with room. |
+| `org_access_required` | 403 | Ask an admin who sees every store. |
+| `app_change_in_progress` | 409 | Send it again in a moment. |
+| `app_in_use` | 409 | Turn the app off instead, or move the records in `uses` first. |
+| `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
+| `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
+| `app_request_not_found` | 404 | Check the id, and that the key is the app's the request went to. |
+| `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
+| `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
+| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. |
+
+### The sandbox
+
+A sandbox key starts `sk_test_`. `new Siren({ apiKey })` sends one to `SANDBOX_BASE_URL` when you
+give no `baseUrl`. It refuses a sandbox key with the live API's address and a live key with the
+sandbox's, so a test never reaches a live organization. Any other address takes either kind, so a
+local Siren works.
+
+## Command-line tool
+
+The package ships a `siren` command. It signs in with your Siren password, keeps the session on
+your machine, and declares an app from a file, so you never handle a session token. Install the
+package globally, or run it with `npx siren`.
+
+```sh
+siren signup                         # make an organization, or: siren login
+siren apps init --key acme-payouts   # write siren.app.json
+siren apps apply                     # declare the app, and save its key in .env.sandbox
+siren apps requests --follow         # watch what Siren sends and what comes back
+```
+
+| Command | What it does |
+|---|---|
+| `siren signup` | Makes an organization and signs in. It asks for the organization's name, your email, the terms and a password, or takes `--org-name`, `--email`, `--accept-terms` and `--password-stdin`. |
+| `siren login` | Signs in. `--org <slug or id>` picks one of your organizations. |
+| `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. |
+| `siren orgs` | Lists your organizations, `*` on the one in use. |
+| `siren use <slug or id>` | Switches to another of your organizations. |
+| `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
+| `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
+| `siren apps list` | Lists the apps and their items. `--json` prints what Siren sent. |
+| `siren apps show <key>` | Shows one app and its items. |
+| `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
+| `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. |
+| `siren apps resend <id>` | Sends a request again. |
+| `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |
+| `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
+| `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them and the command to turn the app off. |
+
+siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its items keyed by
+item key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment, from a variable
+whose name starts with `SIREN_APP_`, and only there. A mistake in the file is printed with its line
+and column, and nothing is sent.
+
+The tool talks to `SIREN_BASE_URL`, else the sandbox. `--base-url <url>` names another Siren, and
+takes plain http only for `localhost`, `127.0.0.1` and `host.docker.internal`. A live organization
+needs `--live` on every command but `siren logout`, and `--live` against a sandbox is refused. The
+session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,
+readable by you alone. It never holds your password, an app's key or its secret. The tool answers 0
+when it did what you asked, 1 when Siren or the tool refused, and 2 for a command line it cannot
+read.
+
+examples/apps/acme in this repository is a small app that checks each request, answers every ask,
+and sends a sale with the app's own key. Its README walks through running it against the sandbox.
 
 ## Other SDKs
 

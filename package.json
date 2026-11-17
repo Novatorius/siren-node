@@ -29,7 +29,10 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=18.3"
+  },
+  "bin": {
+    "siren": "./dist/cli.js"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
