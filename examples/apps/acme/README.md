@@ -37,12 +37,14 @@ From a checkout of this repository, with the `siren` command installed and signe
    or "Acme: Acme ledger" on an autofulfiller, and give the program a collaborator.
 6. Run `npm run send-sale -- tracking:<code> 49` with that collaborator's tracking code. It records a
    visit and a sale with the app's own key, which holds the `event:site-visited` and `event:sale`
-   scopes, and prints what Siren did and the opportunity id.
+   scopes, and prints how many conversions the sale made on which opportunity. A sale that made none
+   prints Siren's reason, such as `no_program` when no active program accepts sales, and its message.
 7. Watch what Siren sends and what came back with `siren apps requests --follow`. The server prints
    a line for each request it acts on and each answer Siren accepts.
 
 Without a tunnel, set `SIREN_APP_URL` to any https address. Siren's deliveries then fail, and you
-answer each ask by hand with `siren apps answer`.
+answer each ask by hand with `siren apps answer` once `siren apps requests --attention` lists it. A
+person may answer only a request that needs attention.
 
 ## Before you copy it
 

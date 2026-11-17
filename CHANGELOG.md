@@ -203,7 +203,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `app_answer_unauthorized`. A person may answer only a request that needs attention, and Siren
   refuses any other hand answer with 409 `app_request_not_needing_attention`, which `AppErrorCode`
   names as `NotNeedingAttention`. `siren apps answer` then prints Siren's line and points to
-  `siren apps requests --attention`, and prints the code of any refusal it does not know. It is sent once, and
+  `siren apps requests --attention`, and prints the code of any refusal it does not know.
+  `WebhookSubscription` gains `appId`, the app that owns the subscription or `null`. The example's
+  `send-sale` prints how many conversions a sale made, or Siren's reason and message when it made
+  none, since a real Siren answers `recorded` for a visit or sale no program pays for. It is sent once, and
   sending the same answer again after a lost one answers `duplicate: true`. `requests.resend`
   sends nothing to the app for a request that holds an answer Siren has not applied, and Siren
   applies that answer instead. It raises `ConflictError` with `app_request_not_resendable` for an

@@ -150,6 +150,8 @@ export const WebhookAnswers = {
     description: 'Payouts to the ledger',
     propertyId: null,
     oauthClientId: null,
+    // Every subscription names its app, or null (captures webhooks-retrieve-200-app-owned and webhooks-create-201).
+    appId: null,
     dateCreated: '2026-11-01 08:00:00',
     dateModified: '2026-11-01 08:00:00',
   },
@@ -164,6 +166,7 @@ export const WebhookAnswers = {
     description: 'Payouts to the ledger',
     propertyId: null,
     oauthClientId: null,
+    appId: null,
     dateCreated: '2026-11-01 08:00:00',
     dateModified: '2026-11-16 21:00:00',
   },

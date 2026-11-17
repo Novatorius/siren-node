@@ -264,5 +264,45 @@
     "failing": [
       "apps-cli: apps.requests.answer > raises a person's answer to an ask that needs no attention"
     ]
+  },
+  {
+    "id": "e2e-6-sale-line-hides-reason",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "  const why = result.reason === undefined ? '' : ` (${result.reason})`;",
+    "replace": "  const why = '';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > prints a sale that made a conversion apart from one that made none"
+    ]
+  },
+  {
+    "id": "e2e-6-sale-counts-nothing",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "    conversions: Array.isArray(body.conversions) ? body.conversions.length : 0,",
+    "replace": "    conversions: 0,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > prints a sale that made a conversion apart from one that made none"
+    ]
+  },
+  {
+    "id": "e2e-6-fake-gains-logo",
+    "file": "test/cli-fakes.ts",
+    "find": "org: { orgId: 3, orgName: 'Acme', orgSlug: 'acme', role: 'admin' }",
+    "replace": "org: membershipAcme",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the fakes carry the fields a real Siren Cloud sends > auth-register-org-201"
+    ]
+  },
+  {
+    "id": "e2e-6-subscription-without-app",
+    "file": "test/sdk-gaps-fakes.ts",
+    "find": "    appId: null,\n    dateCreated: '2026-11-01 08:00:00',\n    dateModified: '2026-11-01 08:00:00',",
+    "replace": "    dateCreated: '2026-11-01 08:00:00',\n    dateModified: '2026-11-01 08:00:00',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the fakes carry the fields a real Siren Cloud sends > webhooks-retrieve-200-app-owned"
+    ]
   }
 ]

@@ -42,8 +42,12 @@ export const AuthAnswers = {
   production: () => reply(200, { shortSignup: false, edition: 'production' }),
   /** A Siren from before slice 7, whose signup-options names no edition. */
   noEdition: () => reply(200, { shortSignup: false }),
+  /**
+   * register-org: the organization carries no `orgLogoUrl`, unlike a
+   * membership (capture auth-register-org-201).
+   */
   registered: () =>
-    reply(201, { org: membershipAcme, user, accessToken: ACCESS_1, refreshToken: REFRESH_1 }),
+    reply(201, { org: { orgId: 3, orgName: 'Acme', orgSlug: 'acme', role: 'admin' }, user, accessToken: ACCESS_1, refreshToken: REFRESH_1 }),
   oneOrg: () => reply(200, { accessToken: ACCESS_1, refreshToken: REFRESH_1, user, memberships: [membershipAcme] }),
   severalOrgs: () =>
     reply(200, { verificationToken: 'verification-token', user: { id: 7, email: EMAIL }, memberships: [membershipAcme, membershipTwo] }),

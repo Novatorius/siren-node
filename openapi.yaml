@@ -3862,6 +3862,9 @@ components:
         status: { type: string, example: active }
         propertyId: { type: [integer, 'null'] }
         oauthClientId: { type: [string, 'null'] }
+        appId:
+          type: [integer, 'null']
+          description: The app that owns the subscription. An app's subscription changes only when the app is declared again, and an update or delete of it gets 409 app_owned_subscription.
         dateCreated: { type: [string, 'null'] }
         dateModified: { type: [string, 'null'] }
     WebhookSubscriptionCreate:

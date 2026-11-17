@@ -293,6 +293,12 @@ export interface WebhookSubscription {
   propertyId?: number | null;
   /** The connected site that manages the subscription, if any. */
   oauthClientId?: string | null;
+  /**
+   * The app that owns the subscription, or `null`. An app's subscription
+   * changes only when the app is declared again, and Siren refuses an update
+   * or delete of it with 409 `app_owned_subscription`.
+   */
+  appId?: number | null;
   dateCreated?: string | null;
   dateModified?: string | null;
   /** @deprecated Siren never sends this field. Read `dateCreated`. */
