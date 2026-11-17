@@ -12,7 +12,7 @@ import type { AppItemKind } from '../taxonomy';
  *     "apps": {
  *       "acme-payouts": {
  *         "name": "Acme payouts",
- *         "url": "${ACME_SIREN_URL}",
+ *         "url": "${SIREN_APP_URL}",
  *         "scopes": [],
  *         "events": [],
  *         "items": {
@@ -71,15 +71,17 @@ export interface AppFileProblem {
 /**
  * Reads and checks an app file's text before anything is sent. Answers the
  * file, or every problem found, each naming its key and line. The rules are
- * in the architecture note, "The app file". `${NAME}` in any string is
- * filled from `env`, and a name `env` lacks is a problem at that key.
+ * in the architecture note, "The app file". `${NAME}` is filled from `env`
+ * only in the app's `url` and only for a name that starts `SIREN_APP_`. A
+ * placeholder anywhere else, any other name, or a name `env` lacks is a
+ * problem at that key. `filled` lists the names it filled, never a value.
  *
  * Stub: answers no file and no problems. Packet cli-app-file.
  */
 export function parseAppFile(
   text: string,
   env: Readonly<Record<string, string | undefined>>,
-): { file: AppFile; problems: [] } | { file: null; problems: AppFileProblem[] } {
+): { file: AppFile; problems: []; filled: string[] } | { file: null; problems: AppFileProblem[] } {
   void text;
   void env;
   return { file: null, problems: [] };

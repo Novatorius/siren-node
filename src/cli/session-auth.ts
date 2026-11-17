@@ -28,6 +28,12 @@ export interface SessionTokens {
   accessToken: string;
   refreshToken: string;
   user: SessionUser;
+  /**
+   * Present when the address still waits for confirmation and Siren gave a
+   * session anyway (AuthService::authenticate()). `signup` and `login` say
+   * how many days are left.
+   */
+  emailConfirmation?: EmailConfirmationWindow;
 }
 
 /** One organization the person belongs to (AuthService::buildMembershipsList()). */
@@ -48,11 +54,28 @@ export type LoginResult =
   | { kind: 'session'; tokens: SessionTokens; memberships: Membership[] }
   | { kind: 'choose-org'; verificationToken: string; memberships: Membership[] };
 
+/**
+ * A confirmation window on a new account (AuthService::windowPayload()).
+ * Siren closes an account nobody confirmed when it ends
+ * (saas/Users/UnconfirmedAccounts).
+ */
+export interface EmailConfirmationWindow {
+  pending: true;
+  /** Unix seconds. */
+  deadline: number;
+  daysUntilClosed?: number;
+}
+
 /** What `POST /auth/register-org` answers (OrgRegistrationService::register()). */
 export interface RegisteredOrg {
   org: Membership;
-  /** Null when Siren asks the person to confirm their address first, which the sandbox never does. */
+  /**
+   * Null when Siren answered `emailConfirmationRequired`: no session until
+   * the person confirms the address in the email Siren sent and signs in.
+   */
   tokens: SessionTokens | null;
+  /** Present when Siren gave a session that still waits for the address to be confirmed. */
+  emailConfirmation?: EmailConfirmationWindow;
 }
 
 /** What `signup` sends. Siren refuses a sign-up without `acceptTerms`. */
@@ -91,13 +114,24 @@ export class SessionAuthClient {
     return 'production';
   }
 
-  /** `POST /auth/register-org`. Sent once: a second send would make a second org or answer 409. */
+  /**
+   * `POST /auth/register-org`. Sent once: a second send would make a second
+   * org or answer 409. A 404 means sign-up is turned off on that Siren
+   * (`SIREN_SAAS_SIGNUP_ENABLED`), and the command says so.
+   */
   async registerOrg(params: RegisterOrgParams): Promise<RegisteredOrg> {
     void params;
     return { org: { orgId: 0, orgName: '', orgSlug: '', role: '' }, tokens: null };
   }
 
-  /** `POST /auth/login` with `email` and `password`, and `orgId` when given. */
+  /**
+   * `POST /auth/login` with `email` and `password`, and `orgId` when given.
+   * Siren answers 403 `email_unconfirmed` for an address not yet confirmed,
+   * and 401 with `no_entitlement`, `entitlement_lapsed`, `trial_ended` or
+   * `entitlements_unavailable` for an organization with no usable plan
+   * (lib/Users/Service/Rest/Login.php). The command turns each into one line
+   * that says what to do next.
+   */
   async login(email: string, password: string, orgId?: number): Promise<LoginResult> {
     void email;
     void password;

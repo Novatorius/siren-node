@@ -133,7 +133,7 @@ export { SettingsResource } from './resources/settings';
 export { PayoutsResource } from './resources/payouts';
 export { FulfillmentsResource } from './resources/fulfillments';
 export { AppItemKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
-export { AppErrorCode } from './errors';
+export { AppErrorCode, appErrorCode } from './errors';
 export {
   AppsResource,
   AppRequestsResource,

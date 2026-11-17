@@ -4,6 +4,7 @@ import { Siren } from '../src/client';
 import {
   AuthenticationError,
   ConflictError,
+  appErrorCode,
   NotFoundError,
   PermissionError,
   SirenError,
@@ -16,6 +17,7 @@ import type { DeclareAppParams } from '../src/record-types';
 import { FakeHttpClient, reply } from './http-fakes';
 import { bodyOf, expectRetried, expectSentOnce, pathOf, queryOf, transportOver } from './record-fakes';
 
+import { APP_KEY, APP_REQUEST_ID, AppAnswers, appRecord, requestRow } from './apps-siren-answers';
 /*
  * Acceptance tests for `siren.apps` and `siren.apps.requests`, packets
  * sdk-apps, sdk-requests, sdk-answer and sdk-sandbox-guard. Contract:
@@ -28,54 +30,12 @@ import { bodyOf, expectRetried, expectSentOnce, pathOf, queryOf, transportOver }
  * Pending: each packet turns its `describe.skip` into `describe`.
  */
 
-const KEY = 'acme-payouts';
-const REQUEST = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
+const KEY = APP_KEY;
+const REQUEST = APP_REQUEST_ID;
 
-const app = {
-  id: 4,
-  key: KEY,
-  name: 'Acme',
-  description: '',
-  status: 'active',
-  webhookSubscriptionId: 31,
-  apiKeyId: 52,
-  dateCreated: '2026-11-16 21:00:00',
-  dateModified: '2026-11-16 21:00:00',
-  url: 'https://acme.example/siren',
-  events: [],
-  scopes: [],
-  apiKeyPrefix: 'sk_test_0a1b2c3d',
-  items: [
-    {
-      id: 12,
-      ref: 'app:12',
-      appId: 4,
-      kind: 'fulfillmentMethod',
-      key: 'acme-ledger',
-      name: 'Acme ledger',
-      description: '',
-      settings: { currencies: ['USD'], answerWindowMinutes: 4320 },
-      status: 'active',
-    },
-  ],
-};
+const app = appRecord({ description: '' });
 const secrets = { rawKey: `sk_test_${'0a'.repeat(32)}`, signingSecret: 'ef'.repeat(32) };
-
-const row = {
-  id: REQUEST,
-  appId: 4,
-  item: 'app:12',
-  kind: 'fulfillmentMethod',
-  mode: 'ask',
-  subject: { type: 'payout', id: '88' },
-  status: 'sent',
-  sendCount: 1,
-  answerBy: '2026-11-18T09:14:03+00:00',
-  answeredBy: null,
-  answeredAt: null,
-  lastError: null,
-  createdAt: '2026-11-17T09:14:03+00:00',
-};
+const row = requestRow();
 
 const declaration: DeclareAppParams = {
   name: 'Acme',
@@ -216,6 +176,16 @@ describe.skip('apps-cli: apps reads and changes', () => {
     expect(await refused(() => half.apps.rotate(KEY))).toBeInstanceOf(UnexpectedResponseError);
   });
 
+  it('reads an app error code from error.code first, then from context.reason', async () => {
+    const coded = apps([reply(409, { error: { message: 'In use.', code: 'app_in_use', context: { reason: 'app_change_in_progress' } } })]);
+    expect(appErrorCode(await refused(() => coded.apps.delete(KEY)))).toBe('app_in_use');
+    const reasoned = apps([AppAnswers.reasonOnly('app_change_in_progress')]);
+    expect(appErrorCode(await refused(() => reasoned.apps.delete(KEY)))).toBe('app_change_in_progress');
+    const plain = apps([AppAnswers.uncoded()]);
+    expect(appErrorCode(await refused(() => plain.apps.delete(KEY)))).toBeUndefined();
+    expect(appErrorCode(new Error('not from Siren'))).toBeUndefined();
+  });
+
   it('deletes once, and raises the in-use refusal with its uses', async () => {
     const { http, apps: resource } = apps([reply(200, { success: true })]);
     await expect(resource.delete(KEY)).resolves.toBeUndefined();
@@ -223,14 +193,7 @@ describe.skip('apps-cli: apps reads and changes', () => {
     expect(pathOf(http.requests[0])).toBe('/apps/acme-payouts');
     await expectSentOnce((transport) => new AppsResource(transport).delete(KEY), reply(200, { success: true }));
 
-    const inUse = apps([
-      reply(409, {
-        error: {
-          message: 'Records still select items of "Acme", so it can\'t be deleted. Turn it off instead.',
-          context: { reason: 'app_in_use', uses: { 'app:12': 2 } },
-        },
-      }),
-    ]);
+    const inUse = apps([AppAnswers.inUse()]);
     const error = await refused(() => inUse.apps.delete(KEY));
     expect(error).toBeInstanceOf(ConflictError);
     expect((error as ConflictError).data).toMatchObject({ reason: 'app_in_use', uses: { 'app:12': 2 } });
@@ -275,7 +238,7 @@ describe.skip('apps-cli: apps.requests', () => {
       expect(bad.http.requests).toHaveLength(0);
     }
 
-    const done = apps([reply(409, { error: { code: 'app_request_not_resendable', message: 'Already answered.' } })]);
+    const done = apps([AppAnswers.notResendable()]);
     const error = await refused(() => done.apps.requests.resend(REQUEST));
     expect(error).toBeInstanceOf(ConflictError);
     expect((error as ConflictError).code).toBe('app_request_not_resendable');
@@ -314,10 +277,10 @@ describe.skip('apps-cli: apps.requests.answer', () => {
     }
   });
 
-  it('is retried, since the same answer again is safe', async () => {
-    await expectRetried(
+  it('is sent once, and the caller sends the same answer again after a lost one', async () => {
+    await expectSentOnce(
       (transport) => new AppsResource(transport).requests.answer(REQUEST, { outcome: 'paid' }),
-      reply(200, { status: 'accepted' }),
+      reply(200, { status: 'accepted', duplicate: true }),
     );
   });
 

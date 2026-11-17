@@ -74,6 +74,19 @@ describe.skip('apps-cli docs', () => {
     expect(apps).toContain('verifyRequest(');
     expect(apps).toContain('requests.answer(');
     expect(apps).toContain('X-Siren-Signature-V2');
+
+    // A receiver drops a repeat by the request's `id`. Idempotency-Key is
+    // not signed (AP-A616), so the README never tells anyone to trust it.
+    const sentences = apps.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/);
+    expect(sentences.some((line) => /repeat|again|twice|duplicate/i.test(line) && line.includes('`id`'))).toBe(true);
+    const keyLines = sentences.filter((line) => line.includes('Idempotency-Key'));
+    expect(keyLines.length).toBeGreaterThan(0);
+    for (const line of keyLines) expect(line).toMatch(/\b(not|never)\b/);
+  });
+
+  it('the parity section counts thirteen Node-only methods', () => {
+    const parity = section(read('README.md'), '## Parity with the PHP SDK');
+    expect(parity.replace(/\s+/g, ' ')).toContain('It also has thirteen methods the PHP SDK does not have yet');
   });
 
   it('the CHANGELOG names the apps calls, the siren command and the sandbox key rule', () => {
@@ -81,5 +94,8 @@ describe.skip('apps-cli docs', () => {
     for (const name of ['siren.apps', 'verifyRequest', 'requests.answer', '`siren`', 'sk_test_', 'SANDBOX_BASE_URL', 'AppErrorCode']) {
       expect(unreleased, name).toContain(name);
     }
+    const changed = section(unreleased, '### Changed');
+    expect(changed).toContain('new Siren()');
+    expect(changed).toContain('sk_test_');
   });
 });

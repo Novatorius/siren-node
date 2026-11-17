@@ -1,6 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { loadAppEnv } from '../examples/apps/acme/env.mjs';
 import { answerFor, createAcmeApp } from '../examples/apps/acme/handler.mjs';
+import { sendSale } from '../examples/apps/acme/sale.mjs';
 import { Siren } from '../src/client';
 import type { HttpResponse } from '../src/http';
 import { FakeHttpClient, reply } from './http-fakes';
@@ -92,5 +96,53 @@ describe.skip('apps-cli: the example app', () => {
     });
     expect(split(10, [0, 0])).toEqual({ outcome: 'resolved', shares: [{ id: 'm1', amount: 5 }, { id: 'm2', amount: 5 }] });
     expect(answerFor({ item: { kind: 'postConversionAction', key: 'notify-crm', id: 'app:11' }, data: {} })).toBeNull();
+  });
+
+  it('reads the env file apply wrote, and never guesses between the sandbox and live', () => {
+    const lines = (base: string) => `PORT=8787\nSIREN_BASE_URL=${base}\nSIREN_API_KEY=${APP_KEY}\nSIREN_SIGNING_SECRET=${fixture.secret}\n`;
+    const one = mkdtempSync(join(tmpdir(), 'acme-env-'));
+    writeFileSync(join(one, '.env.live'), lines('https://api.sirenaffiliates.com/siren/v1'));
+    expect(loadAppEnv(one, {})).toEqual({
+      path: join(one, '.env.live'),
+      values: { SIREN_BASE_URL: 'https://api.sirenaffiliates.com/siren/v1', SIREN_API_KEY: APP_KEY, SIREN_SIGNING_SECRET: fixture.secret },
+    });
+
+    writeFileSync(join(one, '.env.sandbox'), lines(BASE));
+    expect(() => loadAppEnv(one, {})).toThrow(/SIREN_ENV_FILE/);
+    expect(loadAppEnv(one, { SIREN_ENV_FILE: join(one, '.env.sandbox') }).values.SIREN_BASE_URL).toBe(BASE);
+
+    const none = mkdtempSync(join(tmpdir(), 'acme-env-'));
+    expect(() => loadAppEnv(none, {})).toThrow(/siren apps apply/);
+    writeFileSync(join(none, '.env.sandbox'), 'PORT=8787\n');
+    expect(() => loadAppEnv(none, {})).toThrow(/SIREN_API_KEY/);
+  });
+
+  it("sends a real sale with the app's own key: a visit, then a sale on its opportunity", async () => {
+    const http = new FakeHttpClient([
+      reply(200, { status: 'attributed' }, { 'X-Siren-OID': '501' }),
+      reply(200, { status: 'created' }, { 'X-Siren-OID': '501' }),
+    ]);
+    const siren = new Siren({ apiKey: APP_KEY, baseUrl: BASE, httpClient: http });
+    const result = await sendSale(siren, { collaborator: 'tracking:ada', total: 49, currency: 'USD', externalId: 'acme-1' });
+
+    expect(http.requests.map((request) => new URL(request.url).pathname)).toEqual(['/siren/v1/event/site-visited', '/siren/v1/event/sale']);
+    expect(http.bearers()).toEqual([`Bearer ${APP_KEY}`, `Bearer ${APP_KEY}`]);
+    expect(bodyOf(http.requests[0])).toMatchObject({ collaboratorId: 'tracking:ada' });
+    const sale = bodyOf(http.requests[1]) as Record<string, unknown>;
+    expect(sale).toMatchObject({ trackingId: 501, total: 49, currency: 'USD', externalId: 'acme-1', source: 'acme-example' });
+    expect(sale.test).not.toBe(true);
+    expect(result).toMatchObject({ opportunityId: 501, status: 'created' });
+  });
+
+  it('declares the scopes a sale needs and the shortest answer window on each ask', () => {
+    const file = JSON.parse(readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8')) as {
+      apps: Record<string, { scopes: string[]; items: Record<string, { answerWindowMinutes?: number }> }>;
+    };
+    const scopes = readFileSync(new URL('./fixtures/api-key-scopes.json', import.meta.url), 'utf8');
+    const app = file.apps['acme-payouts']!;
+    expect(app.scopes).toEqual(expect.arrayContaining(['event:site-visited', 'event:sale']));
+    for (const scope of app.scopes) expect(scopes, scope).toContain(`"scope": "${scope}"`);
+    expect(app.items['acme-ledger']!.answerWindowMinutes).toBe(1);
+    expect(app.items['acme-split']!.answerWindowMinutes).toBe(1);
   });
 });

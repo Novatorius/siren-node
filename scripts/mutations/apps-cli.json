@@ -286,13 +286,13 @@
     ]
   },
   {
-    "id": "answer-not-retried",
+    "id": "answer-retried",
     "file": "src/resources/apps.ts",
-    "find": "    const response = await this.http.request({ method: 'POST', path, body: copy, retriable: true });",
-    "replace": "    const response = await this.http.request({ method: 'POST', path, body: copy, retriable: false });",
+    "find": "    const response = await this.http.request({ method: 'POST', path, body: copy, retriable: false });",
+    "replace": "    const response = await this.http.request({ method: 'POST', path, body: copy, retriable: true });",
     "expect": "caught",
     "failing": [
-      "apps-cli: apps.requests.answer > is retried"
+      "apps-cli: apps.requests.answer > is sent once"
     ]
   },
   {
@@ -388,7 +388,7 @@
   {
     "id": "file-env-unset-silent",
     "file": "src/cli/app-file.ts",
-    "find": "        problem(path, at, `${path} needs the environment variable ${name}, which is not set.`);\n",
+    "find": "        problem(path, where, `${path} needs the environment variable ${name}, which is not set.`);\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -499,8 +499,8 @@
   {
     "id": "login-edition-unchecked",
     "file": "src/cli/run.ts",
-    "find": "      const edition = await run.auth.edition();\n      assertEditionAllowed(target, edition);\n      const result",
-    "replace": "      const edition = await run.auth.edition();\n      const result",
+    "find": "      const edition = await run.auth.edition();\n      assertEditionAllowed(target, edition);\n      let result;",
+    "replace": "      const edition = await run.auth.edition();\n      let result;",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
@@ -729,8 +729,8 @@
   {
     "id": "apply-prints-key",
     "file": "src/cli/run.ts",
-    "find": "    this.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${name}.`);",
-    "replace": "    this.print(`Key ${rawKey} and its signing secret are in ${name}.`);",
+    "find": "    this.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${path}.`);",
+    "replace": "    this.print(`Key ${rawKey} and its signing secret are in ${path}.`);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
@@ -763,14 +763,14 @@
     "replace": "    lines.push(`${name}=${value}`);",
     "expect": "caught",
     "failing": [
-      "apps-cli: siren apps init, apply and the app key > rotates the key and replaces only its three lines"
+      "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
     ]
   },
   {
     "id": "env-written-on-update",
     "file": "src/cli/run.ts",
-    "find": "      if (app.created) return (await run.saveSecrets(dirname(path), app.rawKey, app.signingSecret)) ? 0 : 1;",
-    "replace": "      const loose = app as unknown as { rawKey: string; signingSecret: string };\n      return (await run.saveSecrets(dirname(path), loose.rawKey, loose.signingSecret)) ? 0 : 1;",
+    "find": "      await run.remember(key, envPath);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "      const loose = app as unknown as { rawKey: string; signingSecret: string };\n      await run.saveSecrets(envPath, loose.rawKey, loose.signingSecret);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
@@ -819,8 +819,8 @@
   {
     "id": "delete-in-use-plain",
     "file": "src/cli/run.ts",
-    "find": "        if (data?.reason === 'app_in_use') {",
-    "replace": "        if (data?.reason === 'never_sent') {",
+    "find": "        if (appErrorCode(error) === 'app_in_use') {",
+    "replace": "        if (appErrorCode(error) === 'never_sent') {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > deletes only with --yes"
@@ -964,6 +964,379 @@
     "expect": "caught",
     "failing": [
       "apps-cli docs > the CHANGELOG names"
+    ]
+  },
+  {
+    "id": "error-code-not-first",
+    "file": "src/errors.ts",
+    "find": "  if (typeof error.code === 'string' && error.code !== '') return error.code;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps reads and changes > reads an app error code"
+    ]
+  },
+  {
+    "id": "error-code-no-reason",
+    "file": "src/errors.ts",
+    "find": "    if (typeof reason === 'string' && reason !== '') return reason;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps reads and changes > reads an app error code"
+    ]
+  },
+  {
+    "id": "target-http-any-host",
+    "file": "src/cli/targets.ts",
+    "find": "  if (url.protocol === 'http:' && !LOCAL_HOSTS.includes(url.hostname)) {",
+    "replace": "  if (url.protocol === 'gopher:' && !LOCAL_HOSTS.includes(url.hostname)) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > answers exit code 2"
+    ]
+  },
+  {
+    "id": "target-http-local-narrow",
+    "file": "src/cli/targets.ts",
+    "find": "const LOCAL_HOSTS = ['localhost', '127.0.0.1', 'host.docker.internal'];",
+    "replace": "const LOCAL_HOSTS = ['localhost'];",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > takes plain http only for a Cloud on this machine"
+    ]
+  },
+  {
+    "id": "file-fill-anywhere",
+    "file": "src/cli/app-file.ts",
+    "find": "    const isUrl = /^apps\\.[^.]+\\.url$/.test(path);",
+    "replace": "    const isUrl = path !== '';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > fills a placeholder only in the url"
+    ]
+  },
+  {
+    "id": "file-fill-any-name",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (!/^SIREN_APP_[A-Z0-9_]+$/.test(name)) {",
+    "replace": "      if (!/^[A-Z0-9_]+$/.test(name)) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > fills a placeholder only in the url"
+    ]
+  },
+  {
+    "id": "file-filled-unreported",
+    "file": "src/cli/app-file.ts",
+    "find": "      filled.add(name);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "file-description-optional",
+    "file": "src/cli/app-file.ts",
+    "find": "  if (typeof top.description !== 'string') problem(",
+    "replace": "  if (top.description !== undefined && typeof top.description !== 'string') problem(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses each broken app or item field"
+    ]
+  },
+  {
+    "id": "reader-raw-line-break",
+    "file": "src/cli/app-file.ts",
+    "find": "[^\"\\\\\\u0000-\\u001f]",
+    "replace": "[^\"\\\\\\u0000-\\u0009\\u000b-\\u001f]",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file's JSON reader > refuses a raw line break"
+    ]
+  },
+  {
+    "id": "signup-off-raw",
+    "file": "src/cli/run.ts",
+    "find": "        if ((error as SirenError).statusCode === 404) {",
+    "replace": "        if ((error as SirenError).statusCode === 410) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "signup-unconfirmed-vague",
+    "file": "src/cli/run.ts",
+    "find": "Open it from your inbox, confirm the address, then run siren login.`);",
+    "replace": "Confirm it.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "signup-window-silent",
+    "file": "src/cli/run.ts",
+    "find": "      const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n      if (pending !== null) run.print(pending);",
+    "replace": "      const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n      void pending;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "login-window-silent",
+    "file": "src/cli/run.ts",
+    "find": "      const pending = confirmationLine(tokens.emailConfirmation, io.now());\n      if (pending !== null) run.print(pending);",
+    "replace": "      const pending = confirmationLine(tokens.emailConfirmation, io.now());\n      void pending;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "login-unconfirmed-raw",
+    "file": "src/cli/run.ts",
+    "find": "  if (code === 'email_unconfirmed') {",
+    "replace": "  if (code === 'email_not_confirmed') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "login-plan-raw",
+    "file": "src/cli/run.ts",
+    "find": "  if (code !== undefined && PLAN_LINES[code] !== undefined) return new CliRefusal(PLAN_LINES[code]);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "logout-needs-live",
+    "file": "src/cli/run.ts",
+    "find": "      const session = await run.store.get(target.baseUrl);\n      if (session === null) throw new CliRefusal(`You are not signed in to ${target.baseUrl}.`);\n      run.adopt(session);",
+    "replace": "      const session = await run.signedIn();",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > logs out by revoking both tokens"
+    ]
+  },
+  {
+    "id": "apply-prints-url",
+    "file": "src/cli/run.ts",
+    "find": "      for (const line of appLines(app, false)) run.print(line);",
+    "replace": "      for (const line of appLines(app)) run.print(line);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
+    ]
+  },
+  {
+    "id": "apply-no-key-silent",
+    "file": "src/cli/run.ts",
+    "find": "        run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run siren apps rotate ${key} to make a new key and save it there.`);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
+    ]
+  },
+  {
+    "id": "apply-no-key-wrong-line",
+    "file": "src/cli/run.ts",
+    "find": "      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "      if ((await envValue(envPath, 'SIREN_BASE_URL')) === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
+    ]
+  },
+  {
+    "id": "apply-later-sends-more",
+    "file": "src/cli/run.ts",
+    "find": "      await run.remember(key, envPath);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "      await siren.apps.retrieve(key);\n      await run.remember(key, envPath);\n      if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
+    ]
+  },
+  {
+    "id": "apply-not-remembered",
+    "file": "src/cli/run.ts",
+    "find": "        await run.remember(key, envPath);\n        return saved ? 0 : 1;",
+    "replace": "        return saved ? 0 : 1;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
+    ]
+  },
+  {
+    "id": "rotate-to-cwd",
+    "file": "src/cli/run.ts",
+    "find": ": session.envFiles?.[key];",
+    "replace": ": join(io.cwd, run.envFileName());",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
+    ]
+  },
+  {
+    "id": "rotate-unknown-guesses",
+    "file": "src/cli/run.ts",
+    "find": ": session.envFiles?.[key];",
+    "replace": ": session.envFiles?.[key] ?? join(io.cwd, run.envFileName());",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
+    ]
+  },
+  {
+    "id": "rotate-other-siren-silent",
+    "file": "src/cli/run.ts",
+    "find": "      if (before !== undefined && before !== target.baseUrl) {",
+    "replace": "      if (before !== undefined && before === 'never') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
+    ]
+  },
+  {
+    "id": "rotate-app-file-unremembered",
+    "file": "src/cli/run.ts",
+    "find": "      await run.remember(key, envPath);\n      return saved ? 0 : 1;",
+    "replace": "      return saved ? 0 : 1;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
+    ]
+  },
+  {
+    "id": "saved-path-relative",
+    "file": "src/cli/run.ts",
+    "find": "and its signing secret are in ${path}.`);",
+    "replace": "and its signing secret are in ${path.slice(path.lastIndexOf('/') + 1)}.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
+    ]
+  },
+  {
+    "id": "delete-open-asks-off",
+    "file": "src/cli/run.ts",
+    "find": "Answer them, or wait for them to end: siren apps requests --app ${key}`);",
+    "replace": "Turn it off instead with siren apps off ${key}.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > deletes only with --yes"
+    ]
+  },
+  {
+    "id": "example-env-guesses",
+    "file": "examples/apps/acme/env.mjs",
+    "find": "    if (found.length > 1) throw new Error(`Both ${found.join(' and ')} are here. Set SIREN_ENV_FILE to the one to use.`);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > reads the env file apply wrote"
+    ]
+  },
+  {
+    "id": "example-env-unchecked",
+    "file": "examples/apps/acme/env.mjs",
+    "find": "  const missing = NAMES.filter((name) => !values[name]);",
+    "replace": "  const missing = NAMES.filter((name) => values[name] === 'never');",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > reads the env file apply wrote"
+    ]
+  },
+  {
+    "id": "example-sale-is-test",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "    source: 'acme-example',\n  });",
+    "replace": "    source: 'acme-example',\n    test: true,\n  });",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > sends a real sale with the app's own key"
+    ]
+  },
+  {
+    "id": "example-sale-no-opportunity",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "    trackingId: visit.opportunityId,",
+    "replace": "    trackingId: 0,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > sends a real sale with the app's own key"
+    ]
+  },
+  {
+    "id": "example-scope-missing",
+    "file": "examples/apps/acme/siren.app.json",
+    "find": "\"scopes\": [\"event:site-visited\", \"event:sale\"],",
+    "replace": "\"scopes\": [\"event:site-visited\"],",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > declares the scopes a sale needs",
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "example-window-long",
+    "file": "examples/apps/acme/siren.app.json",
+    "find": "\"currencies\": [\"USD\"], \"answerWindowMinutes\": 1 }",
+    "replace": "\"currencies\": [\"USD\"], \"answerWindowMinutes\": 4320 }",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > declares the scopes a sale needs",
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "example-split-window-default",
+    "file": "examples/apps/acme/siren.app.json",
+    "find": "\"name\": \"Acme split\", \"answerWindowMinutes\": 1 }",
+    "replace": "\"name\": \"Acme split\" }",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > declares the scopes a sale needs",
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "docs-drop-by-key",
+    "file": "README.md",
+    "find": "Drop a repeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a repeat.",
+    "replace": "Drop a repeat by its `Idempotency-Key` header.",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the README shows the command-line tool"
+    ]
+  },
+  {
+    "id": "docs-count-three",
+    "file": "README.md",
+    "find": "It also has thirteen methods the PHP SDK does not have yet",
+    "replace": "It also has three methods the PHP SDK does not have yet",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the parity section counts thirteen"
+    ]
+  },
+  {
+    "id": "docs-changelog-constructor",
+    "file": "CHANGELOG.md",
+    "find": "- `new Siren()` sends an `sk_test_` key to the sandbox when no `baseUrl` is given, and throws for a\n  test key with the live address or a live key with the sandbox.\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the CHANGELOG names the apps calls"
     ]
   }
 ]

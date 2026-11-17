@@ -89,9 +89,10 @@ export class AppRequestsResource {
    * with no text `outcome`, or one longer than {@link MAX_APP_ANSWER_BYTES}
    * bytes as JSON.
    *
-   * Retried on a network error, 429 or 5xx, unlike other writes. Siren takes
-   * each answer once: the same answer again answers `duplicate: true` and
-   * applies nothing more, so a resend after a lost answer is safe.
+   * Sent once, as every write is. When the answer is lost, because the
+   * connection dropped or Siren answered 5xx, the caller sends the same
+   * answer again. Siren takes each answer once, so `duplicate: true` then
+   * means the first one had already landed, and nothing more is applied.
    *
    * Answers `{ status: 'accepted', duplicate }`. Siren's refusals, each with
    * its code in `AppErrorCode` as the error's `code`: 409

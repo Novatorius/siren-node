@@ -6,13 +6,13 @@
     "acme-payouts": {
       "name": "Acme",
       "description": "Siren's example app.",
-      "url": "${ACME_SIREN_URL}",
-      "scopes": [],
+      "url": "${SIREN_APP_URL}",
+      "scopes": ["event:site-visited", "event:sale"],
       "events": [],
       "items": {
         "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
-        "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 4320 },
-        "acme-split": { "kind": "distributionResolver", "name": "Acme split" }
+        "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
+        "acme-split": { "kind": "distributionResolver", "name": "Acme split", "answerWindowMinutes": 1 }
       }
     }
   }

@@ -17,8 +17,11 @@ import {
   REFRESH_2,
   harness,
   jwt,
+  membershipAcme,
   session,
+  user,
 } from './cli-fakes';
+import { APP_KEY, APP_REQUEST_ID, AppAnswers, ConfirmationAnswers, appRecord, requestRow } from './apps-siren-answers';
 
 /*
  * Acceptance tests for the `siren` command, packets cli-session, cli-apply
@@ -33,47 +36,17 @@ import {
  */
 
 const posix = process.platform !== 'win32';
-const KEY = 'acme-payouts';
-const REQUEST = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
+const KEY = APP_KEY;
+const REQUEST = APP_REQUEST_ID;
 const RAW_KEY = `sk_test_${'0a'.repeat(32)}`;
 const SIGNING_SECRET = 'ef'.repeat(32);
 const RAW_KEY_2 = `sk_test_${'1b'.repeat(32)}`;
 const SIGNING_SECRET_2 = '9c'.repeat(32);
-const appEnv = { ACME_SIREN_URL: 'https://acme.example/siren' };
+const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
 const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
 
-const app = {
-  id: 4,
-  key: KEY,
-  name: 'Acme',
-  description: "Siren's example app.",
-  status: 'active',
-  webhookSubscriptionId: 31,
-  apiKeyId: 52,
-  url: 'https://acme.example/siren',
-  events: [],
-  scopes: [],
-  apiKeyPrefix: RAW_KEY.slice(0, 16),
-  items: [
-    { id: 11, ref: 'app:11', appId: 4, kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM', description: '', settings: {}, status: 'active' },
-    { id: 12, ref: 'app:12', appId: 4, kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', description: '', settings: { currencies: ['USD'], answerWindowMinutes: 4320 }, status: 'active' },
-  ],
-};
-const row = {
-  id: REQUEST,
-  appId: 4,
-  item: 'app:12',
-  kind: 'fulfillmentMethod',
-  mode: 'ask',
-  subject: { type: 'payout', id: '88' },
-  status: 'sent',
-  sendCount: 1,
-  answerBy: '2026-11-18T09:14:03+00:00',
-  answeredBy: null,
-  answeredAt: null,
-  lastError: null,
-  createdAt: '2026-11-17T09:14:03+00:00',
-};
+const app = appRecord({ apiKeyPrefix: RAW_KEY.slice(0, 16) });
+const row = requestRow();
 
 function bearer(h: ReturnType<typeof harness>, index: number): string | undefined {
   return h.http.bearers()[index];
@@ -123,6 +96,55 @@ describe.skip('apps-cli: siren signup, login and the session', () => {
         expect(h.secretPrompts).toEqual([]);
         expect(h.err()).toContain('--live');
       }
+    }
+  });
+
+  it("says what to do when Siren asks for the address to be confirmed, or has sign-up turned off", async () => {
+    const confirm = harness(
+      [AuthAnswers.sandbox(), ConfirmationAnswers.registeredUnconfirmed(membershipAcme, user)],
+      { stdin: PASSWORD },
+    );
+    expect(await confirm.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms']), confirm.err()).toBe(0);
+    expect(confirm.out()).toMatch(/inbox/i);
+    expect(confirm.out()).toContain('siren login');
+    expect(confirm.printed()).not.toContain('confirm-token');
+    expect(() => confirm.credentialsText()).toThrow();
+
+    const pending = harness(
+      [
+        AuthAnswers.sandbox(),
+        ConfirmationAnswers.registeredPending(membershipAcme, user, { accessToken: ACCESS_1, refreshToken: REFRESH_1 }, NOW_S),
+      ],
+      { stdin: PASSWORD },
+    );
+    expect(await pending.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms']), pending.err()).toBe(0);
+    expect(pending.out()).toMatch(/confirm/i);
+    expect(pending.out()).toContain('14 days');
+
+    const pendingLogin = harness([AuthAnswers.sandbox(), ConfirmationAnswers.loginPending(membershipAcme, user, { accessToken: ACCESS_1, refreshToken: REFRESH_1 }, NOW_S)], {
+      stdin: PASSWORD,
+    });
+    expect(await pendingLogin.run(['login', '--email', EMAIL, '--password-stdin']), pendingLogin.err()).toBe(0);
+    expect(pendingLogin.out()).toContain('3 days');
+
+    const closed = harness([AuthAnswers.sandbox(), ConfirmationAnswers.signupOff()], { stdin: PASSWORD });
+    expect(await closed.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'])).toBe(1);
+    expect(closed.err()).toContain(`Sign-up is turned off on ${SANDBOX_BASE_URL}. Ask its owner, or use siren login.`);
+    expect(closed.err()).not.toMatch(/not found/i);
+
+    const unconfirmed = harness(
+      [AuthAnswers.sandbox(), ConfirmationAnswers.loginUnconfirmed(EMAIL)],
+      { stdin: PASSWORD },
+    );
+    expect(await unconfirmed.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
+    expect(unconfirmed.err()).toMatch(/inbox/i);
+    expect(unconfirmed.printed()).not.toContain('confirm-token');
+
+    for (const code of ['no_entitlement', 'entitlement_lapsed', 'trial_ended', 'entitlements_unavailable'] as const) {
+      const plan = harness([AuthAnswers.sandbox(), ConfirmationAnswers.loginNoPlan(code)], { stdin: PASSWORD });
+      expect(await plan.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
+      expect(plan.err(), code).not.toContain('Raw entitlement text.');
+      expect(plan.err(), code).toMatch(code === 'entitlements_unavailable' ? /try again/i : /plan/i);
     }
   });
 
@@ -195,12 +217,27 @@ describe.skip('apps-cli: siren signup, login and the session', () => {
       ['apps', 'list', '--colour'],
       ['apps', 'show'],
       ['deploy'],
+      ['apps', 'list', '--base-url', 'http://siren.example/siren/v1'],
+      ['login', '--email', EMAIL, '--password-stdin', '--base-url', 'http://10.0.0.5/siren/v1'],
     ]) {
-      const h = harness([reply(200, [app])]);
+      const h = harness([reply(200, [app])], { stdin: PASSWORD });
       h.signedIn();
       expect(await h.run(argv), argv.join(' ')).toBe(2);
       expect(h.http.requests).toHaveLength(0);
       expect(h.err()).not.toBe('');
+    }
+
+    const fromEnv = harness([AuthAnswers.sandbox()], { stdin: PASSWORD, env: { SIREN_BASE_URL: 'http://siren.example/siren/v1' } });
+    expect(await fromEnv.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(2);
+    expect(fromEnv.http.requests).toHaveLength(0);
+  });
+
+  it('takes plain http only for a Cloud on this machine', async () => {
+    for (const base of ['http://localhost:33918/siren/v1', 'http://127.0.0.1:33918/siren/v1', 'http://host.docker.internal:33918/siren/v1']) {
+      const h = harness([reply(200, [app])]);
+      h.signedIn({ [base]: session() });
+      expect(await h.run(['apps', 'list', '--base-url', base]), h.err()).toBe(0);
+      expect(h.http.requests[0]?.url).toBe(`${base}/apps`);
     }
   });
 
@@ -254,6 +291,11 @@ describe.skip('apps-cli: siren signup, login and the session', () => {
     expect(bearer(h, 0)).toBe(`Bearer ${ACCESS_1}`);
     expect(bodyOf(h.http.requests[0])).toEqual({ refreshToken: REFRESH_1 });
     expect(Object.keys(h.credentials().sessions)).toEqual([BASE]);
+
+    const live = harness([AuthAnswers.loggedOut()]);
+    live.signedIn({ [BASE]: session({ edition: 'production' }) });
+    expect(await live.run(['logout', '--base-url', BASE]), live.err()).toBe(0);
+    expect(live.credentials().sessions).toEqual({});
   });
 
   it('lists the organizations and switches to another', async () => {
@@ -316,15 +358,26 @@ describe.skip('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.out()).toContain(RAW_KEY.slice(0, 16));
     expect(h.out()).toContain('.env.sandbox');
     expect(h.out()).toContain('app:12');
+    expect(h.out()).toContain('SIREN_APP_URL');
+    expect(h.printed()).not.toContain(appEnv.SIREN_APP_URL);
+    expect(h.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toEqual({ [KEY]: join(h.cwd, '.env.sandbox') });
   });
 
-  it('leaves the env file as it is when a later apply answers no secret', async () => {
-    const h = harness([reply(200, app)], { env: appEnv });
+  it('leaves the env file as it is when a later apply answers no secret, and says when this machine holds no key', async () => {
+    const h = harness([reply(200, app), reply(200, app)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
-    h.write('.env.sandbox', 'PORT=8787\n');
+    h.write('.env.sandbox', `PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(await h.run(['apps', 'apply', 'siren.app.json']), h.err()).toBe(0);
+    expect(h.paths()).toEqual([`PUT /apps/${KEY}`]);
+    expect(h.file('.env.sandbox')).toBe(`PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
+    expect(h.printed()).not.toContain('siren apps rotate');
+
+    h.write('.env.sandbox', 'PORT=8787\n');
+    expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+    expect(h.paths()).toEqual([`PUT /apps/${KEY}`, `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
+    expect(h.printed()).toContain(`siren apps rotate ${KEY}`);
   });
 
   it('prints each problem in the app file with its line, and sends nothing', async () => {
@@ -333,7 +386,7 @@ describe.skip('apps-cli: siren apps init, apply and the app key', () => {
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply'])).toBe(1);
     expect(h.http.requests).toHaveLength(0);
-    expect(h.err()).toContain('ACME_SIREN_URL');
+    expect(h.err()).toContain('SIREN_APP_URL');
     expect(h.err()).toMatch(/siren\.app\.json:9\b/);
   });
 
@@ -348,17 +401,38 @@ describe.skip('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.err().split(SIGNING_SECRET)).toHaveLength(2);
   });
 
-  it('rotates the key and replaces only its three lines in the env file', async () => {
+  it('rotates the key into the env file apply wrote, replacing only its three lines, never in the working folder', async () => {
     const h = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
-    h.signedIn();
-    h.write('.env.sandbox', `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
+    const envFile = join(h.cwd, 'acme', '.env.sandbox');
+    mkdirSync(join(h.cwd, 'acme'));
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [KEY]: envFile } }) });
+    h.write('acme/.env.sandbox', `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
     expect(await h.run(['apps', 'rotate', KEY]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`POST /apps/${KEY}/rotate`]);
-    expect(h.file('.env.sandbox')).toBe(
+    expect(h.file('acme/.env.sandbox')).toBe(
       `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`,
     );
+    expect(() => h.file('.env.sandbox')).toThrow();
+    expect(h.out()).toContain(envFile);
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
+  });
+
+  it('refuses to rotate before sending when it does not know where the key lives, and names a key for another Siren it replaces', async () => {
+    const unknown = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
+    unknown.signedIn();
+    expect(await unknown.run(['apps', 'rotate', KEY])).toBe(1);
+    expect(unknown.http.requests).toHaveLength(0);
+    expect(unknown.err()).toContain('--app-file');
+
+    const other = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
+    other.signedIn();
+    other.write('siren.app.json', exampleFile);
+    other.write('.env.sandbox', `SIREN_BASE_URL=http://localhost:33918/siren/v1\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
+    expect(await other.run(['apps', 'rotate', KEY, '--app-file', 'siren.app.json']), other.err()).toBe(0);
+    expect(other.file('.env.sandbox')).toContain(`SIREN_API_KEY=${RAW_KEY_2}`);
+    expect(other.err()).toContain('http://localhost:33918/siren/v1');
+    expect(other.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toEqual({ [KEY]: join(other.cwd, '.env.sandbox') });
   });
 
   it('turns an app on and off, lists the apps and shows one', async () => {
@@ -388,12 +462,7 @@ describe.skip('apps-cli: siren apps init, apply and the app key', () => {
   it('deletes only with --yes, and explains an app that records still use', async () => {
     const h = harness([
       reply(200, { success: true }),
-      reply(409, {
-        error: {
-          message: 'Records still select items of "Acme", so it can\'t be deleted. Turn it off instead.',
-          context: { reason: 'app_in_use', uses: { 'app:12': 2 } },
-        },
-      }),
+      AppAnswers.inUse(),
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'delete', KEY])).toBe(1);
@@ -405,6 +474,12 @@ describe.skip('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.paths()).toEqual([`DELETE /apps/${KEY}`, `DELETE /apps/${KEY}`]);
     expect(h.err()).toContain('app:12');
     expect(h.err()).toContain('siren apps off');
+
+    const asking = harness([AppAnswers.inUseWithOpenAsks(2)]);
+    asking.signedIn();
+    expect(await asking.run(['apps', 'delete', KEY, '--yes'])).toBe(1);
+    expect(asking.err()).toContain(`siren apps requests --app ${KEY}`);
+    expect(asking.err()).not.toContain('siren apps off');
   });
 });
 
@@ -509,7 +584,7 @@ describe.skip('apps-cli: siren apps requests, answer and resend', () => {
       expect(h.http.requests).toHaveLength(0);
     }
 
-    const late = harness([reply(409, { error: { code: 'app_request_already_answered', message: 'This request already has a different answer.' } })]);
+    const late = harness([AppAnswers.alreadyAnswered()]);
     late.signedIn();
     expect(await late.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"failed"}'])).toBe(1);
     expect(late.err()).toContain('This request already has a different answer.');

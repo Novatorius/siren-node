@@ -17,6 +17,12 @@ export interface StoredSession {
   refreshToken: string;
   /** When the access token ends, in Unix seconds, read from its `exp`. The tool refreshes before it. */
   accessExpiresAt: number;
+  /**
+   * Where `apps apply` wrote each app's key and secret, by app key: the
+   * absolute path of the env file beside its app file. `apps rotate` writes
+   * the new pair to the same file. Holds paths only, never a key.
+   */
+  envFiles?: Record<string, string>;
 }
 
 /** The file's whole shape. `sessions` is keyed by the base URL with no trailing slash. */

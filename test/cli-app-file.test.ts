@@ -11,7 +11,7 @@ import type { AppFileProblem } from '../src/cli/app-file';
  */
 
 const example = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
-const env = { ACME_SIREN_URL: 'https://acme.example/siren' };
+const env = { SIREN_APP_URL: 'https://acme.example/siren' };
 
 function file(app: Record<string, unknown>, top: Record<string, unknown> = {}): string {
   return JSON.stringify({ version: 1, name: 'Acme', description: 'Example.', apps: { 'acme-payouts': app }, ...top }, null, 2);
@@ -37,18 +37,19 @@ describe.skip('apps-cli: the app file', () => {
     const parsed = parseAppFile(example, env);
     expect(parsed.problems).toEqual([]);
     expect(parsed.file).not.toBeNull();
+    expect(parsed.file === null ? [] : parsed.filled).toEqual(['SIREN_APP_URL']);
     expect(declarationFor(parsed.file!)).toEqual({
       key: 'acme-payouts',
       params: {
         name: 'Acme',
         description: "Siren's example app.",
         url: 'https://acme.example/siren',
-        scopes: [],
+        scopes: ['event:site-visited', 'event:sale'],
         events: [],
         items: [
           { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
-          { kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 4320 },
-          { kind: 'distributionResolver', key: 'acme-split', name: 'Acme split' },
+          { kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 1 },
+          { kind: 'distributionResolver', key: 'acme-split', name: 'Acme split', answerWindowMinutes: 1 },
         ],
       },
     });
@@ -57,7 +58,23 @@ describe.skip('apps-cli: the app file', () => {
   it('names the key and the variable when ${NAME} is not set', () => {
     const [problem] = problems(example, {});
     expect(problem).toMatchObject({ path: 'apps.acme-payouts.url', line: lineOf(example, '"url"') });
-    expect(problem!.message).toContain('ACME_SIREN_URL');
+    expect(problem!.message).toContain('SIREN_APP_URL');
+  });
+
+  it('fills a placeholder only in the url and only from a SIREN_APP_ name', () => {
+    const leaky = { ...env, GITHUB_TOKEN: 'ghp_secret', SIREN_APP_NAME: 'Acme' };
+    const inUrl = file({ ...good, url: 'https://collector.example/x?k=${GITHUB_TOKEN}' });
+    const [wrongName] = problems(inUrl, leaky);
+    expect(wrongName).toMatchObject({ path: 'apps.acme-payouts.url' });
+    expect(wrongName!.message).toContain('SIREN_APP_');
+    expect(JSON.stringify(problems(inUrl, leaky))).not.toContain('ghp_secret');
+
+    const inName = file({ ...good, name: '${SIREN_APP_NAME}' });
+    expect(problems(inName, leaky).map((problem) => problem.path)).toContain('apps.acme-payouts.name');
+    const inItem = file({ ...good, items: { notify: { kind: 'postConversionAction', name: 'x', description: '${SIREN_APP_URL}' } } });
+    expect(problems(inItem, leaky).map((problem) => problem.path)).toContain('apps.acme-payouts.items.notify.description');
+    const atTop = file(good, { description: 'For ${SIREN_APP_NAME}' });
+    expect(problems(atTop, leaky).map((problem) => problem.path)).toContain('description');
   });
 
   it('refuses any recipe stanza but apps, naming it', () => {
@@ -77,6 +94,7 @@ describe.skip('apps-cli: the app file', () => {
     const cases: Array<[string, string]> = [
       [file(good, { version: 2 }), 'version'],
       [JSON.stringify({ version: 1, description: '', apps: { 'acme-payouts': good } }), 'name'],
+      [JSON.stringify({ version: 1, name: 'Acme', apps: { 'acme-payouts': good } }), 'description'],
       [JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { Acme: good } }), 'apps.Acme'],
       [JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { requests: good } }), 'apps.requests'],
       [file({ ...good, url: 'http://acme.example/siren' }), 'apps.acme-payouts.url'],
@@ -138,5 +156,37 @@ describe.skip('apps-cli: the app file', () => {
       ['fulfillmentMethod', 'pay'],
     ]);
     expect(parseAppFile(text, {}).problems[0]?.message).toContain('SIREN_APP_URL');
+  });
+});
+
+describe.skip("apps-cli: the app file's JSON reader", () => {
+  it('reads strings, numbers and nesting exactly as JSON.parse does', () => {
+    const tricky = 'Tab\there, \u00e9, "quoted", a \\ slash, and \ud83d\ude00.';
+    const text = file({ ...good, description: tricky, items: { pay: { kind: 'fulfillmentMethod', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 1.5e1 } } });
+    const parsed = parseAppFile(text, env);
+    expect(parsed.problems).toEqual([]);
+    const { params } = declarationFor(parsed.file!);
+    expect(params.description).toBe(tricky);
+    expect(params.items).toEqual([{ kind: 'fulfillmentMethod', key: 'pay', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 15 }]);
+  });
+
+  it.each([
+    ['a trailing comma', '{\n  "version": 1,\n}', 3, 1],
+    ['single quotes', "{\n  'version': 1\n}", 2, 3],
+    ['a comment', '{\n  // note\n  "version": 1\n}', 2, 3],
+    ['NaN', '{\n  "version": NaN\n}', 2, 14],
+    ['text after the object', '{ "version": 1 }\n{}', 2, 1],
+    ['a raw line break in a string, at the string', '{\n  "name": "Ac\nme"\n}', 2, 11],
+  ])('refuses %s at its line and column', (_label, text, line, column) => {
+    expect(() => JSON.parse(text)).toThrow();
+    const [problem] = problems(text);
+    expect(problem).toMatchObject({ path: '', line, column });
+  });
+
+  it('places a problem deep in an item at that key', () => {
+    const text = file({ ...good, items: { pay: { kind: 'fulfillmentMethod', name: 'Pay', currencies: ['USD'], colour: 'red' } } });
+    const found = problems(text).find((problem) => problem.path === 'apps.acme-payouts.items.pay.colour');
+    expect(found?.line).toBe(lineOf(text, '"colour"'));
+    expect(found?.column).toBe(text.split('\n')[found!.line - 1]!.indexOf('"colour"') + 1);
   });
 });

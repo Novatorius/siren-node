@@ -1,24 +1,18 @@
 // The Acme example app: a small server that checks each request Siren sends
-// and answers every ask. Run it with the env file `siren apps apply` wrote:
+// and answers every ask. Start it after `siren apps apply`:
 //
-//   npm install
-//   node --env-file=.env.sandbox server.mjs
+//   npm start
 //
-// It listens on PORT, 8787 by default. Siren reaches only a public https
-// address, so put a tunnel in front of it (see README.md).
+// It reads the env file apply wrote (see env.mjs), so it talks to the Siren
+// the app was applied to. It listens on PORT, 8787 by default.
 import { createServer } from 'node:http';
 import { Siren } from '@novatorius/siren';
+import { loadAppEnv } from './env.mjs';
 import { createAcmeApp } from './handler.mjs';
 
-const apiKey = process.env.SIREN_API_KEY;
-const signingSecret = process.env.SIREN_SIGNING_SECRET;
-if (!apiKey || !signingSecret) {
-  console.error('Set SIREN_API_KEY and SIREN_SIGNING_SECRET. `siren apps apply` writes both to .env.sandbox.');
-  process.exit(1);
-}
-
-const siren = new Siren({ apiKey, ...(process.env.SIREN_BASE_URL ? { baseUrl: process.env.SIREN_BASE_URL } : {}) });
-const app = createAcmeApp({ siren, signingSecret, log: (line) => console.log(line) });
+const { path, values } = loadAppEnv(new URL('.', import.meta.url).pathname, process.env);
+const siren = new Siren({ apiKey: values.SIREN_API_KEY, baseUrl: values.SIREN_BASE_URL });
+const app = createAcmeApp({ siren, signingSecret: values.SIREN_SIGNING_SECRET, log: (line) => console.log(line) });
 const port = Number(process.env.PORT ?? 8787);
 
 createServer((req, res) => {
@@ -30,5 +24,5 @@ createServer((req, res) => {
     res.end(reply.body);
   });
 }).listen(port, () => {
-  console.log(`Acme example app listening on http://localhost:${port}`);
+  console.log(`Acme example app on http://localhost:${port}, for ${values.SIREN_BASE_URL} (${path}).`);
 });

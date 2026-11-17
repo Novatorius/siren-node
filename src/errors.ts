@@ -188,6 +188,20 @@ export const AppErrorCode = {
 /** Union of the {@link AppErrorCode} strings. */
 export type AppErrorCode = (typeof AppErrorCode)[keyof typeof AppErrorCode];
 
+/**
+ * The machine-readable code of an error from an app route: the error's
+ * `code` when Siren sent one in `error.code`, else `data.reason` from
+ * `error.context.reason`, else `undefined`. Siren is moving the app routes'
+ * codes from `context.reason` to `error.code`, so read them through this one
+ * function and either shape works.
+ *
+ * Stub: answers `undefined`. Packet sdk-apps.
+ */
+export function appErrorCode(error: unknown): AppErrorCode | (string & {}) | undefined {
+  void error;
+  return undefined;
+}
+
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<string>(Object.values(ErrorCode));
 
 /**

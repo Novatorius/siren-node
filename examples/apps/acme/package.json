@@ -4,10 +4,11 @@
   "type": "module",
   "description": "Siren's example app. It checks each request Siren sends and answers every ask.",
   "engines": {
-    "node": ">=20.6"
+    "node": ">=18"
   },
   "scripts": {
-    "start": "node --env-file=.env.sandbox server.mjs"
+    "start": "node server.mjs",
+    "send-sale": "node send-sale.mjs"
   },
   "dependencies": {
     "@novatorius/siren": "file:../../.."

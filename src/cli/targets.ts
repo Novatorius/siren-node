@@ -25,13 +25,16 @@ export interface Target {
  * - `--live` alone: {@link LIVE_BASE_URL}.
  * - `--sandbox`: {@link SANDBOX_BASE_URL}.
  * - `--base-url <url>`: that address, with or without `--live`, checked by
- *   the rules `new Siren()` applies to `baseUrl`.
+ *   the rules `new Siren()` applies to `baseUrl`, and https unless its host
+ *   is `localhost`, `127.0.0.1` or `host.docker.internal`, since the tool
+ *   sends a password and session tokens to it.
  * - None of the three: `SIREN_BASE_URL` from the environment when set, else
  *   {@link SANDBOX_BASE_URL}. A command never reaches the live deployment
  *   unless the person typed `--live`.
  *
  * Throws {@link CliUsageError} for `--sandbox` with `--live` or with
- * `--base-url`, and for an address the rules refuse.
+ * `--base-url`, and for an address the rules refuse, `SIREN_BASE_URL`
+ * included, before anything is sent.
  *
  * Stub: answers the sandbox. Packet cli-session.
  */
