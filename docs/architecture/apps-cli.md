@@ -397,13 +397,13 @@ from src.
 also writes dist/cli.cjs and its type files, which nothing names. The version stays 0.3.0 and
 `CLI_VERSION` must equal it, which a test checks.
 
-The build before packing is `"prepack": "tsup"`. It was `prepare`, which npm 11 lists as an install
-script and warns about on `npm i -g` of the tarball and on the example's `file:` install, though it
-never ran for either (e2e step 03). `prepack` runs before `npm pack` and `npm publish` and on no
-install. From a clean dist, the tarball packed with each held the same 38 files, byte for byte, but
-for that line of package.json, and installing the new one printed no warning. A checkout builds with
-`npm run build` after `npm ci`, as CI, the release workflow and the walk's step 3 already do.
-test/cli-build.test.ts checks that no install script is left.
+The build is `"prepare": "tsup"`, and it stays. npm builds a git dependency by running `prepare` in
+the clone, never `prepack`, and Siren's Node connector installs this SDK as
+`git+https://github.com/Novatorius/siren-node.git#<commit>`. Without `prepare` that install has no
+dist and the package cannot be required. npm 11 lists `prepare` as an install script and warns
+about it on `npm i -g` of the tarball and on the example's `file:` install (e2e step 03), though it
+does not run it there. The warning is harmless. test/cli-build.test.ts fails when `prepare` no longer
+runs the build, and the checkpoint script below installs the SDK as a git dependency.
 
 ## Tests and proof
 

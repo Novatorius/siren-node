@@ -31,15 +31,17 @@ describe('apps-cli: the siren command in the package', () => {
     expect(pkg.files).toContain('dist');
   });
 
-  // npm lists `prepare` as an install script when a person installs the
-  // packed tarball or the example's `file:` copy, and warns about it, though
-  // it never runs for them. `prepack` builds dist before `npm pack` and
-  // `npm publish` the same way, and is no install script. The packed tarball
-  // was byte for byte the same with either, but for this line.
-  it('builds dist before packing, and gives an install nothing to run', () => {
+  // Keep `prepare`. npm builds a git dependency, such as
+  // `git+https://github.com/Novatorius/siren-node.git#<commit>` in Siren's
+  // Node connector, by running `prepare` in the clone, and never `prepack`.
+  // Without it that install has no dist and the package cannot be required.
+  // `prepare` also builds before `npm pack` and `npm publish`, and after
+  // `npm ci` in a checkout. npm's install-scripts warning on a tarball
+  // install is the price, and it is harmless.
+  it('builds dist in prepare, which a git dependency install runs', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts?: Record<string, string> };
-    expect(pkg.scripts?.prepack).toBe('tsup');
-    for (const script of ['preinstall', 'install', 'postinstall', 'prepare']) expect(pkg.scripts?.[script], script).toBeUndefined();
+    expect(pkg.scripts?.build).toBe('tsup');
+    expect(['tsup', 'npm run build'], 'scripts.prepare must run the build').toContain(pkg.scripts?.prepare);
   });
 
   it('is present when CI runs the tests', () => {

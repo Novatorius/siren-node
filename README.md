@@ -36,6 +36,10 @@ CJS, and full type declarations.
 npm install @novatorius/siren
 ```
 
+npm 11 may warn that the package has an install script not covered by `allowScripts`. It names
+`prepare: tsup`, the build that a Git install of this package needs. npm does not run it for a
+registry or tarball install, so you can ignore the warning.
+
 ## Quickstart: record a sale
 
 Mint an API key in the Siren dashboard (Settings → API Keys), then:
