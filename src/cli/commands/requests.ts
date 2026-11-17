@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { AppErrorCode, ErrorCode, NotFoundError, SirenError, appErrorCode } from '../../errors';
+import { AppErrorCode, ConflictError, ErrorCode, NotFoundError, SirenError, appErrorCode } from '../../errors';
 import type { AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument } from './apply';
@@ -184,9 +184,37 @@ export async function appsResend(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const id = requestIdArgument(input.args[0] ?? '');
   await run.signedIn();
-  const row = await run.siren().apps.requests.resend(id);
+  const siren = run.siren();
+  let row: AppRequestRecord;
+  try {
+    row = await siren.apps.requests.resend(id);
+  } catch (error) {
+    if (error instanceof ConflictError && appErrorCode(error) === AppErrorCode.NotResendable) throw new CliRefusal(await notResendableLine(run, id, error));
+    throw error;
+  }
   run.print(requestLine(row));
   return 0;
+}
+
+/**
+ * What a resend Siren refused with 409 `app_request_not_resendable` says.
+ * An `applied` request has nothing left to send. Any other status means
+ * its app is off, so it reads the request and the apps to name the app and
+ * the `siren apps on` that turns it on.
+ */
+async function notResendableLine(run: ReturnType<typeof contextOf>, id: string, error: ConflictError): Promise<string> {
+  const data = (typeof error.data === 'object' && error.data !== null ? error.data : {}) as { status?: unknown };
+  if (data.status === 'applied') return `Siren sent nothing: ${id} is applied, so its answer already did its work.`;
+  const siren = run.siren();
+  const app = await siren.apps.requests
+    .retrieve(id)
+    .then(async (request) => (await siren.apps.list()).find((candidate) => candidate.id === request.appId))
+    .catch(() => undefined);
+  const key = app?.key ?? '<app key>';
+  return (
+    `Siren sent nothing: ${app?.key ?? 'its app'} is off, and Siren sends nothing to an app that is off. ` +
+    `Turn it on with ${run.command(`apps on ${key}`)}, then run ${run.command(`apps resend ${id}`)}.`
+  );
 }
 
 /** Every code this SDK knows, so a refusal with any other one prints the code beside Siren's message. */

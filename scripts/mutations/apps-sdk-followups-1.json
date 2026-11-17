@@ -492,5 +492,79 @@
     "failing": [
       "name needsAttention and where the command shows it"
     ]
+  },
+  {
+    "id": "in-use-always-turn-off",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (status === 'active') lines.push(turnOff);",
+    "replace": "    if (status !== 'made_up') lines.push(turnOff);",
+    "expect": "caught",
+    "failing": [
+      "a delete records still hold says to turn the app off only while it is on"
+    ]
+  },
+  {
+    "id": "in-use-off-no-flags",
+    "file": "src/cli/commands/apply.ts",
+    "find": "then run ${run.command(`apps delete ${key} --yes`)}.`;",
+    "replace": "then run siren apps delete ${key} --yes.`;",
+    "expect": "caught",
+    "failing": [
+      "a delete records still hold says to turn the app off only while it is on",
+      "delete of an app that is off and records use"
+    ]
+  },
+  {
+    "id": "resend-off-raw",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    if (error instanceof ConflictError && appErrorCode(error) === AppErrorCode.NotResendable) throw",
+    "replace": "    if (error instanceof ConflictError && appErrorCode(error) === 'made_up') throw",
+    "expect": "caught",
+    "failing": [
+      "a resend refused because the app is off says to turn it on",
+      "a resend refused for an applied request"
+    ]
+  },
+  {
+    "id": "resend-applied-reads-more",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (data.status === 'applied') return",
+    "replace": "  if (data.status === 'made_up') return",
+    "expect": "caught",
+    "failing": [
+      "a resend refused for an applied request says there is nothing to send"
+    ]
+  },
+  {
+    "id": "resend-on-no-flags",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    `Turn it on with ${run.command(`apps on ${key}`)}, then",
+    "replace": "    `Turn it on with siren apps on ${key}, then",
+    "expect": "caught",
+    "failing": [
+      "a resend refused because the app is off says to turn it on",
+      "resend of a request whose app is off"
+    ]
+  },
+  {
+    "id": "answer-401-siren-message",
+    "file": "src/resources/app-requests.ts",
+    "find": "  return new AuthenticationError(UNAUTHORIZED_ANSWER, {",
+    "replace": "  return new AuthenticationError(error.message, {",
+    "expect": "caught",
+    "failing": [
+      "the uncoded 401 on the answer route names siren apps rotate",
+      "gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized"
+    ]
+  },
+  {
+    "id": "docs-hints-section",
+    "file": "docs/architecture/apps-cli.md",
+    "find": "### 9. Three hints that sent a person the wrong way",
+    "replace": "### 9. Three hints",
+    "expect": "caught",
+    "failing": [
+      "say which fix each of the three hints names"
+    ]
   }
 ]

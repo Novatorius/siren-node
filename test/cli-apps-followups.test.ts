@@ -4,6 +4,10 @@ import { appLines } from '../src/cli/commands/apply';
 import type { App } from '../src/record-types';
 import { APP_KEY, AppAnswers, appRecord } from './apps-siren-answers';
 import { harness } from './cli-fakes';
+import { Siren } from '../src/client';
+import { AuthenticationError } from '../src/errors';
+import { FakeHttpClient } from './http-fakes';
+import { BASE } from './record-fakes';
 import { capturedBody, capturedReply } from './cloud-captures';
 import { reply } from './http-fakes';
 
@@ -148,5 +152,70 @@ describe('apps-sdk-followups-1: how many of an app\'s requests need attention', 
     const before = h.out().length;
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
     expect(h.out().slice(before)).not.toContain('attention');
+  });
+});
+
+const RESEND_ID = 'apr_e221f712e2dd08c2daa566d3ac5ce340';
+
+describe('apps-sdk-followups-1: hints that send a person the right way', () => {
+  it('a delete records still hold says to turn the app off only while it is on', async () => {
+    const on = harness([capturedReply('apps-delete-409-in-use'), reply(200, appRecord({ key: 'ledger-sync', status: 'active' }))]);
+    on.signedIn();
+    expect(await on.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
+    expect(on.paths()).toEqual(['DELETE /apps/ledger-sync', 'GET /apps/ledger-sync']);
+    expect(on.err()).toBe(
+      'siren: Siren kept ledger-sync.\nRecords still select its items: app:4 (1), app:5 (1).\n' +
+        'Turn it off instead with siren apps off ledger-sync --sandbox. Siren then stops calling it and keeps what it already did.\n',
+    );
+
+    const off = harness([capturedReply('apps-delete-409-in-use'), reply(200, appRecord({ key: 'ledger-sync', status: 'inactive' }))]);
+    off.signedIn();
+    expect(await off.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
+    expect(off.err()).toBe(
+      'siren: Siren kept ledger-sync.\nRecords still select its items: app:4 (1), app:5 (1).\n' +
+        'It is already off, so Siren no longer calls it. To delete it, change each record that selects those items to another choice, ' +
+        'then run siren apps delete ledger-sync --yes --sandbox.\n',
+    );
+    expect(off.err()).not.toContain('Turn it off');
+  });
+
+  it("a resend refused because the app is off says to turn it on, with the command", async () => {
+    const request = { ...capturedBody<Record<string, unknown>>('apps-request-one-200-needs-attention'), appId: 4 };
+    const h = harness([capturedReply('apps-resend-409-app-off'), reply(200, request), reply(200, [appRecord({ status: 'inactive' })])]);
+    h.signedIn();
+    expect(await h.run(['apps', 'resend', RESEND_ID, '--sandbox'])).toBe(1);
+    expect(h.paths()).toEqual([`POST /apps/requests/${RESEND_ID}/resend`, `GET /apps/requests/${RESEND_ID}`, 'GET /apps']);
+    expect(h.err()).toBe(
+      `siren: Siren sent nothing: ${APP_KEY} is off, and Siren sends nothing to an app that is off. ` +
+        `Turn it on with siren apps on ${APP_KEY} --sandbox, then run siren apps resend ${RESEND_ID} --sandbox.\n`,
+    );
+  });
+
+  it('a resend refused for an applied request says there is nothing to send, and reads nothing more', async () => {
+    const h = harness([AppAnswers.notResendable('applied')]);
+    h.signedIn();
+    expect(await h.run(['apps', 'resend', RESEND_ID])).toBe(1);
+    expect(h.paths()).toEqual([`POST /apps/requests/${RESEND_ID}/resend`]);
+    expect(h.err()).toBe(`siren: Siren sent nothing: ${RESEND_ID} is applied, so its answer already did its work.\n`);
+  });
+
+  it("the uncoded 401 on the answer route names siren apps rotate, not the API keys screen", async () => {
+    for (const name of ['apps-answer-401-unknown-key', 'apps-answer-401-no-bearer']) {
+      const siren = new Siren({ apiKey: 'made-up-key', baseUrl: BASE, httpClient: new FakeHttpClient([capturedReply(name)]), maxRetries: 0 });
+      const error = await siren.apps.requests.answer(RESEND_ID, { outcome: 'paid' }).then(() => undefined, (caught: unknown) => caught);
+      expect(error, name).toBeInstanceOf(AuthenticationError);
+      expect((error as Error).message, name).toBe(
+        "Siren did not accept this key on the answer route. An app answers with its own key, the SIREN_API_KEY that siren apps apply saved beside its app file. " +
+          'When that key is lost or revoked, run siren apps rotate <app key> to make a new one.',
+      );
+      expect((error as Error).message).not.toContain('under API keys');
+    }
+  });
+
+  it('the uncoded 401 an admin gets from siren apps answer says to sign in again, with the target flags', async () => {
+    const h = harness([capturedReply('apps-answer-401-unknown-key')]);
+    h.signedIn();
+    expect(await h.run(['apps', 'answer', RESEND_ID, '--body', '{"outcome":"paid"}', '--sandbox'])).toBe(1);
+    expect(h.err()).toBe('siren: Your session has ended. Run siren login --sandbox to sign in again.\n');
   });
 });

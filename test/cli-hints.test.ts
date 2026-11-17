@@ -135,6 +135,20 @@ const LIVE_CASES: Case[] = [
   { name: 'one request the organization does not have', argv: ['apps', 'requests', 'apr_0123456789abcdef0123456789abcdef'], replies: [AppAnswers.requestNotFound()], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests${LIVE}` },
   { name: 'list with an app whose requests need attention', argv: ['apps', 'list'], replies: [reply(200, [appRecord({ needsAttention: 2 })])], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${LIVE}` },
   { name: 'show of an app whose requests need attention', argv: ['apps', 'show', KEY], replies: [reply(200, appRecord({ needsAttention: 1 }))], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${LIVE}` },
+  {
+    name: 'delete of an app that is off and records use',
+    argv: ['apps', 'delete', KEY, '--yes'],
+    replies: [AppAnswers.inUse(), reply(200, appRecord({ status: 'inactive' }))],
+    setup: (h) => h.signedIn(signedInLive),
+    command: `siren apps delete ${KEY} --yes${LIVE}`,
+  },
+  {
+    name: 'resend of a request whose app is off',
+    argv: ['apps', 'resend', 'apr_0123456789abcdef0123456789abcdef'],
+    replies: [AppAnswers.notResendable('needs_attention'), reply(200, { id: 'apr_0123456789abcdef0123456789abcdef', appId: 4, data: {}, answer: null, answeredByUser: null }), reply(200, [appRecord({ status: 'inactive' })])],
+    setup: (h) => h.signedIn(signedInLive),
+    command: `siren apps on ${KEY}${LIVE}`,
+  },
   { name: 'apps init', argv: ['apps', 'init', '--key', KEY], command: `siren apps apply${LIVE}` },
 ];
 

@@ -190,13 +190,25 @@ export async function answerAppRequest(
  * (saas/Auth/ApiKeyAuthMiddleware.php line 133 on feat/apps at 1557b0030,
  * captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), before
  * the answer route can send `app_answer_unauthorized`. That 401 gets the
- * code here, with Siren's message, status and context kept, so a caller acts
- * on one code for every unauthorized answer. Any other error passes as it is.
+ * code here and a message that names `siren apps rotate`, with Siren's
+ * status and context kept and its error as `cause`, so a caller acts on one
+ * code for every unauthorized answer. Any other error passes as it is.
  */
 function unauthorizedAnswer(error: unknown): unknown {
   if (!(error instanceof AuthenticationError) || error.statusCode !== 401 || (error.code !== undefined && error.code !== '')) return error;
-  return new AuthenticationError(error.message, { code: AppErrorCode.AnswerUnauthorized, statusCode: 401, data: error.data, cause: error });
+  return new AuthenticationError(UNAUTHORIZED_ANSWER, { code: AppErrorCode.AnswerUnauthorized, statusCode: 401, data: error.data, cause: error });
 }
+
+/**
+ * What the uncoded 401 on the answer route says. Siren's key check words it
+ * for any key ("make a new one under API keys"), and an org key made there
+ * gets 404 on this route, so the fix for an app's key is a rotate. The SDK
+ * holds no app key or target, so the command names a placeholder and no
+ * flags. Siren's own message stays on the error's `cause`.
+ */
+const UNAUTHORIZED_ANSWER =
+  'Siren did not accept this key on the answer route. An app answers with its own key, the SIREN_API_KEY that siren apps apply saved beside its app file. ' +
+  'When that key is lost or revoked, run siren apps rotate <app key> to make a new one.';
 
 /** True for an object made by `{}` or `Object.create(null)`, and nothing else. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {

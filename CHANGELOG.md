@@ -267,6 +267,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `siren apps delete` says to turn an app off only while it is on, and otherwise that the records
+  selecting its items must change. `siren apps resend` names `siren apps on <key>` when Siren refuses
+  because the request's app is off. `requests.answer()` gives Siren's uncoded 401 a message that
+  names `siren apps rotate <app key>` in place of "make a new one under API keys", with Siren's
+  error as `cause`.
 - `siren apps apply`, `list` and `show` mark an archived item beside it, and `apply` says once that
   Siren keeps such an item while a record selects it, never calls it, and brings it back when the
   app file names it again.

@@ -90,7 +90,7 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 404 `app_request_not_found` | `NotFoundError` | Checks the id. The answer route tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers another app's request (AppRequestService.php line 698 at 27169452a). The resend and read routes say "App request not found." |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
 | 422 `app_answer_invalid` | `ValidationError` | Fixes the answer for the item's kind. |
-| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
+| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized`, and a message that names `siren apps rotate <app key>` in place of Siren's "make a new one under API keys", which is kept as `cause` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
 | a bad signature, an old timestamp, or no V2 header | `SignatureVerificationError` from `verifyRequest` | Answers 400 and does nothing else. |
 
 `appErrorCode(error)` in src/errors.ts reads the code in one place: the error's `code` (Siren's
@@ -150,10 +150,10 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
 | `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request's line, the data Siren sent, the answer Siren took and who gave it, or that none came yet, then each send with its HTTP status and what the app said back. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
-| `siren apps resend <id>` | `POST /apps/requests/{id}/resend` | The request as it now stands. |
+| `siren apps resend <id>` | `POST /apps/requests/{id}/resend`, and on 409 `app_request_not_resendable` for a request not `applied`, `GET /apps/requests/{requestKey}` and `GET /apps` | The request as it now stands. On that 409, that its app is off, with `siren apps on <key>` and the resend to run after. An `applied` request is told there is nothing to send. |
 | `siren apps rotate <key> [--app-file <path>]` | `POST /apps/{key}/rotate` | The new prefix and the absolute path of the env file. Writes the new key and secret where `apply` wrote the first pair, or beside the named app file (AP-A634). |
 | `siren apps on <key>` and `siren apps off <key>` | `POST /apps/{key}/status` | The app's new state. |
-| `siren apps delete <key> --yes` | `DELETE /apps/{key}` | That it is gone. On 409 `app_in_use`: the records in `uses` with the `siren apps off` command, and when `openRequests` is above 0, `siren apps requests --app <key>` and the advice to answer or wait for the open asks (AP-A641). |
+| `siren apps delete <key> --yes` | `DELETE /apps/{key}`, and `GET /apps/{key}` after a 409 that names records | That it is gone. On 409 `app_in_use`: the records in `uses` with the `siren apps off` command while the app is on, or, once it is off, that those records must change before a delete, and when `openRequests` is above 0, `siren apps requests --app <key>` and the advice to answer or wait for the open asks (AP-A641). |
 
 Every command takes `--sandbox`, `--live`, `--base-url <url>` and `--help`. Exit codes: 0 for done,
 1 when Siren or the tool refused, 2 for a command line the tool cannot read, with nothing sent.
@@ -984,3 +984,27 @@ not send it then. `siren apps list` and `siren apps show` print, under an app wh
 0, "1 request needs attention. See it with siren apps requests --app <key> --attention." or the
 plural, with the target flags. A count of 0 prints nothing. The hint names `--app` beside
 `--attention` so the list holds only that app's requests.
+
+### 9. Three hints that sent a person the wrong way
+
+The second Cloud run found three hints that named the wrong fix.
+
+- A delete that records still hold said "Turn it off instead" even for an app already off (step
+  22d, capture apps-delete-409-in-use). After that 409, `siren apps delete` reads the app with
+  `GET /apps/{key}`. An app that is on gets the turn-off hint as before. One that is off is told
+  that Siren no longer calls it and that the records selecting its items must change before
+  `siren apps delete <key> --yes` can work. When the read fails, the line names both ways.
+- A resend Siren refused because the app is off printed Siren's "it is applied, or its app is off"
+  and nothing more (step 13a, capture apps-resend-409-app-off, whose `context.status` is the
+  request's own, `needs_attention`). `siren apps resend` now says an `applied` request has
+  nothing to send. For any other status it reads the request and the apps to name the app, and
+  says to turn it on with `siren apps on <key>`, then to resend.
+- The uncoded 401 on the answer route kept Siren's "Copy the key from Siren again, or make a new
+  one under API keys" (step 24a). An org key made there gets 404 on the answer route, so that
+  advice cannot work for an app. `requests.answer()` now gives that 401 a message that names
+  `siren apps rotate <app key>`, and keeps Siren's error as `cause`. The SDK holds no target, so
+  that message carries no flags. The command's own answer with an admin's session already ends in
+  "Your session has ended. Run siren login to sign in again." with the target flags, and a test
+  now pins that.
+
+Every hint above that names a command carries the target flags (test/cli-hints.test.ts).

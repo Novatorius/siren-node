@@ -1,0 +1,31 @@
+{
+  "capturedAt": "2026-11-17T12:23:50.048Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 57999d085, http://localhost:33918",
+  "route": "DELETE /siren/v1/apps/ledger-sync",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": null,
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "Records still select items of \"Ledger sync\", so it can't be deleted. Turn it off instead. Siren then stops calling it and keeps what it already did.",
+        "code": "app_in_use",
+        "context": {
+          "reason": "app_in_use",
+          "uses": {
+            "app:4": 1,
+            "app:5": 1
+          },
+          "openRequests": 0
+        }
+      }
+    }
+  }
+}

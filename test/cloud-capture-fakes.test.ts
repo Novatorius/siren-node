@@ -96,6 +96,8 @@ const REPLAYED: Record<string, string> = {
   'webhooks-update-409-app-owned': 'this file, the app-owned subscription',
   'apps-declare-200-dropped-selected-item': 'test/cli-apps-followups.test.ts, the archived item',
   'apps-request-one-200-needs-attention': 'test/apps-request-retrieve.test.ts and test/cli-apps-followups.test.ts, one request',
+  'apps-delete-409-in-use': 'test/cli-apps-followups.test.ts, a delete records still hold',
+  'apps-resend-409-app-off': 'test/cli-apps-followups.test.ts, a resend while the app is off',
   'apps-request-one-404': 'test/apps-request-retrieve.test.ts and test/cli-apps-followups.test.ts, a request the organization does not have',
 };
 

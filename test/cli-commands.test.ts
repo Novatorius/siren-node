@@ -498,6 +498,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     const h = harness([
       reply(200, { success: true }),
       AppAnswers.inUse(),
+      reply(200, app),
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'delete', KEY])).toBe(1);
@@ -506,7 +507,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
 
     expect(await h.run(['apps', 'delete', KEY, '--yes']), h.err()).toBe(0);
     expect(await h.run(['apps', 'delete', KEY, '--yes'])).toBe(1);
-    expect(h.paths()).toEqual([`DELETE /apps/${KEY}`, `DELETE /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`DELETE /apps/${KEY}`, `DELETE /apps/${KEY}`, `GET /apps/${KEY}`]);
     expect(h.err()).toContain('app:12');
     expect(h.err()).toContain('siren apps off');
 

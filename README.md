@@ -1253,7 +1253,7 @@ try {
 | `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
 | `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
-| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code. |
+| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate <app key>` when the app's key is lost or revoked. |
 
 ### The sandbox
 
@@ -1289,10 +1289,10 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
 | `siren apps requests <id>` | Shows one request, however old: its line, the data Siren sent, the answer Siren took and who gave it, then each send with its HTTP status and what the app said back. |
 | `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
-| `siren apps resend <id>` | Sends a request again. |
+| `siren apps resend <id>` | Sends a request again. When Siren refuses because the request's app is off, it names the `siren apps on <key>` that turns it on. |
 | `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
-| `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them and the command to turn the app off. |
+| `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
 
 siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its items keyed by
 item key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment, from a variable

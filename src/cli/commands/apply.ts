@@ -276,7 +276,7 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   try {
     await run.siren().apps.delete(key);
   } catch (error) {
-    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(inUseLines(run, key, error));
+    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(await inUseLines(run, key, error));
     throw error;
   }
   run.print(`Deleted ${key} from ${run.target.baseUrl}. Its key no longer works.`);
@@ -310,15 +310,28 @@ async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Pr
   return 0;
 }
 
-/** The lines a delete that records or open asks still hold gets. */
-function inUseLines(run: CommandContext, key: string, error: ConflictError): string {
+/**
+ * The lines a delete that records or open asks still hold gets. When records
+ * hold it, it reads the app with `GET /apps/{key}`: an app that is on is
+ * told to turn off instead, and one already off is told to change the
+ * records. When that read fails, both ways are named.
+ */
+async function inUseLines(run: CommandContext, key: string, error: ConflictError): Promise<string> {
   const data = (typeof error.data === 'object' && error.data !== null ? error.data : {}) as { uses?: unknown; openRequests?: unknown };
   const uses = typeof data.uses === 'object' && data.uses !== null && !Array.isArray(data.uses) ? Object.entries(data.uses as Record<string, unknown>) : [];
   const open = typeof data.openRequests === 'number' ? data.openRequests : 0;
   const lines = [`Siren kept ${key}.`];
   if (uses.length > 0) {
     lines.push(`Records still select its items: ${uses.map(([ref, count]) => `${ref} (${String(count)})`).join(', ')}.`);
-    lines.push(`Turn it off instead with ${run.command(`apps off ${key}`)}. Siren then stops calling it and keeps what it already did.`);
+    const status = await run
+      .siren()
+      .apps.retrieve(key)
+      .then((app) => app.status, () => undefined);
+    const turnOff = `Turn it off instead with ${run.command(`apps off ${key}`)}. Siren then stops calling it and keeps what it already did.`;
+    const change = `To delete it, change each record that selects those items to another choice, then run ${run.command(`apps delete ${key} --yes`)}.`;
+    if (status === 'active') lines.push(turnOff);
+    else if (status !== undefined) lines.push(`It is already off, so Siren no longer calls it. ${change}`);
+    else lines.push(`If it is on, ${turnOff.charAt(0).toLowerCase()}${turnOff.slice(1)} ${change}`);
   }
   if (open > 0) {
     lines.push(`It has ${open} open ${open === 1 ? 'ask' : 'asks'}. Answer them, or wait for them to end: ${run.command(`apps requests --app ${key}`)}`);
