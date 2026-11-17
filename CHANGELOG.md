@@ -207,8 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MAX_APP_ANSWER_BYTES`, 16384, the most an answer may hold as JSON.
 - `DEFAULT_APP_REQUEST_TOLERANCE_SECONDS`, 300, how far a signed time may be from the receiver's
   clock when `verifyRequest` gets no `toleranceSeconds`.
-- `DEFAULT_BASE_URL`, the live address `https://api.sirenaffiliates.com/siren/v1`, beside
-  `SANDBOX_BASE_URL`.
+- `DEFAULT_BASE_URL`, the live address `https://api.sirenaffiliates.com/siren/v1`.
 - `AppErrorCode` names the codes the app routes send, and `appErrorCode(error)` reads one from an
   error's `code`, else `data.reason`. `AppItemKind`, `AppStatus`, `AppRequestStatus` and
   `AppRequestMode` are Siren's app vocabularies, and `App`, `AppItem`, `DeclareAppParams`,
