@@ -166,6 +166,53 @@ export const AppAnswers = {
 };
 
 /**
+ * Currencies as Siren's API describes one, `CurrencyAdapter::toArray()`
+ * (lib/Commerce/Adapters/CurrencyAdapter.php lines 25 to 33), which both
+ * tells send as `currency`, on Novatorius/siren `feat/apps` at 27169452a.
+ */
+export const AppCurrencies = {
+  /** lib/Configs/Core/Listeners/RegisterCoreCurrencies.php line 26: scale 2, and decimal places default to the scale. */
+  usd: () => ({ id: 'USD', symbol: '$', position: 'before', name: 'US Dollar', scale: 2, decimalPlaces: 2, type: 'monetary' }),
+  /** RegisterCoreCurrencies.php line 29: yen is stored in hundredths, scale 2, and shown with 0 decimal places. */
+  jpy: () => ({ id: 'JPY', symbol: '¥', position: 'before', name: 'Japanese Yen', scale: 2, decimalPlaces: 0, type: 'monetary' }),
+  /**
+   * A points currency an org defined: StoredCustomCurrencies::toCurrency()
+   * (lib/Configs/Service/Datastores/CustomCurrency/StoredCustomCurrencies.php
+   * lines 71 to 80) takes its symbol, position, name and scale from the
+   * stored row, decimal places from the scale, and type `internal`.
+   */
+  points: () => ({ id: 'POINTS', symbol: 'pts', position: 'after', name: 'Points', scale: 0, decimalPlaces: 0, type: 'internal' }),
+};
+
+/** A currency as the fakes above give one. */
+type FakeCurrency = ReturnType<typeof AppCurrencies.usd>;
+
+/**
+ * The data of the two tells, as AppActionSubjects builds it
+ * (lib/Apps/Service/Services/AppActionSubjects.php, forConversion() lines
+ * 128 to 152 and forAllocation() lines 179 to 190, on `feat/apps` at
+ * 27169452a). `value` is the stored integer and `currency` is the reward's
+ * currency (currencyOf(), lines 202 to 205).
+ */
+export const AppTells = {
+  conversionApproved: (value = 1500, currency: FakeCurrency = AppCurrencies.usd()) => ({
+    conversion: { id: 51, type: 'sale', status: 'complete', engagementId: 7, opportunityId: 9, collaboratorId: 4, transactionId: 12, obligationId: 33 },
+    reward: { value, units: currency.id, currency },
+    program: { id: 3, name: 'Partners' },
+  }),
+  /** A conversion with no reward: `reward` is null (AppActionSubjects.php lines 128 to 137). */
+  conversionWithoutReward: () => ({
+    conversion: { id: 52, type: 'lead', status: 'complete', engagementId: 8, opportunityId: 9, collaboratorId: 4, transactionId: null, obligationId: null },
+    reward: null,
+    program: { id: 3, name: 'Partners' },
+  }),
+  allocationCompleted: (value = 2500, currency: FakeCurrency = AppCurrencies.usd()) => ({
+    allocation: { distributionId: 21, obligationId: 40, collaboratorId: 4, status: 'complete', value, units: currency.id, currency },
+    distributor: { id: 2, name: 'Partner pool' },
+  }),
+};
+
+/**
  * Siren's sign-up and sign-in answers about a confirmation or a plan.
  */
 export const ConfirmationAnswers = {

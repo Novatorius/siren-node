@@ -44,7 +44,9 @@ From a checkout of this repository, with the `siren` command installed and signe
    scopes, and prints how many conversions the sale made on which opportunity. A sale that made none
    prints Siren's reason, such as `no_program` when no active program accepts sales, and its message.
 7. Watch what Siren sends and what came back with `siren apps requests --follow`. The server prints
-   a line for each request it acts on and each answer Siren accepts.
+   a line for each request it acts on and each answer Siren accepts. A tell's `value` is the integer
+   Siren stores, not the amount a person reads, so the server reads each amount with
+   `siren.apps.shownAmount(value, currency)`: 10000 in yen prints as ¥100.
 
 Without a tunnel, set `SIREN_APP_URL` to any https address. Siren's deliveries then fail, and you
 answer each ask by hand with `siren apps answer` once `siren apps requests --attention` lists it. A

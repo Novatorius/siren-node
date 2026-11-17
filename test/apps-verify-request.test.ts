@@ -6,6 +6,7 @@ import { SignatureVerificationError, SirenError } from '../src/errors';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient } from './http-fakes';
 import { BASE } from './record-fakes';
+import { AppTells } from './apps-siren-answers';
 
 /*
  * Acceptance tests for `siren.apps.verifyRequest()`, packet sdk-verify.
@@ -67,7 +68,8 @@ const tell = JSON.stringify({
   app: 'acme-payouts',
   item: { kind: 'postConversionAction', key: 'notify-crm', id: 'app:11' },
   createdAt: '2026-11-17T09:14:03+00:00',
-  data: { conversionId: 412, programId: 3 },
+  // A conversion approved, as Siren's AppActionSubjects::forConversion() builds it (test/apps-siren-answers.ts).
+  data: AppTells.conversionApproved(),
 });
 
 describe('apps-cli: apps.verifyRequest', () => {

@@ -853,3 +853,41 @@ side.
    Unreleased, Added, and under Changed for `new Siren()`, and openapi.yaml's app paths under the
    `dashboardSession` scheme, with `apiKey: []` on the answer route. Turns on
    test/docs-apps-cli.test.ts (12).
+
+## Follow-ups after the merge (pkt/apps-sdk-followups-1)
+
+A fix lane made these changes after the slice merged, each with a test that failed first on
+`feat/apps` at 934169a and a mutation in scripts/mutations/apps-sdk-followups-1.json. Siren was
+read on `feat/apps` at 27169452a.
+
+### 1. The amount in a tell
+
+Both tells now carry the reward's currency beside its value (AppActionSubjects.php lines 34 to 41,
+128 to 137 and 179 to 190). `reward` on an approved conversion is `{ value, units, currency }` or
+null, and `allocation` on a completed allocation gains `currency`. `currency` is
+`CurrencyAdapter::toArray()`: `id`, `symbol`, `position`, `name`, `scale`, `decimalPlaces` and
+`type`. `value` is the stored integer and the shown amount is `value / 10^scale`, so 10000 in yen,
+which Siren stores at scale 2 and shows with 0 decimal places, is ¥100.
+
+| Call or type | What it is | File |
+| --- | --- | --- |
+| `siren.apps.shownAmount(value, currency)` | Answers `{ amount, decimal, text }`. Sends nothing. | src/resources/apps.ts, src/resources/app-amounts.ts |
+| `AppCurrency` | The currency a tell carries, every field present. It extends `ProgramCurrency`, the same shape `programs.currencyTypes()` lists. | src/record-types.ts |
+| `AppConversionApprovedData`, `AppAllocationCompletedData` | The data of the two tells. | src/record-types.ts |
+| `ShownAmount` | What `shownAmount` answers. | src/record-types.ts |
+
+`shownAmount` copies Siren's `CurrencyAmountService` (lib/Commerce/Services/CurrencyAmountService.php):
+`amount` is `toFloat()`, `decimal` is `toDecimalString()`, and `text` is `format()` with `.` and
+`,`, rounding halves up to `decimalPlaces` with integer arithmetic. It refuses a `value` that is
+not a safe integer, a currency that is not an object, a `scale` outside 0 to 8
+(`Currency::MAX_SCALE`) and `decimalPlaces` outside 0 to the scale, which `Currency`'s constructor
+also refuses. `AppRequest.data` stays `Record<string, unknown>`, since its fields belong to the
+item's kind, and a caller narrows it by `item.kind`. openapi.yaml documents the routes the SDK
+calls, and a tell is a request Siren sends the app, so it gains no schema.
+
+The example's handler logs each tell through `describeTell()`, which reads the amount with
+`shownAmount` and logs the data as it came for a kind it does not know or a tell with no currency.
+The asks the example answers carry a currency code, not a currency, and its pool split works in
+stored units, which needs no scale. The tell fakes are `AppTells` and `AppCurrencies` in
+test/apps-siren-answers.ts, each citing its Siren file and line, and the tell in
+test/apps-verify-request.test.ts now has Siren's shape.

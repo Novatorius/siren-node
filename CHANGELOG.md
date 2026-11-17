@@ -246,6 +246,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the app's own key.
 - `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppItem`,
   `AppRequestRecord`, `AppAnswer` and `AppAnswerReceipt` schemas, and the sandbox server.
+- `siren.apps.shownAmount(value, currency)` reads a stored amount and its currency as a person
+  reads them, and answers `{ amount, decimal, text }`, such as `{ amount: 100, decimal: '100',
+  text: '¥100' }` for 10000 in yen. It sends nothing, and throws `SirenError` for a `value` that is
+  not a safe integer or a currency whose `scale` or `decimalPlaces` it cannot read.
+- `AppConversionApprovedData` and `AppAllocationCompletedData` type the data of the two tells, and
+  `AppCurrency` the `currency` Siren sends beside each `value`. `value` is the stored integer, not
+  the amount a person reads. `ShownAmount` types what `shownAmount` answers. The example app logs
+  each tell's amount through `shownAmount`.
 
 ### Changed
 

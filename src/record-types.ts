@@ -1119,6 +1119,85 @@ export interface AppAsk extends AppRequestBase {
 /** A checked request from Siren, as `apps.verifyRequest()` answers it. */
 export type AppRequest = AppTell | AppAsk;
 
+/**
+ * A currency as Siren's API describes one (`CurrencyAdapter::toArray()`),
+ * the shape `programs.currencyTypes()` lists, with every field present. A
+ * stored amount is the shown amount times `10^scale`. `decimalPlaces` is how
+ * many digits a person sees, never more than `scale`. Read an amount with
+ * `apps.shownAmount(value, currency)`.
+ */
+export interface AppCurrency extends ProgramCurrency {
+  /** The currency code, such as `USD`, or the code of an organization's own currency, such as `POINTS`. */
+  id: string;
+  symbol: string;
+  position: 'before' | 'after' | (string & {});
+  name: string;
+  /** Digits of a stored amount that sit after the decimal point, 0 to 8. Every built-in currency is 2, yen included. */
+  scale: number;
+  /** Digits a person sees after the decimal point, 0 to `scale`. Yen shows 0. */
+  decimalPlaces: number;
+  /** `monetary` for money, `internal` for points or store credit an organization defined. */
+  type: CustomCurrencyType | (string & {});
+}
+
+/**
+ * The data of a `postConversionAction` tell, sent after a conversion is
+ * approved (Siren's `AppActionSubjects::forConversion()`).
+ */
+export interface AppConversionApprovedData {
+  conversion: {
+    id: number;
+    type: string;
+    status: string;
+    engagementId: number;
+    opportunityId: number;
+    collaboratorId: number;
+    transactionId: number | null;
+    obligationId: number | null;
+  };
+  /**
+   * The reward, or null when the conversion has none. `value` is the stored
+   * integer, not the amount a person reads: 10000 in yen is 100 yen. Read it
+   * with `apps.shownAmount(reward.value, reward.currency)`. `units` is the
+   * currency code.
+   */
+  reward: { value: number; units: string; currency: AppCurrency } | null;
+  program: { id: number; name: string };
+}
+
+/**
+ * The data of a `postAllocationAction` tell, sent after an allocation
+ * completes (Siren's `AppActionSubjects::forAllocation()`). The subject id is
+ * `{distributionId}:{obligationId}`.
+ */
+export interface AppAllocationCompletedData {
+  allocation: {
+    distributionId: number;
+    obligationId: number;
+    collaboratorId: number;
+    status: string;
+    /** The stored integer, not the amount a person reads. Read it with `apps.shownAmount(value, currency)`. */
+    value: number;
+    /** The currency code. */
+    units: string;
+    currency: AppCurrency;
+  };
+  distributor: { id: number; name: string };
+}
+
+/**
+ * A stored amount as a person reads it, from `apps.shownAmount()`, the three
+ * ways Siren's own `CurrencyAmountService` gives one.
+ */
+export interface ShownAmount {
+  /** `value / 10^scale` as a number, for arithmetic: 15 for 1500 in dollars, 100 for 10000 in yen. */
+  amount: number;
+  /** Plain text with the currency's decimal places, no symbol and no grouping: `15.00`, `100`. */
+  decimal: string;
+  /** The text a person reads: `$15.00`, `¥100`, `10,000 pts`. */
+  text: string;
+}
+
 /** Options for `apps.verifyRequest()`. */
 export interface VerifyAppRequestOptions {
   /** How far the signed timestamp may be from `now`, either way. Whole seconds from 1 to 3600. Default 300. */

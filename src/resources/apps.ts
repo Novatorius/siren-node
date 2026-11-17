@@ -1,7 +1,9 @@
 import type { HttpTransport } from '../http';
+import { shownAmount } from './app-amounts';
 import { answerAppRequest, listAppRequests, resendAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
+  AppCurrency,
   AppAnswer,
   AppAnswerReceipt,
   AppRequest,
@@ -10,6 +12,7 @@ import type {
   DeclareAppParams,
   DeclaredApp,
   RotatedApp,
+  ShownAmount,
   VerifyAppRequestOptions,
 } from '../record-types';
 import type { AppStatus } from '../taxonomy';
@@ -324,5 +327,26 @@ export class AppsResource {
     options: VerifyAppRequestOptions = {},
   ): AppRequest {
     return verifyAppRequest(rawBody, headers, secret, options, DEFAULT_APP_REQUEST_TOLERANCE_SECONDS);
+  }
+
+  /**
+   * The amount a person reads from a stored `value` and its `currency`, as
+   * a tell carries them: `reward.value` and `reward.currency` on an approved
+   * conversion, `allocation.value` and `allocation.currency` on a completed
+   * allocation. `value` is the stored integer, and the shown amount is
+   * `value / 10^currency.scale`, so 1500 in dollars is $15.00, 10000 in yen
+   * is ¥100, and 10000 in a points currency at scale 0 is 10,000 points.
+   *
+   * Answers `{ amount, decimal, text }`, the three ways Siren's own
+   * `CurrencyAmountService` reads an amount: a number for arithmetic, plain
+   * text with the currency's decimal places, and the text the dashboard
+   * shows. Sends nothing.
+   *
+   * Throws `SirenError` naming the field for a `value` that is not a safe
+   * integer, a currency that is not an object, a `scale` outside 0 to 8, or
+   * `decimalPlaces` outside 0 to the scale.
+   */
+  shownAmount(value: number, currency: AppCurrency): ShownAmount {
+    return shownAmount(value, currency, 'apps.shownAmount()');
   }
 }

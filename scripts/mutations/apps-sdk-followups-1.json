@@ -1,0 +1,178 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  return { amount: value / 10 ** scale, decimal, text };",
+    "replace": "  return { amount: value, decimal, text };",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-followups-1: the amount a person reads from a tell"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const sign = value < 0 ? '-' : '';",
+    "replace": "  const sign = value >= 0 ? '' : '-';",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/resources/app-amounts.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  return { amount: value / 10 ** scale, decimal, text };",
+    "replace": "  return { amount: value, decimal, text };",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-cli: the hidden password prompt"
+    ]
+  },
+  {
+    "id": "amount-scale-fixed",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  return { amount: value / 10 ** scale, decimal, text };",
+    "replace": "  return { amount: value / 100, decimal, text };",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-decimal-places-ignored",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const unit = 10 ** decimalPlaces;",
+    "replace": "  const unit = 10 ** scale;",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-truncates",
+    "file": "src/resources/app-amounts.ts",
+    "find": " + ((magnitude % dropped) * 2 >= dropped ? 1 : 0);",
+    "replace": ";",
+    "expect": "caught",
+    "failing": [
+      "rounds to the decimal places shown, halves up"
+    ]
+  },
+  {
+    "id": "amount-symbol-after-touches",
+    "file": "src/resources/app-amounts.ts",
+    "find": "      : `${sign}${grouped} ${symbol !== '' ? symbol : String(currency.id)}`;",
+    "replace": "      : `${sign}${grouped}${symbol !== '' ? symbol : String(currency.id)}`;",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-no-code-without-symbol",
+    "file": "src/resources/app-amounts.ts",
+    "find": "      : `${sign}${grouped} ${symbol !== '' ? symbol : String(currency.id)}`;",
+    "replace": "      : `${sign}${grouped} ${symbol}`;",
+    "expect": "caught",
+    "failing": [
+      "puts a symbol written after the number behind a space"
+    ]
+  },
+  {
+    "id": "amount-ungrouped",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const grouped = `${whole.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')}${fraction}`;",
+    "replace": "  const grouped = `${whole}${fraction}`;",
+    "expect": "caught",
+    "failing": [
+      "reads dollars, yen and points by their scale and decimal places"
+    ]
+  },
+  {
+    "id": "amount-value-unchecked",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {",
+    "replace": "  if (typeof value !== 'number') {",
+    "expect": "caught",
+    "failing": [
+      "refuses a value that is not a stored integer"
+    ]
+  },
+  {
+    "id": "amount-scale-range-open",
+    "file": "src/resources/app-amounts.ts",
+    "find": "scale < 0 || scale > MAX_SCALE) {",
+    "replace": "scale < 0) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a value that is not a stored integer"
+    ]
+  },
+  {
+    "id": "amount-places-over-scale",
+    "file": "src/resources/app-amounts.ts",
+    "find": "decimalPlaces < 0 || decimalPlaces > scale) {",
+    "replace": "decimalPlaces < 0) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a value that is not a stored integer"
+    ]
+  },
+  {
+    "id": "example-prints-stored-value",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "    return shown === undefined ? asCame : `${about}, reward ${shown}.`;",
+    "replace": "    return shown === undefined ? asCame : `${about}, reward ${told.reward.value}.`;",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-followups-1: the example app reads the amount in a tell"
+    ]
+  },
+  {
+    "id": "example-allocation-stored-value",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "by distributor ${told.distributor.name}, ${shown}.`;",
+    "replace": "by distributor ${told.distributor.name}, ${allocation.value}.`;",
+    "expect": "caught",
+    "failing": [
+      "logs a completed allocation with its amount"
+    ]
+  },
+  {
+    "id": "example-tell-raw-json",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "): ${describeTell(siren, request)}`);",
+    "replace": "): ${JSON.stringify(request.data)}`);",
+    "expect": "caught",
+    "failing": [
+      "logs the reward of an approved conversion as a person reads it"
+    ]
+  },
+  {
+    "id": "docs-value-not-shown",
+    "file": "README.md",
+    "find": "`value` is not the amount a person reads.",
+    "replace": "`value` is the amount.",
+    "expect": "caught",
+    "failing": [
+      "say plainly that a tell carries the stored integer"
+    ]
+  },
+  {
+    "id": "parity-shown-amount-row",
+    "file": "README.md",
+    "find": "| `siren.apps.shownAmount()` | None.",
+    "replace": "| `siren.apps.shownAmountX()` | None.",
+    "expect": "caught",
+    "failing": [
+      "Parity: Node methods the PHP SDK does not have yet"
+    ]
+  }
+]

@@ -654,7 +654,8 @@ as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the eleven sc
 ### Node methods the PHP SDK does not have yet
 
 Each method below calls a route Siren serves today, or, for `siren.apps`, a route the Siren apps
-work adds. Neither PHP 0.3.0 nor the PHP SDK's next release has a method for it. The PHP SDK is to
+work adds. `siren.apps.verifyRequest()` and `siren.apps.shownAmount()` read what Siren sends an app
+and send nothing. Neither PHP 0.3.0 nor the PHP SDK's next release has a method for it. The PHP SDK is to
 gain each one under the same name. The `siren` command-line tool ships with this package only.
 
 | Node | Siren route | What it does |
@@ -669,6 +670,7 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.rotate()` | `POST /apps/{key}/rotate` | Gives an app a new key and signing secret, shown once. |
 | `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
 | `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
+| `siren.apps.shownAmount()` | None. It reads the value and currency of a tell, which Siren sends as `POST /` to the app's own address | Reads a stored amount and its currency as a person reads them, such as `$15.00` for 1500 in dollars and `¥100` for 10000 in yen. |
 | `siren.apps.requests.list()` | `GET /apps/requests` | Lists the latest requests Siren sent the organization's apps. |
 | `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
 | `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
@@ -1154,6 +1156,35 @@ arrives while the first answer is in flight waits for that answer, so two delive
 answer once. An ask it cannot answer, such as a pool with no metrics, gets 500 and a logged line
 that says why, never a guessed answer, so Siren sends it again on its deadline and then shows it as
 needing attention. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
+
+### Read what a tell says
+
+A tell's `data` belongs to the item's kind. A `postConversionAction` gets
+`AppConversionApprovedData`: the `conversion`, its `reward` as `{ value, units, currency }` or
+`null` when it has none, and the `program`. A `postAllocationAction` gets
+`AppAllocationCompletedData`: the `allocation`, with `value`, `units` and `currency`, and the
+`distributor`.
+
+`value` is not the amount a person reads. It is the integer Siren stores, and the shown amount is
+`value / 10^currency.scale`. Siren stores yen in hundredths, so a `value` of 10000 in yen is 100
+yen, and a points currency an organization defines usually has scale 0, so 10000 is 10,000 points.
+`units` is the currency code. Read an amount with `apps.shownAmount(value, currency)`, which answers
+`{ amount, decimal, text }` the way Siren's dashboard reads it: `{ amount: 15, decimal: '15.00',
+text: '$15.00' }` for 1500 in dollars, `{ amount: 100, decimal: '100', text: '¥100' }` for 10000 in
+yen.
+
+```ts
+import type { AppConversionApprovedData } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'tell' && request.item.kind === 'postConversionAction') {
+  const { conversion, reward } = request.data as unknown as AppConversionApprovedData;
+  if (reward !== null) {
+    const shown = siren.apps.shownAmount(reward.value, reward.currency);
+    crm.note(conversion.collaboratorId, `Earned ${shown.text}`); // "Earned ¥100", never "Earned 10000"
+  }
+}
+```
 
 ### Answer an ask
 
