@@ -86,7 +86,7 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 409 `app_request_not_resendable` | `ConflictError` | Reads the request. It is applied, or it would be sent and its app is off. A request that holds an answer not yet applied, `answered` or `needs_attention`, is never refused: Siren applies the stored answer, even while the app is off. |
 | 409 `app_request_already_answered` | `ConflictError` | Stops. A different answer came first, and it stands. |
 | 409 `app_request_not_needing_attention` | `ConflictError` | A person answered an ask that does not need attention, such as one `pending` or `sent`. Waits for the app, or answers once `siren apps requests --attention` lists the ask. The app's own key answers its own ask at any time before it is applied. Siren checks the status before the answer's fit, so a misfit answer gets this and not 422. The code is named by Siren (lib/Apps/Service/Services/AppRequestService.php lines 680 to 687 on pkt/apps-screen-a at fcf19b1f0). |
-| 404 `app_request_not_found` | `NotFoundError` | Checks the id and the key's app. |
+| 404 `app_request_not_found` | `NotFoundError` | Checks the id. The answer route tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers another app's request (AppRequestService.php line 698 at 27169452a). The resend route says "App request not found." |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
 | 422 `app_answer_invalid` | `ValidationError` | Fixes the answer for the item's kind. |
 | 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
@@ -924,3 +924,16 @@ again in a minute. The other session calls keep the 30-second timeout, since a s
 Siren's password hashing and a refresh must not be cut short. test/cli-edition-check.test.ts pins
 the timeout and the line with the harness, and runs the built command against the loopback Cloud
 with its edition route hanging, where the old code ran into the test's 20-second limit.
+
+### 5. Siren's messages, word for word
+
+Siren's merged exchange words some refusals differently from the commits this slice first read.
+The answer route's 404 now tells an admin "This organization has no request with this key." and
+an app's key "No request with this key was sent to this app." with the same status and code. The
+409 for a different answer reads "This request already has a different answer, and the first
+answer stands." test/apps-siren-quotes.test.ts holds every message of the exchange this
+repository quotes, each with its Siren file and line at 27169452a. It checks each fake against
+the quoted text everywhere, and with `SIREN_CHECKOUT` set it reads each line from Siren with
+`git show`. The fake for a different answer had cut Siren's message short to fit an assertion,
+and both now carry Siren's whole sentence. The captures in test/fixtures/cloud-captures stay as
+recorded at 1557b0030, so apps-answer-404-admin keeps the older wording, and its note says so.

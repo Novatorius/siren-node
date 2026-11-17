@@ -258,6 +258,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- README and the architecture note give both of Siren's wordings of the answer route's 404
+  `app_request_not_found`: "This organization has no request with this key." for an admin and
+  "No request with this key was sent to this app." for an app's key, as Siren's feat/apps says at
+  27169452a. The status and the code did not change.
 - `engines` asks for Node 18.3 or later, since the `siren` command uses `util.parseArgs`.
 - `new Siren()` sends an `sk_test_` key to the sandbox when no `baseUrl` is given, and throws for a
   test key with the live address or a live key with the sandbox.

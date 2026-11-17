@@ -1245,7 +1245,7 @@ try {
 | `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
 | `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
 | `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
-| `app_request_not_found` | 404 | Check the id, and that the key is the app's the request went to. |
+| `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route says "App request not found." |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
 | `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
 | `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code. |

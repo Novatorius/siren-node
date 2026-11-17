@@ -90,7 +90,7 @@ const REPLAYED: Record<string, string> = {
  */
 const UNFAKED: Record<string, string> = {
   'api-keys-create-201': 'Made an org key for the checkpoint. The apps tests never make one.',
-  'apps-answer-404-admin': 'app_request_not_found, which the answer refusal table fakes with a generic message.',
+  'apps-answer-404-admin': 'app_request_not_found as Siren worded it for everyone at 1557b0030. At 27169452a an admin gets "This organization has no request with this key." (AppAnswers.notFound, held in test/apps-siren-quotes.test.ts).',
   'apps-answer-404-app-key': 'The same body as apps-answer-404-admin.',
   'apps-answer-404-over-16kb-unknown-id': 'The same body: Siren looks the id up before it reads the size.',
   'apps-answer-404-plain-org-key': 'The same body: an org key that is no app\'s.',

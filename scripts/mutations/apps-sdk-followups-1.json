@@ -257,5 +257,36 @@
     "failing": [
       "say the edition read gives up well under ten seconds"
     ]
+  },
+  {
+    "id": "quote-already-answered-short",
+    "file": "test/apps-siren-answers.ts",
+    "find": "'This request already has a different answer, and the first answer stands.'",
+    "replace": "'This request already has a different answer.'",
+    "expect": "caught",
+    "failing": [
+      "alreadyAnswered quotes"
+    ]
+  },
+  {
+    "id": "quote-admin-not-found-old",
+    "file": "test/apps-siren-answers.ts",
+    "find": "caller === 'admin' ? 'This organization has no request with this key.' :",
+    "replace": "caller === 'admin' ? 'No request with this key was sent to this app.' :",
+    "expect": "caught",
+    "failing": [
+      "notFoundForAdmin quotes",
+      "prints the line Siren gives an admin"
+    ]
+  },
+  {
+    "id": "docs-not-found-one-wording",
+    "file": "README.md",
+    "find": "Siren tells an admin \"This organization has no request with this key.\" and an app's key",
+    "replace": "Siren tells an app's key",
+    "expect": "caught",
+    "failing": [
+      "give both of Siren's wordings"
+    ]
   }
 ]

@@ -622,7 +622,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     const late = harness([AppAnswers.alreadyAnswered()]);
     late.signedIn();
     expect(await late.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"failed"}'])).toBe(1);
-    expect(late.err()).toContain('This request already has a different answer.');
+    expect(late.err()).toContain('This request already has a different answer, and the first answer stands.');
   });
 
   it("says a person may answer only a request that needs attention, and where to see those, when Siren refuses a hand answer", async () => {

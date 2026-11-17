@@ -37,4 +37,12 @@ describe('apps-sdk-followups-1: the records', () => {
     expect(note).toContain('is given up after 6.5 seconds');
     expect(read('CHANGELOG.md')).toContain('That read gives up after 6.5 seconds');
   });
+
+  it("give both of Siren's wordings of the answer route's 404", () => {
+    for (const file of ['README.md', 'docs/architecture/apps-cli.md', 'CHANGELOG.md']) {
+      expect(read(file), file).toContain('"This organization has no request with this key."');
+      expect(read(file), file).toContain('"No request with this key was sent to this app."');
+    }
+    expect(read('README.md')).not.toContain("and that the key is the app's the request went to");
+  });
 });
