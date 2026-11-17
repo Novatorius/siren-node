@@ -333,6 +333,48 @@ describe('P1: readList', () => {
 
     await expect(readList(transport, '/programs/currency-types')).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
+
+  const rowsAreObjects = (body: unknown[]) =>
+    body.every((row) => typeof row === 'object' && row !== null) ? undefined : 'A currency type is not an object.';
+
+  it('answers the array when the check passes, and hands the check the body', async () => {
+    const answer = [{ id: 'USD' }];
+    const seen: unknown[] = [];
+    const { transport } = transportOver([reply(200, answer)]);
+
+    const read = await readList(transport, '/programs/currency-types', (body) => {
+      seen.push(body);
+      return rowsAreObjects(body);
+    });
+
+    expect(read).toEqual(answer);
+    expect(seen).toEqual([answer]);
+  });
+
+  it("throws UnexpectedResponseError with the check's message, the status and the body when the check fails", async () => {
+    const { http, transport } = transportOver([reply(200, ['USD']), reply(200, [{ id: 'USD' }])]);
+
+    const error = await readList(transport, '/programs/currency-types', rowsAreObjects).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).message).toBe('A currency type is not an object.');
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    expect((error as UnexpectedResponseError).data).toEqual(['USD']);
+    expect(http.requests).toHaveLength(1);
+  });
+
+  it('throws for a body that is not an array before running the check', async () => {
+    let ran = false;
+    const { transport } = transportOver([reply(200, { items: [] })]);
+
+    const error = await readList(transport, '/programs/currency-types', () => {
+      ran = true;
+      return undefined;
+    }).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect(ran).toBe(false);
+  });
 });
 
 describe('P1: writeList', () => {

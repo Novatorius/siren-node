@@ -288,9 +288,17 @@ export async function readObject<T>(
  * bare list with no list envelope, such as `GET /programs/currency-types`.
  * Throws `UnexpectedResponseError` when a 2xx body is not a JSON array.
  *
+ * `check`, when given, runs on the array. When it answers a message,
+ * `readList` throws `UnexpectedResponseError` with that message, the status
+ * Siren sent and the body as `data`, as {@link readObject}'s `check` does.
+ *
  * @internal
  */
-export async function readList<T>(http: Transport, path: string): Promise<T[]> {
+export async function readList<T>(
+  http: Transport,
+  path: string,
+  check?: (body: unknown[]) => string | undefined,
+): Promise<T[]> {
   const response = await http.request({ method: 'GET', path, retriable: true });
   const body = await parseJsonBody(response);
   if (!Array.isArray(body)) {
@@ -298,6 +306,11 @@ export async function readList<T>(http: Transport, path: string): Promise<T[]> {
       statusCode: response.status,
       data: body,
     });
+  }
+
+  const problem = check === undefined ? undefined : check(body);
+  if (problem !== undefined) {
+    throw new UnexpectedResponseError(problem, { statusCode: response.status, data: body });
   }
   return body as T[];
 }

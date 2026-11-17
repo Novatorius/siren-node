@@ -13,7 +13,7 @@ import type {
   WebhookTestResult,
 } from '../types';
 import { pickFields } from './create-fields';
-import { isJsonObject, readObject, recordId, writeRecord } from './record-requests';
+import { isJsonObject, readList, readObject, recordId, writeRecord } from './record-requests';
 
 const SIGNATURE_PREFIX = 'sha256=';
 const HEX_DIGEST_PATTERN = /^[0-9a-f]{64}$/i;
@@ -149,20 +149,15 @@ export class WebhookSubscriptionsResource {
    * The subscription's latest deliveries, newest first, at most 50, from
    * `GET /webhooks/{id}/deliveries`. Each holds the payload Siren sent, its
    * status, how many tries it took and the first 200 bytes of the endpoint's
-   * answer. Retries on a network error, 429 or 5xx, as a read. Throws
-   * `UnexpectedResponseError` when a 2xx body is not a list of objects.
+   * answer. Retries on a network error, 429 or 5xx, as a read, through
+   * `readList`. Throws `UnexpectedResponseError` when a 2xx body is not a
+   * JSON array, or when a row in it is not a JSON object.
    */
   async deliveries(id: number): Promise<WebhookDelivery[]> {
     const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.deliveries')}/deliveries`;
-    const response = await this.http.request({ method: 'GET', path, retriable: true });
-    const body = await parseJsonBody(response);
-    if (!Array.isArray(body) || !body.every(isJsonObject)) {
-      throw new UnexpectedResponseError(`Siren answered GET ${path} with a body that is not a list of deliveries.`, {
-        statusCode: response.status,
-        data: body,
-      });
-    }
-    return body as unknown as WebhookDelivery[];
+    return readList<WebhookDelivery>(this.http, path, (rows) =>
+      rows.every(isJsonObject) ? undefined : `Siren answered GET ${path} with a delivery that is not a JSON object.`,
+    );
   }
 
   /**

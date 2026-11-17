@@ -116,6 +116,17 @@ describe('apps-sdk-gaps: webhooks.subscriptions.update', () => {
     });
   });
 
+  it('sends a new object, so a toJSON the caller inherits cannot change the body', async () => {
+    const { http, subscriptions } = over([reply(200, WebhookAnswers.paused)]);
+    const params = Object.assign(Object.create({ toJSON: () => ({ signingSecret: 'x' }) }) as object, {
+      status: 'paused' as const,
+    });
+
+    await subscriptions.update(12, params);
+
+    expect(bodyOf(http.requests[0])).toEqual({ status: 'paused' });
+  });
+
   it('refuses a field the route does not read, before sending, and names it', async () => {
     const { http, subscriptions } = over([reply(200, WebhookAnswers.subscription)]);
 
@@ -236,6 +247,19 @@ describe('apps-sdk-gaps: webhooks.subscriptions.deliveries', () => {
       const { subscriptions } = over([reply(200, body)]);
       await expect(subscriptions.deliveries(12)).rejects.toBeInstanceOf(UnexpectedResponseError);
     }
+  });
+
+  it('names the bad row and carries the status Siren sent and the body, as readList does', async () => {
+    const { subscriptions } = over([reply(200, [WebhookAnswers.deliveries[0], 'x'])]);
+
+    const error = await subscriptions.deliveries(12).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).message).toBe(
+      'Siren answered GET /webhooks/12/deliveries with a delivery that is not a JSON object.',
+    );
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    expect((error as UnexpectedResponseError).data).toEqual([WebhookAnswers.deliveries[0], 'x']);
   });
 
   it('refuses an id that is not a positive whole number before sending', async () => {
