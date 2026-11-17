@@ -200,7 +200,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SirenError` before sending for an id that is not `apr_` and 32 hex characters, or an answer that
   is not a plain object with a text `outcome` of at most 16384 bytes as JSON. The 401 Siren sends
   with no code for a missing or unknown bearer is raised as `AuthenticationError` with `code`
-  `app_answer_unauthorized`. It is sent once, and
+  `app_answer_unauthorized`. A person may answer only a request that needs attention, and Siren
+  refuses any other hand answer with 409 `app_request_not_needing_attention`, which `AppErrorCode`
+  names as `NotNeedingAttention`. `siren apps answer` then prints Siren's line and points to
+  `siren apps requests --attention`, and prints the code of any refusal it does not know. It is sent once, and
   sending the same answer again after a lost one answers `duplicate: true`. `requests.resend`
   sends nothing to the app for a request that holds an answer Siren has not applied, and Siren
   applies that answer instead. It raises `ConflictError` with `app_request_not_resendable` for an

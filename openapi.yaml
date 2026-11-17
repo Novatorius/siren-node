@@ -3269,14 +3269,17 @@ paths:
       description: |
         Takes an app's answer to an ask. The app sends its own API key, which
         needs no scope and answers only a request Siren sent its own app. A
-        signed-in admin may answer by hand. The body is the answer, a JSON
+        signed-in admin may answer by hand, but only a request that needs
+        attention. The body is the answer, a JSON
         object with a text `outcome`, at most 16384 bytes.
 
         Siren takes each answer once. The same answer again answers
         `duplicate: true` and applies nothing. Each refusal of the route
         carries its code in `error.code`: 403 app_inactive or
         app_answer_forbidden, 409 app_request_already_answered for a
-        different answer after one was accepted, 422 app_answer_invalid, and
+        different answer after one was accepted, 409
+        app_request_not_needing_attention for a person's answer to an ask
+        that does not need attention, 422 app_answer_invalid, and
         404 app_request_not_found, which an org key that is no app's also
         gets. A missing or unknown bearer gets 401 from the key check every
         route shares, with no code, and the SDK reads it as

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Siren } from '../src/client';
 import {
+  AppErrorCode,
   AuthenticationError,
   ConflictError,
   appErrorCode,
@@ -329,6 +330,21 @@ describe('apps-cli: apps.requests.answer', () => {
         UnexpectedResponseError,
       );
     }
+  });
+
+  it("raises a person's answer to an ask that needs no attention as ConflictError app_request_not_needing_attention, and a code it does not know as Siren sent it", async () => {
+    const { apps: resource } = apps([AppAnswers.notNeedingAttention()]);
+    const error = await refused(() => resource.requests.answer(REQUEST, { outcome: 'paid' }));
+    expect(error).toBeInstanceOf(ConflictError);
+    expect(appErrorCode(error)).toBe(AppErrorCode.NotNeedingAttention);
+    expect(AppErrorCode.NotNeedingAttention).toBe('app_request_not_needing_attention');
+    expect((error as Error).message).toBe('A person may answer only a request that needs attention. The app may still answer this one.');
+
+    const unknown = apps([AppAnswers.unknownRefusal()]);
+    const other = await refused(() => unknown.apps.requests.answer(REQUEST, { outcome: 'paid' }));
+    expect(other).toBeInstanceOf(ConflictError);
+    expect(appErrorCode(other)).toBe('made_up_refusal_code');
+    expect((other as Error).message).toBe('Siren refused this answer for a reason this SDK does not know.');
   });
 
   // Siren's key check answers a missing or unknown bearer with 401 and no code, before the answer

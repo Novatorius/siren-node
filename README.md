@@ -1154,7 +1154,10 @@ needing attention. The route passes anything else that throws to `next`, so Expr
 ### Answer an ask
 
 `apps.requests.answer(id, answer)` posts the answer with `POST /apps/requests/{id}/answer`, from a
-`Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand. The
+`Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand,
+but only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses
+a person's answer to any other ask with 409 `app_request_not_needing_attention`, since the app may
+still answer it. The app's own key answers its own ask at any time before it is applied. The
 answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
 `{ status: 'accepted', duplicate }`.
 
@@ -1206,6 +1209,7 @@ try {
 | `app_in_use` | 409 | Turn the app off instead, or move the records in `uses` first. |
 | `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
 | `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
+| `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
 | `app_request_not_found` | 404 | Check the id, and that the key is the app's the request went to. |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
 | `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
@@ -1243,7 +1247,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps list` | Lists the apps and their items. `--json` prints what Siren sent. |
 | `siren apps show <key>` | Shows one app and its items. |
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
-| `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. |
+| `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
 | `siren apps resend <id>` | Sends a request again. |
 | `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |

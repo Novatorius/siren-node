@@ -604,6 +604,24 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(late.err()).toContain('This request already has a different answer.');
   });
 
+  it("says a person may answer only a request that needs attention, and where to see those, when Siren refuses a hand answer", async () => {
+    const early = harness([AppAnswers.notNeedingAttention()]);
+    early.signedIn();
+    expect(await early.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
+    expect(early.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`]);
+    expect(early.err()).toBe(
+      'siren: A person may answer only a request that needs attention. The app may still answer this one. ' +
+        'See the requests that need attention with siren apps requests --attention.\n',
+    );
+  });
+
+  it("prints Siren's message and its code for a refusal whose code the SDK does not know, and exits 1", async () => {
+    const h = harness([AppAnswers.unknownRefusal()]);
+    h.signedIn();
+    expect(await h.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
+    expect(h.err()).toBe("siren: Siren refused this answer for a reason this SDK does not know. Siren's code: made_up_refusal_code.\n");
+  });
+
   it('sends a request again', async () => {
     const h = harness([reply(200, { ...row, sendCount: 2 })]);
     h.signedIn();

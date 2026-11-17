@@ -130,6 +130,26 @@ export const AppAnswers = {
    */
   alreadyAnswered: () => reply(409, { error: { message: 'This request already has a different answer.', code: 'app_request_already_answered', context: [] } }),
   /**
+   * The answer route's refusal of a person's answer to an ask that does not
+   * need attention, such as one `pending` or `sent`, which the app may still
+   * answer: AppRequestService::notNeedingAttention()
+   * (lib/Apps/Service/Services/AppRequestService.php lines 680 to 687) through
+   * AppAnswerResult::refused() (lib/Apps/Core/Models/AppAnswerResult.php
+   * lines 51 to 54), on pkt/apps-screen-a at fcf19b1f0. Siren checks the
+   * status before the answer's fit, so a misfit answer to such an ask gets
+   * this 409 too.
+   */
+  notNeedingAttention: () =>
+    reply(409, {
+      error: {
+        message: 'A person may answer only a request that needs attention. The app may still answer this one.',
+        code: 'app_request_not_needing_attention',
+        context: [],
+      },
+    }),
+  /** A refusal of the answer route with a code this SDK has never heard of, made up for the test. */
+  unknownRefusal: () => reply(409, { error: { message: 'Siren refused this answer for a reason this SDK does not know.', code: 'made_up_refusal_code', context: [] } }),
+  /**
    * The resend route's 409 for an `applied` request, or one it would send
    * while its app is off: lib/Apps/Service/Rest/ResendAppRequest.php lines
    * 82 to 87 on `feat/apps` at 1557b0030, through AppRequestRefusedException

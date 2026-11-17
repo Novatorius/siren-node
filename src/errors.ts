@@ -169,6 +169,13 @@ export const AppErrorCode = {
   RequestNotFound: 'app_request_not_found',
   /** 409 from the answer route: a different answer was accepted first, and it stands. */
   AlreadyAnswered: 'app_request_already_answered',
+  /**
+   * 409 from the answer route: a person answered an ask that does not need
+   * attention, such as one `pending` or `sent`, which the app may still
+   * answer. A person may answer only a request in `needs_attention`. The
+   * app's own key answers its own ask at any time before it is applied.
+   */
+  NotNeedingAttention: 'app_request_not_needing_attention',
   /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the item's kind refuses. */
   AnswerInvalid: 'app_answer_invalid',
   /**

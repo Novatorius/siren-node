@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { AppErrorCode, ErrorCode, SirenError, appErrorCode } from '../../errors';
 import type { AppAnswer, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument } from './apply';
@@ -148,7 +149,12 @@ export async function appsAnswer(input: CommandInput): Promise<number> {
 
   const run = contextOf(input);
   await run.signedIn();
-  const receipt = await run.siren().apps.requests.answer(id, answer as AppAnswer);
+  let receipt;
+  try {
+    receipt = await run.siren().apps.requests.answer(id, answer as AppAnswer);
+  } catch (error) {
+    throw answerRefusal(run, error);
+  }
   run.print(receipt.duplicate ? 'Siren already had this answer. Nothing changed.' : 'Siren accepted the answer.');
   return 0;
 }
@@ -161,6 +167,26 @@ export async function appsResend(input: CommandInput): Promise<number> {
   const row = await run.siren().apps.requests.resend(id);
   run.print(requestLine(row));
   return 0;
+}
+
+/** Every code this SDK knows, so a refusal with any other one prints the code beside Siren's message. */
+const KNOWN_CODES: ReadonlySet<string> = new Set<string>([...Object.values(AppErrorCode), ...Object.values(ErrorCode)]);
+
+/**
+ * The refusal `apps answer` prints for an error from the answer route. A
+ * person's answer to an ask that does not need attention says where to see
+ * the ones that do. A refusal with a code this SDK does not know, such as
+ * one a newer Siren sends, prints Siren's message and the code, and exits 1
+ * like any other refusal. Anything else passes as it is.
+ */
+function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unknown {
+  if (!(error instanceof SirenError) || error.statusCode === undefined) return error;
+  const code = appErrorCode(error);
+  if (code === AppErrorCode.NotNeedingAttention) {
+    return new CliRefusal(`${error.message} See the requests that need attention with ${run.command('apps requests --attention')}.`);
+  }
+  if (code !== undefined && !KNOWN_CODES.has(code)) return new CliRefusal(`${error.message} Siren's code: ${code}.`);
+  return error;
 }
 
 /** One request as a line: its id, status, mode and kind, item, subject, sends, time and last error. */

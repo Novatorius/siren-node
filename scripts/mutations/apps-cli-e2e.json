@@ -234,5 +234,35 @@
     "failing": [
       "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps on requests"
     ]
+  },
+  {
+    "id": "e2e-9-attention-line-dropped",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (code === AppErrorCode.NotNeedingAttention) {",
+    "replace": "  if (code === 'not-a-code') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > says a person may answer only a request that needs attention"
+    ]
+  },
+  {
+    "id": "e2e-9-unknown-code-hidden",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (code !== undefined && !KNOWN_CODES.has(code)) return",
+    "replace": "  if (false) return",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > prints Siren's message and its code for a refusal whose code the SDK does not know"
+    ]
+  },
+  {
+    "id": "e2e-9-code-unnamed",
+    "file": "src/errors.ts",
+    "find": "  NotNeedingAttention: 'app_request_not_needing_attention',",
+    "replace": "  NotNeedingAttention: 'app_request_needs_no_attention',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > raises a person's answer to an ask that needs no attention"
+    ]
   }
 ]
