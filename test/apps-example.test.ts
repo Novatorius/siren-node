@@ -40,7 +40,7 @@ function acme(replies: Array<HttpResponse | Error>, now = fixture.timestamp) {
   return { http, app };
 }
 
-describe.skip('apps-cli: the example app', () => {
+describe('apps-cli: the example app', () => {
   it("answers Siren's signed ask with 200, then pays it with the app's key", async () => {
     const { http, app } = acme([reply(200, { status: 'accepted' })]);
     const result = await app.handle(fixture.body, fixture.headers);

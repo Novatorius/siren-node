@@ -7,8 +7,6 @@
 // in X-Siren-OID, then a real sale of `total` in `currency` on that
 // opportunity, with `source` `acme-example` and the given `externalId`, and
 // no `test` flag, as a store sends one.
-//
-// Stub: answers an empty result. Packet example-app builds it.
 
 /**
  * @param {import('@novatorius/siren').Siren} siren
@@ -16,7 +14,16 @@
  * @returns {Promise<{ opportunityId?: number, status?: string }>}
  */
 export async function sendSale(siren, sale) {
-  void siren;
-  void sale;
-  return {};
+  const visit = await siren.events.siteVisited({ collaboratorId: sale.collaborator });
+  if (visit.opportunityId === undefined) {
+    throw new Error(`Siren opened no opportunity for ${sale.collaborator} (${visit.status ?? 'no status'}). Check the collaborator id or tracking code.`);
+  }
+  const result = await siren.events.sale({
+    trackingId: visit.opportunityId,
+    total: sale.total,
+    ...(sale.currency === undefined ? {} : { currency: sale.currency }),
+    externalId: sale.externalId,
+    source: 'acme-example',
+  });
+  return { opportunityId: result.opportunityId ?? visit.opportunityId, status: result.status };
 }

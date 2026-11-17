@@ -1219,7 +1219,7 @@
   {
     "id": "example-no-dedupe",
     "file": "examples/apps/acme/handler.mjs",
-    "find": "      if (handled.has(request.id)) return { status: 200, body: '{\"received\":true}' };\n",
+    "find": "      if (handled.has(request.id)) return { status: 200, body: received };\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -1229,8 +1229,8 @@
   {
     "id": "example-failed-counts",
     "file": "examples/apps/acme/handler.mjs",
-    "find": "        (error) => log(`could not answer ${request.id}: ${error.message}`),",
-    "replace": "        (error) => {\n          handled.add(request.id);\n          log(`could not answer ${request.id}: ${error.message}`);\n        },",
+    "find": "        (error) => log(`${request.id}: could not answer, and will answer again when Siren sends it again: ${error.message}`),",
+    "replace": "        (error) => {\n          handled.add(request.id);\n          log(`${request.id}: could not answer: ${error.message}`);\n        },",
     "expect": "caught",
     "failing": [
       "apps-cli: the example app > answers again after an answer that failed"
@@ -1259,11 +1259,31 @@
   {
     "id": "example-remainder-lost",
     "file": "examples/apps/acme/handler.mjs",
-    "find": "      shares[index] += 1;\n",
+    "find": "    shares[index] += 1;\n",
     "replace": "",
     "expect": "caught",
     "failing": [
       "apps-cli: the example app > pays a payout"
+    ]
+  },
+  {
+    "id": "example-inflight-twice",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "      if (answering.has(request.id)) return { status: 200, body: received, answered: answering.get(request.id) };\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "the example app, beyond the contract > answers once when a repeat arrives"
+    ]
+  },
+  {
+    "id": "example-sale-unattributed",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "  if (visit.opportunityId === undefined) {\n",
+    "replace": "  if (visit.opportunityId === -1) {\n",
+    "expect": "caught",
+    "failing": [
+      "the example app, beyond the contract > sends no sale when Siren opens no opportunity"
     ]
   },
   {
