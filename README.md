@@ -1340,7 +1340,7 @@ package globally, or run it with `npx siren`.
 ```sh
 siren signup                         # make an organization, or: siren login
 siren apps init --key acme-payouts   # write siren.app.json
-siren apps apply                     # declare the app, and save its key in .env.sandbox
+siren apps apply                     # show the changes, ask, declare the app, and save its key in .env.sandbox
 siren apps requests --follow         # watch what Siren sends and what comes back
 ```
 
@@ -1352,7 +1352,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren orgs` | Lists your organizations, `*` on the one in use. |
 | `siren use <slug or id>` | Switches to another of your organizations. |
 | `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
-| `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. An item the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the item and says that naming it in the file again brings it back. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
+| `siren apps apply [file] [--yes]` | Reads the app on Siren first and prints each change the file would make, a change made in the dashboard since included: name, description, the address added, moved or removed (never its url), events, the key's scopes, and each feature added, changed, brought back or removed, with how many records select a removed one. It then asks before it writes, since the last write wins. `--yes` skips the question, and with no terminal and no `--yes` it sends nothing. With nothing to change it says so and writes nothing. It declares the app, then prints each feature's `app:{id}`. A feature the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the feature and says that naming it in the file again brings it back. On the first apply it saves the key, and the signing secret when the file names a `url`, in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
 | `siren apps list` | Lists the apps and their items, and under an app with requests that need attention, how many and the `siren apps requests --app <key> --attention` that lists them. `--json` prints what Siren sent. |
 | `siren apps show <key>` | Shows one app and its items, with each archived item marked beside it, and how many of its requests need attention when any do. |
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |

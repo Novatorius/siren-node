@@ -5,7 +5,7 @@ import { reply } from './http-fakes';
 import { BASE } from './record-fakes';
 import { AuthAnswers, EMAIL, NOW_S, PASSWORD, harness, membershipAcme, session, user } from './cli-fakes';
 import type { HarnessOptions } from './cli-fakes';
-import { APP_KEY, AppAnswers, ConfirmationAnswers, appRecord } from './apps-siren-answers';
+import { APP_KEY, AppAnswers, ConfirmationAnswers, appBefore, appRecord } from './apps-siren-answers';
 
 /*
  * Acceptance tests for the hints the `siren` command prints. Contract:
@@ -50,8 +50,8 @@ type Case = { name: string; argv: string[]; replies?: Parameters<typeof harness>
 const LIVE_CASES: Case[] = [
   {
     name: 'apply of an app this machine holds no key for',
-    argv: ['apps', 'apply'],
-    replies: [reply(200, app)],
+    argv: ['apps', 'apply', '--yes'],
+    replies: [appBefore(), reply(200, app)],
     options: { env: appEnv },
     setup: (h) => {
       h.signedIn(signedInLive);
@@ -61,8 +61,8 @@ const LIVE_CASES: Case[] = [
   },
   {
     name: 'apply that leaves an archived item',
-    argv: ['apps', 'apply'],
-    replies: [reply(200, appRecord({ items: app.items.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) }))],
+    argv: ['apps', 'apply', '--yes'],
+    replies: [appBefore(), reply(200, appRecord({ items: app.items.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) }))],
     options: { env: appEnv },
     setup: (h) => {
       h.signedIn(signedInLive);
@@ -175,10 +175,10 @@ describe('apps-cli: every hint names a command the person can run as printed', (
       expect(hint).not.toContain('--live');
     }
 
-    const plain = harness([reply(200, app)], { env: appEnv });
+    const plain = harness([appBefore(), reply(200, app)], { env: appEnv });
     plain.signedIn();
     plain.write('siren.app.json', exampleFile);
-    expect(await plain.run(['apps', 'apply']), plain.err()).toBe(0);
+    expect(await plain.run(['apps', 'apply', '--yes']), plain.err()).toBe(0);
     expect(plain.out()).toContain(`Run siren apps rotate ${KEY} to make a new key and save it there.`);
   });
 });

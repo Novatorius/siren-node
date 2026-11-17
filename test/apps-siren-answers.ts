@@ -1,4 +1,5 @@
 import { reply } from './http-fakes';
+import { capturedReply } from './cloud-captures';
 
 /*
  * The answers Siren gives on the app routes, shared by
@@ -406,3 +407,17 @@ export const ConfirmationAnswers = {
   loginNoPlan: (code: 'no_entitlement' | 'entitlement_lapsed' | 'trial_ended' | 'entitlements_unavailable') =>
     reply(401, { error: { message: 'Raw entitlement text.', code } }),
 };
+
+/**
+ * Siren's answer to `GET /apps/{key}` for a key the organization lacks, as a
+ * real Cloud sent it (capture apps-retrieve-404). `siren apps apply` reads
+ * the app first, so a first apply meets this before it declares.
+ */
+export function appMissing() {
+  return capturedReply('apps-retrieve-404');
+}
+
+/** An app that differs from the example file by its name, so an apply has one change to make. */
+export function appBefore(overrides: Record<string, unknown> = {}) {
+  return reply(200, appRecord({ name: 'Acme before', ...overrides }));
+}

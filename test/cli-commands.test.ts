@@ -21,7 +21,7 @@ import {
   session,
   user,
 } from './cli-fakes';
-import { APP_KEY, APP_REQUEST_ID, AppAnswers, ConfirmationAnswers, appRecord, requestRow } from './apps-siren-answers';
+import { APP_KEY, APP_REQUEST_ID, AppAnswers, ConfirmationAnswers, appBefore, appMissing, appRecord, requestRow } from './apps-siren-answers';
 
 /*
  * Acceptance tests for the `siren` command, packets cli-session, cli-apply
@@ -340,14 +340,14 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('declares the app on the first apply, writes its key and secret to .env.sandbox, and prints neither', async () => {
-    const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
+    const h = harness([appMissing(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
 
-    expect(h.paths()).toEqual([`PUT /apps/${KEY}`]);
-    expect(bearer(h, 0)).toBe(`Bearer ${ACCESS_1}`);
-    expect(bodyOf(h.http.requests[0])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(bearer(h, 1)).toBe(`Bearer ${ACCESS_1}`);
+    expect(bodyOf(h.http.requests[1])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
     expect(h.file('.env.sandbox').split('\n')).toEqual(
       expect.arrayContaining([`SIREN_BASE_URL=${SANDBOX_BASE_URL}`, `SIREN_API_KEY=${RAW_KEY}`, `SIREN_SIGNING_SECRET=${SIGNING_SECRET}`]),
     );
@@ -367,35 +367,35 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
       "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
       'Use host.docker.internal in its place, and see "Running against your own Siren Cloud" in the README.\n';
     for (const url of ['http://localhost:8787', 'http://127.0.0.1:8787/siren', 'http://localhost']) {
-      const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
+      const h = harness([appMissing(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
       h.signedIn();
       h.write('siren.app.json', exampleFile);
-      expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+      expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
       expect(h.err(), url).toBe(NOTE);
       expect(h.printed(), url).not.toContain(url);
     }
     for (const url of ['https://acme.example/siren', 'http://host.docker.internal:8787', 'https://localhost.acme.example']) {
-      const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
+      const h = harness([appMissing(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
       h.signedIn();
       h.write('siren.app.json', exampleFile);
-      expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+      expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
       expect(h.err(), url).toBe('');
     }
   });
 
   it('leaves the env file as it is when a later apply answers no secret, and says when this machine holds no key', async () => {
-    const h = harness([reply(200, app), reply(200, app)], { env: appEnv });
+    const h = harness([appBefore(), reply(200, app), appBefore(), reply(200, app)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     h.write('.env.sandbox', `PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
-    expect(await h.run(['apps', 'apply', 'siren.app.json']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`PUT /apps/${KEY}`]);
+    expect(await h.run(['apps', 'apply', 'siren.app.json', '--yes']), h.err()).toBe(0);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe(`PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(h.printed()).not.toContain('siren apps rotate');
 
     h.write('.env.sandbox', 'PORT=8787\n');
-    expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`PUT /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`, `GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
     expect(h.printed()).toContain(`siren apps rotate ${KEY}`);
   });

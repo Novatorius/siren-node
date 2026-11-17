@@ -90,9 +90,9 @@ const SPECS: Record<Command, CommandSpec> = {
     run: apply.appsInit,
   },
   'apps apply': {
-    usage: 'apps apply [file]',
-    summary: 'Declare the app in siren.app.json, and save its key beside the file.',
-    options: {},
+    usage: 'apps apply [file] [--yes]',
+    summary: 'Show what siren.app.json changes, ask, then declare the app and save its key beside the file.',
+    options: { yes: { type: 'boolean' } },
     positionals: [0, 1],
     run: apply.appsApply,
   },

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { harness, session } from './cli-fakes';
-import { APP_KEY, appRecord } from './apps-siren-answers';
+import { APP_KEY, appMissing, appRecord } from './apps-siren-answers';
 
 /*
  * The env file that holds an app's key and signing secret. Every write of
@@ -76,12 +76,12 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     expect(rotate.modeOf(join(rotate.cwd, '.env.sandbox'))).toBe(0o600);
 
     watch.marks = [];
-    const apply = harness([declared()], { env: appEnv });
+    const apply = harness([appMissing(), declared()], { env: appEnv });
     apply.signedIn();
     apply.write('siren.app.json', exampleFile);
     apply.write('.env.sandbox', 'PORT=8787\n');
     chmodSync(join(apply.cwd, '.env.sandbox'), 0o644);
-    expect(await apply.run(['apps', 'apply']), apply.err()).toBe(0);
+    expect(await apply.run(['apps', 'apply', '--yes']), apply.err()).toBe(0);
     expect(apply.file('.env.sandbox')).toBe(NEW_ENV);
     expect(watch.marks.length).toBeGreaterThan(0);
     for (const mark of watch.marks) expect(mark.mode, mark.path).toBe(0o600);
@@ -153,10 +153,10 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
 
-    const apply = harness([declared()], { env: appEnv });
+    const apply = harness([appMissing(), declared()], { env: appEnv });
     apply.signedIn();
     apply.write('siren.app.json', exampleFile);
-    expect(await apply.run(['apps', 'apply'])).toBe(1);
+    expect(await apply.run(['apps', 'apply', '--yes'])).toBe(1);
     expect(apply.err()).toMatch(/Siren issued/);
     expect(apply.err()).toContain(`siren apps rotate ${APP_KEY}`);
     expect(apply.printed()).not.toContain(RAW_KEY_2);

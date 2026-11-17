@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { appLines } from '../src/cli/commands/apply';
 import type { App } from '../src/record-types';
-import { APP_KEY, AppAnswers, appRecord } from './apps-siren-answers';
+import { APP_KEY, AppAnswers, appBefore, appRecord } from './apps-siren-answers';
 import { harness } from './cli-fakes';
 import { Siren } from '../src/client';
 import { AuthenticationError } from '../src/errors';
@@ -26,10 +26,10 @@ const ARCHIVED_LINE = '  app:1  postConversionAction  notify-crm  Tell the CRM  
 
 describe('apps-sdk-followups-1: an archived item', () => {
   it('apply marks the archived item beside it, and says once what archiving means and how to bring it back', async () => {
-    const h = harness([capturedReply(DROPPED)], { env: appEnv });
+    const h = harness([appBefore(), capturedReply(DROPPED)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const lines = h.out().split('\n');
     expect(lines).toContain(ARCHIVED_LINE);
     // The capture predates the payout kind's new word, so Siren answered the old one.
@@ -43,19 +43,19 @@ describe('apps-sdk-followups-1: an archived item', () => {
   });
 
   it('keeps the target flags in the apply hint, and names the file as it was given', async () => {
-    const h = harness([capturedReply(DROPPED)], { env: appEnv });
+    const h = harness([appBefore(), capturedReply(DROPPED)], { env: appEnv });
     h.signedIn();
     h.write('my.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply', 'my.app.json', '--sandbox']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', 'my.app.json', '--sandbox', '--yes']), h.err()).toBe(0);
     expect(h.out()).toContain('name it in my.app.json again with the same kind and key, and run siren apps apply my.app.json --sandbox.');
   });
 
   it('says nothing about archiving when no item is archived', async () => {
     const body = capturedBody<App>(DROPPED);
-    const h = harness([capturedReply(DROPPED)].map(() => ({ status: 200, headers: {}, body: JSON.stringify({ ...body, items: body.items.map((item) => ({ ...item, status: 'active' })) }) })), { env: appEnv });
+    const h = harness([appBefore(), ...[capturedReply(DROPPED)].map(() => ({ status: 200, headers: {}, body: JSON.stringify({ ...body, items: body.items.map((item) => ({ ...item, status: 'active' })) }) }))], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.out()).not.toContain('archived');
   });
 

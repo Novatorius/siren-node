@@ -2,9 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { access, lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { ConflictError, appErrorCode } from '../../errors';
+import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import type { App } from '../../record-types';
 import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
+import { appChanges, droppedLine } from '../app-changes';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
@@ -90,7 +91,12 @@ function onThisMachine(url: string): boolean {
 }
 
 /**
- * `siren apps apply [file]`: checks the app file, declares its app with
+ * `siren apps apply [file] [--yes]`: checks the app file, reads the app as
+ * Siren holds it with `GET /apps/{key}`, prints each change applying the
+ * file would make, a change made in the dashboard since included, and asks
+ * before it writes, since the last write wins. `--yes` skips the question,
+ * and with no terminal and no `--yes` it refuses. With nothing to change it
+ * says so and writes nothing. Then it declares the app with
  * `PUT /apps/{key}` once, and prints the app without its url. On the first
  * declaration it writes the key and signing secret Siren shows once to the
  * env file beside the app file, and prints the key's prefix and the file's
@@ -136,6 +142,39 @@ export async function appsApply(input: CommandInput): Promise<number> {
     );
   }
   const siren = run.siren();
+  const current = await siren.apps.retrieve(key).catch((error: unknown) => {
+    if (error instanceof NotFoundError) return undefined;
+    throw error;
+  });
+  const changes = appChanges(current, params);
+  const removals = await Promise.all(
+    changes.dropped.map(({ item }) =>
+      siren.apps.items.retrieve(key, item.id).then(
+        (page) => droppedLine(item, page.uses),
+        () => droppedLine(item, undefined),
+      ),
+    ),
+  );
+  const lines = [...changes.lines, ...removals];
+  if (lines.length === 0) {
+    run.print(`${key} on ${run.target.baseUrl} already matches ${shown}, so nothing was sent.`);
+    return 0;
+  }
+  run.print(
+    changes.isNew
+      ? `${key} is new on ${run.target.baseUrl}. Applying ${shown}:`
+      : `Applying ${shown} changes ${key} on ${run.target.baseUrl}, a change made in the dashboard included:`,
+  );
+  for (const line of lines) run.print(`  ${line}`);
+  if (input.values.yes !== true) {
+    const question = `Apply ${lines.length === 1 ? 'this change' : 'these changes'}? The last write wins, so this replaces anything changed in the dashboard since. Type yes to apply: `;
+    if (!io.interactive) {
+      throw new CliRefusal(`Nothing was sent. Run ${run.command(input.args[0] === undefined ? 'apps apply --yes' : `apps apply ${shown} --yes`)} to apply ${lines.length === 1 ? 'it' : 'them'} without asking.`);
+    }
+    const typed = (await io.prompt(question)).trim().toLowerCase();
+    if (typed !== 'yes' && typed !== 'y') throw new CliRefusal('Nothing was sent.');
+  }
+
   const app = await siren.apps.declare(key, params);
 
   run.print(`Declared ${key} on ${run.target.baseUrl}.`);
