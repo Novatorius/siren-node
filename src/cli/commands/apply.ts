@@ -1,4 +1,5 @@
-import { readFile, stat, writeFile, chmod } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { ConflictError, appErrorCode } from '../../errors';
 import type { App } from '../../record-types';
@@ -64,6 +65,10 @@ export async function appsInit(input: CommandInput): Promise<number> {
  * env file beside the app file, and prints the key's prefix and the file's
  * absolute path. On a later one it leaves the env file alone, and says so
  * when that file holds no key. Records the env file's path for `rotate`.
+ *
+ * Before sending it refuses an env file that is a symbolic link, and one
+ * that holds the key of another Siren, so a key is never written through a
+ * link and never replaces a key this machine still needs.
  */
 export async function appsApply(input: CommandInput): Promise<number> {
   const run = contextOf(input);
@@ -82,10 +87,19 @@ export async function appsApply(input: CommandInput): Promise<number> {
   }
 
   await run.signedIn();
-  const siren = run.siren();
   const { key, params } = declarationFor(parsed.file);
-  const app = await siren.apps.declare(key, params);
   const envPath = join(dirname(path), run.envFileName());
+  const problem = await envFileProblem(envPath);
+  if (problem?.kind === 'link') throw new CliRefusal(`${problem.line} Nothing was sent.`);
+  const held = problem === undefined ? await envValue(envPath, 'SIREN_BASE_URL') : undefined;
+  if (held !== undefined && held !== run.target.baseUrl) {
+    throw new CliRefusal(
+      `${envPath} holds the key for ${held}, and this apply is for ${run.target.baseUrl}, so nothing was sent. ` +
+        `Move that file aside to keep its key, then run siren apps apply again.`,
+    );
+  }
+  const siren = run.siren();
+  const app = await siren.apps.declare(key, params);
 
   run.print(`Declared ${key} on ${run.target.baseUrl}.`);
   for (const line of appLines(app, false)) run.print(line);
@@ -163,6 +177,8 @@ export async function appsRotate(input: CommandInput): Promise<number> {
       `This machine has no record of where ${key}'s key lives, so nothing was sent. Run siren apps rotate ${key} --app-file <path to siren.app.json>, and the new key goes beside that file.`,
     );
   }
+  const problem = await envFileProblem(envPath);
+  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);
 
   const rotated = await run.siren().apps.rotate(key);
   const saved = await saveSecrets(run, envPath, rotated.rawKey, rotated.signingSecret);
@@ -258,8 +274,17 @@ async function saveSecrets(run: CommandContext, envPath: string, rawKey: string,
   return true;
 }
 
-/** Replaces each named line of the env file, or adds it at the end, keeping every other line, and leaves the file at mode 0600. */
+/**
+ * Replaces each named line of the env file, or adds it at the end, keeping
+ * every other line. Writes the whole text to a new file made with mode 0600
+ * beside it and renames that over the env file, as `CredentialStore` writes
+ * credentials.json, so the key is never in a wider file, a crash leaves the
+ * old file whole, and a link planted at the path is replaced, not followed.
+ * Refuses a path that is a symbolic link or not a regular file.
+ */
 async function writeEnvLines(path: string, entries: Readonly<Record<(typeof ENV_NAMES)[number], string>>): Promise<void> {
+  const problem = await envFileProblem(path);
+  if (problem !== undefined) throw new Error(problem.line);
   const text = (await readText(path)) ?? '';
   const lines = text === '' ? [] : text.replace(/\n$/, '').split('\n');
   for (const name of ENV_NAMES) {
@@ -268,8 +293,34 @@ async function writeEnvLines(path: string, entries: Readonly<Record<(typeof ENV_
     if (at >= 0) lines[at] = `${name}=${value}`;
     else lines.push(`${name}=${value}`);
   }
-  await writeFile(path, `${lines.join('\n')}\n`, { mode: 0o600 });
-  await chmod(path, 0o600);
+  const temporary = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);
+  try {
+    await writeFile(temporary, `${lines.join('\n')}\n`, { mode: 0o600, flag: 'wx' });
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
+}
+
+/**
+ * Why the tool will not write a key to `path`: it is a symbolic link, or it
+ * is there and not a regular file. Undefined when it is a regular file or
+ * not there.
+ */
+async function envFileProblem(path: string): Promise<{ kind: 'link' | 'other'; line: string } | undefined> {
+  let found;
+  try {
+    found = await lstat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  if (found.isSymbolicLink()) {
+    return { kind: 'link', line: `${path} is a symbolic link, and the tool writes a key only to a regular file it can see. Replace the link with a file.` };
+  }
+  if (!found.isFile()) return { kind: 'other', line: `${path} is not a regular file, so the tool cannot write a key to it.` };
+  return undefined;
 }
 
 /** The value of `name` in the env file, or undefined when the file or the line is missing. */

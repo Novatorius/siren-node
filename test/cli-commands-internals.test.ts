@@ -1,6 +1,7 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SANDBOX_BASE_URL } from '../src/http';
+import { LIVE_BASE_URL } from '../src/cli/targets';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
 import { ACCESS_2, AuthAnswers, EMAIL, NOW_S, PASSWORD, REFRESH_1, harness, membershipAcme, session } from './cli-fakes';
@@ -131,5 +132,39 @@ describe('apps-cli internals: requests', () => {
     h.write('answer.json', '{"outcome":"paid"}');
     expect(await h.run(['apps', 'answer', APP_REQUEST_ID, '--body', '{"outcome":"paid"}', '--file', 'answer.json'])).toBe(2);
     expect(h.http.requests).toHaveLength(0);
+  });
+});
+
+describe('apps-cli internals: the stored files before a secret is sent', () => {
+  it('refuses a credentials file others can read before the password leaves the machine', async () => {
+    for (const argv of [
+      ['login', '--email', EMAIL, '--password-stdin'],
+      ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'],
+    ]) {
+      const h = harness([AuthAnswers.sandbox(), AuthAnswers.oneOrg()], { stdin: PASSWORD });
+      h.signedIn();
+      chmodSync(h.credentialsPath, 0o644);
+      expect(await h.run(argv), argv[0]).toBe(1);
+      expect(h.http.requests, argv[0]).toHaveLength(0);
+      expect(h.err()).toContain('chmod 600');
+    }
+  });
+
+  it('stops a later apply before sending when the env file holds the key of another Siren', async () => {
+    const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
+    const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
+    for (const other of ['http://localhost:33918/siren/v1', LIVE_BASE_URL]) {
+      const held = `SIREN_BASE_URL=${other}\nSIREN_API_KEY=sk_test_${'0a'.repeat(32)}\nSIREN_SIGNING_SECRET=${'ef'.repeat(32)}\n`;
+      const h = harness([reply(200, appRecord())], { env: appEnv });
+      h.signedIn();
+      h.write('siren.app.json', exampleFile);
+      h.write('.env.sandbox', held);
+      expect(await h.run(['apps', 'apply']), other).toBe(1);
+      expect(h.http.requests, other).toHaveLength(0);
+      expect(h.err()).toContain(other);
+      expect(h.err()).toContain(SANDBOX_BASE_URL);
+      expect(h.err()).toMatch(/siren apps apply/);
+      expect(h.file('.env.sandbox')).toBe(held);
+    }
   });
 });

@@ -14,7 +14,9 @@ import { CliRefusal, CliUsageError, assertEditionAllowed } from '../targets';
  */
 
 /**
- * `siren signup`: reads the edition, checks it against `--live`, asks for
+ * `siren signup`: reads credentials.json first, so a file the tool would
+ * refuse stops it before anything is sent, then reads the edition, checks
+ * it against `--live`, asks for
  * what the flags left out, and sends `POST /auth/register-org` once. Keeps
  * the session Siren gives, or none when Siren wants the address confirmed
  * first. Never prints a token.
@@ -28,6 +30,8 @@ export async function signup(input: CommandInput): Promise<number> {
     [values.email, '--email <address>'],
     [passwordFromStdin || undefined, '--password-stdin'],
   ]);
+  // A credentials file the tool would refuse stops the command here, before the password leaves the machine.
+  await run.store.get(run.target.baseUrl);
 
   const edition = await run.auth.edition();
   assertEditionAllowed(run.target, edition);
@@ -72,7 +76,8 @@ export async function signup(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren login`: reads the edition, checks it against `--live`, signs in
+ * `siren login`: reads credentials.json first, as `signup` does, then reads
+ * the edition, checks it against `--live`, signs in
  * with the password, and picks the organization by `--org` when the person
  * belongs to several. Keeps the session and never the verification token.
  */
@@ -84,6 +89,8 @@ export async function login(input: CommandInput): Promise<number> {
     [values.email, '--email <address>'],
     [passwordFromStdin || undefined, '--password-stdin'],
   ]);
+  // A credentials file the tool would refuse stops the command here, before the password leaves the machine.
+  await run.store.get(run.target.baseUrl);
 
   const edition = await run.auth.edition();
   assertEditionAllowed(run.target, edition);
