@@ -1,0 +1,108 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/webhooks.ts",
+    "find": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);",
+    "replace": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, {});",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-gaps: webhooks.subscriptions.update"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/webhooks.ts",
+    "find": "    if (Object.values(body).every((value) => value === null)) {",
+    "replace": "    if (Object.values({ ...body }).every((value) => value === null)) {",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/resources/webhooks.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/webhooks.ts",
+    "find": "    if (Object.values(body).every((value) => value === null)) {",
+    "replace": "    if (false && Object.values(body).every((value) => value === null)) {",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-sdk-gaps: webhooks.subscriptions.retrieve"
+    ]
+  },
+  {
+    "id": "update-nothing-to-change-guard-dropped",
+    "file": "src/resources/webhooks.ts",
+    "find": "    if (Object.values(body).every((value) => value === null)) {",
+    "replace": "    if (false && Object.values(body).every((value) => value === null)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses an update with nothing to change, before sending, since Siren skips a null field"
+    ]
+  },
+  {
+    "id": "update-guard-drops-a-null-beside-a-change",
+    "file": "src/resources/webhooks.ts",
+    "find": "    if (Object.values(body).every((value) => value === null)) {",
+    "replace": "    if (Object.values(body).some((value) => value === null)) {",
+    "expect": "caught",
+    "failing": [
+      "sends a null field beside one that changes, as given"
+    ]
+  },
+  {
+    "id": "moved-row-missing-from-first-table",
+    "file": "README.md",
+    "find": "| `$siren->payouts->retrieve()` | `siren.payouts.retrieve()` |  |\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "has a row for every public method of the PHP SDK, once"
+    ]
+  },
+  {
+    "id": "moved-row-left-in-second-table",
+    "file": "README.md",
+    "find": "| `siren.events.forward()` | `POST /event/{eventSlug}` |",
+    "replace": "| `siren.payouts.retrieve()` | `GET /payouts/{id}` | Reads one payout. |\n| `siren.events.forward()` | `POST /event/{eventSlug}` |",
+    "expect": "caught",
+    "failing": [
+      "lists each Node-only method once, with its route and what it does"
+    ]
+  },
+  {
+    "id": "fulfillments-difference-dropped",
+    "file": "README.md",
+    "find": "| `siren.fulfillments.list()` | Refuses a key the route does not read, `propertyId` included, an empty filter list, and a comma in a filter, where PHP sends any other key as a filter. Both refuse a `payoutStatus` or `currency` of `\"\"` or not a string, and a `from` or `to` that is not a real day. Node refuses a `null` filter, where PHP leaves it out. |",
+    "replace": "| `siren.fulfillments.list()` |  |",
+    "expect": "caught",
+    "failing": [
+      "writes down how $siren->fulfillments->list() differs"
+    ]
+  },
+  {
+    "id": "scope-sentence-dropped",
+    "file": "README.md",
+    "find": "`ApiKeyRecordScope` and `ApiKeyRecordScope::ALL` in PHP match Node's",
+    "replace": "`ApiKeyRecordScope` and the PHP scope list match Node's",
+    "expect": "caught",
+    "failing": [
+      "maps the record scope list in a sentence under the table"
+    ]
+  },
+  {
+    "id": "opening-names-a-commit",
+    "file": "README.md",
+    "find": "the record scope list to PHP 0.3.0.",
+    "replace": "the record scope list to PHP 0.3.0, at a0d3abc.",
+    "expect": "caught",
+    "failing": [
+      "compares against the PHP SDK by release, never by branch or commit"
+    ]
+  }
+]
