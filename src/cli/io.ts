@@ -147,8 +147,11 @@ function askVisible(question: string): Promise<string> {
  * one leaves the terminal echoing, as readline does when it closes. Node
  * itself also gives the terminal its mode back when the process exits.
  */
-function askHidden(question: string): Promise<string> {
-  const input = process.stdin;
+export function askHidden(
+  question: string,
+  input: Pick<NodeJS.ReadStream, 'isRaw' | 'setRawMode' | 'on' | 'off' | 'resume' | 'pause'> = process.stdin,
+  output: Pick<NodeJS.WriteStream, 'write'> = process.stderr,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let typed = '';
     let done = false;
@@ -162,7 +165,7 @@ function askHidden(question: string): Promise<string> {
       input.off('data', onData);
       restore();
       input.pause();
-      process.stderr.write('\n');
+      output.write('\n');
       if (error === undefined) resolve(typed);
       else reject(error);
     };
@@ -177,7 +180,7 @@ function askHidden(question: string): Promise<string> {
     try {
       // Echo goes off first, and only then does the question appear.
       input.setRawMode(true);
-      process.stderr.write(question);
+      output.write(question);
       input.on('data', onData);
       input.resume();
     } catch (error) {

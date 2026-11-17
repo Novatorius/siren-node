@@ -38,11 +38,11 @@
   {
     "id": "e2e-1-question-before-raw-mode",
     "file": "src/cli/io.ts",
-    "find": "      input.setRawMode(true);\n      process.stderr.write(question);",
-    "replace": "      process.stderr.write(question);\n      input.setRawMode(true);",
+    "find": "      input.setRawMode(true);\n      output.write(question);",
+    "replace": "      output.write(question);\n      input.setRawMode(true);",
     "expect": "caught",
     "failing": [
-      "apps-cli: the hidden password prompt in a terminal"
+      "apps-cli: the hidden password prompt > turns echo off before the question appears"
     ]
   },
   {
@@ -78,8 +78,8 @@
   {
     "id": "e2e-2-session-keeps-no-address",
     "file": "src/cli/context.ts",
-    "find": "      baseUrl: this.target.baseUrl,\n",
-    "replace": "",
+    "find": "      edition,\n      baseUrl: this.target.baseUrl,\n",
+    "replace": "      edition,\n",
     "expect": "caught",
     "failing": [
       "apps-cli: the edition the target reports now, on every command > keeps the edition and the address a session was made for"
@@ -249,7 +249,7 @@
     "id": "e2e-9-unknown-code-hidden",
     "file": "src/cli/commands/requests.ts",
     "find": "  if (code !== undefined && !KNOWN_CODES.has(code)) return",
-    "replace": "  if (false) return",
+    "replace": "  if (code === 'never-a-code-siren-sends') return",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps requests, answer and resend > prints Siren's message and its code for a refusal whose code the SDK does not know"

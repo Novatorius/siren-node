@@ -1,6 +1,8 @@
 import { execFile, spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { askHidden } from '../src/cli/io';
 import { buildCli, configFolder, startFakeCloud } from './cli-loopback';
 import type { FakeCloud } from './cli-loopback';
 
@@ -42,6 +44,42 @@ function typeAtPrompt(cli: string, cloud: FakeCloud, mode: 'enter' | 'ctrl-c'): 
     });
   });
 }
+
+/**
+ * A terminal that records what the prompt does to it, in order. The echo a
+ * person sees depends on timing, so the pseudo-terminal test below catches it
+ * only when the machine is quiet. This order is the cause, and it does not.
+ */
+class RecordingTerminal extends EventEmitter {
+  isRaw = false;
+  readonly done: string[] = [];
+  setRawMode(mode: boolean): this {
+    this.isRaw = mode;
+    this.done.push(`raw ${mode}`);
+    return this;
+  }
+  resume(): this {
+    this.done.push('read');
+    return this;
+  }
+  pause(): this {
+    return this;
+  }
+  write(text: string): boolean {
+    this.done.push(`write ${JSON.stringify(text)}`);
+    return true;
+  }
+}
+
+describe('apps-cli: the hidden password prompt', () => {
+  it('turns echo off before the question appears, and gives the mode back after Enter', async () => {
+    const terminal = new RecordingTerminal();
+    const answer = askHidden('Password: ', terminal as unknown as NodeJS.ReadStream, terminal as unknown as NodeJS.WriteStream);
+    terminal.emit('data', Buffer.from('made-up\r'));
+    expect(await answer).toBe('made-up');
+    expect(terminal.done).toEqual(['raw true', 'write "Password: "', 'read', 'raw false', 'write "\\n"']);
+  });
+});
 
 describe.skipIf(python === undefined)('apps-cli: the hidden password prompt in a terminal', () => {
   let cloud: FakeCloud;
