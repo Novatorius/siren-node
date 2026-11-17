@@ -157,6 +157,14 @@ Every command takes `--sandbox`, `--live`, `--base-url <url>` and `--help`. Exit
 1 when Siren or the tool refused, 2 for a command line the tool cannot read, with nothing sent.
 Results go to standard output and every refusal is one message on standard error.
 
+A command checks what it was given on the line before it sends anything, the edition read
+included, and answers 2 in its own words with the usage line: a request id that is not `apr_` and
+32 lowercase hex characters (`answer`, `resend`, `requests <id>`), an app key Siren cannot hold
+(`show`, `on`, `off`, `rotate`, `delete`, `requests --app`), and an answer that is not JSON, not
+an object, has no text `outcome`, or is longer than 16384 bytes. Before, `siren apps answer
+apr_xyz` exited 1 with the SDK's line, which named `apps.requests.answer()` (e2e step 11d), and
+`requests --app <bad key>` sent the list before it refused. test/cli-arguments.test.ts covers each.
+
 ### Confirmation and plan answers
 
 Each answer gets one line that says what to do next, and the tool never prints Siren's

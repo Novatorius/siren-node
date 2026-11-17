@@ -28,6 +28,20 @@ const ENV_NAMES = ['SIREN_BASE_URL', 'SIREN_API_KEY', 'SIREN_SIGNING_SECRET'] as
 const APP_KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
+ * The app key a command line names, or `CliUsageError` in the tool's words
+ * for one Siren cannot hold, so the command answers 2 and sends nothing, not
+ * the SDK's refusal, which names a method the person never typed.
+ */
+export function appKeyArgument(key: string): string {
+  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {
+    throw new CliUsageError(
+      `An app key is lowercase letters and digits joined by single dashes, at most 64 characters and never requests, and ${JSON.stringify(key)} is not one.`,
+    );
+  }
+  return key;
+}
+
+/**
  * `siren apps init`: writes siren.app.json in the working folder from the
  * template, never over a file that is there, and adds `.env.*` to
  * .gitignore so the key `apply` saves stays out of git. Sends nothing.
@@ -135,8 +149,9 @@ export async function appsList(input: CommandInput): Promise<number> {
 /** `siren apps show <key> [--json]`: the app and its items. */
 export async function appsShow(input: CommandInput): Promise<number> {
   const run = contextOf(input);
+  const key = appKeyArgument(input.args[0] ?? '');
   await run.signedIn();
-  const app = await run.siren().apps.retrieve(input.args[0] ?? '');
+  const app = await run.siren().apps.retrieve(key);
   if (input.values.json === true) run.print(JSON.stringify(app, null, 2));
   else for (const line of appLines(app)) run.print(line);
   return 0;
@@ -162,7 +177,7 @@ export function appsOff(input: CommandInput): Promise<number> {
 export async function appsRotate(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
-  const key = input.args[0] ?? '';
+  const key = appKeyArgument(input.args[0] ?? '');
   const session = await run.signedIn();
 
   let envPath: string | undefined;
@@ -204,7 +219,7 @@ export async function appsRotate(input: CommandInput): Promise<number> {
 export async function appsDelete(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
-  const key = input.args[0] ?? '';
+  const key = appKeyArgument(input.args[0] ?? '');
   if (values.yes !== true) {
     const typed = io.interactive ? (await io.prompt(`Deleting ${key} revokes its key and cannot be undone. Type ${key} to delete it: `)).trim() : undefined;
     if (typed !== key) throw new CliRefusal(`Deleting ${key} revokes its key and cannot be undone. Run ${run.command(`apps delete ${key} --yes`)} to delete it.`);
@@ -235,8 +250,9 @@ export function appLines(app: App, showUrl = true): string[] {
 /** Turns the app on or off and prints its new state. */
 async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Promise<number> {
   const run = contextOf(input);
+  const key = appKeyArgument(input.args[0] ?? '');
   await run.signedIn();
-  const app = await run.siren().apps.setStatus(input.args[0] ?? '', status);
+  const app = await run.siren().apps.setStatus(key, status);
   run.print(`${app.key} is ${app.status === 'active' ? 'on' : 'off'}.`);
   return 0;
 }

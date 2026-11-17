@@ -184,5 +184,55 @@
     "failing": [
       "apps-cli: apps.requests.answer > gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized"
     ]
+  },
+  {
+    "id": "e2e-5-answer-id-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  const id = requestIdArgument(input.args[0] ?? '');\n  const body",
+    "replace": "  const id = input.args[0] ?? '';\n  const body",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps answer apr_xyz"
+    ]
+  },
+  {
+    "id": "e2e-5-outcome-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (typeof outcome !== 'string' || outcome === '') throw",
+    "replace": "  if (typeof outcome !== 'string') throw",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read"
+    ]
+  },
+  {
+    "id": "e2e-5-resend-id-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  const id = requestIdArgument(input.args[0] ?? '');\n  await run.signedIn();",
+    "replace": "  const id = input.args[0] ?? '';\n  await run.signedIn();",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps resend apr_xyz"
+    ]
+  },
+  {
+    "id": "e2e-5-app-key-after-list",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  const appKey = typeof values.app === 'string' ? appKeyArgument(values.app) : undefined;",
+    "replace": "  const appKey = typeof values.app === 'string' ? values.app : undefined;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps requests --app Acme"
+    ]
+  },
+  {
+    "id": "e2e-5-key-reserved-word",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {\n    throw new CliUsageError(\n      `An app key",
+    "replace": "  if (key.length > 64 || !APP_KEY.test(key)) {\n    throw new CliUsageError(\n      `An app key",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps on requests"
+    ]
   }
 ]
