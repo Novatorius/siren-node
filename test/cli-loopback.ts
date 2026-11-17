@@ -45,6 +45,8 @@ export interface FakeCloud {
   baseUrl: string;
   /** What `GET /auth/signup-options` reports. A test may change it between two commands. */
   edition: 'sandbox' | 'production';
+  /** When true, `GET /auth/signup-options` gets no answer at all, as a target that hangs. */
+  hangEdition: boolean;
   seen: SeenRequest[];
   close(): Promise<void>;
 }
@@ -57,7 +59,7 @@ export function loopbackAccessToken(): string {
 /** Starts the fake Cloud on a free port of 127.0.0.1. */
 export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbox'): Promise<FakeCloud> {
   const seen: SeenRequest[] = [];
-  const state = { edition };
+  const state = { edition, hangEdition: false };
   const server = createServer((request, response) => {
     const path = (request.url ?? '').split('?')[0]!.replace(/^\/siren\/v1/, '');
     seen.push({ method: request.method ?? '', path, authorization: request.headers.authorization });
@@ -68,6 +70,7 @@ export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbo
         response.end(JSON.stringify(body));
       };
       const route = `${request.method} ${path}`;
+      if (route === 'GET /auth/signup-options' && state.hangEdition) return undefined;
       if (route === 'GET /auth/signup-options') return send(200, capturedBody(`auth-signup-options-${state.edition === 'production' ? 'production' : 'sandbox'}`));
       if (route === 'POST /auth/login') {
         return send(200, capturedBody('auth-login-200', { '<ACCESSTOKEN>': loopbackAccessToken(), '<REFRESHTOKEN>': 'made-up-refresh-token' }));
@@ -87,6 +90,12 @@ export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbo
     },
     set edition(value) {
       state.edition = value;
+    },
+    get hangEdition() {
+      return state.hangEdition;
+    },
+    set hangEdition(value) {
+      state.hangEdition = value;
     },
     seen,
     close: () =>

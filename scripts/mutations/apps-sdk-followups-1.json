@@ -215,5 +215,47 @@
     "failing": [
       "say a follow run reads the edition before each poll"
     ]
+  },
+  {
+    "id": "edition-session-timeout",
+    "file": "src/cli/session-auth.ts",
+    "find": "{ timeout: EDITION_TIMEOUT_MS, retries: EDITION_RETRIES }",
+    "replace": "{ retries: EDITION_RETRIES }",
+    "expect": "caught",
+    "failing": [
+      "gives the edition read a short timeout of its own",
+      "gives up on a target whose edition read hangs well under ten seconds"
+    ]
+  },
+  {
+    "id": "edition-retries-two",
+    "file": "src/cli/session-auth.ts",
+    "find": "const EDITION_RETRIES = 1;",
+    "replace": "const EDITION_RETRIES = 2;",
+    "expect": "caught",
+    "failing": [
+      "gives the edition read a short timeout of its own"
+    ]
+  },
+  {
+    "id": "edition-line-raw",
+    "file": "src/cli/context.ts",
+    "find": "      if (!(error instanceof ConnectionError)) throw error;\n      throw new CliRefusal(",
+    "replace": "      throw error;\n      throw new CliRefusal(",
+    "expect": "caught",
+    "failing": [
+      "gives the edition read a short timeout of its own",
+      "with a line that says it did not answer"
+    ]
+  },
+  {
+    "id": "docs-edition-timeout",
+    "file": "docs/architecture/apps-cli.md",
+    "find": "so a target that hangs is given up after 6.5 seconds with the line",
+    "replace": "so a target that hangs is refused with the line",
+    "expect": "caught",
+    "failing": [
+      "say the edition read gives up well under ten seconds"
+    ]
   }
 ]

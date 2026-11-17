@@ -80,6 +80,22 @@ export class CommandContext {
     this.auth = new SessionAuthClient({ baseUrl: target.baseUrl, httpClient: io.httpClient });
   }
 
+  /**
+   * One edition read. A target that sends no answer, after the read's own
+   * short timeout and one retry, is refused with one line that says it did
+   * not answer, in place of the transport's line.
+   */
+  private async readEdition(): Promise<Edition> {
+    try {
+      return await this.auth.edition();
+    } catch (error) {
+      if (!(error instanceof ConnectionError)) throw error;
+      throw new CliRefusal(
+        `${this.target.baseUrl} did not answer when the tool asked which edition it is, so nothing was sent. Check the address, or try again in a minute.`,
+      );
+    }
+  }
+
   /** Writes one line to standard output. */
   print(line: string): void {
     this.io.stdout(`${line}\n`);
@@ -97,7 +113,7 @@ export class CommandContext {
    * twice. A Siren that names none counts as live.
    */
   targetEdition(): Promise<Edition> {
-    this.editionRead ??= this.auth.edition();
+    this.editionRead ??= this.readEdition();
     return this.editionRead;
   }
 
@@ -112,7 +128,7 @@ export class CommandContext {
    * bytes, per poll.
    */
   async recheckEdition(): Promise<void> {
-    this.editionRead = this.auth.edition();
+    this.editionRead = this.readEdition();
     assertSessionMatches(this.target, this.current(), await this.editionRead);
   }
 

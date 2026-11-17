@@ -30,4 +30,11 @@ describe('apps-sdk-followups-1: the records', () => {
     expect(note).toContain('one more GET every 2 seconds while following');
     expect(read('CHANGELOG.md')).toContain('`apps requests --follow` reads it again before each poll');
   });
+
+  it('say the edition read gives up well under ten seconds', () => {
+    const note = read('docs/architecture/apps-cli.md');
+    expect(note).not.toContain('retried like any read');
+    expect(note).toContain('is given up after 6.5 seconds');
+    expect(read('CHANGELOG.md')).toContain('That read gives up after 6.5 seconds');
+  });
 });

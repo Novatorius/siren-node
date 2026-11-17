@@ -266,7 +266,10 @@ as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps in
 - Every command that sends anything reads the edition from `GET /auth/signup-options` first, on
   every run, before anything else is sent. `signup` and `login` read it before they ask for the
   password. A Siren that names no edition counts as live. The read costs one GET with no
-  credential, a few dozen bytes, retried like any read. `CommandContext` keeps the answer for the
+  credential, a few dozen bytes. Each attempt may take 3 seconds and it is sent once more after a
+  network error, 429 or 5xx, so a target that hangs is given up after 6.5 seconds with the line
+  `<address> did not answer when the tool asked which edition it is, so nothing was sent.`
+  `CommandContext` keeps the answer for the
   run, so a refresh and a second call use it. `apps requests --follow` reads it again before each
   poll after the first (`recheckEdition()`), so a target that changes edition during the run stops
   it with the same one line before the session is sent there again. That costs one more GET every
@@ -908,3 +911,16 @@ while following. The test that pinned one edition read per follow run now pins o
 test/cli-edition-check.test.ts covers both directions with the harness, and the built command
 against the loopback Cloud flipped mid-run, where the old code kept polling until the test's
 20-second limit killed it.
+
+### 3. An edition read that hangs
+
+The edition read went through the session client's ordinary read: a 30-second timeout and two
+retries, so a target that took the connection and never answered held every command for 92
+seconds (30 + 0.5 + 30 + 1 + 30) before the transport's line. `SessionAuthClient.edition()` now
+sends with `EDITION_TIMEOUT_MS`, 3 seconds, and `EDITION_RETRIES`, 1, which gives up after 6.5
+seconds. `CommandContext` turns the `ConnectionError` into one line: the address did not answer
+when the tool asked which edition it is, so nothing was sent, and to check the address or try
+again in a minute. The other session calls keep the 30-second timeout, since a sign-in waits on
+Siren's password hashing and a refresh must not be cut short. test/cli-edition-check.test.ts pins
+the timeout and the line with the harness, and runs the built command against the loopback Cloud
+with its edition route hanging, where the old code ran into the test's 20-second limit.

@@ -99,6 +99,18 @@ const DEFAULT_SESSION_TIMEOUT_MS = 30_000;
 const READ_RETRIES = 2;
 
 /**
+ * How long one edition read may take, in milliseconds. Every command waits
+ * on it before it sends anything else, so it gets a short timeout of its own
+ * and one retry: a target that never answers is given up after 3 seconds,
+ * half a second, and 3 seconds more, 6.5 seconds in all. With the session
+ * timeout and two retries it took 92 seconds.
+ */
+const EDITION_TIMEOUT_MS = 3000;
+
+/** How many times the edition read is sent again after a network error, 429 or 5xx. */
+const EDITION_RETRIES = 1;
+
+/**
  * Fields of a session answer that hold a credential, in lower case with no
  * `_` or `-`. No error built from an answer carries their values.
  */
@@ -125,10 +137,12 @@ export class SessionAuthClient {
   /**
    * `GET /auth/signup-options`, and its `edition`. An answer with no
    * `edition`, from a Siren older than slice 7, counts as `production`, so
-   * the tool treats an unknown Cloud as live.
+   * the tool treats an unknown Cloud as live. Each attempt may take
+   * {@link EDITION_TIMEOUT_MS}, and it is sent again once, so a target that
+   * hangs raises `ConnectionError` after 6.5 seconds.
    */
   async edition(): Promise<Edition> {
-    const body = await this.send('GET', '/auth/signup-options', undefined, undefined, true);
+    const body = await this.send('GET', '/auth/signup-options', undefined, undefined, true, [], { timeout: EDITION_TIMEOUT_MS, retries: EDITION_RETRIES });
     if (!isObject(body)) throw unexpected('/auth/signup-options', 200);
     return body.edition === 'sandbox' ? 'sandbox' : 'production';
   }
@@ -206,8 +220,10 @@ export class SessionAuthClient {
   /**
    * Sends one JSON request to `{baseUrl}{path}` and answers the parsed 2xx
    * body. `read` lets a network error, 429 or 5xx send it again, up to
-   * {@link READ_RETRIES} times. `secrets` are the values this call sent that
-   * no error may show. The bearer is always one of them.
+   * {@link READ_RETRIES} times, or `limits.retries`. `limits.timeout` takes
+   * the place of the session timeout for each attempt. `secrets` are the
+   * values this call sent that no error may show. The bearer is always one of
+   * them.
    */
   private async send(
     method: 'GET' | 'POST',
@@ -216,16 +232,18 @@ export class SessionAuthClient {
     bearer?: string,
     read = false,
     secrets: readonly string[] = [],
+    limits: { timeout?: number; retries?: number } = {},
   ): Promise<unknown> {
     const url = `${this.options.baseUrl.replace(/\/+$/, '')}${path}`;
     const hidden = bearer === undefined ? [...secrets] : [...secrets, bearer];
     const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': USER_AGENT };
     if (bearer !== undefined) headers.Authorization = `Bearer ${bearer}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const timeout = this.options.timeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+    const timeout = limits.timeout ?? this.options.timeout ?? DEFAULT_SESSION_TIMEOUT_MS;
+    const retries = limits.retries ?? READ_RETRIES;
 
     for (let attempt = 0; ; attempt += 1) {
-      const retry = read && attempt < READ_RETRIES;
+      const retry = read && attempt < retries;
       let reply: HttpResponse;
       try {
         reply = await this.options.httpClient.send({

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { SANDBOX_BASE_URL } from '../src/http';
+import { HttpClientError, SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { BASE } from './record-fakes';
 import { AuthAnswers, EMAIL, PASSWORD, harness, session } from './cli-fakes';
@@ -148,6 +148,23 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(h.err()).toContain('is now a sandbox Siren, and your session was made when it was a live one');
   });
 
+  it('gives the edition read a short timeout of its own, so a target that hangs is given up well under ten seconds', async () => {
+    const h = harness([reply(200, [app])], { edition: new HttpClientError('The operation was aborted due to timeout') });
+    h.signedIn();
+    expect(await h.run(['apps', 'list'])).toBe(1);
+    expect(h.paths()).toEqual([]);
+    const timeouts = h.editionReads.map((request) => request.timeout);
+    expect(timeouts.length).toBeGreaterThan(0);
+    for (const timeout of timeouts) expect(timeout).toBeLessThanOrEqual(3000);
+    // Every attempt waits its whole timeout, and the pauses between them, half a second then a second, add to it.
+    const pauses = [500, 1000].slice(0, timeouts.length - 1).reduce((sum, pause) => sum + pause, 0);
+    expect(timeouts.reduce((sum, timeout) => sum + timeout, 0) + pauses).toBeLessThan(7000);
+    expect(h.err()).toBe(
+      `siren: ${SANDBOX_BASE_URL} did not answer when the tool asked which edition it is, so nothing was sent. ` +
+        'Check the address, or try again in a minute.\n',
+    );
+  });
+
   it('keeps the edition and the address a session was made for', async () => {
     const h = harness([AuthAnswers.oneOrg()], { stdin: PASSWORD, edition: 'production' });
     expect(await h.run(['login', '--live', '--base-url', BASE, '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
@@ -222,5 +239,21 @@ describe('apps-cli: the edition check against a Cloud whose edition changes betw
     const after = cloud.seen.slice(flippedAt).map((request) => `${request.method} ${request.path}`);
     expect(after).toEqual(['GET /auth/signup-options']);
     cloud.edition = 'sandbox';
+  }, 60_000);
+
+  it('gives up on a target whose edition read hangs well under ten seconds, with a line that says it did not answer', async () => {
+    const config = configFolder();
+    const login = await runBuilt(cli, ['login', '--base-url', cloud.baseUrl, '--email', 'loopback@example.invalid', '--password-stdin'], config, 'made-up-password\n');
+    expect(login.status, login.stderr).toBe(0);
+    cloud.hangEdition = true;
+    const started = Date.now();
+    const ended = await runBuilt(cli, ['apps', 'list', '--base-url', cloud.baseUrl], config);
+    const took = Date.now() - started;
+    cloud.hangEdition = false;
+    expect(ended.status, ended.stderr).toBe(1);
+    expect(took).toBeLessThan(9000);
+    expect(ended.stderr).toBe(
+      `siren: ${cloud.baseUrl} did not answer when the tool asked which edition it is, so nothing was sent. Check the address, or try again in a minute.\n`,
+    );
   }, 60_000);
 });
