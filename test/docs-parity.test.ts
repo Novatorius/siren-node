@@ -274,3 +274,143 @@ describe('P11: README parity table', () => {
     expect(http.requests).toHaveLength(0);
   });
 });
+
+/*
+ * The second table, "Node methods the PHP SDK does not have yet". Node may
+ * lead the PHP SDK, and each method it adds first is written down here, so
+ * a later slice can give PHP the same call. siren-php's origin/main was
+ * still 59383e6 when this list was checked, and no branch there held any of
+ * these methods.
+ *
+ * The guard below walks a real `Siren` client: every method on the
+ * prototype of every resource it carries, nested resources included. Each
+ * one must sit in exactly one of the two tables, so a later public method
+ * that is in neither fails here until its row is written.
+ */
+
+/** Node methods with no PHP counterpart, as the second table's Node cell writes them. */
+const NODE_ONLY = [
+  'siren.events.forward()',
+  'siren.conversions.recoverCreate()',
+  'siren.transactions.recoverCreditCollaborator()',
+  'siren.payouts.retrieve()',
+  'siren.fulfillments.list()',
+  'siren.fulfillments.retrieve()',
+  'siren.webhooks.subscriptions.retrieve()',
+  'siren.webhooks.subscriptions.update()',
+  'siren.webhooks.subscriptions.test()',
+  'siren.webhooks.subscriptions.deliveries()',
+];
+
+/**
+ * Methods TypeScript marks `private`, which sit on the prototype at run time
+ * but are not public surface. `privateStaysPrivate` below fails the type
+ * check if either becomes public, so this list cannot hide a public method.
+ */
+const PRIVATE_METHODS = ['siren.events.send()', 'siren.mappings.deleteLinks()'];
+
+// Never called. `npm run typecheck` reads it, and each `@ts-expect-error`
+// fails the check once its method stops being private.
+export function privateStaysPrivate(siren: sdk.Siren): void {
+  // @ts-expect-error EventsResource.send is private.
+  void siren.events.send;
+  // @ts-expect-error MappingsResource.deleteLinks is private.
+  void siren.mappings.deleteLinks;
+}
+
+const NODE_ONLY_HEADING = '### Node methods the PHP SDK does not have yet';
+
+interface NodeOnlyRow {
+  node: string;
+  route: string;
+  does: string;
+}
+
+/** The rows of the table headed `| Node | Siren route | What it does |` in the second section. */
+function nodeOnlyRows(): NodeOnlyRow[] {
+  const lines = section(readme(), NODE_ONLY_HEADING).split('\n');
+  const header = lines.findIndex((line) => /^\|\s*Node\s*\|\s*Siren route\s*\|\s*What it does\s*\|\s*$/.test(line));
+  expect(header, 'a table headed | Node | Siren route | What it does |').toBeGreaterThan(-1);
+  const rows: NodeOnlyRow[] = [];
+  for (const line of lines.slice(header + 2)) {
+    if (!line.startsWith('|')) break;
+    const cells = line
+      .slice(1, line.endsWith('|') ? -1 : undefined)
+      .split('|')
+      .map((cell) => cell.trim());
+    rows.push({ node: cells[0] ?? '', route: cells[1] ?? '', does: cells[2] ?? '' });
+  }
+  return rows;
+}
+
+/** Every method on the prototype chain of each resource a client carries, as `siren.path.method()`. */
+function clientMethods(siren: sdk.Siren): string[] {
+  const names = new Set<string>();
+  const seen = new Set<object>();
+
+  function walk(value: object, path: string): void {
+    if (seen.has(value)) return;
+    seen.add(value);
+    for (let proto = Object.getPrototypeOf(value) as object | null; proto && proto !== Object.prototype; proto = Object.getPrototypeOf(proto) as object | null) {
+      for (const key of Object.getOwnPropertyNames(proto)) {
+        if (key === 'constructor') continue;
+        if (typeof Object.getOwnPropertyDescriptor(proto, key)?.value === 'function') names.add(`${path}.${key}()`);
+      }
+    }
+    for (const key of Object.keys(value)) {
+      const child: unknown = Reflect.get(value, key);
+      // Resources hold the transport too. Only the resources are surface.
+      if (typeof child === 'object' && child !== null && /Resource$/.test(child.constructor.name)) {
+        walk(child, `${path}.${key}`);
+      }
+    }
+  }
+
+  walk(siren, 'siren');
+  return [...names].sort();
+}
+
+describe('Parity: Node methods the PHP SDK does not have yet', () => {
+  it('lists each Node-only method once, with its route and what it does', () => {
+    const rows = nodeOnlyRows();
+
+    expect(rows.map((row) => code(row.node)).sort()).toEqual([...NODE_ONLY].sort());
+    for (const row of rows) {
+      expect(row.route, `${row.node} names its route`).toMatch(/`(GET|POST|PUT|DELETE) \//);
+      expect(row.does.length, `${row.node} says what it does`).toBeGreaterThan(10);
+    }
+  });
+
+  it('names no method the PHP table already maps', () => {
+    const mapped = new Set(PHP_SURFACE.map(([, node]) => node));
+
+    for (const node of NODE_ONLY) {
+      expect(mapped.has(node), node).toBe(false);
+    }
+  });
+
+  it('names only Node methods that exist', () => {
+    const http = new FakeHttpClient([reply(200, {})]);
+    const siren = new sdk.Siren({ apiKey: TEST_API_KEY, httpClient: http, baseUrl: BASE });
+
+    for (const row of nodeOnlyRows()) {
+      expect(typeof resolve(code(row.node), siren), row.node).toBe('function');
+    }
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it('puts every public method of the Siren client in exactly one of the two tables', () => {
+    const http = new FakeHttpClient([reply(200, {})]);
+    const siren = new sdk.Siren({ apiKey: TEST_API_KEY, httpClient: http, baseUrl: BASE });
+    const inPhpTable = new Set(parityRows().map((row) => code(row.node)));
+    const inNodeTable = new Set(nodeOnlyRows().map((row) => code(row.node)));
+    const methods = clientMethods(siren);
+
+    expect(methods, 'the walk reaches the nested resources').toContain('siren.collaborators.aliases.create()');
+    for (const name of PRIVATE_METHODS) expect(methods, name).toContain(name);
+    for (const name of methods.filter((candidate) => !PRIVATE_METHODS.includes(candidate))) {
+      expect([inPhpTable.has(name), inNodeTable.has(name)].filter(Boolean), name).toHaveLength(1);
+    }
+    expect(http.requests).toHaveLength(0);
+  });
+});

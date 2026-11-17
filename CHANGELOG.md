@@ -155,6 +155,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CreditsResource.holdReference`, which builds the reference a checkout's credit holds carry.
 - `ConversionBulkAction`, `TransactionBulkAction`, `DistributorBulkAction` and `CreditHoldStatus`,
   Siren's names for those bulk actions and hold statuses.
+- `payouts.retrieve` reads one payout with `GET /payouts/{id}`, taking `fields`, `include` and
+  `propertyId`. `siren.payouts` is now a `PayoutsResource`, whose `list` is unchanged. An API key
+  needs `ledger:payouts:read` and must be organization-wide. `Payout` types the answer.
+- `siren.fulfillments` (`FulfillmentsResource`) reads the batches Siren pays payouts in: `list`
+  with `GET /fulfillments` and `retrieve` with `GET /fulfillments/{id}`. `list` filters by
+  `status`, `payoutStatus`, `currency`, `from` and `to`, and throws `SirenError` before sending for
+  any other key, `propertyId` included, for a `from` or `to` that is not a real day written
+  `YYYY-MM-DD`, and for a `payoutStatus` or `currency` that is `""` or not a string, which Siren
+  reads as no filter or as one value. An API key needs `ledger:fulfillments:read` and must be
+  organization-wide. `Fulfillment`, `FulfillmentPayout` and `FulfillmentListParams` type them.
+- `webhooks.subscriptions.retrieve` (`GET /webhooks/{id}`) reads one subscription, and
+  `webhooks.subscriptions.deliveries` (`GET /webhooks/{id}/deliveries`) reads its latest 50
+  deliveries, newest first. Both retry as reads. `webhooks.subscriptions.update`
+  (`PUT /webhooks/{id}`) sends only `targetUrl`, `events`, `status` and `description`, and throws
+  `SirenError` before sending for any other key. `webhooks.subscriptions.test`
+  (`POST /webhooks/{id}/test`) makes Siren send one signed `webhook.test` delivery now. Both are sent
+  once. Each of the four throws `UnexpectedResponseError` for a 2xx body of the wrong shape.
+  `UpdateWebhookSubscriptionParams`, `WebhookTestResult` and `WebhookDelivery` type them.
+- `ApiKeyRecordScope` names all thirty record scopes Siren issues, from Siren's
+  `ApiKeyRecordScopes`, and `API_KEY_RECORD_SCOPES` lists them in Siren's order.
+  `CreateApiKeyParams.scopes` and `ApiKeyScopeEntry.scope` take them.
+- `openapi.yaml` documents `GET /payouts/{id}`, `GET /fulfillments`, `GET /fulfillments/{id}`,
+  `PUT /webhooks/{id}`, `GET /webhooks/{id}/deliveries` and the `WebhookDelivery` schema.
 
 ### Changed
 
