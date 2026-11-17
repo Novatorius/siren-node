@@ -319,7 +319,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `siren apps apply` writes only the secrets Siren sent, so a key-only app gets no empty
   `SIREN_SIGNING_SECRET` line, and a later apply that adds a `url` saves the new signing secret.
 - `siren apps apply` reads the app with `GET /apps/{key}` first and prints each change the file
-  would make, a change made in the dashboard included, with how many records select a feature it
+  would make, with how many records select a feature it
   removes. It asks before it writes, says the last write wins, and takes `--yes` to skip the
   question. With no terminal and no `--yes` it sends nothing, and with nothing to change it says so
   and writes nothing.

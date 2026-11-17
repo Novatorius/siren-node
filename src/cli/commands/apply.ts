@@ -95,8 +95,9 @@ function onThisMachine(url: string): boolean {
 /**
  * `siren apps apply [file] [--yes]`: checks the app file, reads the app as
  * Siren holds it with `GET /apps/{key}`, prints each change applying the
- * file would make, a change made in the dashboard since included, and asks
- * before it writes, since the last write wins. `--yes` skips the question,
+ * file would make, and asks
+ * before it writes, since the last write wins. It cannot tell a change made
+ * in the dashboard from an edit to the file (AP-A1776), so it claims neither. `--yes` skips the question,
  * and with no terminal and no `--yes` it refuses. With nothing to change it
  * says so and writes nothing. Then it declares the app with
  * `PUT /apps/{key}` once, and prints the app without its url. On the first
@@ -171,7 +172,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   run.print(
     changes.isNew
       ? `${key} is new on ${run.target.baseUrl}. Applying ${shown}:`
-      : `Applying ${shown} changes ${key} on ${run.target.baseUrl}, a change made in the dashboard included:`,
+      : `Applying ${shown} changes ${key} on ${run.target.baseUrl}:`,
   );
   for (const line of lines) run.print(`  ${line}`);
   if (input.values.yes !== true) {

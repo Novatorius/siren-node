@@ -112,3 +112,14 @@ describe('apps-sdk-container review fix 1: the command for a missing key fits th
     expect((error as Error).message).toContain('When the app holds no key, as after its key was revoked, run siren apps add-key <app key>.');
   });
 });
+
+describe('apps-sdk-container review fix 2: apply says what will change, and claims no dashboard change', () => {
+  it('a change made only in the file prints a header that names no dashboard change', async () => {
+    const h = harness([reply(200, appRecord({ name: 'Old' })), reply(200, appRecord())], { env: URL_ENV });
+    h.signedIn();
+    h.write('siren.app.json', exampleFile());
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
+    expect(h.out()).toContain(`Applying siren.app.json changes ${KEY} on ${SANDBOX_BASE_URL}:\n  name: Old becomes Acme\n`);
+    expect(h.out()).not.toContain('made in the dashboard');
+  });
+});

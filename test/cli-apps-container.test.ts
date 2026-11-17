@@ -100,7 +100,7 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     expect(h.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toBeUndefined();
   });
 
-  it('prints each difference, a dashboard change and a feature the file lacks included, then asks and writes on yes', async () => {
+  it('prints each difference, a feature the file lacks included, then asks and writes on yes', async () => {
     const changed = appRecord({
       name: 'Acme from the dashboard',
       description: 'Changed in the dashboard.',
@@ -125,7 +125,7 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `GET /apps/${KEY}/items/13`, `GET /apps/${KEY}/items/14`, `PUT /apps/${KEY}`]);
     const out = h.out();
     for (const line of [
-      `Applying siren.app.json changes ${KEY} on ${SANDBOX_BASE_URL}, a change made in the dashboard included:`,
+      `Applying siren.app.json changes ${KEY} on ${SANDBOX_BASE_URL}:`,
       '  name: Acme from the dashboard becomes Acme',
       '  description changes',
       '  moves the address to a new url, keeping its signing secret',
