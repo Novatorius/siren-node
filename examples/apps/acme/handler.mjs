@@ -18,6 +18,9 @@
 //   its metrics in proportion to each metric's value, in whole minor units.
 //   An ask is counted as handled only once its answer is accepted, so a
 //   repeat after a failed answer is answered again.
+// - An ask it cannot answer, such as a pool with no metrics, gets 500 and a
+//   logged line that says why, and no guessed answer. Siren sends it again
+//   on its deadline, and then shows it as needing attention.
 //
 // It keeps the ids it handled in memory, so a restart forgets them. A real
 // app keeps them in its own store, beside whatever it did for each request.
@@ -56,7 +59,13 @@ export function createAcmeApp({ siren, signingSecret, log = () => {}, now }) {
         return { status: 200, body: received };
       }
 
-      const answer = answerFor(request);
+      let answer;
+      try {
+        answer = answerFor(request);
+      } catch (error) {
+        log(`${request.id}: cannot answer this ask, so it gets 500 and no answer: ${error.message}`);
+        return { status: 500, body: JSON.stringify({ error: 'unanswerable' }) };
+      }
       if (answer === null) {
         log(`${request.id}: no answer for an ask on ${request.item.kind}.`);
         return { status: 200, body: received };
@@ -76,7 +85,38 @@ export function createAcmeApp({ siren, signingSecret, log = () => {}, now }) {
 }
 
 /**
- * The answer the example gives an ask, or null for a kind it does not answer.
+ * A node:http request listener that hands each request's body and headers
+ * to `app.handle()`. Anything the handler throws gets 500 and a logged
+ * line, and the server keeps serving the next request.
+ *
+ * @param {{ handle(rawBody: Uint8Array, headers: Record<string, string | string[] | undefined>): Promise<{ status: number, body: string }> }} app
+ * @param {(line: string) => void} log
+ * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void}
+ */
+export function createRequestListener(app, log) {
+  return (req, res) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      app.handle(Buffer.concat(chunks), req.headers).then(
+        (reply) => {
+          res.writeHead(reply.status, { 'Content-Type': 'application/json' });
+          res.end(reply.body);
+        },
+        (error) => {
+          log(`Could not handle a request, and answered 500: ${error.message}`);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'failed' }));
+        },
+      );
+    });
+  };
+}
+
+/**
+ * The answer the example gives an ask, or null for a kind it does not
+ * answer. Throws, naming the field, for an ask whose data lacks what the
+ * answer needs, so the example never answers with a guess.
  *
  * @param {{ item: { kind: string }, data: Record<string, unknown> }} request
  * @returns {{ outcome: string, [field: string]: unknown } | null}
@@ -84,9 +124,13 @@ export function createAcmeApp({ siren, signingSecret, log = () => {}, now }) {
 export function answerFor(request) {
   const { data } = request;
   if (request.item.kind === 'fulfillmentMethod') {
+    if (typeof data.payoutId !== 'number' && typeof data.payoutId !== 'string') throw new Error('a payout ask needs data.payoutId.');
     return { outcome: 'paid', reference: `acme-${data.payoutId}` };
   }
   if (request.item.kind === 'distributionResolver') {
+    if (!Number.isSafeInteger(Number(data.amount)) || !Array.isArray(data.metrics) || data.metrics.length === 0) {
+      throw new Error('a pool ask needs data.amount in whole minor units and a list of data.metrics.');
+    }
     return { outcome: 'resolved', shares: split(Number(data.amount), data.metrics) };
   }
   return null;

@@ -21,4 +21,9 @@ export function createAcmeApp(options: AcmeAppOptions): {
   handle(rawBody: string | Uint8Array, headers: Record<string, string | string[] | undefined>): Promise<AcmeReply>;
 };
 
+export function createRequestListener(
+  app: { handle(rawBody: Uint8Array, headers: Record<string, string | string[] | undefined>): Promise<{ status: number; body: string }> },
+  log: (line: string) => void,
+): (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void;
+
 export function answerFor(request: Pick<AppRequest, 'item' | 'data'>): AppAnswer | null;

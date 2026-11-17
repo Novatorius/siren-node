@@ -1147,7 +1147,9 @@ parts that are easy to get wrong. It answers an ask after the 200, outside the r
 an answer that fails, so a 5xx or a dropped connection is logged and never ends the process. It counts
 an ask as handled only once Siren accepts the answer, so the next delivery answers again. A repeat that
 arrives while the first answer is in flight waits for that answer, so two deliveries close together
-answer once. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
+answer once. An ask it cannot answer, such as a pool with no metrics, gets 500 and a logged line
+that says why, never a guessed answer, so Siren sends it again on its deadline and then shows it as
+needing attention. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
 
 ### Answer an ask
 

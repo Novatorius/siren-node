@@ -1,4 +1,4 @@
-import { chmodSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { accessSync, chmodSync, constants, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SANDBOX_BASE_URL } from '../src/http';
@@ -118,7 +118,7 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     expect(folder.err()).toMatch(/not a regular file/);
   });
 
-  it('leaves the old env file whole when the write fails, and prints the new pair once on standard error', async () => {
+  it('leaves the old env file whole when a write no check foresaw fails, and says the pair is lost and how to get a new one, never printing it', async () => {
     const h = harness([rotated()]);
     h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: join(h.cwd, '.env.sandbox') } }) });
     h.write('.env.sandbox', OLD_ENV);
@@ -127,8 +127,55 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     expect(await h.run(['apps', 'rotate', APP_KEY])).toBe(1);
     expect(h.file('.env.sandbox')).toBe(OLD_ENV);
     expect(readdirSync(h.cwd).sort()).toEqual(['.env.sandbox']);
-    expect(h.err().split(RAW_KEY_2)).toHaveLength(2);
-    expect(h.err().split(SIGNING_SECRET_2)).toHaveLength(2);
-    expect(h.out()).not.toContain(RAW_KEY_2);
+    expect(h.err()).toMatch(/Siren issued/);
+    expect(h.err()).toMatch(/could not be saved/);
+    expect(h.err()).toContain(`siren apps rotate ${APP_KEY}`);
+    expect(h.printed()).not.toContain(RAW_KEY_2);
+    expect(h.printed()).not.toContain(SIGNING_SECRET_2);
+
+    const apply = harness([declared()], { env: appEnv });
+    apply.signedIn();
+    apply.write('siren.app.json', exampleFile);
+    expect(await apply.run(['apps', 'apply'])).toBe(1);
+    expect(apply.err()).toMatch(/Siren issued/);
+    expect(apply.err()).toContain(`siren apps rotate ${APP_KEY}`);
+    expect(apply.printed()).not.toContain(RAW_KEY_2);
+    expect(apply.printed()).not.toContain(SIGNING_SECRET_2);
+  });
+
+  it('refuses before sending an env path whose folder is missing or cannot be written', async () => {
+    const gone = harness([rotated()]);
+    gone.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: join(gone.cwd, 'moved', '.env.sandbox') } }) });
+    expect(await gone.run(['apps', 'rotate', APP_KEY])).toBe(1);
+    expect(gone.http.requests).toHaveLength(0);
+    expect(gone.err()).toMatch(/does not exist/);
+
+    // A folder the test cannot write to, whoever runs it: /etc belongs to another user unless
+    // the run is the machine's real root, and a user namespace's root gets no write to it either.
+    if (statSync('/etc').uid !== process.getuid?.()) {
+      const system = harness([rotated()]);
+      system.signedIn();
+      expect(await system.run(['apps', 'rotate', APP_KEY, '--app-file', '/etc/passwd'])).toBe(1);
+      expect(system.http.requests).toHaveLength(0);
+      expect(system.err()).toMatch(/cannot write to \/etc/);
+    }
+
+    const shut = harness([declared()], { env: appEnv });
+    shut.signedIn();
+    mkdirSync(join(shut.cwd, 'shut'));
+    shut.write('shut/siren.app.json', exampleFile);
+    chmodSync(join(shut.cwd, 'shut'), 0o555);
+    let writable = true;
+    try {
+      accessSync(join(shut.cwd, 'shut'), constants.W_OK);
+    } catch {
+      writable = false;
+    }
+    if (!writable) {
+      expect(await shut.run(['apps', 'apply', 'shut/siren.app.json'])).toBe(1);
+      expect(shut.http.requests).toHaveLength(0);
+      expect(shut.err()).toMatch(/cannot write to/);
+    }
+    chmodSync(join(shut.cwd, 'shut'), 0o755);
   });
 });

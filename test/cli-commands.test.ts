@@ -388,15 +388,19 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.err()).toMatch(/siren\.app\.json:9\b/);
   });
 
-  it('prints the key and secret once, on standard error, when the env file cannot be written', async () => {
+  // The orchestrator's ruling in the slice 8 fix round (AP-A904): Siren issues an app's key and
+  // secret once, so a declare that succeeds while the env file cannot be written loses the pair.
+  // apply checks the env path before sending, and this case expects the refusal with nothing sent.
+  it('refuses before sending when the env file cannot be written as a regular file, and prints no key', async () => {
     const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     mkdirSync(join(h.cwd, '.env.sandbox'));
     expect(await h.run(['apps', 'apply'])).toBe(1);
-    expect(h.out()).not.toContain(RAW_KEY);
-    expect(h.err().split(RAW_KEY)).toHaveLength(2);
-    expect(h.err().split(SIGNING_SECRET)).toHaveLength(2);
+    expect(h.http.requests).toHaveLength(0);
+    expect(h.err()).toMatch(/not a regular file/);
+    expect(h.printed()).not.toContain(RAW_KEY);
+    expect(h.printed()).not.toContain(SIGNING_SECRET);
   });
 
   it('rotates the key into the env file apply wrote, replacing only its three lines, never in the working folder', async () => {

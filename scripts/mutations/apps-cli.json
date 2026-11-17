@@ -1019,11 +1019,11 @@
   {
     "id": "env-fallback-silent",
     "file": "src/cli/commands/apply.ts",
-    "find": "        `SIREN_API_KEY=${rawKey}\\nSIREN_SIGNING_SECRET=${signingSecret}\\n`,",
+    "find": "        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair.`,",
     "replace": "        '',",
     "expect": "caught",
     "failing": [
-      "apps-cli: siren apps init, apply and the app key > prints the key and secret once"
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
     ]
   },
   {
@@ -1610,8 +1610,8 @@
   {
     "id": "apply-not-remembered",
     "file": "src/cli/commands/apply.ts",
-    "find": "    const saved = await saveSecrets(run, envPath, app.rawKey, app.signingSecret);\n    await run.remember(key, envPath);",
-    "replace": "    const saved = await saveSecrets(run, envPath, app.rawKey, app.signingSecret);",
+    "find": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret);\n    await run.remember(key, envPath);",
+    "replace": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
@@ -1650,8 +1650,8 @@
   {
     "id": "rotate-app-file-unremembered",
     "file": "src/cli/commands/apply.ts",
-    "find": "  const saved = await saveSecrets(run, envPath, rotated.rawKey, rotated.signingSecret);\n  await run.remember(key, envPath);",
-    "replace": "  const saved = await saveSecrets(run, envPath, rotated.rawKey, rotated.signingSecret);",
+    "find": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret);\n  await run.remember(key, envPath);",
+    "replace": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
@@ -1804,8 +1804,8 @@
   {
     "id": "env-link-followed",
     "file": "src/cli/commands/apply.ts",
-    "find": "  if (found.isSymbolicLink()) {",
-    "replace": "  if (found.isSymbolicLink() && path === '') {",
+    "find": "  if (found?.isSymbolicLink()) {",
+    "replace": "  if (found?.isSymbolicLink() && path === '') {",
     "expect": "caught",
     "failing": [
       "apps-cli internals: the env file > refuses an env file that is a symbolic link"
@@ -1814,11 +1814,12 @@
   {
     "id": "env-other-kind-written",
     "file": "src/cli/commands/apply.ts",
-    "find": "  if (!found.isFile()) return { kind: 'other',",
-    "replace": "  if (path === '') return { kind: 'other',",
+    "find": "  if (found !== undefined && !found.isFile()) return { kind: 'other',",
+    "replace": "  if (found !== undefined && path === '') return { kind: 'other',",
     "expect": "caught",
     "failing": [
-      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link",
+      "apps-cli: siren apps init, apply and the app key > refuses before sending when the env file cannot be written as a regular file"
     ]
   },
   {
@@ -1834,11 +1835,12 @@
   {
     "id": "apply-link-unchecked",
     "file": "src/cli/commands/apply.ts",
-    "find": "  if (problem?.kind === 'link') throw new CliRefusal(",
-    "replace": "  if (problem?.kind === 'link' && key === '') throw new CliRefusal(",
+    "find": "  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent.`);",
+    "replace": "  if (problem !== undefined && key === '') throw new CliRefusal(`${problem.line} Nothing was sent.`);",
     "expect": "caught",
     "failing": [
-      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link",
+      "apps-cli: siren apps init, apply and the app key > refuses before sending when the env file cannot be written as a regular file"
     ]
   },
   {
@@ -1952,6 +1954,76 @@
     "expect": "caught",
     "failing": [
       "apps-cli docs > the README's request handler hands each request"
+    ]
+  },
+  {
+    "id": "env-fate-prints-secret",
+    "file": "src/cli/commands/apply.ts",
+    "find": "        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair.`,",
+    "replace": "        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair. ${rawKey} ${signingSecret}`,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
+    ]
+  },
+  {
+    "id": "env-folder-missing-allowed",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (code === 'ENOENT' || code === 'ENOTDIR') return { kind: 'other', line: `${folder} does not exist,",
+    "replace": "    if (code === 'ENOENT' || code === 'ENOTDIR') return undefined && { kind: 'other', line: `${folder} does not exist,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses before sending an env path whose folder is missing or cannot be written"
+    ]
+  },
+  {
+    "id": "env-folder-unwritable-allowed",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    return { kind: 'other', line: `The tool cannot write to ${folder}, so it cannot save ${path}.` };",
+    "replace": "    return undefined;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses before sending an env path whose folder is missing or cannot be written"
+    ]
+  },
+  {
+    "id": "example-unanswerable-thrown",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "      let answer;\n      try {\n        answer = answerFor(request);\n      } catch (error) {\n        log(`${request.id}: cannot answer this ask, so it gets 500 and no answer: ${error.message}`);\n        return { status: 500, body: JSON.stringify({ error: 'unanswerable' }) };\n      }",
+    "replace": "      const answer = answerFor(request);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > answers an ask it cannot answer with 500"
+    ]
+  },
+  {
+    "id": "example-pool-guessed",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "    if (!Number.isSafeInteger(Number(data.amount)) || !Array.isArray(data.metrics) || data.metrics.length === 0) {",
+    "replace": "    if (!Number.isSafeInteger(Number(data.amount))) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > answers an ask it cannot answer with 500"
+    ]
+  },
+  {
+    "id": "example-payout-guessed",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "    if (typeof data.payoutId !== 'number' && typeof data.payoutId !== 'string') throw new Error('a payout ask needs data.payoutId.');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > answers an ask it cannot answer with 500"
+    ]
+  },
+  {
+    "id": "example-listener-unguarded",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "        (error) => {\n          log(`Could not handle a request, and answered 500: ${error.message}`);\n          res.writeHead(500, { 'Content-Type': 'application/json' });\n          res.end(JSON.stringify({ error: 'failed' }));\n        },",
+    "replace": "        (error) => {\n          throw error;\n        },",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > the server's listener answers 500"
     ]
   }
 ]

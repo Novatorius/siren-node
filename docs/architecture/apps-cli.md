@@ -229,11 +229,14 @@ to the wrong Siren unnoticed. Only the three lines `SIREN_BASE_URL`, `SIREN_API_
 `SIREN_SIGNING_SECRET` are replaced, and every other line is kept. The whole text goes to a new
 file made with mode 0600 beside the env file, which is then renamed over it, as credentials.json is
 written. So the key is never in a file wider than 0600, a failed write leaves the old file whole,
-and a link at the path is replaced rather than followed. A path that is a symbolic link is refused
-before `apply` or `rotate` sends anything, and `rotate` refuses one that is not a regular file the
-same way, since its old key still works until Siren rotates it. The command prints the key's 16-character prefix and the file name, never the key or the
-secret. When the file cannot be written, it prints both once on standard error and answers 1, since
-Siren will not show them again.
+and a link at the path is replaced rather than followed. Before `apply` or `rotate` sends
+anything, it checks that the env path can be written as a regular file: it is a regular file, or it
+is not there and its folder exists and can be written to. A symbolic link, a folder, a missing
+folder and a folder the tool cannot write to are each refused with one line that says why, since
+Siren issues a pair once (the orchestrator's ruling in the fix round, AP-A904). The command prints
+the key's 16-character prefix and the file name, never the key or the secret. When a write the
+check could not foresee still fails, it says on standard error that Siren issued a pair it could
+not save and that `siren apps rotate <key>` issues a new one, prints neither value, and answers 1.
 
 ## Sandbox and live
 
@@ -315,6 +318,10 @@ answers each request:
   answered `{ outcome: 'resolved', shares: [{ id, amount }] }`, divided by each metric's value in
   whole minor units, the remainder going to the largest fractions. An ask counts as handled only
   once its answer is accepted.
+- An ask whose data lacks what the answer needs, such as a pool with no metrics or a payout with no
+  `payoutId`, gets 500 and a logged line that says why, and no guessed answer. Siren sends it again
+  on its deadline, then marks it `needs_attention`. `createRequestListener` gives server.mjs a
+  listener that answers 500 for anything the handler throws and keeps serving (AP-A905).
 
 The example runs in place in a checkout of this repository, after `npm ci && npm run build`, since
 its package.json takes this package by `file:` (AP-A646).
@@ -743,6 +750,8 @@ The review of the built slice (the run folder's review/cli-review.md) read it ag
 | 13, .gitignore on apply | Declined. `apps init` adds `.env.*`, and a hand-written app file is the developer's own repository. |
 | 13, the config folder's mode | Declined. The file is 0600, and the folder is one the person chose. |
 | 13, control characters in `apps requests <id>` | Declined for now. The app's own answer is shown as Siren stored it, and a later slice can escape it. |
+| After the review, the example server | Taken. An ask the example cannot answer gets 500 and a logged reason, and the server's listener survives a handler that throws (AP-A905). |
+| After the review, an env path that is a folder | Taken by ruling. `apply` and `rotate` refuse before sending an env path they cannot write as a regular file, and a later failure names the lost pair and `siren apps rotate` without printing it (AP-A904). |
 | 13, the example logs a tell's data | Declined. The example is a demonstration on a sandbox, and its comment says a real app keeps its own store. |
 
 ## Packets in build order

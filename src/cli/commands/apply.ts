@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { ConflictError, appErrorCode } from '../../errors';
 import type { App } from '../../record-types';
@@ -66,8 +67,8 @@ export async function appsInit(input: CommandInput): Promise<number> {
  * absolute path. On a later one it leaves the env file alone, and says so
  * when that file holds no key. Records the env file's path for `rotate`.
  *
- * Before sending it refuses an env file that is a symbolic link, and one
- * that holds the key of another Siren, so a key is never written through a
+ * Before sending it refuses an env path it could not write as a regular
+ * file (AP-A904), and an env file that holds the key of another Siren, so a key is never written through a
  * link and never replaces a key this machine still needs.
  */
 export async function appsApply(input: CommandInput): Promise<number> {
@@ -90,8 +91,8 @@ export async function appsApply(input: CommandInput): Promise<number> {
   const { key, params } = declarationFor(parsed.file);
   const envPath = join(dirname(path), run.envFileName());
   const problem = await envFileProblem(envPath);
-  if (problem?.kind === 'link') throw new CliRefusal(`${problem.line} Nothing was sent.`);
-  const held = problem === undefined ? await envValue(envPath, 'SIREN_BASE_URL') : undefined;
+  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent.`);
+  const held = await envValue(envPath, 'SIREN_BASE_URL');
   if (held !== undefined && held !== run.target.baseUrl) {
     throw new CliRefusal(
       `${envPath} holds the key for ${held}, and this apply is for ${run.target.baseUrl}, so nothing was sent. ` +
@@ -106,7 +107,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   for (const name of parsed.filled) run.print(`Its url came from ${name}.`);
 
   if (app.created) {
-    const saved = await saveSecrets(run, envPath, app.rawKey, app.signingSecret);
+    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret);
     await run.remember(key, envPath);
     return saved ? 0 : 1;
   }
@@ -181,7 +182,7 @@ export async function appsRotate(input: CommandInput): Promise<number> {
   if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);
 
   const rotated = await run.siren().apps.rotate(key);
-  const saved = await saveSecrets(run, envPath, rotated.rawKey, rotated.signingSecret);
+  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret);
   await run.remember(key, envPath);
   if (saved) run.print(`Siren revoked the old key. Restart your app so it reads the new pair.`);
   return saved ? 0 : 1;
@@ -254,10 +255,12 @@ function inUseLines(key: string, error: ConflictError): string {
  * Writes the key and secret Siren showed once to the env file, replacing
  * only its three lines, mode 0600, and prints the key's prefix and the
  * file's absolute path. Says on standard error when the file held a key for
- * another Siren. When the file cannot be written, prints both once on
- * standard error, since Siren will not show them again, and answers false.
+ * another Siren. When a write the checks before sending could not foresee
+ * fails, says on standard error that Siren issued a pair it could not save
+ * and that `siren apps rotate` issues a new one, never printing either
+ * value, and answers false.
  */
-async function saveSecrets(run: CommandContext, envPath: string, rawKey: string, signingSecret: string): Promise<boolean> {
+async function saveSecrets(run: CommandContext, key: string, envPath: string, rawKey: string, signingSecret: string): Promise<boolean> {
   const base = run.target.baseUrl;
   try {
     const before = await envValue(envPath, 'SIREN_BASE_URL');
@@ -265,8 +268,8 @@ async function saveSecrets(run: CommandContext, envPath: string, rawKey: string,
     if (before !== undefined && before !== base) run.warn(`${envPath} held a key for ${before}. It now holds the key for ${base}.`);
   } catch (error) {
     run.warn(
-      `Siren showed the app's new key and signing secret once, and ${envPath} could not be written (${(error as Error).message}). Keep them somewhere safe now:\n` +
-        `SIREN_API_KEY=${rawKey}\nSIREN_SIGNING_SECRET=${signingSecret}\n`,
+      `Siren issued a new key and signing secret for ${key}, and they could not be saved to ${envPath} (${(error as Error).message}). ` +
+        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair.`,
     );
     return false;
   }
@@ -304,22 +307,34 @@ async function writeEnvLines(path: string, entries: Readonly<Record<(typeof ENV_
 }
 
 /**
- * Why the tool will not write a key to `path`: it is a symbolic link, or it
- * is there and not a regular file. Undefined when it is a regular file or
- * not there.
+ * Why the tool cannot write a key to `path` as a regular file: it is a
+ * symbolic link, it is there and not a regular file, its folder does not
+ * exist, or its folder cannot be written to, which the rename needs.
+ * Undefined when the path is a regular file or not there, in a folder the
+ * tool can write to. `apply` and `rotate` ask before sending, by the
+ * orchestrator's ruling in the slice 8 fix round (AP-A904), since Siren
+ * issues a pair once.
  */
 async function envFileProblem(path: string): Promise<{ kind: 'link' | 'other'; line: string } | undefined> {
   let found;
   try {
     found = await lstat(path);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
   }
-  if (found.isSymbolicLink()) {
+  if (found?.isSymbolicLink()) {
     return { kind: 'link', line: `${path} is a symbolic link, and the tool writes a key only to a regular file it can see. Replace the link with a file.` };
   }
-  if (!found.isFile()) return { kind: 'other', line: `${path} is not a regular file, so the tool cannot write a key to it.` };
+  if (found !== undefined && !found.isFile()) return { kind: 'other', line: `${path} is not a regular file, so the tool cannot write a key to it.` };
+  const folder = dirname(path);
+  try {
+    await access(folder, constants.W_OK);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return { kind: 'other', line: `${folder} does not exist, so the tool cannot write ${path}.` };
+    return { kind: 'other', line: `The tool cannot write to ${folder}, so it cannot save ${path}.` };
+  }
   return undefined;
 }
 
