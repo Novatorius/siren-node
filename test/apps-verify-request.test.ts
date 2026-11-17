@@ -72,7 +72,7 @@ const tell = JSON.stringify({
   data: { conversionId: 412, programId: 3 },
 });
 
-describe.skip('apps-cli: apps.verifyRequest', () => {
+describe('apps-cli: apps.verifyRequest', () => {
   it('checks the request Siren signed, byte for byte, as text and as bytes', () => {
     for (const raw of [fixture.body, Buffer.from(fixture.body, 'utf8'), new TextEncoder().encode(fixture.body)]) {
       const request = siren.apps.verifyRequest(raw, fixture.headers, SECRET, { now: T });

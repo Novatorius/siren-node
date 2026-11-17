@@ -200,7 +200,7 @@ describe('apps-cli: apps reads and changes', () => {
   });
 });
 
-describe.skip('apps-cli: apps.requests', () => {
+describe('apps-cli: apps.requests', () => {
   it('lists requests from their envelope, retried, with a status filter', async () => {
     const { http, apps: resource } = apps([reply(200, { requests: [row] })]);
     expect(await resource.requests.list({ status: 'needs_attention' })).toEqual([row]);
@@ -253,7 +253,7 @@ const answers = JSON.parse(
   readFileSync(new URL('./fixtures/apps-exchange/answer.json', import.meta.url), 'utf8'),
 ) as AnswerFixture;
 
-describe.skip('apps-cli: apps.requests.answer', () => {
+describe('apps-cli: apps.requests.answer', () => {
   it("replays Siren's answer fixture: accepted, then a duplicate, then a different answer refused", async () => {
     const replies = answers.exchanges.map((exchange) =>
       exchange.status === 200
@@ -333,7 +333,7 @@ describe.skip('apps-cli: apps.requests.answer', () => {
   });
 });
 
-describe.skip('apps-cli: sandbox and live keys', () => {
+describe('apps-cli: sandbox and live keys', () => {
   const testKey = `sk_test_${'0a'.repeat(32)}`;
   const liveKey = `sk_live_${'0a'.repeat(32)}`;
 

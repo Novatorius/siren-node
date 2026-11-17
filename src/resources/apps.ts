@@ -1,4 +1,5 @@
 import type { HttpTransport } from '../http';
+import { answerAppRequest, listAppRequests, resendAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
   AppAnswer,
@@ -58,9 +59,7 @@ export class AppRequestsResource {
    * Packet sdk-requests.
    */
   async list(params: AppRequestListParams = {}): Promise<AppRequestRecord[]> {
-    void this.http;
-    void params;
-    return [];
+    return listAppRequests(this.http, params, AppRequestsResource.LIST_FILTERS);
   }
 
   /**
@@ -78,8 +77,7 @@ export class AppRequestsResource {
    * Packet sdk-requests.
    */
   async resend(id: string): Promise<AppRequestRecord> {
-    void id;
-    return {} as AppRequestRecord;
+    return resendAppRequest(this.http, id);
   }
 
   /**
@@ -110,9 +108,7 @@ export class AppRequestsResource {
    * Packet sdk-answer.
    */
   async answer(id: string, answer: AppAnswer): Promise<AppAnswerReceipt> {
-    void id;
-    void answer;
-    return { status: 'accepted', duplicate: false };
+    return answerAppRequest(this.http, id, answer, MAX_APP_ANSWER_BYTES);
   }
 }
 
@@ -332,10 +328,6 @@ export class AppsResource {
     secret: string,
     options: VerifyAppRequestOptions = {},
   ): AppRequest {
-    void rawBody;
-    void headers;
-    void secret;
-    void options;
-    return {} as AppRequest;
+    return verifyAppRequest(rawBody, headers, secret, options, DEFAULT_APP_REQUEST_TOLERANCE_SECONDS);
   }
 }
