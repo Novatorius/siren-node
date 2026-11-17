@@ -1,4 +1,4 @@
-import type { ApiKeyScope } from './api-key-scopes';
+import type { ApiKeyRecordScope, ApiKeyScope } from './api-key-scopes';
 import type { WebhookEventType } from './event-types';
 import type { RefundKind } from './taxonomy';
 import type { AccessTokenSource } from './auth/access-token-source';
@@ -352,15 +352,16 @@ export interface CreateApiKeyParams {
   /** Human-readable label, e.g. `"Production server"`. Optional, and left out of the request when not given. */
   label?: string;
   /**
-   * Scopes to grant, from {@link ApiKeyScope}. At least one is required.
-   * Event scopes (`event:*` or `event:{slug}`) send events. The ledger scopes,
-   * such as `ledger:conversions:read`, read conversions, transactions,
-   * obligations and payouts. `webhook-subscriptions:read` and
-   * `webhook-subscriptions:manage` read and manage webhook subscriptions.
+   * Scopes to grant, from {@link ApiKeyScope} and {@link ApiKeyRecordScope}.
+   * At least one is required. Event scopes (`event:*` or `event:{slug}`) send
+   * events. The ledger scopes, such as `ledger:conversions:read`, read the
+   * ledger, payouts and fulfillments included. `webhook-subscriptions:read`
+   * and `webhook-subscriptions:manage` read and manage webhook subscriptions.
+   * The `records:` scopes read and manage the records a merchant sets up.
    * Siren answers 400 for an older resource scope such as `programs:read` or
    * `conversions:read`.
    */
-  scopes: Array<ApiKeyScope | (string & {})>;
+  scopes: Array<ApiKeyScope | ApiKeyRecordScope | (string & {})>;
   /** When the key stops working, as an ISO 8601 date. Omit for a key that never expires. */
   expiresAt?: string;
   /**
@@ -432,7 +433,7 @@ export interface WebhookCatalogEntry {
  */
 export interface ApiKeyScopeEntry {
   /** The scope string to pass to `apiKeys.create`. */
-  scope: ApiKeyScope | (string & {});
+  scope: ApiKeyScope | ApiKeyRecordScope | (string & {});
   /** The group the scope belongs to, such as `events` or `ledger`. */
   resource: string;
   /** What the scope allows within its group, such as `conversions:read`. */

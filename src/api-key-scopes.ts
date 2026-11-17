@@ -22,6 +22,9 @@
  * a 400. No scope reaches API key management, which takes a signed-in
  * dashboard session.
  *
+ * {@link ApiKeyRecordScope} names every record scope Siren issues, these
+ * six included.
+ *
  * ```ts
  * await siren.apiKeys.create({
  *   label: 'Accounting export',
@@ -71,6 +74,79 @@ export const LEDGER_READ_SCOPES: readonly ApiKeyScope[] = [
   ApiKeyScope.LedgerObligationsRead,
   ApiKeyScope.LedgerPayoutsRead,
 ];
+
+/**
+ * Every scope that lets an API key read or manage an organization's
+ * records, one for each constant in Siren's `ApiKeyRecordScopes`, in the
+ * order the dashboard offers them. Each name is the PHP constant's name in
+ * Pascal case, so `ENGAGEMENTS_READ` is `EngagementsRead`.
+ *
+ * - The `ledger:` scopes only read what Siren recorded. No scope approves a
+ *   reward, moves an obligation along or sends a payout.
+ * - `WebhooksRead` and `WebhooksManage` read and manage webhook
+ *   subscriptions. They are the same strings as
+ *   `ApiKeyScope.WebhookSubscriptionsRead` and `WebhookSubscriptionsManage`.
+ * - The `records:` scopes read and manage the records a merchant sets up.
+ *   A manage scope reads everything its read scope reads.
+ *
+ * Siren grants each only by its exact name. `*` and wildcards such as
+ * `records:*` grant none of them. A test reads Siren's
+ * ApiKeyRecordScopes.php and fails when this list differs from it.
+ *
+ * ```ts
+ * await siren.apiKeys.create({
+ *   label: 'Payout app',
+ *   scopes: [ApiKeyRecordScope.PayoutsRead, ApiKeyRecordScope.FulfillmentsRead],
+ * });
+ * ```
+ */
+export const ApiKeyRecordScope = Object.freeze({
+  /** `siren.engagements` reads. A store's key reads its own store. */
+  EngagementsRead: 'ledger:engagements:read',
+  /** `siren.opportunities` reads. Organization keys only. */
+  OpportunitiesRead: 'ledger:opportunities:read',
+  /** `conversions.list()` and `retrieve()`. A store's key reads its own store. */
+  ConversionsRead: 'ledger:conversions:read',
+  /** `transactions.list()` and `retrieve()`. A store's key reads its own store. */
+  TransactionsRead: 'ledger:transactions:read',
+  /** `obligations.list()`. A store's key reads its own store. */
+  ObligationsRead: 'ledger:obligations:read',
+  /** `fulfillments.list()` and `retrieve()`. Organization keys only. */
+  FulfillmentsRead: 'ledger:fulfillments:read',
+  /** `payouts.list()` and `retrieve()`. Organization keys only. */
+  PayoutsRead: 'ledger:payouts:read',
+  /** Lists and reads webhook subscriptions, the event catalog and deliveries. Organization keys only. */
+  WebhooksRead: 'webhook-subscriptions:read',
+  /** Everything `WebhooksRead` opens, plus create, update, delete and test. Organization keys only. */
+  WebhooksManage: 'webhook-subscriptions:manage',
+  ProductsRead: 'records:products:read',
+  ProductsManage: 'records:products:manage',
+  CouponsRead: 'records:coupons:read',
+  CouponsManage: 'records:coupons:manage',
+  CollaboratorsRead: 'records:collaborators:read',
+  CollaboratorsManage: 'records:collaborators:manage',
+  CollaboratorGroupsRead: 'records:collaborator-groups:read',
+  CollaboratorGroupsManage: 'records:collaborator-groups:manage',
+  ProgramsRead: 'records:programs:read',
+  ProgramsManage: 'records:programs:manage',
+  ProgramGroupsRead: 'records:program-groups:read',
+  ProgramGroupsManage: 'records:program-groups:manage',
+  DistributorsRead: 'records:distributors:read',
+  DistributorsManage: 'records:distributors:manage',
+  ApplicationFormsRead: 'records:application-forms:read',
+  ApplicationFormsManage: 'records:application-forms:manage',
+  ApplicationsRead: 'records:applications:read',
+  ApplicationsManage: 'records:applications:manage',
+  NotificationRulesRead: 'records:notification-rules:read',
+  NotificationRulesManage: 'records:notification-rules:manage',
+  PropertiesRead: 'records:properties:read',
+} as const);
+
+/** Union of the {@link ApiKeyRecordScope} strings. */
+export type ApiKeyRecordScope = (typeof ApiKeyRecordScope)[keyof typeof ApiKeyRecordScope];
+
+/** Every {@link ApiKeyRecordScope}, in the order Siren lists them. */
+export const API_KEY_RECORD_SCOPES: readonly ApiKeyRecordScope[] = Object.freeze(Object.values(ApiKeyRecordScope));
 
 /** The scope for one event type, such as `event:loyalty-points-earned`. */
 export function eventScope(slug: string): `event:${string}` {

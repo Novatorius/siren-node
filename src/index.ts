@@ -1,6 +1,7 @@
 export { Siren } from './client';
 export { WebhookEventType } from './event-types';
 export { ApiKeyScope, LEDGER_READ_SCOPES, eventScope } from './api-key-scopes';
+export { ApiKeyRecordScope, API_KEY_RECORD_SCOPES } from './api-key-scopes';
 export { ConnectorScope } from './auth/connector-scope';
 export type { AccessTokenSource } from './auth/access-token-source';
 export { StaticAccessToken } from './auth/static-access-token';
