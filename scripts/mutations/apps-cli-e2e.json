@@ -324,5 +324,15 @@
     "failing": [
       "apps-cli: siren apps init, apply and the app key > says once, before sending, that a Siren in a container cannot reach an app on localhost"
     ]
+  },
+  {
+    "id": "e2e-8-prepare-again",
+    "file": "package.json",
+    "find": "\"prepack\": \"tsup\"",
+    "replace": "\"prepare\": \"tsup\"",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the siren command in the package > builds dist before packing, and gives an install nothing to run"
+    ]
   }
 ]

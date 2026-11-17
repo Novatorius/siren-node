@@ -250,6 +250,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `engines` asks for Node 18.3 or later, since the `siren` command uses `util.parseArgs`.
+- The build before `npm pack` and `npm publish` runs as `prepack`, not `prepare`, so installing the
+  package's tarball no longer warns about an install script. The packed files are the same. A
+  checkout now needs `npm run build` after `npm ci`, as CI and the release already run it.
 - `new Siren()` sends an `sk_test_` key to the sandbox when no `baseUrl` is given, and throws for a
   test key with the live address or a live key with the sandbox.
 - A 401 is resent once with a refreshed token when the credential is an `AccessTokenSource` that
