@@ -224,7 +224,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `login` refuse a credentials file others can read before the password is sent. It talks to the
   sandbox unless told otherwise, and needs `--live` for a live organization. Its hidden password
   prompt turns the terminal's echo off before it shows `Password: `, so a password typed the moment
-  the prompt appears is never shown, and gives the echo back however the prompt ends.
+  the prompt appears is never shown, and gives the echo back however the prompt ends. Every command
+  that sends anything first reads the edition the Siren reports with `GET /auth/signup-options`,
+  once per run, and refuses a stored session made for another edition or address before it sends
+  anything with it, with one line that names the `siren login` to run.
 - examples/apps/acme, an example app that checks each request, answers every ask and sends a sale
   with the app's own key.
 - `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppItem`,

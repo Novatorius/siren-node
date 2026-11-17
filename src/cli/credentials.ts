@@ -10,8 +10,16 @@ import { CliRefusal } from './targets';
  * verification token, an app's API key or its signing secret.
  */
 export interface StoredSession {
-  /** What Siren reported at sign-in. Every later command checks it against `--live`. */
+  /**
+   * What Siren reported at sign-in. Every later command reads the edition
+   * the Siren reports now and refuses a session made for another one.
+   */
   edition: Edition;
+  /**
+   * The address the session was made for, with no trailing slash, the same
+   * as its key in the file. Absent in a file written before it was kept.
+   */
+  baseUrl?: string;
   email: string;
   userId: number;
   orgId: number;
@@ -137,6 +145,7 @@ function isCredentialsFile(value: unknown): value is CredentialsFile {
     const s = session as Record<string, unknown>;
     return (
       (s.edition === 'sandbox' || s.edition === 'production') &&
+      (s.baseUrl === undefined || typeof s.baseUrl === 'string') &&
       typeof s.accessToken === 'string' &&
       typeof s.refreshToken === 'string' &&
       typeof s.accessExpiresAt === 'number' &&

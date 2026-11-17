@@ -4,7 +4,7 @@ import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { PasswordSignIn, askLine, readPassword } from '../session-auth';
 import type { EmailConfirmationWindow, LoginResult, Membership, SessionTokens } from '../session-auth';
-import { CliRefusal, CliUsageError, assertEditionAllowed } from '../targets';
+import { CliRefusal, CliUsageError, assertEditionAllowed, assertSessionMatches } from '../targets';
 
 /*
  * `siren signup`, `login`, `logout`, `orgs` and `use`: signing a person in
@@ -33,7 +33,7 @@ export async function signup(input: CommandInput): Promise<number> {
   // A credentials file the tool would refuse stops the command here, before the password leaves the machine.
   await run.store.get(run.target.baseUrl);
 
-  const edition = await run.auth.edition();
+  const edition = await run.targetEdition();
   assertEditionAllowed(run.target, edition);
 
   const orgName = text(values['org-name']) ?? (await askLine(io, 'Organization name: ', '--org-name'));
@@ -92,7 +92,7 @@ export async function login(input: CommandInput): Promise<number> {
   // A credentials file the tool would refuse stops the command here, before the password leaves the machine.
   await run.store.get(run.target.baseUrl);
 
-  const edition = await run.auth.edition();
+  const edition = await run.targetEdition();
   assertEditionAllowed(run.target, edition);
 
   let result: LoginResult;
@@ -137,15 +137,34 @@ export async function login(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren logout`: revokes the access and refresh tokens with
- * `POST /auth/logout` and forgets this Siren's session, even when Siren
- * refuses. Needs no `--live`, since it sends only the session's own tokens.
+ * `siren logout`: reads the edition the target reports, then revokes the
+ * access and refresh tokens with `POST /auth/logout` and forgets this
+ * Siren's session, even when Siren refuses. Needs no `--live`, since it
+ * sends only the session's own tokens. When the target is now another
+ * edition than the session was made for, or its edition cannot be read, it
+ * sends the tokens nowhere and forgets the session on this machine.
  */
 export async function logout(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const session = await run.store.get(run.target.baseUrl);
   if (session === null) throw new CliRefusal(`You are not signed in to ${run.target.baseUrl}.`);
   run.adopt(session);
+  let edition;
+  try {
+    edition = await run.targetEdition();
+  } catch (error) {
+    run.warn(`Siren did not confirm the sign-out: ${messageOf(error)} This machine forgets the session anyway.`);
+    await run.store.remove(run.target.baseUrl);
+    run.print(`Signed out of ${run.target.baseUrl}.`);
+    return 0;
+  }
+  try {
+    assertSessionMatches(run.target, session, edition);
+  } catch (mismatch) {
+    await run.store.remove(run.target.baseUrl);
+    run.print(`Forgot the session for ${run.target.baseUrl} on this machine. ${messageOf(mismatch)}`);
+    return 0;
+  }
   try {
     await run.auth.logout(session.accessToken, session.refreshToken);
   } catch (error) {

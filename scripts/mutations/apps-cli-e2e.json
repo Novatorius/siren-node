@@ -44,5 +44,65 @@
     "failing": [
       "apps-cli: the hidden password prompt in a terminal"
     ]
+  },
+  {
+    "id": "e2e-2-session-edition-unchecked",
+    "file": "src/cli/targets.ts",
+    "find": "  if (session.edition !== edition) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > refuses a session stored for a sandbox when the target is now live"
+    ]
+  },
+  {
+    "id": "e2e-2-signed-in-skips-session-check",
+    "file": "src/cli/context.ts",
+    "find": "    assertSessionMatches(this.target, session, edition);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > checks every command that sends anything with a session"
+    ]
+  },
+  {
+    "id": "e2e-2-session-address-unchecked",
+    "file": "src/cli/targets.ts",
+    "find": "  if (session.baseUrl !== undefined && session.baseUrl !== target.baseUrl) {",
+    "replace": "  if (false && session.baseUrl !== target.baseUrl) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > refuses a session whose stored address is not the target"
+    ]
+  },
+  {
+    "id": "e2e-2-session-keeps-no-address",
+    "file": "src/cli/context.ts",
+    "find": "      baseUrl: this.target.baseUrl,\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > keeps the edition and the address a session was made for"
+    ]
+  },
+  {
+    "id": "e2e-2-logout-sends-mismatched-tokens",
+    "file": "src/cli/commands/session.ts",
+    "find": "    assertSessionMatches(run.target, session, edition);\n  } catch (mismatch) {",
+    "replace": "    void edition;\n  } catch (mismatch) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > logs out of a session made for another edition"
+    ]
+  },
+  {
+    "id": "e2e-2-login-hint-without-live",
+    "file": "src/cli/targets.ts",
+    "find": "  const login = commandLine(target, 'login', edition === 'production');",
+    "replace": "  const login = commandLine(target, 'login');",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > refuses a session stored for a sandbox when the target is now live"
+    ]
   }
 ]

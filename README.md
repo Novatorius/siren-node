@@ -1235,7 +1235,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 |---|---|
 | `siren signup` | Makes an organization and signs in. It asks for the organization's name, your email, the terms and a password, or takes `--org-name`, `--email`, `--accept-terms` and `--password-stdin`. |
 | `siren login` | Signs in. `--org <slug or id>` picks one of your organizations. |
-| `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. |
+| `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. A session made when the Siren was the other edition is forgotten here and its tokens are not sent. |
 | `siren orgs` | Lists your organizations, `*` on the one in use. |
 | `siren use <slug or id>` | Switches to another of your organizations. |
 | `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
@@ -1256,8 +1256,10 @@ and column, and nothing is sent.
 
 The tool talks to `SIREN_BASE_URL`, else the sandbox. `--base-url <url>` names another Siren, and
 takes plain http only for `localhost`, `127.0.0.1` and `host.docker.internal`. A live organization
-needs `--live` on every command but `siren logout`, and `--live` against a sandbox is refused. The
-session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,
+needs `--live` on every command but `siren logout`, and `--live` against a sandbox is refused. Every
+command that sends anything first asks the Siren whether it is a sandbox or live, and refuses a
+session made when it was the other, so a sandbox session never reaches a Siren that became live.
+The session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,
 readable by you alone. It never holds your password, an app's key or its secret. The tool answers 0
 when it did what you asked, 1 when Siren or the tool refused, and 2 for a command line it cannot
 read.

@@ -5,7 +5,7 @@ import type { CliIo } from '../src/cli/io';
 import { runCli } from '../src/cli/run';
 import type { StoredSession } from '../src/cli/credentials';
 import { SANDBOX_BASE_URL } from '../src/http';
-import type { HttpResponse } from '../src/http';
+import type { HttpClient, HttpRequest, HttpResponse } from '../src/http';
 import { FakeHttpClient, reply } from './http-fakes';
 
 /*
@@ -91,6 +91,13 @@ export function session(overrides: Partial<StoredSession> = {}): StoredSession {
 }
 
 export interface HarnessOptions {
+  /**
+   * What the target's `GET /auth/signup-options` answers, which every command
+   * that sends anything reads first: `sandbox` (the default), `production`,
+   * `none` for a Siren that names no edition, or any reply or error. The
+   * harness answers that route itself, apart from the queued replies.
+   */
+  edition?: 'sandbox' | 'production' | 'none' | HttpResponse | Error;
   env?: Record<string, string>;
   interactive?: boolean;
   /** Lines typed at each `prompt`, in order. */
@@ -116,6 +123,25 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
   const http = new FakeHttpClient(replies);
   const controller = new AbortController();
   let sleeps = 0;
+  const editionReads: HttpRequest[] = [];
+  const sent: string[] = [];
+  const edition = options.edition ?? 'sandbox';
+  const editionAnswer = (): HttpResponse | Error =>
+    edition === 'sandbox' ? AuthAnswers.sandbox() : edition === 'production' ? AuthAnswers.production() : edition === 'none' ? AuthAnswers.noEdition() : edition;
+  const pathOf = (request: HttpRequest) => `${request.method} ${new URL(request.url).pathname.replace(/^\/siren\/v1/, '')}`;
+  // The edition read goes to its own list, so `http.requests` and `paths()` hold what the command itself sent.
+  const client: HttpClient = {
+    send: async (request) => {
+      sent.push(pathOf(request));
+      if (request.method === 'GET' && new URL(request.url).pathname.endsWith('/auth/signup-options')) {
+        editionReads.push(request);
+        const answer = editionAnswer();
+        if (answer instanceof Error) throw answer;
+        return answer;
+      }
+      return http.send(request);
+    },
+  };
 
   const io: CliIo = {
     stdout: (text) => {
@@ -137,7 +163,7 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
     env: options.env ?? {},
     cwd,
     configDir,
-    httpClient: http,
+    httpClient: client,
     now: () => NOW_MS,
     sleep: async () => {
       sleeps += 1;
@@ -174,6 +200,11 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
     modeOf: (path: string) => statSync(path).mode & 0o777,
     file: (name: string) => readFileSync(join(cwd, name), 'utf8'),
     write: (name: string, text: string) => writeFileSync(join(cwd, name), text),
-    paths: () => http.requests.map((request) => `${request.method} ${new URL(request.url).pathname.replace(/^\/siren\/v1/, '')}`),
+    /** What the command sent, the edition read left out. */
+    paths: () => http.requests.map(pathOf),
+    /** Each `GET /auth/signup-options` the command sent. */
+    editionReads,
+    /** Every request in the order sent, the edition read included. */
+    sent: () => [...sent],
   };
 }

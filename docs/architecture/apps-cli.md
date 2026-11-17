@@ -211,7 +211,8 @@ It holds one session per Siren address:
 
 ```json
 { "version": 1, "sessions": { "https://sandbox.sirenaffiliates.com/siren/v1": {
-  "edition": "sandbox", "email": "dev@acme.example", "userId": 7, "orgId": 3, "orgName": "Acme",
+  "edition": "sandbox", "baseUrl": "https://sandbox.sirenaffiliates.com/siren/v1",
+  "email": "dev@acme.example", "userId": 7, "orgId": 3, "orgName": "Acme",
   "role": "admin", "accessToken": "<JWT>", "refreshToken": "<JWT>", "accessExpiresAt": 1794916800,
   "envFiles": { "acme-payouts": "/home/dev/acme/.env.sandbox" } } } }
 ```
@@ -253,11 +254,27 @@ as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps in
 - `--base-url` and `SIREN_BASE_URL` take `http://` only for `localhost`, `127.0.0.1` and
   `host.docker.internal`. Any other address must be https, or the command is a usage error, exit 2,
   with nothing sent, since every command sends a password or a session token (AP-A632).
-- `signup` and `login` read the edition from `GET /auth/signup-options` before they ask for the
-  password. A Siren that names no edition counts as live.
+- Every command that sends anything reads the edition from `GET /auth/signup-options` first, on
+  every run, before anything else is sent. `signup` and `login` read it before they ask for the
+  password. A Siren that names no edition counts as live. The read costs one GET with no
+  credential, a few dozen bytes, retried like any read. It is made once per run: `CommandContext`
+  keeps the answer, so a refresh, a second call and every loop of `apps requests --follow` use it.
+  `apps init` sends nothing and reads nothing.
 - A live edition needs `--live` on every command but `logout`, whatever address chose it. Signing
-  out sends only the session's own tokens, to revoke them. `--live` against a
-  sandbox is refused. A stored session keeps its edition, so the check runs before anything is sent.
+  out sends only the session's own tokens, to revoke them. `--live` against a sandbox is refused.
+- A stored session keeps the edition and the address it was made for (`edition`, `baseUrl`). A
+  command whose target now reports another edition, or a session stored for another address,
+  stops with one line before it sends anything with the session: what the target is now, what the
+  session was made for, and the `siren login` to run, with `--live` when the target is live. So a
+  session made on a sandbox never lists or changes a live organization because the same address
+  became live, and a live session never acts on a Siren that became a sandbox. The checkpoint saw
+  both against a real Cloud (e2e steps 20a and 20l) before this check.
+- `logout` reads the edition too. On a mismatch it sends the tokens nowhere and forgets the
+  session on this machine, since the tokens were made for another Siren. When the edition cannot
+  be read, it forgets the session anyway, as it does when Siren refuses the sign-out.
+- test/cli-edition-check.test.ts covers a stored sandbox session against a live target, a stored
+  live session against a sandbox, every command that sends anything, and the built command against
+  a fake Cloud on 127.0.0.1 whose edition changes between two commands.
 
 ## The app file
 

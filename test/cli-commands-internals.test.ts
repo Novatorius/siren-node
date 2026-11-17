@@ -17,7 +17,7 @@ const apps = () => reply(200, []);
 
 describe('apps-cli internals: the session', () => {
   it('refuses a credentials file of another shape, and never overwrites it with a sign-in', async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.oneOrg()], { stdin: PASSWORD });
+    const h = harness([AuthAnswers.oneOrg()], { stdin: PASSWORD });
     mkdirSync(h.configDir, { mode: 0o700 });
     writeFileSync(h.credentialsPath, '{"version":2,"sessions":{}}', { mode: 0o600 });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
@@ -27,7 +27,7 @@ describe('apps-cli internals: the session', () => {
 
   it('asks for --email and --password-stdin before sending when there is no terminal', async () => {
     for (const argv of [['login', '--password-stdin'], ['login', '--email', EMAIL], ['signup', '--email', EMAIL, '--password-stdin', '--accept-terms']]) {
-      const h = harness([AuthAnswers.sandbox()], { stdin: PASSWORD });
+      const h = harness([], { stdin: PASSWORD });
       expect(await h.run(argv), argv.join(' ')).toBe(2);
       expect(h.http.requests).toHaveLength(0);
     }
@@ -57,7 +57,7 @@ describe('apps-cli internals: the session', () => {
   });
 
   it('says what to do about a plan when choosing among several organizations', async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.severalOrgs(), reply(401, { error: { message: 'Raw entitlement text.', code: 'trial_ended' } })], {
+    const h = harness([AuthAnswers.severalOrgs(), reply(401, { error: { message: 'Raw entitlement text.', code: 'trial_ended' } })], {
       stdin: PASSWORD,
     });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin', '--org', 'acme-two'])).toBe(1);
@@ -74,16 +74,16 @@ describe('apps-cli internals: the session', () => {
   });
 
   it('refuses --org that names another organization than the only one, and keeps nothing', async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.oneOrg()], { stdin: PASSWORD });
+    const h = harness([AuthAnswers.oneOrg()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin', '--org', 'acme-two'])).toBe(1);
     expect(h.err()).toContain(membershipAcme.orgSlug);
     expect(() => h.credentialsText()).toThrow();
   });
 
   it('sends the password with a line break at its end taken off, and nothing else of standard input changed', async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.oneOrg(), apps()], { stdin: ` ${PASSWORD} \r\n` });
+    const h = harness([AuthAnswers.oneOrg(), apps()], { stdin: ` ${PASSWORD} \r\n` });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
-    expect(bodyOf(h.http.requests[1])).toEqual({ email: EMAIL, password: ` ${PASSWORD} ` });
+    expect(bodyOf(h.http.requests[0])).toEqual({ email: EMAIL, password: ` ${PASSWORD} ` });
   });
 });
 
@@ -149,7 +149,7 @@ describe('apps-cli internals: the stored files before a secret is sent', () => {
       ['login', '--email', EMAIL, '--password-stdin'],
       ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'],
     ]) {
-      const h = harness([AuthAnswers.sandbox(), AuthAnswers.oneOrg()], { stdin: PASSWORD });
+      const h = harness([AuthAnswers.oneOrg()], { stdin: PASSWORD });
       h.signedIn();
       chmodSync(h.credentialsPath, 0o644);
       expect(await h.run(argv), argv[0]).toBe(1);

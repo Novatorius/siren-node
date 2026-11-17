@@ -6,7 +6,7 @@ import type { StoredSession } from './credentials';
 import type { CliIo } from './io';
 import { SessionAuthClient } from './session-auth';
 import type { Edition, Membership, SessionTokens } from './session-auth';
-import { CliRefusal, assertEditionAllowed } from './targets';
+import { CliRefusal, assertEditionAllowed, assertSessionMatches, commandLine } from './targets';
 import type { Target } from './targets';
 
 /** How long before the access token's `exp` the tool refreshes it, in seconds. */
@@ -54,6 +54,7 @@ export class CommandContext {
   readonly store: CredentialStore;
   readonly auth: SessionAuthClient;
   private session: StoredSession | null = null;
+  private editionRead: Promise<Edition> | null = null;
 
   constructor(
     readonly io: CliIo,
@@ -74,15 +75,37 @@ export class CommandContext {
   }
 
   /**
-   * The stored session for this Siren, checked against `--live` before
-   * anything is sent. Refuses when there is none, naming `siren login`.
+   * The edition the target reports now, from `GET /auth/signup-options`.
+   * Read once per command run, at the first call, and the same answer is
+   * given to every later call in that run, so `apps requests --follow` and a
+   * refresh never read it again. A Siren that names none counts as live.
+   */
+  targetEdition(): Promise<Edition> {
+    this.editionRead ??= this.auth.edition();
+    return this.editionRead;
+  }
+
+  /**
+   * The stored session for this Siren, checked before anything else is sent
+   * with it: refused when there is none, naming `siren login`, and, once the
+   * target's edition is read, refused when the session was made for another
+   * address or edition (`assertSessionMatches`), or when `--live` does not
+   * match the edition (`assertEditionAllowed`). With no session nothing is
+   * sent at all.
    */
   async signedIn(): Promise<StoredSession> {
     const session = await this.store.get(this.target.baseUrl);
-    if (session === null) throw new CliRefusal(`You are not signed in to ${this.target.baseUrl}. Run siren login first.`);
-    assertEditionAllowed(this.target, session.edition);
+    if (session === null) throw new CliRefusal(`You are not signed in to ${this.target.baseUrl}. Run ${this.command('login')} first.`);
+    const edition = await this.targetEdition();
+    assertSessionMatches(this.target, session, edition);
+    assertEditionAllowed(this.target, edition);
     this.adopt(session);
     return session;
+  }
+
+  /** A `siren` command line for a hint, with the flags that reach this Siren (`commandLine`). */
+  command(words: string): string {
+    return commandLine(this.target, words);
   }
 
   /** Uses this session for the rest of the run, without the edition check. `logout` alone calls it directly. */
@@ -163,6 +186,7 @@ export class CommandContext {
     const before = await this.store.get(this.target.baseUrl);
     const session: StoredSession = {
       edition,
+      baseUrl: this.target.baseUrl,
       email: tokens.user.email || email,
       userId: tokens.user.id,
       orgId: org.orgId,
