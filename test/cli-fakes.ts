@@ -48,7 +48,13 @@ export const AuthAnswers = {
   severalOrgs: () =>
     reply(200, { verificationToken: 'verification-token', user: { id: 7, email: EMAIL }, memberships: [membershipAcme, membershipTwo] }),
   tokens: (accessToken = ACCESS_2, refreshToken = REFRESH_2) => reply(200, { accessToken, refreshToken, user }),
-  wrongPassword: () => reply(401, { error: { message: 'Those details do not match an account.', context: [] } }),
+  /**
+   * A wrong password: Login.php line 193 answers `setError(self::NO_MATCH, 401)`,
+   * a bare string (saas/Http/Response.php line 112), with NO_MATCH from
+   * Login.php line 51, on `feat/apps` at 1557b0030.
+   */
+  wrongPassword: () =>
+    reply(401, { error: "Invalid email or password. If you haven't set up your login yet, check your email for a link to set it up." }),
   /**
    * A spent or unknown refresh token: AuthService::refreshToken() throws
    * InvalidCredentialsException('Invalid refresh token.') (AuthService.php

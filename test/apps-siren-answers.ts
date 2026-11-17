@@ -13,6 +13,8 @@ export const APP_REQUEST_ID = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
 /**
  * An app as the app routes answer it: lib/Apps/Service/Services/AppSerializer.php
  * lines 15 to 30, with `rawKey` and `signingSecret` only on a first declare.
+ * Each item as lib/Apps/Core/Models/Adapters/AppItemAdapter.php lines 43 to 53
+ * gives it, on `feat/apps` at 1557b0030.
  */
 export function appRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -30,7 +32,19 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
     scopes: [],
     apiKeyPrefix: 'sk_test_0a0a0a0a',
     items: [
-      { id: 11, ref: 'app:11', appId: 4, kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM', description: '', settings: {}, status: 'active' },
+      {
+        id: 11,
+        ref: 'app:11',
+        appId: 4,
+        kind: 'postConversionAction',
+        key: 'notify-crm',
+        name: 'Tell the CRM',
+        description: '',
+        settings: {},
+        status: 'active',
+        dateCreated: '2026-11-16 21:00:00',
+        dateModified: '2026-11-16 21:00:00',
+      },
       {
         id: 12,
         ref: 'app:12',
@@ -41,6 +55,8 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
         description: '',
         settings: { currencies: ['USD'], answerWindowMinutes: 1 },
         status: 'active',
+        dateCreated: '2026-11-16 21:00:00',
+        dateModified: '2026-11-16 21:00:00',
       },
     ],
     ...overrides,
@@ -74,37 +90,59 @@ export function requestRow(overrides: Record<string, unknown> = {}) {
 export const AppAnswers = {
   /**
    * 409 on a delete while records select the app's items:
-   * lib/Apps/Service/Exceptions/AppInUseException.php lines 19 to 35. The
-   * code sits in `error.code` and in `context.reason`.
+   * lib/Apps/Service/Exceptions/AppInUseException.php lines 30 to 50 on
+   * `feat/apps` at 1557b0030, which always sends `openRequests`. The code
+   * sits in `error.code` and in `context.reason`.
    */
   inUse: (uses: Record<string, number> = { 'app:12': 2 }) =>
     reply(409, {
       error: {
         message: 'Records still select items of "Acme", so it can\'t be deleted. Turn it off instead. Siren then stops calling it and keeps what it already did.',
         code: 'app_in_use',
-        context: { reason: 'app_in_use', uses },
+        context: { reason: 'app_in_use', uses, openRequests: 0 },
       },
     }),
   /**
    * The same 409 while asks are open and nothing selects the items:
-   * lib/Apps/Service/Services/AppOpenRequests.php line 15 on `pkt/apps-exchange`
-   * at 086615e2a, and its architecture note line 184.
+   * AppInUseException.php lines 41 to 47 on `feat/apps` at 1557b0030 word
+   * it for the open asks, and `uses` is an empty PHP array, which JSON
+   * writes as `[]`.
    */
   inUseWithOpenAsks: (openRequests = 2) =>
     reply(409, {
       error: {
-        message: 'Records still select items of "Acme", so it can\'t be deleted. Turn it off instead. Siren then stops calling it and keeps what it already did.',
+        message: `"Acme" still has ${openRequests === 1 ? '1 request' : `${openRequests} requests`} waiting on its answer, so it can't be deleted. It can be deleted once each answer is applied.`,
         code: 'app_in_use',
-        context: { reason: 'app_in_use', uses: {}, openRequests },
+        context: { reason: 'app_in_use', uses: [], openRequests },
       },
     }),
   /** An app route's older shape, with the code only in `context.reason`. */
   reasonOnly: (reason: string) => reply(409, { error: { message: 'Refused.', context: { reason } } }),
   /** A 409 with no code at all, as RestException gives one. */
   uncoded: () => reply(409, { error: { message: 'Conflict.', context: [] } }),
-  /** The answer route's refusals, in `error.code` (exchange contract, "Answering"). */
-  alreadyAnswered: () => reply(409, { error: { message: 'This request already has a different answer.', code: 'app_request_already_answered', context: {} } }),
-  notResendable: () => reply(409, { error: { message: 'Already answered.', code: 'app_request_not_resendable', context: {} } }),
+  /**
+   * The answer route's refusal of a different answer, in `error.code`:
+   * AppAnswerResult::refused() (lib/Apps/Core/Models/AppAnswerResult.php
+   * line 51 on `feat/apps` at 1557b0030) sends `context` as an empty PHP
+   * array, `[]`. The message is shorter than Siren's (AppRequestService.php
+   * line 608, "..., and the first answer stands."), since an assertion in
+   * test/cli-commands.test.ts pins it.
+   */
+  alreadyAnswered: () => reply(409, { error: { message: 'This request already has a different answer.', code: 'app_request_already_answered', context: [] } }),
+  /**
+   * The resend route's 409 for an `applied` request, or one it would send
+   * while its app is off: lib/Apps/Service/Rest/ResendAppRequest.php lines
+   * 82 to 87 on `feat/apps` at 1557b0030, through AppRequestRefusedException
+   * (line 29), which puts the code in `context.reason` beside the status.
+   */
+  notResendable: (status = 'applied') =>
+    reply(409, {
+      error: {
+        message: 'This request cannot be sent again: it is applied, or its app is off.',
+        code: 'app_request_not_resendable',
+        context: { reason: 'app_request_not_resendable', status },
+      },
+    }),
 };
 
 /**

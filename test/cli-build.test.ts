@@ -13,8 +13,6 @@ import { COMMANDS, CLI_VERSION } from '../src/cli/run';
  * run without a build skips them, as test/connect-build.test.ts does. The
  * child process gets an empty config folder and no SIREN_BASE_URL, and
  * `--help` and `--version` send nothing.
- *
- * Pending: the packet turns `describe.skip` into `describe`.
  */
 
 const root = join(__dirname, '..');

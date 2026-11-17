@@ -6,8 +6,6 @@ import type { AppFileProblem } from '../src/cli/app-file';
 /*
  * Acceptance tests for the app file, packet cli-app-file. Contract:
  * docs/architecture/apps-cli.md, "The app file".
- *
- * Pending: the packet turns `describe.skip` into `describe`.
  */
 
 const example = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');

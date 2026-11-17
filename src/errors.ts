@@ -175,7 +175,7 @@ export const AppErrorCode = {
   AnswerUnauthorized: 'app_answer_unauthorized',
   /** 403 from the answer route: a signed-in person who may not change apps. */
   AnswerForbidden: 'app_answer_forbidden',
-  /** 409 from the resend route: the request is answered or applied, or its app is off. */
+  /** 409 from the resend route: the request is applied, or it would be sent and its app is off. */
   NotResendable: 'app_request_not_resendable',
   /** 409 `data.reason` from `DELETE /apps/{key}`: a record still selects one of the app's items, or an ask is open. */
   AppInUse: 'app_in_use',

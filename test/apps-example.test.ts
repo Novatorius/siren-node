@@ -17,8 +17,6 @@ import { BASE, bodyOf, unavailable } from './record-fakes';
  *
  * The request is Siren's signed fixture. The distribution resolver's data
  * and answer shapes are a claim on slice 5, written down in the note.
- *
- * Pending: the packet turns `describe.skip` into `describe`.
  */
 
 interface SignedFixture {

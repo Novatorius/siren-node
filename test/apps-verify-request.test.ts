@@ -15,8 +15,6 @@ import { BASE } from './record-fakes';
  * tests/Fixtures/apps-exchange/signed-request.json on the apps-exchange
  * branch (086615e2a). Siren's AppsExchangeFlowTest checks that PHP still
  * makes these bytes, so a pass here means this SDK reads what Siren sends.
- *
- * Pending: the packet turns `describe.skip` into `describe`.
  */
 
 interface SignedFixture {

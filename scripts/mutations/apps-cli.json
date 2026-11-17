@@ -1029,11 +1029,12 @@
   {
     "id": "env-file-open-mode",
     "file": "src/cli/commands/apply.ts",
-    "find": "  await writeFile(path, `${lines.join('\\n')}\\n`, { mode: 0o600 });\n  await chmod(path, 0o600);",
-    "replace": "  await writeFile(path, `${lines.join('\\n')}\\n`);",
+    "find": "    await writeFile(temporary, `${lines.join('\\n')}\\n`, { mode: 0o600, flag: 'wx' });",
+    "replace": "    await writeFile(temporary, `${lines.join('\\n')}\\n`, { flag: 'wx' });",
     "expect": "caught",
     "failing": [
-      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
+      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply",
+      "apps-cli internals: the env file > never leaves the new key in a file wider than 0600"
     ]
   },
   {
@@ -1787,6 +1788,170 @@
     "expect": "caught",
     "failing": [
       "apps-cli docs > the CHANGELOG names the apps calls"
+    ]
+  },
+  {
+    "id": "env-written-in-place",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    await writeFile(temporary, `${lines.join('\\n')}\\n`, { mode: 0o600, flag: 'wx' });\n    await rename(temporary, path);",
+    "replace": "    await writeFile(path, `${lines.join('\\n')}\\n`, { mode: 0o600 });\n    await (await import('node:fs/promises')).chmod(path, 0o600);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > never leaves the new key in a file wider than 0600",
+      "apps-cli internals: the env file > leaves the old env file whole when the write fails"
+    ]
+  },
+  {
+    "id": "env-link-followed",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (found.isSymbolicLink()) {",
+    "replace": "  if (found.isSymbolicLink() && path === '') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+    ]
+  },
+  {
+    "id": "env-other-kind-written",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (!found.isFile()) return { kind: 'other',",
+    "replace": "  if (path === '') return { kind: 'other',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+    ]
+  },
+  {
+    "id": "rotate-env-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);",
+    "replace": "  if (problem !== undefined && key === '') throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+    ]
+  },
+  {
+    "id": "apply-link-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (problem?.kind === 'link') throw new CliRefusal(",
+    "replace": "  if (problem?.kind === 'link' && key === '') throw new CliRefusal(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+    ]
+  },
+  {
+    "id": "env-temp-left",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    await rm(temporary, { force: true });\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > leaves the old env file whole when the write fails"
+    ]
+  },
+  {
+    "id": "apply-other-siren-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (held !== undefined && held !== run.target.baseUrl) {",
+    "replace": "  if (held !== undefined && held === '') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the stored files before a secret is sent > stops a later apply before sending when the env file holds the key of another Siren"
+    ]
+  },
+  {
+    "id": "login-store-read-late",
+    "file": "src/cli/commands/session.ts",
+    "find": "  needsFlags(io, [\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n  // A credentials file the tool would refuse stops the command here, before the password leaves the machine.\n  await run.store.get(run.target.baseUrl);\n",
+    "replace": "  needsFlags(io, [\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the stored files before a secret is sent > refuses a credentials file others can read before the password leaves the machine"
+    ]
+  },
+  {
+    "id": "signup-store-read-late",
+    "file": "src/cli/commands/session.ts",
+    "find": "    [values['org-name'], '--org-name <name>'],\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n  // A credentials file the tool would refuse stops the command here, before the password leaves the machine.\n  await run.store.get(run.target.baseUrl);\n",
+    "replace": "    [values['org-name'], '--org-name <name>'],\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the stored files before a secret is sent > refuses a credentials file others can read before the password leaves the machine"
+    ]
+  },
+  {
+    "id": "secrets-redact-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "  for (const secret of [...secrets].filter(isFilled).sort((a, b) => b.length - a.length)) out = out.split(secret).join('[redacted]');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a password Siren echoes back",
+      "apps-cli internals: no secret in an error > keeps a token out of a refused answer",
+      "apps-cli internals: no secret in an error > keeps a password and a bearer token out of an error the transport throws"
+    ]
+  },
+  {
+    "id": "secrets-scrub-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "scrub(parseJson(reply.body), hidden)",
+    "replace": "parseJson(reply.body)",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a password Siren echoes back",
+      "apps-cli internals: no secret in an error > keeps a token out of a refused answer"
+    ]
+  },
+  {
+    "id": "secrets-token-fields-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "      value: TOKEN_FIELDS.has(key.toLowerCase().replace(/[_-]/g, '')) ? '[redacted]'",
+    "replace": "      value: key === '' ? '[redacted]'",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a token out of a refused answer"
+    ]
+  },
+  {
+    "id": "secrets-transport-redact-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "failed: ${redact(error.message, hidden)}`",
+    "replace": "failed: ${error.message}`",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a password and a bearer token out of an error the transport throws"
+    ]
+  },
+  {
+    "id": "docs-resend-answered-refused",
+    "file": "src/errors.ts",
+    "find": "  /** 409 from the resend route: the request is applied, or it would be sent and its app is off. */",
+    "replace": "  /** 409 from the resend route: the request is answered or applied, or its app is off. */",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > every description of resend follows merged Siren"
+    ]
+  },
+  {
+    "id": "docs-resend-fake-old",
+    "file": "test/apps-siren-answers.ts",
+    "find": "        message: 'This request cannot be sent again: it is applied, or its app is off.',",
+    "replace": "        message: 'Already answered.',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > every description of resend follows merged Siren"
+    ]
+  },
+  {
+    "id": "docs-readme-handler-await",
+    "file": "README.md",
+    "find": "app.post('/siren', express.raw({ type: 'application/json' }), (req, res, next) => {\n  acme.handle(req.body, req.headers).then((reply) => res.status(reply.status).type('application/json').send(reply.body), next);",
+    "replace": "app.post('/siren', express.raw({ type: 'application/json' }), async (req, res) => {\n  const reply = await acme.handle(req.body, req.headers);\n  res.status(reply.status).type('application/json').send(reply.body);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the README's request handler hands each request"
     ]
   }
 ]

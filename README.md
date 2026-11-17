@@ -27,7 +27,7 @@ This SDK is the Node.js and TypeScript integration point for Siren. In a few lin
 - **Build a Siren app** (`apps`, `apps.verifyRequest`, `apps.requests.answer`) that acts as part of
   Siren's engine, and declare it with the `siren` command-line tool.
 
-It runs on Node 18+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
+It runs on Node 18.3+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
 CJS, and full type declarations.
 
 ## Install
@@ -1127,27 +1127,27 @@ body that is not a request of version 1, each with `SignatureVerificationError`.
 to the older `X-Siren-Signature`, which signs no time.
 
 ```ts
-const appSiren = new Siren({ apiKey: process.env.SIREN_API_KEY! }); // the app's own key
+// createAcmeApp is the example app's handler, examples/apps/acme/handler.mjs. Copy it, or write your own in its shape.
+import { createAcmeApp } from './handler.mjs';
 
-app.post('/siren', express.raw({ type: 'application/json' }), async (req, res) => {
-  let request;
-  try {
-    request = appSiren.apps.verifyRequest(req.body, req.headers, process.env.SIREN_SIGNING_SECRET!);
-  } catch {
-    return res.sendStatus(400);
-  }
-  res.sendStatus(200);
-  if (alreadyHandled(request.id)) return;
-  if (request.mode === 'ask') {
-    await appSiren.apps.requests.answer(request.id, { outcome: 'paid', reference: `acme-${request.data.payoutId}` });
-  }
-  markHandled(request.id);
+const appSiren = new Siren({ apiKey: process.env.SIREN_API_KEY! }); // the app's own key
+const acme = createAcmeApp({ siren: appSiren, signingSecret: process.env.SIREN_SIGNING_SECRET!, log: console.log });
+
+app.post('/siren', express.raw({ type: 'application/json' }), (req, res, next) => {
+  acme.handle(req.body, req.headers).then((reply) => res.status(reply.status).type('application/json').send(reply.body), next);
 });
 ```
 
 Answer 200 as soon as the request checks out. Siren may deliver one request more than once. Drop a
 repeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a
 repeat.
+
+The example's handler, which test/apps-example.test.ts drives with Siren's signed fixture, does the
+parts that are easy to get wrong. It answers an ask after the 200, outside the request, and catches
+an answer that fails, so a 5xx or a dropped connection is logged and never ends the process. It counts
+an ask as handled only once Siren accepts the answer, so the next delivery answers again. A repeat that
+arrives while the first answer is in flight waits for that answer, so two deliveries close together
+answer once. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
 
 ### Answer an ask
 
@@ -1171,9 +1171,11 @@ sets none.
 `apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
 `pending`, `sent`, `delivered` (a tell the app received), `answered`, `applied` (an ask whose answer
 did its work) or `needs_attention`. `apps.requests.resend(id)` sends a request again under the same
-id with a new answer window. A request in `needs_attention` that already holds an answer is not
-sent to the app again, and Siren applies the stored answer instead. Siren refuses a request it will
-not send again, such as an applied one or one whose app is off, with 409 `app_request_not_resendable`.
+id with a new answer window. A request that holds an answer Siren has not applied, in
+`needs_attention` after its apply ran out of tries or still `answered` because the wake after the
+answer was lost, is not sent to the app again. Siren applies the stored answer instead, even while
+the app is off. Siren refuses an `applied` request, and one it would have to send while its app is
+off, with 409 `app_request_not_resendable`.
 
 ### Error codes
 

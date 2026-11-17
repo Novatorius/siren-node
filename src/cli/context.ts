@@ -45,7 +45,7 @@ export function contextOf(input: CommandInput): CommandContext {
 }
 
 /**
- * What one command run shares:the terminal, the Siren it talks to, the
+ * What one command run shares: the terminal, the Siren it talks to, the
  * stored sessions, the session client and, once a command needs one, the
  * signed-in session. The command files under src/cli/commands use it, so
  * none of them reads `credentials.json` or refreshes a token itself.

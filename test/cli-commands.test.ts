@@ -31,8 +31,6 @@ import { APP_KEY, APP_REQUEST_ID, AppAnswers, ConfirmationAnswers, appRecord, re
  * Every test runs `runCli` on a fake terminal (test/cli-fakes.ts): Siren's
  * answers come from a FakeHttpClient, files land in a temporary folder, and
  * the clock is fixed.
- *
- * Pending: each packet turns its `describe.skip` into `describe`.
  */
 
 const posix = process.platform !== 'win32';
@@ -177,7 +175,7 @@ describe('apps-cli: siren signup, login and the session', () => {
   it("answers a wrong password with Siren's message and keeps nothing", async () => {
     const h = harness([AuthAnswers.sandbox(), AuthAnswers.wrongPassword()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain('Those details do not match an account.');
+    expect(h.err()).toContain("Invalid email or password. If you haven't set up your login yet, check your email for a link to set it up.");
     expect(h.printed()).not.toContain(PASSWORD);
     expect(() => h.credentialsText()).toThrow();
   });

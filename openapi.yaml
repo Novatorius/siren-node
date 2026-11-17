@@ -3240,11 +3240,12 @@ paths:
       summary: Send a request again
       description: |
         Sends the request again under the same id, and gives an ask a new
-        answer window. A request in `needs_attention` that holds an answer is
-        not sent to the app. Siren applies the stored answer instead. A
+        answer window. A request that holds an answer Siren has not applied,
+        in `needs_attention` or still `answered`, is not sent to the app.
+        Siren applies the stored answer instead, even while the app is off. A
         signed-in admin who sees every store only. 409
-        `app_request_not_resendable` for a request Siren will not send again,
-        such as an applied one or one whose app is off, and 404
+        `app_request_not_resendable` for an `applied` request, or one Siren
+        would have to send while its app is off, and 404
         `app_request_not_found`.
       security:
         - dashboardSession: []

@@ -26,8 +26,6 @@ import { APP_KEY, APP_REQUEST_ID, AppAnswers, appRecord, requestRow } from './ap
  * The answers are Siren's, from AppSerializer and AppRequestSerializer on
  * the apps-records (7a843fed3) and apps-exchange (086615e2a) branches.
  * answer.json is Siren's tests/Fixtures/apps-exchange/answer.json.
- *
- * Pending: each packet turns its `describe.skip` into `describe`.
  */
 
 const KEY = APP_KEY;

@@ -60,14 +60,18 @@ export class AppRequestsResource {
   /**
    * Sends a request again under the same key, with
    * `POST /apps/requests/{id}/resend`, and answers the request as it now
-   * stands. An ask gets a new answer window. A request whose answer failed
-   * to apply is not sent to the app again: Siren applies its stored answer.
+   * stands. An ask gets a new answer window. A request that holds an answer
+   * Siren has not applied, in `needs_attention` after its apply ran out of
+   * tries or still `answered` because the wake after the answer was lost, is
+   * not sent to the app again: Siren applies its stored answer, even while
+   * the app is off.
    *
    * Refuses an `id` that is not `apr_` and 32 lowercase hex characters with
    * `SirenError` before sending. Sent once. Siren answers 409 with
-   * `app_request_not_resendable` for a request that is answered or applied,
-   * or whose app is off, raised as `ConflictError`, and 404 for a request the
-   * org does not have, raised as `NotFoundError`.
+   * `app_request_not_resendable` for a request that is `applied`, or one it
+   * would send while its app is off, raised as `ConflictError`, and 404 for a
+   * request the org does not have, raised as `NotFoundError`
+   * (ResendAppRequest.php on Siren's feat/apps at 1557b0030).
    */
   async resend(id: string): Promise<AppRequestRecord> {
     return resendAppRequest(this.http, id);

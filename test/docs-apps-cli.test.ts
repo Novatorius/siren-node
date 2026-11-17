@@ -1,14 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { COMMANDS } from '../src/cli/run';
+import { AppAnswers } from './apps-siren-answers';
 
 /*
  * apps-cli docs, packet docs: the README, the CHANGELOG and openapi.yaml
  * describe the apps calls and the `siren` command, as test/docs-apps-sdk-gaps.test.ts
  * pins the slice before. The parity rows have their own test in
- * test/docs-parity.test.ts, which runs now.
- *
- * Pending: the packet turns `describe.skip` into `describe`.
+ * test/docs-parity.test.ts.
  */
 
 function read(name: string): string {
@@ -97,5 +96,34 @@ describe('apps-cli docs', () => {
     const changed = section(unreleased, '### Changed');
     expect(changed).toContain('new Siren()');
     expect(changed).toContain('sk_test_');
+  });
+
+  it('every description of resend follows merged Siren: an answered or held answer is applied, and only an applied request or a send to an off app is refused', async () => {
+    // lib/Apps/Service/Rest/ResendAppRequest.php lines 31 to 38 and 82 to 87, and
+    // AppRequestService::resend() lines 371 to 386, on Novatorius/siren feat/apps at 1557b0030.
+    for (const name of ['src/resources/apps.ts', 'src/errors.ts', 'docs/architecture/apps-cli.md', 'README.md', 'openapi.yaml']) {
+      expect(read(name), name).not.toMatch(/answered or applied/);
+    }
+    const readme = section(read('README.md'), '### See what Siren sent');
+    const openapi = operation(read('openapi.yaml'), '/apps/requests/{id}/resend', 'post');
+    for (const [name, text] of [['README.md', readme], ['openapi.yaml', openapi], ['src/resources/apps.ts', read('src/resources/apps.ts')]] as const) {
+      expect(text, name).toMatch(/`answered`/);
+      expect(text, name).toMatch(/app is off/);
+    }
+    const body = JSON.parse((AppAnswers.notResendable()).body) as { error: { message: string; context: Record<string, unknown> } };
+    expect(body.error.message).toBe('This request cannot be sent again: it is applied, or its app is off.');
+    expect(body.error.context).toMatchObject({ reason: 'app_request_not_resendable' });
+  });
+
+  it("the README's request handler hands each request to the example's tested handler, and passes a failure to Express", () => {
+    const check = section(read('README.md'), '### Check a request');
+    const code = check.slice(check.indexOf('```ts'), check.indexOf('```', check.indexOf('```ts') + 5));
+    expect(code).toContain('examples/apps/acme/handler.mjs');
+    expect(code).toMatch(/createAcmeApp\(/);
+    expect(code).toMatch(/\.handle\(req\.body, req\.headers\)/);
+    expect(code).toMatch(/\.then\([\s\S]*,\s*next\)/);
+    // The answer, its repeat and its failure belong to the handler, which test/apps-example.test.ts drives.
+    expect(code).not.toContain('requests.answer(');
+    expect(code).not.toMatch(/\bawait\b/);
   });
 });

@@ -83,7 +83,7 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 403 with `data.reason` `org_access_required` | `PermissionError` | Asks a member who sees every store. |
 | 409 with `data.reason` `app_change_in_progress` | `ConflictError` | Sends again in a moment. |
 | 409 with `data.reason` `app_in_use` and `data.uses` | `ConflictError` | Turns the app off instead, or moves the records in `uses` first. |
-| 409 `app_request_not_resendable` | `ConflictError` | Reads the request. It is answered or applied, or its app is off. |
+| 409 `app_request_not_resendable` | `ConflictError` | Reads the request. It is applied, or it would be sent and its app is off. A request that holds an answer not yet applied, `answered` or `needs_attention`, is never refused: Siren applies the stored answer, even while the app is off. |
 | 409 `app_request_already_answered` | `ConflictError` | Stops. A different answer came first, and it stands. |
 | 404 `app_request_not_found` | `NotFoundError` | Checks the id and the key's app. |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
@@ -199,7 +199,9 @@ interface is the seam slice 9 builds on.
 `credentials.json` sits in `SIREN_CONFIG_DIR`, else `%APPDATA%\siren` on Windows, else
 `$XDG_CONFIG_HOME/siren`, else `~/.config/siren`. The folder is mode 0700 and the file 0600, written
 through a temporary file and a rename. A file anyone else can read is refused before a token in it
-is used, with a message naming the file and `chmod 600`. It holds one session per Siren address:
+is used, with a message naming the file and `chmod 600`. `signup` and `login` read it before they
+send anything, so a file the tool would refuse stops them before the password leaves the machine.
+It holds one session per Siren address:
 
 ```json
 { "version": 1, "sessions": { "https://sandbox.sirenaffiliates.com/siren/v1": {
@@ -220,9 +222,16 @@ file. `apply` records that path in `envFiles` on every apply. `rotate` writes th
 recorded path, or beside the app file named with `--app-file`, and never to the working folder.
 With neither, it refuses before sending, since the new pair would have nowhere known to go and
 Siren shows it once. When the file already names another `SIREN_BASE_URL`, `rotate` says on
-standard error which Siren's key it replaced (AP-A636). The file is mode 0600. Only the three lines
-`SIREN_BASE_URL`, `SIREN_API_KEY` and `SIREN_SIGNING_SECRET` are replaced, and every other line is
-kept. The command prints the key's 16-character prefix and the file name, never the key or the
+standard error which Siren's key it replaced (AP-A636). A later `apply` stops before sending when
+the file names another `SIREN_BASE_URL`, says which Siren's key it holds, and says to move the file
+aside and apply again, so a key the machine still needs is never replaced and the app never talks
+to the wrong Siren unnoticed. Only the three lines `SIREN_BASE_URL`, `SIREN_API_KEY` and
+`SIREN_SIGNING_SECRET` are replaced, and every other line is kept. The whole text goes to a new
+file made with mode 0600 beside the env file, which is then renamed over it, as credentials.json is
+written. So the key is never in a file wider than 0600, a failed write leaves the old file whole,
+and a link at the path is replaced rather than followed. A path that is a symbolic link is refused
+before `apply` or `rotate` sends anything, and `rotate` refuses one that is not a regular file the
+same way, since its old key still works until Siren rotates it. The command prints the key's 16-character prefix and the file name, never the key or the
 secret. When the file cannot be written, it prints both once on standard error and answers 1, since
 Siren will not show them again.
 
@@ -551,6 +560,16 @@ OK   docs-changelog-sandbox: caught (expected caught)
 
 ## The founder's walk
 
+Steps 1 to 6, 8 and 15 run today on Siren's `feat/apps` at 1557b0030, given a sandbox Cloud with
+sign-up on. The other steps wait on Siren slices that are not on `feat/apps` yet:
+
+| Step | Waits on |
+| --- | --- |
+| 7 | Slice 3 for "Acme: Tell the CRM", slice 4 for the resolver, and slice 11 for the distributor's resolver picker |
+| 9 | Slice 3, since Siren sends a tell only after a program picks the action |
+| 10, 12, 13 and 14 | Slice 4, or slice 5, since only those make an ask |
+| 11 | Slice 5 |
+
 This is design section 10's walk, rewritten so every step runs as written (ruling M1). It runs
 against the sandbox edition of Siren Cloud, where the plan puts a developer's testing (AP-A13) and
 where the tool goes by default (AP-A648). The address is the founder's UAT preview when it is a
@@ -559,18 +578,17 @@ when nothing is set. If the preview turns out to be a production edition, `siren
 live, and the same steps run with `--live` added to every `siren` command, writing `.env.live` in
 place of `.env.sandbox`.
 
-It needs Node 18 or later, a checkout of the siren-node pull request's branch, and `cloudflared`.
-Steps 7, 9, 10 and 12 also need Siren slices 1 to 4 on the preview, and step 11 slice 5.
+It needs Node 18.3 or later, a checkout of the siren-node pull request's branch, and `cloudflared`.
 
 | # | The person runs | The person sees | Made true by |
 | --- | --- | --- | --- |
-| 1 | `npm i -g ./novatorius-siren-<sha>.tgz`, the tarball attached to the siren-node pull request, then `siren --version` | `0.3.0` | cli-session (bin and build tests) |
+| 1 | `npm i -g ./novatorius-siren-0.3.0.tgz`, the tarball attached to the siren-node pull request, then `siren --version` | `0.3.0` | cli-session (bin and build tests) |
 | 2 | `siren signup`, answering the prompts: organization name, email, the terms, and the password at a hidden prompt | `Made <org> (<slug>) on <address>, and signed in as <email>.` On a live edition: `<address> is a live Siren. Add --live to act on a live organization.` With sign-up off: `Sign-up is turned off on <address>. Ask its owner, or use siren login.` | cli-session |
 | 3 | In the checkout: `npm ci && npm run build`, then `cd examples/apps/acme && npm install` | npm's usual output | example-app |
 | 4 | In a second terminal: `cloudflared tunnel --url http://localhost:8787`. Back in the first: `export SIREN_APP_URL=<the https address it printed>` | A `https://<words>.trycloudflare.com` address | none, cloudflared |
 | 5 | `siren apps apply` | `Declared acme-payouts on <address>.`, the app line, one line per item with its `app:{id}`, `Its url came from SIREN_APP_URL.`, and `Key sk_test_<8 hex> and its signing secret are in <folder>/.env.sandbox.` No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |
 | 6 | `npm start` | `Acme example app on http://localhost:8787, for <address> (<folder>/.env.sandbox).` | example-app |
-| 7 | In the dashboard, signed in with the same email and password: make a program with a sale reward, pick "Acme: Tell the CRM" among its post-conversion actions and "Acme: Acme split" as its distributor's resolver, and add a collaborator with a tracking code. Open Webhooks. | The three Acme items in the pickers, and the app's subscription marked as managed by the app | Siren slices 1, 3 (claim C3) and 4, not this slice |
+| 7 | In the dashboard, signed in with the same email and password: make a program with a sale reward, pick "Acme: Tell the CRM" among its post-conversion actions and "Acme: Acme split" as its distributor's resolver, and add a collaborator with a tracking code. Open Webhooks. | The three Acme items in the pickers, and the app's subscription marked as managed by the app | Siren slices 1, 3 (claim C3), 4 and 11, not this slice |
 | 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: created, opportunity <id>.` | example-app |
 | 9 | Approve the conversion in the dashboard. Then `siren apps requests --follow`, and in another terminal `siren apps requests <id>` for the tell | The tell's line going from `sent` to `delivered`. The single request shows the send, `HTTP 200`, the app's answer and the body Siren sent. Ctrl-C ends `--follow` with exit 0. | cli-requests, Siren slices 2 and 3 |
 | 10 | Close the program's distribution with slice 4's test route (claim C7) | `--follow` shows the ask `sent`, then `answered`, then `applied`. The server logs the answer, and the distribution completes with the app's shares. | example-app, sdk-verify, sdk-answer, Siren slice 4 |
@@ -701,6 +719,31 @@ Each item of the audit, taken or declined, with its reason.
 | N6, the command list | Nothing to do. The audit judged the list close to the smallest, and the walk's sale is a script, not a command. |
 | N7, the bin name | Taken as a note. The `siren` link in a project's node_modules/.bin can collide with another package's `siren` bin, and npm warns when it does. The package keeps the name the design gives it. |
 | N8, docs, parity and fakes | Taken. The docs test asserts the CHANGELOG names the `new Siren()` change under Changed and the parity intro counts thirteen methods, and the docs packet writes both. The Siren answers moved to test/apps-siren-answers.ts, each citing its Siren file and line. The JSON reader has its own tests. The pinned read order of `apps requests` stays, as the note states it. |
+
+## The review's items
+
+The review of the built slice (the run folder's review/cli-review.md) read it against Siren's
+`feat/apps` at 1557b0030. Each finding, taken or declined, with its reason.
+
+| Finding | Taken or declined |
+| --- | --- |
+| 1, the env file written in place | Taken. A new 0600 file and a rename, a link or other path refused, and a failed write leaves the old file whole (AP-A896). |
+| 2, the resend contract | Taken. The docblock, the error comment, the error table, the README, openapi and the fake follow ResendAppRequest.php at 1557b0030, and a docs test holds them (AP-A897). |
+| 3, no secret in an error | Taken. test/cli-secrets.test.ts fails when the redaction, the scrub or the transport's redaction is removed (AP-A898). |
+| 4, the password before the credentials file | Taken. `signup` and `login` read the file first (AP-A899). |
+| 5, another Siren's key | Taken. A later `apply` stops before sending (AP-A900). |
+| 6, the README's handler | Taken. The snippet hands each request to the example's tested handler and passes a failure to `next` (AP-A901). |
+| 7, the fakes | Taken where no assertion changes. The resend, in-use and item fakes follow Siren, and the wrong password's fake and its assertion use Login.php's NO_MATCH, which the review names. The different answer's message stays short, since an assertion pins it (AP-A902). |
+| 8, the walk | Taken. The walk names the steps that run today, the slices the others wait on, slice 11 among them, and npm's tarball name. |
+| 9, the CHANGELOG's four exports | Taken. One bullet each. |
+| 10, Node 18.3 | Taken. `engines` says `>=18.3`, since `parseArgs` arrived in 18.3. |
+| 11, the example's base url | Declined. Apply writes only a checked address, and the SDK's own `baseUrl` rule is the one every client follows. |
+| 12, a coded 401 refreshed | Declined. That is the repository's 401 rule, and a resend after a 401 applies nothing. |
+| 13, Pending comments and the typo | Taken. |
+| 13, .gitignore on apply | Declined. `apps init` adds `.env.*`, and a hand-written app file is the developer's own repository. |
+| 13, the config folder's mode | Declined. The file is 0600, and the folder is one the person chose. |
+| 13, control characters in `apps requests <id>` | Declined for now. The app's own answer is shown as Siren stored it, and a later slice can escape it. |
+| 13, the example logs a tell's data | Declined. The example is a demonstration on a sandbox, and its comment says a real app keeps its own store. |
 
 ## Packets in build order
 
