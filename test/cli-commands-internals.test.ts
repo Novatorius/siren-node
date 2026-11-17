@@ -103,6 +103,14 @@ describe('apps-cli internals: apply and the app key', () => {
     expect(h.http.requests).toHaveLength(0);
   });
 
+  it('refuses --app-file that names no file in a folder that exists, before sending', async () => {
+    const h = harness([reply(200, { ...appRecord(), rawKey: `sk_test_${'1b'.repeat(32)}`, signingSecret: '9c'.repeat(32) })]);
+    h.signedIn();
+    expect(await h.run(['apps', 'rotate', APP_KEY, '--app-file', 'siren.app.json'])).toBe(1);
+    expect(h.http.requests).toHaveLength(0);
+    expect(h.err()).toContain('There is no app file');
+  });
+
   it('deletes in a terminal only when the key is typed', async () => {
     const wrong = harness([reply(200, { success: true })], { interactive: true, typed: ['acme'] });
     wrong.signedIn();

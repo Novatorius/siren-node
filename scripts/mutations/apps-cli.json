@@ -1664,7 +1664,7 @@
     "replace": "    if (false) throw new CliRefusal(",
     "expect": "caught",
     "failing": [
-      "apps-cli internals: apply and the app key > refuses --app-file that names no file"
+      "apps-cli internals: apply and the app key > refuses --app-file that names no file in a folder that exists"
     ]
   },
   {
@@ -1798,7 +1798,7 @@
     "expect": "caught",
     "failing": [
       "apps-cli internals: the env file > never leaves the new key in a file wider than 0600",
-      "apps-cli internals: the env file > leaves the old env file whole when the write fails"
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
     ]
   },
   {
@@ -1850,7 +1850,7 @@
     "replace": "",
     "expect": "caught",
     "failing": [
-      "apps-cli internals: the env file > leaves the old env file whole when the write fails"
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
     ]
   },
   {
@@ -1970,7 +1970,7 @@
     "id": "env-folder-missing-allowed",
     "file": "src/cli/commands/apply.ts",
     "find": "    if (code === 'ENOENT' || code === 'ENOTDIR') return { kind: 'other', line: `${folder} does not exist,",
-    "replace": "    if (code === 'ENOENT' || code === 'ENOTDIR') return undefined && { kind: 'other', line: `${folder} does not exist,",
+    "replace": "    if (code === '') return { kind: 'other', line: `${folder} does not exist,",
     "expect": "caught",
     "failing": [
       "apps-cli internals: the env file > refuses before sending an env path whose folder is missing or cannot be written"
