@@ -453,9 +453,10 @@ paths:
       description: |
         Changes the fields sent and leaves the rest as they are. Siren reads
         only `targetUrl`, `events`, `status` and `description`, and skips a
-        `null` description. `status: paused` stops deliveries and `active`
-        starts them again. Siren answers 400 for a target URL that is not a
-        public https endpoint.
+        `null` one. `status: paused` stops deliveries and `active` starts
+        them again. Siren answers 400 for a target URL that is not a public
+        https endpoint. Send at least one field that is not `null`. With
+        none, Siren has nothing to change and answers 500.
 
         An API key needs `webhook-subscriptions:manage`, and must be
         organization-wide. A key that holds only `webhook-subscriptions:read`
@@ -472,6 +473,7 @@ paths:
           application/json:
             schema:
               type: object
+              minProperties: 1
               properties:
                 targetUrl: { type: string, format: uri }
                 events:

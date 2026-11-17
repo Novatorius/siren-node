@@ -136,6 +136,35 @@ describe('apps-sdk-gaps: webhooks.subscriptions.update', () => {
     expect(http.requests).toHaveLength(0);
   });
 
+  it('refuses an update with nothing to change, before sending, since Siren skips a null field', async () => {
+    // UpdateWebhookSubscription.php skips a null field, so each of these
+    // leaves Siren nothing to set.
+    const { http, subscriptions } = over([reply(200, WebhookAnswers.subscription)]);
+    const nothingToChange = [
+      {},
+      { description: undefined },
+      { description: null },
+      { targetUrl: null, events: null, status: null, description: null },
+    ];
+
+    for (const params of nothingToChange) {
+      const sent = subscriptions.update(12, params as never);
+      await expect(sent).rejects.toBeInstanceOf(SirenError);
+      await expect(sent).rejects.toThrow(
+        'webhooks.subscriptions.update() needs at least one of targetUrl, events, status or description that is not null or undefined. Siren skips a null field and cannot apply an update with nothing to change.',
+      );
+    }
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it('sends a null field beside one that changes, as given', async () => {
+    const { http, subscriptions } = over([reply(200, WebhookAnswers.subscription)]);
+
+    await subscriptions.update(12, { status: 'active', description: null } as never);
+
+    expect(bodyOf(http.requests[0])).toEqual({ status: 'active', description: null });
+  });
+
   it('refuses an id that is not a positive whole number before sending', async () => {
     const { http, subscriptions } = over([reply(200, WebhookAnswers.subscription)]);
 

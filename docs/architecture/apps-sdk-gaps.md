@@ -64,7 +64,7 @@ objects, such as `ledger:payouts:read`.
 | `fulfillments.list` | `listRecords` with `LIST_FILTERS` | yes | a key outside `status`, `payoutStatus`, `currency`, `from`, `to` and the paging keys, `propertyId` included, an empty filter list, a comma in a filter, a `from` or `to` that is not a real `YYYY-MM-DD` day, and a `payoutStatus` or `currency` that is `""` or not a string | `UnexpectedResponseError` for a body that is not a record list, or a row that is not an object |
 | `fulfillments.retrieve` | `retrieveRecord` | yes | an id that is not a positive whole number | as `payouts.retrieve` |
 | `subscriptions.retrieve` | `readObject` | yes | an id that is not a positive whole number | `UnexpectedResponseError` for a body that is not an object |
-| `subscriptions.update` | `writeRecord`, `PUT` | no | an id as above, and any key outside `UPDATE_FIELDS` (`targetUrl`, `events`, `status`, `description`), whatever its value | as above |
+| `subscriptions.update` | `writeRecord`, `PUT` | no | an id as above, any key outside `UPDATE_FIELDS` (`targetUrl`, `events`, `status`, `description`), whatever its value, and an update with no field that is not `null` or `undefined` | as above |
 | `subscriptions.test` | `writeRecord`, `POST`, no body | no | an id as above | as above |
 | `subscriptions.deliveries` | `readList` with a row check | yes | an id as above | `UnexpectedResponseError` for a body that is not an array, or a row that is not an object |
 
@@ -76,6 +76,12 @@ apart from the one resend after a 401 that every request gets.
   by `pickFields`, so a `toJSON` the caller's params inherit cannot change
   the body. Sending the same update after a lost answer sets the same
   values, so the caller may repeat it.
+- `update` refuses an update with no field left that is not `null` or
+  `undefined`. `UpdateWebhookSubscription.php` skips a `null` field, and
+  with none left `WebhookService::updateSubscription` hands the datastore an
+  empty change, which builds `UPDATE ... SET  WHERE ...`. That is not valid
+  SQL, so Siren answers 500 "Failed to update webhook subscription.", and a
+  caller that repeats it gets the same 500. Read at `20c47873d` and not run.
 - `test` is sent once because each call makes Siren send a request. From
   one address, Siren allows 20 tests an hour for one subscription and 60 in
   all (`SendWebhookTest.php`), and answers more with a 429, raised as
@@ -114,13 +120,16 @@ a public https endpoint.
 ## Node leads PHP here
 
 The Node connectors work kept Node to the PHP SDK's methods. This slice
-adds seven calls the PHP SDK lacks, under the rule the Siren apps work
+added seven calls the PHP SDK lacked, under the rule the Siren apps work
 set: Node leads, each Node-only call is written into the README's parity
 section, and a later slice gives the PHP SDK the same calls under the same
-names. The README's second parity
-table, "Node methods the PHP SDK does not have yet", lists them with three
-older ones (`events.forward`, `conversions.recoverCreate` and
-`transactions.recoverCreditCollaborator`). `test/docs-parity.test.ts` walks a
+names. The apps-sdk-php slice did that, so the seven calls now sit in the
+README's first parity table, which compares against the PHP SDK's next
+release, each with its PHP name and the differences that remain. The scope
+list is a sentence under that table. The second table, "Node methods the
+PHP SDK does not have yet", keeps the three older calls,
+`events.forward`, `conversions.recoverCreate` and
+`transactions.recoverCreditCollaborator`. `test/docs-parity.test.ts` walks a
 real client and fails when a public method is in neither table.
 
 ## Tests
@@ -136,7 +145,7 @@ real resource over the real `HttpTransport`, with `FakeHttpClient` at the
 | `test/api-key-record-scopes.test.ts` | `ApiKeyRecordScope` against the fixture, and against `ApiKeyRecordScopes.php` when `SIREN_CHECKOUT` names a Siren checkout |
 | `test/record-requests.test.ts` | `readList`'s `check` |
 | `test/docs-apps-sdk-gaps.test.ts` | the README, CHANGELOG and `openapi.yaml` lines for this slice |
-| `test/docs-parity.test.ts` | the second parity table and the walk over the client |
+| `test/docs-parity.test.ts` | both parity tables, the scope sentence and the walk over the client |
 
 The answers in `test/sdk-gaps-fakes.ts` come from Siren's source at
 `20c47873d`, each with the file it follows, and were not captured from a
@@ -146,6 +155,9 @@ guard once. Run it with only loopback up:
 ```sh
 unshare -rn sh -c 'ip link set lo up && node scripts/mutation-proof.mjs scripts/mutations/apps-sdk-conventions.json'
 ```
+
+`scripts/mutations/apps-sdk-parity-rows.json` breaks the empty-update
+guard and the parity tables the same way.
 
 ## After the review
 
@@ -162,6 +174,10 @@ line with the record rules:
   answers every fulfillment. It now refuses one, and refuses a list.
 - No test proved `update` sends a new object. One does now.
 
+A later review of the PHP calls found that an update with nothing to
+change gets a 500 from Siren. `pkt/apps-sdk-parity-rows` made `update`
+refuse it in both SDKs, and moved the seven rows to the first parity table.
+
 ## Left open
 
 - The fixtures are read from Siren's source, not captured. Slice 8 runs a
@@ -176,5 +192,6 @@ line with the record rules:
 - The test that reads `ApiKeyRecordScopes.php` runs only when
   `SIREN_CHECKOUT` is set, so `npm test` and CI compare against the fixture,
   which `scripts/siren-fixtures.mjs --check` keeps honest.
-- The PHP SDK lacks every call in the second parity table and
-  `ApiKeyRecordScope`. The apps-sdk-php slice adds them.
+- The PHP SDK lacks the three calls in the second parity table.
+- Siren answers 500 for an update with nothing to change. The SDKs refuse
+  it, and the Siren fault stays open.

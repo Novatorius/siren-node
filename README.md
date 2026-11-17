@@ -241,7 +241,9 @@ it took and the first 200 bytes of your endpoint's answer. Both take `webhook-su
 or `webhook-subscriptions:manage`.
 
 `update(id, params)` changes the target URL, the events, the status or the description, and sends
-only the fields you give. `test(id)` makes Siren send one signed `webhook.test` delivery now and
+only the fields you give. It throws `SirenError` before sending for any other key, and for an update
+with no field that is not `null` or `undefined`, because Siren skips a `null` field and cannot apply
+an update with nothing to change. `test(id)` makes Siren send one signed `webhook.test` delivery now and
 answers what your endpoint did. Siren answers 200 either way, so read `delivered`. Both take
 `webhook-subscriptions:manage`, and each is sent once.
 
@@ -497,8 +499,10 @@ for any other key, naming it.
 
 ## Parity with the PHP SDK
 
-The Node SDK carries every public method of the Siren PHP SDK 0.3.0 under the same name, with one
-left out. It also has methods the PHP SDK does not have yet, listed in the second table below.
+The first table compares this SDK with the Siren PHP SDK's next release, which adds seven calls and
+the record scope list to PHP 0.3.0. The Node SDK carries every public method of that release under
+the same name, with one left out. It also has three methods the PHP SDK does not have yet, listed in
+the second table below.
 The first table lists each PHP method, its Node name, and how the two differ where they do.
 Across every record resource, Node throws `SirenError` before sending where PHP throws
 `InvalidArgumentException`, a list answers a `SirenList` with `estimatedCount` where PHP answers
@@ -520,6 +524,10 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->webhooks->subscriptions->events()` | `siren.webhooks.subscriptions.events()` |  |
 | `$siren->webhooks->subscriptions->list()` | `siren.webhooks.subscriptions.list()` |  |
 | `$siren->webhooks->subscriptions->delete()` | `siren.webhooks.subscriptions.delete()` |  |
+| `$siren->webhooks->subscriptions->retrieve()` | `siren.webhooks.subscriptions.retrieve()` |  |
+| `$siren->webhooks->subscriptions->update()` | `siren.webhooks.subscriptions.update()` |  |
+| `$siren->webhooks->subscriptions->test()` | `siren.webhooks.subscriptions.test()` |  |
+| `$siren->webhooks->subscriptions->deliveries()` | `siren.webhooks.subscriptions.deliveries()` | Throws `UnexpectedResponseError` for a body that is not a list or a row that is not an object. PHP keeps each member of what it decoded that is an array, as its `events()` does, so it drops a row that is not an array, reads each array member of a JSON object as a row, and answers `[]` for a body that is not JSON. |
 | `$siren->apiKeys->create()` | `siren.apiKeys.create()` |  |
 | `$siren->apiKeys->list()` | `siren.apiKeys.list()` |  |
 | `$siren->apiKeys->scopes()` | `siren.apiKeys.scopes()` |  |
@@ -540,6 +548,9 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->transactions->sources()` | `siren.transactions.sources()` |  |
 | `$siren->obligations->list()` | `siren.obligations.list()` |  |
 | `$siren->payouts->list()` | `siren.payouts.list()` |  |
+| `$siren->payouts->retrieve()` | `siren.payouts.retrieve()` |  |
+| `$siren->fulfillments->list()` | `siren.fulfillments.list()` | Refuses a key the route does not read, `propertyId` included, an empty filter list, and a comma in a filter, where PHP sends any other key as a filter. Both refuse a `payoutStatus` or `currency` of `""` or not a string, and a `from` or `to` that is not a real day. Node refuses a `null` filter, where PHP leaves it out. |
+| `$siren->fulfillments->retrieve()` | `siren.fulfillments.retrieve()` |  |
 | `$siren->collaborators->list()` | `siren.collaborators.list()` | Throws `SirenError` for a key the route does not read, an empty filter list, a comma outside `fields` and `s`, and an id filter that is not a positive whole number. |
 | `$siren->collaborators->retrieve()` | `siren.collaborators.retrieve()` |  |
 | `$siren->collaborators->create()` | `siren.collaborators.create()` |  |
@@ -628,26 +639,22 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->settings->collaborator()` | `siren.settings.collaborator()` |  |
 | `$siren->settings->value()` | `siren.settings.value()` | Also refuses a name holding a comma, with one message, since Siren reads a comma as "any of". |
 
+`ApiKeyRecordScope` and `ApiKeyRecordScope::ALL` in PHP match Node's `ApiKeyRecordScope` and
+`API_KEY_RECORD_SCOPES`, with the same thirty strings in the same order. PHP keeps Siren's constant
+names, such as `ApiKeyRecordScope::FULFILLMENTS_READ`, where Node writes them in Pascal case, such
+as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the eleven scopes Node's
+`ApiKeyScope` does.
+
 ### Node methods the PHP SDK does not have yet
 
-Each method below calls a route Siren serves today. The PHP SDK 0.3.0 has no method for it, and
-it is to gain each one under the same name.
+Each method below calls a route Siren serves today. Neither PHP 0.3.0 nor the PHP SDK's next
+release has a method for it. The PHP SDK is to gain each one under the same name.
 
 | Node | Siren route | What it does |
 |---|---|---|
 | `siren.events.forward()` | `POST /event/{eventSlug}` | Sends a connected site's event in Siren's versioned envelope, once. |
 | `siren.conversions.recoverCreate()` | `GET /conversions`, then `POST /conversions` | After `create` lost its answer, sends it again only when Siren holds no such conversion. |
 | `siren.transactions.recoverCreditCollaborator()` | `GET /conversions`, then `POST /transactions/credit-collaborator` | After `creditCollaborator` lost its answer, credits only the transactions that hold no conversion for the collaborator. |
-| `siren.payouts.retrieve()` | `GET /payouts/{id}` | Reads one payout. |
-| `siren.fulfillments.list()` | `GET /fulfillments` | Lists the batches Siren pays payouts in, with the filters it reads. |
-| `siren.fulfillments.retrieve()` | `GET /fulfillments/{id}` | Reads one fulfillment, and each payout in it with `include: 'extended'`. |
-| `siren.webhooks.subscriptions.retrieve()` | `GET /webhooks/{id}` | Reads one subscription, never with its signing secret. |
-| `siren.webhooks.subscriptions.update()` | `PUT /webhooks/{id}` | Changes the target URL, events, status or description, sent once. |
-| `siren.webhooks.subscriptions.test()` | `POST /webhooks/{id}/test` | Makes Siren send one signed test delivery now, sent once. |
-| `siren.webhooks.subscriptions.deliveries()` | `GET /webhooks/{id}/deliveries` | Reads the latest 50 deliveries, newest first. |
-
-`ApiKeyRecordScope` and `API_KEY_RECORD_SCOPES` have no PHP counterpart yet either. PHP's
-`ApiKeyScope` names the eleven scopes Node's `ApiKeyScope` does.
 
 ## Storefront module (browser)
 

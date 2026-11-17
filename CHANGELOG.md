@@ -169,7 +169,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `webhooks.subscriptions.deliveries` (`GET /webhooks/{id}/deliveries`) reads its latest 50
   deliveries, newest first. Both retry as reads. `webhooks.subscriptions.update`
   (`PUT /webhooks/{id}`) sends only `targetUrl`, `events`, `status` and `description`, and throws
-  `SirenError` before sending for any other key. `webhooks.subscriptions.test`
+  `SirenError` before sending for any other key, and for an update with no field that is not `null`
+  or `undefined`, since Siren skips a `null` field and answers 500 when nothing is left to change.
+  `webhooks.subscriptions.test`
   (`POST /webhooks/{id}/test`) makes Siren send one signed `webhook.test` delivery now. Both are sent
   once. Each of the four throws `UnexpectedResponseError` for a 2xx body of the wrong shape.
   `UpdateWebhookSubscriptionParams`, `WebhookTestResult` and `WebhookDelivery` type them.

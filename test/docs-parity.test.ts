@@ -7,14 +7,15 @@ import { BASE } from './record-fakes';
 
 /*
  * Slice 4 acceptance tests for packet P11: the README's parity table with
- * the Siren PHP SDK 0.3.0 (siren-php at 59383e6). The slice is done when
- * the table shows no PHP-only row except where a difference is written
- * down.
+ * the Siren PHP SDK. The slice is done when the table shows no PHP-only row
+ * except where a difference is written down.
  *
  * PHP_SURFACE below is every public method of every resource the PHP
  * `Siren` client carries, read from siren-php's src/Resources and
- * src/Siren.php, with the Node name each one has. `null` marks a method the
- * Node SDK leaves out on purpose, and its row must say why.
+ * src/Siren.php, with the Node name each one has. It is PHP 0.3.0 (siren-php
+ * at 59383e6) and the seven calls the PHP SDK's next release adds, read from
+ * siren-php's feat/apps. `null` marks a method the Node SDK leaves out on
+ * purpose, and its row must say why.
  *
  * Every Node name in the table must exist: a `siren.` name is read from a
  * real `Siren` client built over a FakeHttpClient and the reserved base URL,
@@ -40,6 +41,10 @@ const PHP_SURFACE: Array<[string, string | null]> = [
   ['$siren->webhooks->subscriptions->events()', 'siren.webhooks.subscriptions.events()'],
   ['$siren->webhooks->subscriptions->list()', 'siren.webhooks.subscriptions.list()'],
   ['$siren->webhooks->subscriptions->delete()', 'siren.webhooks.subscriptions.delete()'],
+  ['$siren->webhooks->subscriptions->retrieve()', 'siren.webhooks.subscriptions.retrieve()'],
+  ['$siren->webhooks->subscriptions->update()', 'siren.webhooks.subscriptions.update()'],
+  ['$siren->webhooks->subscriptions->test()', 'siren.webhooks.subscriptions.test()'],
+  ['$siren->webhooks->subscriptions->deliveries()', 'siren.webhooks.subscriptions.deliveries()'],
   ['$siren->apiKeys->create()', 'siren.apiKeys.create()'],
   ['$siren->apiKeys->list()', 'siren.apiKeys.list()'],
   ['$siren->apiKeys->scopes()', 'siren.apiKeys.scopes()'],
@@ -60,6 +65,9 @@ const PHP_SURFACE: Array<[string, string | null]> = [
   ['$siren->transactions->sources()', 'siren.transactions.sources()'],
   ['$siren->obligations->list()', 'siren.obligations.list()'],
   ['$siren->payouts->list()', 'siren.payouts.list()'],
+  ['$siren->payouts->retrieve()', 'siren.payouts.retrieve()'],
+  ['$siren->fulfillments->list()', 'siren.fulfillments.list()'],
+  ['$siren->fulfillments->retrieve()', 'siren.fulfillments.retrieve()'],
   ['$siren->collaborators->list()', 'siren.collaborators.list()'],
   ['$siren->collaborators->retrieve()', 'siren.collaborators.retrieve()'],
   ['$siren->collaborators->create()', 'siren.collaborators.create()'],
@@ -151,9 +159,12 @@ const PHP_SURFACE: Array<[string, string | null]> = [
 
 /**
  * Rows whose Node method behaves differently from PHP in a way the slice 4
- * architecture note writes down, so the table must say so too.
+ * or apps-sdk-gaps architecture note writes down, so the table must say so
+ * too.
  */
 const WRITTEN_DIFFERENCES = [
+  '$siren->webhooks->subscriptions->deliveries()',
+  '$siren->fulfillments->list()',
   '$siren->conversions->update()',
   '$siren->transactions->details()',
   '$siren->transactions->create()',
@@ -262,6 +273,24 @@ describe('P11: README parity table', () => {
     expect(row!.difference.length, `${php} has a difference`).toBeGreaterThan(20);
   });
 
+  it('maps the record scope list in a sentence under the table', () => {
+    const parity = section(readme(), '## Parity with the PHP SDK');
+    const underTable = parity.slice(0, parity.indexOf(`\n${NODE_ONLY_HEADING}\n`));
+
+    for (const name of ['`ApiKeyRecordScope::ALL`', '`API_KEY_RECORD_SCOPES`', '`ApiKeyRecordScope::FULFILLMENTS_READ`', '`ApiKeyRecordScope.FulfillmentsRead`']) {
+      expect(underTable, name).toContain(name);
+    }
+    expect(underTable).toContain('the same thirty strings in the same order');
+    expect(sdk.API_KEY_RECORD_SCOPES).toHaveLength(30);
+  });
+
+  it('compares against the PHP SDK by release, never by branch or commit', () => {
+    const opening = section(readme(), '## Parity with the PHP SDK').split('\n| PHP |')[0]!;
+
+    expect(opening).toContain("the Siren PHP SDK's next release");
+    expect(opening).not.toMatch(/feat\/|pkt\/|\b[0-9a-f]{7,40}\b/);
+  });
+
   it('names only Node methods that exist', () => {
     const http = new FakeHttpClient([reply(200, {})]);
     const siren = new sdk.Siren({ apiKey: TEST_API_KEY, httpClient: http, baseUrl: BASE });
@@ -278,9 +307,10 @@ describe('P11: README parity table', () => {
 /*
  * The second table, "Node methods the PHP SDK does not have yet". Node may
  * lead the PHP SDK, and each method it adds first is written down here, so
- * a later slice can give PHP the same call. siren-php's origin/main was
- * still 59383e6 when this list was checked, and no branch there held any of
- * these methods.
+ * a later slice can give PHP the same call. The seven calls siren-php's
+ * feat/apps added moved to the first table. When this list was checked,
+ * siren-php's origin/main was still 59383e6, and neither it nor feat/apps
+ * held any of the three left here.
  *
  * The guard below walks a real `Siren` client: every method on the
  * prototype of every resource it carries, nested resources included. Each
@@ -293,13 +323,6 @@ const NODE_ONLY = [
   'siren.events.forward()',
   'siren.conversions.recoverCreate()',
   'siren.transactions.recoverCreditCollaborator()',
-  'siren.payouts.retrieve()',
-  'siren.fulfillments.list()',
-  'siren.fulfillments.retrieve()',
-  'siren.webhooks.subscriptions.retrieve()',
-  'siren.webhooks.subscriptions.update()',
-  'siren.webhooks.subscriptions.test()',
-  'siren.webhooks.subscriptions.deliveries()',
 ];
 
 /**
