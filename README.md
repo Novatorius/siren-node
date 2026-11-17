@@ -507,7 +507,7 @@ for any other key, naming it.
 
 The first table compares this SDK with the Siren PHP SDK's next release, which adds seven calls and
 the record scope list to PHP 0.3.0. The Node SDK carries every public method of that release under
-the same name, with one left out. It also has thirteen methods the PHP SDK does not have yet, listed
+the same name, with one left out. It also has twenty-nine methods the PHP SDK does not have yet, listed
 in the second table below.
 The first table lists each PHP method, its Node name, and how the two differ where they do.
 Across every record resource, Node throws `SirenError` before sending where PHP throws
@@ -663,11 +663,21 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.events.forward()` | `POST /event/{eventSlug}` | Sends a connected site's event in Siren's versioned envelope, once. |
 | `siren.conversions.recoverCreate()` | `GET /conversions`, then `POST /conversions` | After `create` lost its answer, sends it again only when Siren holds no such conversion. |
 | `siren.transactions.recoverCreditCollaborator()` | `GET /conversions`, then `POST /transactions/credit-collaborator` | After `creditCollaborator` lost its answer, credits only the transactions that hold no conversion for the collaborator. |
-| `siren.apps.declare()` | `PUT /apps/{key}` | Declares an app from its whole description, once, and answers its key and signing secret the first time. |
-| `siren.apps.list()` | `GET /apps` | Lists the organization's apps with their items. |
-| `siren.apps.retrieve()` | `GET /apps/{key}` | Reads one app with its items. |
+| `siren.apps.declare()` | `PUT /apps/{key}` | Declares an app from its whole description, once. The first call answers its key, and its signing secret when the file names a `url`. |
+| `siren.apps.create()` | `POST /apps` | Makes an app from the dashboard's door, with a key when `scopes` is sent and an address when `url` is, and answers each new secret once. |
+| `siren.apps.update()` | `PATCH /apps/{key}` | Changes only the fields sent. `url: null` removes the address. |
+| `siren.apps.list()` | `GET /apps` | Lists the organization's apps with their key, address and features. |
+| `siren.apps.retrieve()` | `GET /apps/{key}` | Reads one app with its key, address and features. |
 | `siren.apps.setStatus()` | `POST /apps/{key}/status` | Turns an app on or off. |
-| `siren.apps.rotate()` | `POST /apps/{key}/rotate` | Gives an app a new key and signing secret, shown once. |
+| `siren.apps.createKey()` | `POST /apps/{key}/key` | Makes a key for an app that has none, and answers it once. |
+| `siren.apps.rotateKey()` | `POST /apps/{key}/key/rotate` | Gives an app a new key, shown once. The signing secret stays. |
+| `siren.apps.revokeKey()` | `DELETE /apps/{key}/key` | Revokes an app's key. The app keeps its address. |
+| `siren.apps.rotateSecret()` | `POST /apps/{key}/secret/rotate` | Gives an app's address a new signing secret, shown once. The key stays. |
+| `siren.apps.test()` | `POST /apps/{key}/test` | Sends the app's address one signed `webhook.test` delivery and answers what it did. |
+| `siren.apps.deliveries()` | `GET /apps/{key}/deliveries` | Lists the latest 50 deliveries to the app's address. |
+| `siren.apps.events()` | `GET /apps/events` | Lists the events an app's address may receive. |
+| `siren.apps.scopes()` | `GET /apps/scopes` | Lists the scopes an app's key may hold, grouped by resource. |
+| `siren.apps.kinds()` | `GET /apps/kinds` | Lists the kinds of feature an app may add, with their settings and whether the plan can use each. |
 | `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
 | `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
 | `siren.apps.shownAmount()` | None. It reads the value and currency of a tell, which Siren sends as `POST /` to the app's own address | Reads a stored amount and its currency as a person reads them, such as `$15.00` for 1500 in dollars and `¥100` for 10000 in yen. |
@@ -675,6 +685,10 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` | Reads one request, however old, with the data Siren sent, the answer it took and the person who answered by hand. |
 | `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
 | `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
+| `siren.apps.items.create()` | `POST /apps/{app}/items` | Adds one feature to an app that holds a key and an address. |
+| `siren.apps.items.retrieve()` | `GET /apps/{app}/items/{id}` | Reads one feature with how many records select it and which. |
+| `siren.apps.items.update()` | `PATCH /apps/{app}/items/{id}` | Changes a feature's name, description or settings. Its kind and key never change. |
+| `siren.apps.items.delete()` | `DELETE /apps/{app}/items/{id}` | Archives a feature a record selects, and deletes one nothing selects. |
 
 ## Storefront module (browser)
 
@@ -1082,7 +1096,7 @@ item joins one of Siren's pickers, so an organization chooses it as it chooses a
 |---|---|---|
 | `postConversionAction` | a program | A tell after each approved conversion. |
 | `postAllocationAction` | a distributor | A tell after each completed allocation. |
-| `fulfillmentMethod` | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
+| `payoutMethod` | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
 | `distributionResolver` | a distributor | An ask to divide each pool. |
 
 Apps are a Siren Cloud feature. The app routes take a signed-in admin's session token as
@@ -1105,7 +1119,7 @@ const app = await siren.apps.declare('acme-payouts', {
   scopes: ['event:sale'],
   items: [
     { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
-    { kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] },
+    { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] },
   ],
 });
 if (app.created) saveSecrets(app.rawKey, app.signingSecret);

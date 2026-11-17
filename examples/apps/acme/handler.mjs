@@ -165,7 +165,7 @@ export function describeTell(siren, request) {
  */
 export function answerFor(request) {
   const { data } = request;
-  if (request.item.kind === 'fulfillmentMethod') {
+  if (request.item.kind === 'payoutMethod') {
     if (typeof data.payoutId !== 'number' && typeof data.payoutId !== 'string') throw new Error('a payout ask needs data.payoutId.');
     return { outcome: 'paid', reference: `acme-${data.payoutId}` };
   }

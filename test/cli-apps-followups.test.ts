@@ -32,6 +32,7 @@ describe('apps-sdk-followups-1: an archived item', () => {
     expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
     const lines = h.out().split('\n');
     expect(lines).toContain(ARCHIVED_LINE);
+    // The capture predates the payout kind's new word, so Siren answered the old one.
     expect(lines).toContain('  app:2  fulfillmentMethod  acme-ledger  Acme ledger');
     expect(lines).toContain(
       'An archived item is one siren.app.json no longer names while a record still selects it. ' +
@@ -80,7 +81,7 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     const h = harness([capturedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /webhooks/31/deliveries']);
+    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
     const out = h.out();
     expect(out.split('\n')[0]).toBe(
       `${ONE_ID}  needs_attention  tell postConversionAction  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,

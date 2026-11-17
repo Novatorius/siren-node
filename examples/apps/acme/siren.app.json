@@ -11,7 +11,7 @@
       "events": [],
       "items": {
         "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
-        "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
+        "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
         "acme-split": { "kind": "distributionResolver", "name": "Acme split", "answerWindowMinutes": 1 }
       }
     }

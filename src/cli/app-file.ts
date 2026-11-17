@@ -17,7 +17,7 @@ import { AppItemKind } from '../taxonomy';
  *         "events": [],
  *         "items": {
  *           "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
- *           "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"] }
+ *           "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"] }
  *         }
  *       }
  *     }
@@ -143,7 +143,7 @@ export function appFileTemplate(key: string, name: string): string {
         events: [],
         items: {
           notify: { kind: 'postConversionAction', name: 'Tell my service about each approved conversion' },
-          pay: { kind: 'fulfillmentMethod', name: 'Pay through my service', currencies: ['USD'] },
+          pay: { kind: 'payoutMethod', name: 'Pay through my service', currencies: ['USD'] },
         },
       },
     },
@@ -182,7 +182,7 @@ const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'items'];
 const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes'];
 
 /** Siren's item kinds (lib/Apps/Core/Enums/AppItemKinds.php). */
-const KINDS: readonly string[] = Object.values(AppItemKind);
+const KINDS: readonly string[] = [...new Set<string>(Object.values(AppItemKind))];
 
 /** An app or item key, as Siren's `AppService::KEY_PATTERN` reads it, at most 64 characters. */
 const KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -537,12 +537,12 @@ class AppFileCheck {
     if (entry.description !== undefined && typeof entry.description !== 'string') {
       this.problem(`${path}.description`, this.where(`${path}.description`), `${path}.description must be text.`);
     }
-    if (entry.kind === AppItemKind.FulfillmentMethod) {
+    if (entry.kind === AppItemKind.PayoutMethod) {
       if (!isTextList(entry.currencies) || entry.currencies.length === 0) {
-        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a fulfillmentMethod: a list of the currency codes it pays.`);
+        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a payoutMethod: a list of the currency codes it pays.`);
       }
     } else if (entry.currencies !== undefined) {
-      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a fulfillmentMethod.`);
+      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a payoutMethod.`);
     }
     const window = entry.answerWindowMinutes;
     if (window !== undefined && (!Number.isInteger(window) || (window as number) < 1 || (window as number) > MAX_ANSWER_WINDOW_MINUTES)) {

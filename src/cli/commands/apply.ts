@@ -119,7 +119,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
 
   await run.signedIn();
   const { key, params } = declarationFor(parsed.file);
-  if (onThisMachine(params.url)) {
+  if (params.url != null && onThisMachine(params.url)) {
     run.warn(
       "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
         'Use host.docker.internal in its place, and see "Running against your own Siren Cloud" in the README.',
@@ -151,7 +151,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   }
 
   if (app.created) {
-    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);
+    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret ?? '', false);
     await run.remember(key, envPath);
     return saved ? 0 : 1;
   }
@@ -251,7 +251,8 @@ export async function appsRotate(input: CommandInput): Promise<number> {
     );
   }
 
-  const rotated = await run.siren().apps.rotate(key);
+  const siren = run.siren();
+  const rotated = { rawKey: (await siren.apps.rotateKey(key)).rawKey, signingSecret: (await siren.apps.rotateSecret(key)).signingSecret };
   const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret, true);
   await run.remember(key, envPath);
   if (saved) run.print(`Siren revoked the old key. Restart your app so it reads the new pair.`);

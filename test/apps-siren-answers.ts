@@ -11,13 +11,33 @@ export const APP_KEY = 'acme-payouts';
 export const APP_REQUEST_ID = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
 
 /**
- * An app as the app routes answer it: lib/Apps/Service/Services/AppSerializer.php
- * lines 15 to 30, with `rawKey` and `signingSecret` only on a first declare.
- * Each item as lib/Apps/Core/Models/Adapters/AppItemAdapter.php lines 43 to 53
- * gives it, on `feat/apps` at 1557b0030. `needsAttention` is the count
- * AppSerializer.php line 57 adds on `feat/apps` at 27169452a, from
- * AppAttention::count() (captures apps-retrieve-200-with-count and
- * apps-list-200-count-1, from the second Cloud run at 57999d085).
+ * The plan fields Siren's AppPlanAccess gives a feature and an app's events
+ * (lib/Apps/Service/Services/AppPlanAccess.php on Novatorius/siren
+ * `int/preview-apps` at a22547327). `usable` is Pro, or no plan claim.
+ * `needsPro` is what an outward kind and the events read on Plus, as
+ * tests/Integration/Tests/AppsOutIsProFlowTest.php `everyPlan()` lines 397
+ * to 413 pin it.
+ */
+export const PlanFields = {
+  usable: () => ({ entitled: true, requiredCapability: null, requiredPlan: null }),
+  needsPro: () => ({ entitled: false, requiredCapability: 'outbound-apps', requiredPlan: 'pro' }),
+};
+
+/**
+ * An app as the app routes answer it on Siren's `int/preview-apps` at
+ * a22547327: lib/Apps/Service/Services/AppSerializer.php `toArray()` lines
+ * 54 to 69, with `source`, `apiKey` as `key()` gives it (lines 86 to 97) and
+ * `address` as `address()` gives it (lines 103 to 112), `eventsAccess`, and
+ * no `apiKeyId` or `webhookSubscriptionId`, which
+ * tests/Integration/Tests/AppsOwnPartsFlowTest.php
+ * `test_a_first_declaration_makes_parts_that_point_at_the_app` (lines 153 to
+ * 163) and `test_the_last_write_wins_and_the_answer_holds_what_a_file_declares`
+ * (lines 499 to 505) pin. Each item as AppItemAdapter.php `toArray()` (lines
+ * 40 to 55) gives it, with the plan fields AppSerializer `item()` adds (line
+ * 78). The payout kind is `payoutMethod`, as
+ * `test_the_payout_kind_is_stored_as_the_docs_word` (lines 1302 to 1314)
+ * pins. `rawKey` and `signingSecret` sit only on the answer of the route that
+ * made them.
  */
 export function appRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -26,14 +46,23 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
     name: 'Acme',
     description: "Siren's example app.",
     status: 'active',
-    webhookSubscriptionId: 31,
-    apiKeyId: 52,
+    source: 'code',
     dateCreated: '2026-11-16 21:00:00',
     dateModified: '2026-11-16 21:00:00',
     url: 'https://acme.example/siren',
     events: [],
     scopes: [],
     apiKeyPrefix: 'sk_test_0a0a0a0a',
+    apiKey: {
+      id: 52,
+      prefix: 'sk_test_0a0a0a0a',
+      lastFour: '0a0a',
+      scopes: [],
+      propertyId: null,
+      lastUsedAt: null,
+      dateCreated: '2026-11-16 21:00:00',
+    },
+    address: { id: 31, url: 'https://acme.example/siren', events: [], status: 'active', dateCreated: '2026-11-16 21:00:00' },
     items: [
       {
         id: 11,
@@ -47,12 +76,13 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
         status: 'active',
         dateCreated: '2026-11-16 21:00:00',
         dateModified: '2026-11-16 21:00:00',
+        ...PlanFields.usable(),
       },
       {
         id: 12,
         ref: 'app:12',
         appId: 4,
-        kind: 'fulfillmentMethod',
+        kind: 'payoutMethod',
         key: 'acme-ledger',
         name: 'Acme ledger',
         description: '',
@@ -60,12 +90,94 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
         status: 'active',
         dateCreated: '2026-11-16 21:00:00',
         dateModified: '2026-11-16 21:00:00',
+        ...PlanFields.usable(),
       },
     ],
+    eventsAccess: PlanFields.usable(),
     needsAttention: 0,
     ...overrides,
   };
 }
+
+/**
+ * One feature as its own routes answer it: AppSerializer `item()` and
+ * `uses` and `usedBy` (AddAppItem.php, GetAppItem.php, EditAppItem.php,
+ * `page()`). `usedBy` holds `{record, id}`, an autofulfiller known by its
+ * currency, as AppsOwnPartsFlowTest.php
+ * `test_the_item_routes_add_read_change_and_remove_one_item` (lines 1102 to
+ * 1117) pins.
+ */
+export function itemPage(overrides: Record<string, unknown> = {}) {
+  return {
+    ...(appRecord().items[1] as Record<string, unknown>),
+    uses: 1,
+    usedBy: [{ record: 'autofulfiller', id: 'USD' }],
+    ...overrides,
+  };
+}
+
+/**
+ * One kind as `GET /apps/kinds` answers it on Plus: AppItemKindCatalog
+ * `entries()` (lib/Apps/Core/Enums/AppItemKindCatalog.php lines 301 to 319
+ * on `int/preview-apps` at a22547327), `direction` from `direction()`, and
+ * the plan fields an outward kind reads on Plus (AppsOutIsProFlowTest.php
+ * lines 400 to 412).
+ */
+export function payoutKind(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: 'payoutMethod',
+    term: 'payout method',
+    name: 'Payout method',
+    description: 'Siren asks the app to pay a payout, in the currencies it names, when an autofulfiller picks this method.',
+    mode: 'ask',
+    direction: 'out',
+    aliases: ['autofulfiller', 'fulfillment method'],
+    docs: '/documentation/resource-reference/autofulfillers',
+    settings: [
+      {
+        field: 'currencies',
+        label: 'Currencies',
+        type: 'currencies',
+        required: true,
+        help: 'The currencies the app can pay in. An autofulfiller sets the method for one of them.',
+      },
+      {
+        field: 'answerWindowMinutes',
+        label: 'Answer window',
+        type: 'integer',
+        required: false,
+        min: 1,
+        max: 43200,
+        help: 'How many minutes Siren waits for the app to answer before the request needs a person.',
+      },
+    ],
+    ...PlanFields.needsPro(),
+    ...overrides,
+  };
+}
+
+/**
+ * Siren's refusals of a change to an app's parts, as
+ * lib/Apps/Service/Exceptions/AppPartRefusedException.php on
+ * `int/preview-apps` at a22547327 builds them: the code in `error.code` and
+ * `context.reason`. The messages are AppsOwnPartsFlowTest.php line 1244 for
+ * the key that exists and line 1208 for the missing address.
+ */
+export const PartAnswers = {
+  keyExists: () =>
+    reply(409, {
+      error: { message: 'The app "acme-payouts" already has a key. Rotate it to get a new one.', code: 'app_key_exists', context: { reason: 'app_key_exists' } },
+    }),
+  itemsNeedKeyAndAddress: () =>
+    reply(409, {
+      error: {
+        message:
+          'An app with features needs a key and an address, and "acme-payouts" would lack an address. Siren asks the app at its address, and the app answers with its key.',
+        code: 'app_items_need_key_and_address',
+        context: { reason: 'app_items_need_key_and_address', missing: ['address'] },
+      },
+    }),
+};
 
 /**
  * One row of `GET /apps/requests`, from the exchange contract
@@ -77,7 +189,7 @@ export function requestRow(overrides: Record<string, unknown> = {}) {
     id: APP_REQUEST_ID,
     appId: 4,
     item: 'app:12',
-    kind: 'fulfillmentMethod',
+    kind: 'payoutMethod',
     mode: 'ask',
     subject: { type: 'payout', id: '88' },
     status: 'sent',

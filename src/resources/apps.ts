@@ -4,6 +4,17 @@ import { answerAppRequest, listAppRequests, resendAppRequest, retrieveAppRequest
 import type {
   App,
   AppCurrency,
+  AppItemKindEntry,
+  AppItemPage,
+  AppWithRawKey,
+  AppWithSigningSecret,
+  CreateAppItemParams,
+  CreateAppParams,
+  CreatedApp,
+  RemovedAppItem,
+  UpdateAppItemParams,
+  UpdateAppParams,
+  UpdatedApp,
   AppAnswer,
   AppAnswerReceipt,
   AppRequest,
@@ -12,15 +23,14 @@ import type {
   AppRequestRecord,
   DeclareAppParams,
   DeclaredApp,
-  RotatedApp,
   ShownAmount,
   VerifyAppRequestOptions,
 } from '../record-types';
 import type { AppStatus } from '../taxonomy';
-import type { WebhookHeaders } from '../types';
+import type { ApiKeyScopeGroups, WebhookCatalogEntry, WebhookDelivery, WebhookHeaders, WebhookTestResult } from '../types';
 import { SirenError, UnexpectedResponseError } from '../errors';
 import { pickFields } from './create-fields';
-import { deleteRecord, isJsonObject, readList, readObject, writeRecord } from './record-requests';
+import { deleteRecord, isJsonObject, readList, readObject, recordId, writeRecord } from './record-requests';
 
 /*
  * Siren apps: a service the organization hosts that acts as part of Siren's
@@ -137,18 +147,27 @@ export class AppRequestsResource {
 const APP_KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
+ * The words Siren keeps for its own app routes, `AppService::RESERVED_KEYS`
+ * on Siren's int/preview-apps at a22547327: `/apps/requests`, `/apps/events`,
+ * `/apps/scopes` and `/apps/kinds`. No app holds one as its key.
+ */
+export const RESERVED_APP_KEYS = ['requests', 'events', 'scopes', 'kinds'] as const;
+
+/** The payout kind's old stored value, which Siren refuses since it renamed the kind `payoutMethod`. */
+const OLD_PAYOUT_KIND = 'fulfillmentMethod';
+
+/**
  * The path of the app with this key, `/apps/{key}`. Throws `SirenError`
  * naming `method` before anything is sent when `key` is not lowercase letters
  * and digits joined by single dashes, at most 64 characters
- * (`AppsTable::KEY_LENGTH`), or is `requests`, which Siren keeps for
- * `/apps/requests` (`AppService::RESERVED_KEYS`).
+ * (`AppsTable::KEY_LENGTH`), or is one of {@link RESERVED_APP_KEYS}.
  */
 function appPath(key: unknown, method: string): string {
-  if (typeof key !== 'string' || key.length > 64 || !APP_KEY.test(key) || key === 'requests') {
+  if (typeof key !== 'string' || key.length > 64 || !APP_KEY.test(key) || (RESERVED_APP_KEYS as readonly string[]).includes(key)) {
     const shown = typeof key === 'string' ? JSON.stringify(key) : String(key);
     throw new SirenError(
       `Siren: ${method} needs an app key of lowercase letters and digits joined by single dashes, ` +
-        `at most 64 characters and never requests, and got ${shown}.`,
+        `at most 64 characters and never ${RESERVED_APP_KEYS.join(', ')}, and got ${shown}.`,
     );
   }
   return `/apps/${key}`;
@@ -163,60 +182,230 @@ function appProblem(body: unknown, route: string): string | undefined {
     `Siren answered ${route} with a body that is not an app.`;
 }
 
+/** Throws `UnexpectedResponseError` when `body` is not an app. */
+function checkApp(body: unknown, route: string): void {
+  const problem = appProblem(body, route);
+  if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: body });
+}
+
 /**
- * Siren apps (`/apps`): declare an app, read it, turn it on and off, rotate
- * its key and secret, delete it, and check each request Siren sends it.
+ * Throws `UnexpectedResponseError` when `body` holds `field` and it is not
+ * text, or when `required` and it is missing. Siren had done the write by
+ * then, so `then` says what to do about the secret it lost.
+ */
+function checkSecret(body: Record<string, unknown>, field: 'rawKey' | 'signingSecret', route: string, required: boolean, then: string): void {
+  if (body[field] === undefined && !required) return;
+  if (typeof body[field] !== 'string') {
+    throw new UnexpectedResponseError(`Siren answered ${route} without ${field} as text, so it is lost. ${then}`, { data: body });
+  }
+}
+
+/**
+ * A feature's `kind` before it is sent: `SirenError` for the payout kind's
+ * old value, which Siren refuses, naming the new one. Any other value goes
+ * to Siren, which checks it.
+ */
+function checkKind(kind: unknown, method: string, where: string): void {
+  if (kind === OLD_PAYOUT_KIND) {
+    throw new SirenError(`Siren: ${method} needs kind payoutMethod${where}. Siren renamed fulfillmentMethod to payoutMethod, the documentation's word.`);
+  }
+}
+
+/** Sends a write once and answers the app with the one secret it made, checked. */
+async function writeWithSecret<T extends App>(
+  http: HttpTransport,
+  path: string,
+  method: 'POST',
+  body: unknown,
+  field: 'rawKey' | 'signingSecret',
+  then: string,
+): Promise<T> {
+  const route = `${method} ${path}`;
+  const app = await writeRecord<Record<string, unknown>>(http, method, path, body);
+  checkApp(app, route);
+  checkSecret(app, field, route, true, then);
+  return app as unknown as T;
+}
+
+/**
+ * One app's features, the code's items, through their own routes
+ * (`/apps/{app}/items`), so the dashboard and code can add one without
+ * declaring the whole app. A feature's kind and key lock once Siren makes
+ * it. Every route takes a signed-in admin's session, and a member limited
+ * to some stores gets 403 `org_access_required`, reads included, since a
+ * feature's page names the records that select it.
+ */
+export class AppItemsResource {
+  /** The fields `create()` sends, the six `POST /apps/{app}/items` reads (AddAppItem.php). */
+  static readonly CREATE_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes'] as const;
+  /** The fields `update()` sends. `PATCH /apps/{app}/items/{id}` refuses a changed kind or key with 422. */
+  static readonly UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes'] as const;
+
+  constructor(private readonly http: HttpTransport) {}
+
+  /**
+   * Adds one feature to the app with `POST /apps/{app}/items`, sent once,
+   * and answers it with `uses` and `usedBy`. Siren answers 201, or 200 when
+   * an archived feature of the same kind and key came back with the new
+   * fields. The feature is checked by the rules a declaration's feature
+   * meets.
+   *
+   * Refuses with `SirenError` before sending: a bad app key, params that are
+   * not an object, any field but {@link CREATE_FIELDS}, no `kind`, `key` or
+   * `name`, and the old kind `fulfillmentMethod`. Siren answers 422 with the
+   * field for the rest, 409 `app_items_need_key_and_address` with
+   * `data.missing` when the app lacks a key or an address, and 404 for an
+   * app the organization lacks. Throws `UnexpectedResponseError` when the
+   * 2xx body is not a feature.
+   */
+  async create(appKey: string, params: CreateAppItemParams): Promise<AppItemPage> {
+    const path = `${appPath(appKey, 'apps.items.create()')}/items`;
+    if (!isJsonObject(params)) throw new SirenError('Siren: apps.items.create() needs the feature as an object.');
+    const sent = pickFields(params, AppItemsResource.CREATE_FIELDS, (field) => `Siren: apps.items.create() does not take ${field}.`);
+    for (const field of ['kind', 'key', 'name']) {
+      if (sent[field] == null) throw new SirenError(`Siren: apps.items.create() needs a ${field}.`);
+    }
+    checkKind(sent.kind, 'apps.items.create()', '');
+    const item = await writeRecord<Record<string, unknown>>(this.http, 'POST', path, sent);
+    return checkedItem(item, `POST ${path}`);
+  }
+
+  /**
+   * One feature by its id, with `uses`, how many records select it, and
+   * `usedBy`, up to 100 of them, from `GET /apps/{app}/items/{id}`. Retries
+   * as a read. Siren answers 404 for a feature another app holds. Refuses a
+   * bad app key or id with `SirenError` before sending.
+   */
+  async retrieve(appKey: string, id: number): Promise<AppItemPage> {
+    const path = `${appPath(appKey, 'apps.items.retrieve()')}/items/${recordId(id, 'apps.items.retrieve')}`;
+    return readObject<AppItemPage>(this.http, path, {}, (body) => itemProblem(body, `GET ${path}`));
+  }
+
+  /**
+   * Changes a feature's name, description or settings with
+   * `PATCH /apps/{app}/items/{id}`, sent once, and answers it. A field left
+   * out keeps its value. Refuses with `SirenError` before sending: a bad app
+   * key or id, params that are not an object, and any field but
+   * {@link UPDATE_FIELDS}, `kind` and `key` included, since a feature's kind
+   * and key never change.
+   */
+  async update(appKey: string, id: number, params: UpdateAppItemParams): Promise<AppItemPage> {
+    const path = `${appPath(appKey, 'apps.items.update()')}/items/${recordId(id, 'apps.items.update')}`;
+    if (!isJsonObject(params)) throw new SirenError('Siren: apps.items.update() needs the change as an object.');
+    const sent = pickFields(params, AppItemsResource.UPDATE_FIELDS, (field) =>
+      field === 'kind' || field === 'key'
+        ? `Siren: apps.items.update() cannot change ${field}. A feature's kind and key never change once Siren makes it.`
+        : `Siren: apps.items.update() does not take ${field}.`,
+    );
+    const item = await writeRecord<Record<string, unknown>>(this.http, 'PATCH', path, sent);
+    return checkedItem(item, `PATCH ${path}`);
+  }
+
+  /**
+   * Removes a feature with `DELETE /apps/{app}/items/{id}`, sent once.
+   * Siren archives it while a record selects it and answers
+   * `{ archived: true, item }`, and deletes it otherwise and answers
+   * `{ archived: false, item: null }`. Refuses a bad app key or id with
+   * `SirenError` before sending. Throws `UnexpectedResponseError` for any
+   * other 2xx body.
+   */
+  async delete(appKey: string, id: number): Promise<RemovedAppItem> {
+    const path = `${appPath(appKey, 'apps.items.delete()')}/items/${recordId(id, 'apps.items.delete')}`;
+    const body = await deleteRecord<Record<string, unknown>>(this.http, path);
+    const fits = body !== null && typeof body.archived === 'boolean' && (body.item === null || itemProblem(body.item, '') === undefined);
+    if (!fits) throw new UnexpectedResponseError(`Siren answered DELETE ${path} with a body that is not { archived, item }.`, { data: body });
+    return body as unknown as RemovedAppItem;
+  }
+}
+
+/** Why `body` is not a feature with a numeric `id`, a text `kind` and `key`, or `undefined` when it is. */
+function itemProblem(body: unknown, route: string): string | undefined {
+  return isJsonObject(body) && typeof body.id === 'number' && typeof body.kind === 'string' && typeof body.key === 'string'
+    ? undefined
+    : `Siren answered ${route} with a body that is not a feature.`;
+}
+
+function checkedItem(body: Record<string, unknown>, route: string): AppItemPage {
+  const problem = itemProblem(body, route);
+  if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: body });
+  return body as unknown as AppItemPage;
+}
+
+/**
+ * Siren apps (`/apps`). An app is the container for its API key, its
+ * address and its features, as a Slack app is: declare an app from its
+ * file, make one from the dashboard's door, change it, make, rotate and
+ * revoke its key, rotate its signing secret, send it a test, read its
+ * delivery log, turn it on and off, delete it, and check each request
+ * Siren sends it.
  *
  * Every route but the answer route takes a signed-in admin's session token
  * as `accessToken`. Siren refuses an API key there with 401
- * `api_key_not_accepted`. An app key is lowercase letters and digits joined
- * by single dashes, at most 64 characters, and never `requests`. Each method
- * that takes one refuses any other with `SirenError` before sending.
+ * `api_key_not_accepted`, and a member limited to some stores with 403
+ * `org_access_required` on every write. An app key is lowercase letters
+ * and digits joined by single dashes, at most 64 characters, and never one
+ * of {@link RESERVED_APP_KEYS}. Each method that takes one refuses any
+ * other with `SirenError` before sending.
  */
 export class AppsResource {
   /** The fields `declare()` sends, the six `PUT /apps/{key}` reads (DeclareApp.php). */
   static readonly DECLARE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'items'] as const;
   /** The fields `declare()` sends for each item, the six Siren stores (apps-records.md, "Item settings"). */
   static readonly ITEM_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes'] as const;
+  /** The fields `create()` sends, those `POST /apps` reads but `items`, which it refuses (CreateApp.php). */
+  static readonly CREATE_FIELDS = ['name', 'description', 'url', 'scopes', 'events'] as const;
+  /** The fields `update()` sends, those `PATCH /apps/{key}` reads but `items`, which it refuses (EditApp.php). */
+  static readonly UPDATE_FIELDS = ['name', 'description', 'url', 'events', 'scopes'] as const;
 
   /** The requests Siren sent the org's apps. */
   readonly requests: AppRequestsResource;
+  /** One app's features, through their own routes. */
+  readonly items: AppItemsResource;
 
   constructor(private readonly http: HttpTransport) {
     this.requests = new AppRequestsResource(http);
+    this.items = new AppItemsResource(http);
   }
 
   /**
    * Declares the app with this key from its whole description, with
-   * `PUT /apps/{key}`, sent once.
+   * `PUT /apps/{key}`, sent once. The file's door: an app it makes has
+   * `source` `code`.
    *
-   * The first call makes the app, its API key and its webhook subscription,
-   * and Siren answers 201 with `rawKey` and `signingSecret`, which it never
-   * shows again. This answers them with `created: true`. Every later call
-   * updates the app in place and answers `created: false` with no secret.
-   * Sending the same declaration again after a lost answer changes nothing,
-   * but a lost first answer loses the secrets: rotate to get new ones.
+   * The first call makes the app and its API key, and an address when
+   * `url` is given. Siren answers 201 with `rawKey`, and `signingSecret`
+   * when it made an address, each shown this once. This answers them with
+   * `created: true`. Every later call updates the app in place and answers
+   * `created: false`. A later call never makes or revokes a key: its
+   * `scopes` reach only an active key. A `url` the app had no address for
+   * makes one and answers `signingSecret` once, and no `url` removes the
+   * address and its delivery log. A feature the call leaves out is archived
+   * while a record selects it and deleted otherwise. Sending the same
+   * declaration again after a lost answer changes nothing, but a lost first
+   * answer loses the secrets: rotate to get new ones.
    *
    * Sends a new object of {@link DECLARE_FIELDS}, and each item as a new
    * object of {@link ITEM_FIELDS}. Refuses with `SirenError` before sending:
    * a bad app key, any other field or item field whatever its value, no
-   * `name` or `url`, `items` that is not an array, or an item that is not an
-   * object or lacks `kind`, `key` or `name`. Siren checks the rest and
-   * answers 400 or 422 with the field, raised as `BadRequestError` or
-   * `ValidationError`, and 403 with `data.reason` `app_limit_reached` when
-   * the plan has no room.
+   * `name`, `items` that is not an array, an item that is not an object or
+   * lacks `kind`, `key` or `name`, the old kind `fulfillmentMethod`, and
+   * features with no `url`, which Siren refuses with 422
+   * `app_items_need_key_and_address`, since it asks the app at its address.
+   * Siren checks the rest and answers 400 or 422 with the field, raised as
+   * `BadRequestError` or `ValidationError`, and 400 `app_cap_reached` when
+   * the organization holds its cap of apps.
    *
    * Throws `UnexpectedResponseError` when a 2xx body is not an app (an object
-   * with a text `key` and an `items` array), or holds only one of `rawKey`
-   * and `signingSecret`. Its `statusCode` is unset, since `writeRecord`
-   * answers the body alone. Siren had accepted the write, so read the app
-   * with `retrieve()` before sending it again.
+   * with a text `key` and an `items` array), or holds `rawKey` or
+   * `signingSecret` as anything but text. Its `statusCode` is unset, since
+   * `writeRecord` answers the body alone. Siren had accepted the write, so
+   * read the app with `retrieve()` before sending it again.
    */
   async declare(key: string, params: DeclareAppParams): Promise<DeclaredApp> {
     const path = appPath(key, 'apps.declare()');
     if (!isJsonObject(params)) throw new SirenError('Siren: apps.declare() needs the app as an object.');
     const sent = pickFields(params, AppsResource.DECLARE_FIELDS, (field) => `Siren: apps.declare() does not take ${field}.`);
-    if (sent.name == null || sent.url == null) throw new SirenError('Siren: apps.declare() needs a name and a url.');
+    if (sent.name == null) throw new SirenError('Siren: apps.declare() needs a name.');
     if (sent.items !== undefined) {
       if (!Array.isArray(sent.items)) throw new SirenError('Siren: apps.declare() takes items as a list.');
       sent.items = (sent.items as unknown[]).map((item, index) => {
@@ -225,21 +414,85 @@ export class AppsResource {
         for (const field of ['kind', 'key', 'name']) {
           if (copy[field] == null) throw new SirenError(`Siren: apps.declare() needs a ${field} on item ${index}.`);
         }
+        checkKind(copy.kind, 'apps.declare()', ` on item ${index}`);
         return copy;
       });
+      if ((sent.items as unknown[]).length > 0 && sent.url == null) {
+        throw new SirenError(
+          'Siren: apps.declare() needs a url for an app with features. Siren asks the app at its address, so it refuses features on an app with none.',
+        );
+      }
     }
 
+    const route = `PUT ${path}`;
     const app = await writeRecord<Record<string, unknown>>(this.http, 'PUT', path, sent);
-    const problem = appProblem(app, `PUT ${path}`);
-    if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: app });
-    const created = app.rawKey !== undefined || app.signingSecret !== undefined;
-    if (created && (typeof app.rawKey !== 'string' || typeof app.signingSecret !== 'string')) {
-      throw new UnexpectedResponseError(
-        `Siren answered PUT ${path} without both rawKey and signingSecret as text, so the new app's secrets are lost. Rotate to get new ones.`,
-        { data: app },
-      );
-    }
+    checkApp(app, route);
+    const created = app.rawKey !== undefined;
+    checkSecret(app, 'rawKey', route, false, 'Rotate the key with apps.rotateKey() to get a new one.');
+    checkSecret(app, 'signingSecret', route, false, 'Rotate the secret with apps.rotateSecret() to get a new one.');
     return { ...app, created } as DeclaredApp;
+  }
+
+  /**
+   * Makes an app from the dashboard's door with `POST /apps`, sent once.
+   * Siren picks its key from the name, makes a key when `scopes` is a list,
+   * even `[]`, and an address when `url` is given, and answers 201 with
+   * `rawKey` and `signingSecret` for the parts it made, each shown this
+   * once. The app has `source` `dashboard`. Add features with
+   * {@link items}.
+   *
+   * Refuses with `SirenError` before sending: params that are not an object,
+   * no `name`, `items`, and any other field but {@link CREATE_FIELDS}. Siren
+   * answers 422 `app_needs_a_part` for an app with neither part, 422 on
+   * `events` with no `url`, and 400 `app_cap_reached` at the cap. Throws
+   * `UnexpectedResponseError` when the 2xx body is not an app or holds a
+   * secret that is not text.
+   */
+  async create(params: CreateAppParams): Promise<CreatedApp> {
+    if (!isJsonObject(params)) throw new SirenError('Siren: apps.create() needs the app as an object.');
+    const sent = pickFields(params, AppsResource.CREATE_FIELDS, (field) =>
+      field === 'items'
+        ? 'Siren: apps.create() does not take items. Add each feature with apps.items.create() once the app has a key and an address.'
+        : `Siren: apps.create() does not take ${field}.`,
+    );
+    if (sent.name == null) throw new SirenError('Siren: apps.create() needs a name.');
+    const route = 'POST /apps';
+    const app = await writeRecord<Record<string, unknown>>(this.http, 'POST', '/apps', sent);
+    checkApp(app, route);
+    checkSecret(app, 'rawKey', route, false, 'Rotate the key with apps.rotateKey() to get a new one.');
+    checkSecret(app, 'signingSecret', route, false, 'Rotate the secret with apps.rotateSecret() to get a new one.');
+    return app as unknown as CreatedApp;
+  }
+
+  /**
+   * Changes the fields sent with `PATCH /apps/{key}`, sent once, and
+   * answers the app. The edit page's door. `url` moves the address and
+   * keeps its id and secret, or makes one and answers `signingSecret` once.
+   * `url: null` removes the address. `events` needs an address and `scopes`
+   * a key. It never makes, rotates or revokes a key. An empty change writes
+   * nothing.
+   *
+   * Refuses with `SirenError` before sending: a bad app key, params that are
+   * not an object, `items`, and any other field but {@link UPDATE_FIELDS}.
+   * Siren answers 409 `app_key_missing` for `scopes` on an app with no key,
+   * 409 `app_address_missing` for `events` on an app with no address, 409
+   * `app_needs_a_part` for a change that would leave neither, and 409
+   * `app_items_need_key_and_address` for a change that would take the
+   * address of an app with features.
+   */
+  async update(key: string, params: UpdateAppParams): Promise<UpdatedApp> {
+    const path = appPath(key, 'apps.update()');
+    if (!isJsonObject(params)) throw new SirenError('Siren: apps.update() needs the change as an object.');
+    const sent = pickFields(params, AppsResource.UPDATE_FIELDS, (field) =>
+      field === 'items'
+        ? 'Siren: apps.update() does not take items. Change each feature with apps.items.update().'
+        : `Siren: apps.update() does not take ${field}.`,
+    );
+    const route = `PATCH ${path}`;
+    const app = await writeRecord<Record<string, unknown>>(this.http, 'PATCH', path, sent);
+    checkApp(app, route);
+    checkSecret(app, 'signingSecret', route, false, 'Rotate the secret with apps.rotateSecret() to get a new one.');
+    return app as unknown as UpdatedApp;
   }
 
   /**
@@ -255,10 +508,12 @@ export class AppsResource {
   }
 
   /**
-   * One app with its items, from `GET /apps/{key}`. Retries as a read.
-   * Siren answers 404 for a key the org lacks, raised as `NotFoundError`.
-   * Refuses a bad app key with `SirenError` before sending. Throws
-   * `UnexpectedResponseError` when the 2xx body is not an app.
+   * One app with its key, address and features, from `GET /apps/{key}`,
+   * each field in the shape a file declares it, so a tool can compare a
+   * file with it. Retries as a read. Siren answers 404 for a key the org
+   * lacks, raised as `NotFoundError`. Refuses a bad app key with
+   * `SirenError` before sending. Throws `UnexpectedResponseError` when the
+   * 2xx body is not an app.
    */
   async retrieve(key: string): Promise<App> {
     const path = appPath(key, 'apps.retrieve()');
@@ -269,48 +524,176 @@ export class AppsResource {
    * Turns the app on (`active`) or off (`inactive`) with
    * `POST /apps/{key}/status`, sent once, and answers the app. Refuses a bad
    * app key or any other status with `SirenError` before sending. An off
-   * app's items leave every picker and Siren sends it nothing. Turning one
-   * on checks the plan's room again, and Siren answers 403 with `data.reason`
-   * `app_limit_reached` when it has none. Throws `UnexpectedResponseError`
-   * when the 2xx body is not an app.
+   * app's items leave every picker, its address is paused, and Siren sends
+   * it nothing. Throws `UnexpectedResponseError` when the 2xx body is not an
+   * app.
    */
   async setStatus(key: string, status: AppStatus): Promise<App> {
     const path = `${appPath(key, 'apps.setStatus()')}/status`;
     if (status !== 'active' && status !== 'inactive') throw new SirenError('Siren: apps.setStatus() takes active or inactive.');
     const app = await writeRecord<App>(this.http, 'POST', path, { status });
-    const problem = appProblem(app, `POST ${path}`);
-    if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: app });
+    checkApp(app, `POST ${path}`);
     return app;
   }
 
   /**
-   * Gives the app a new API key and signing secret with
-   * `POST /apps/{key}/rotate`, sent once. Siren revokes the old key at once
-   * and signs every later request with the new secret only. Answers the app
-   * with `rawKey` and `signingSecret`, shown this once. Refuses a bad app key
-   * with `SirenError` before sending. Throws `UnexpectedResponseError` when
-   * the 2xx body is not an app or lacks either secret. Siren had rotated the
-   * key by then, so rotate again to get a pair you can read.
+   * Makes a key for an app that has none with `POST /apps/{key}/key`, sent
+   * once, holding `params.scopes` or none, labelled "App: {name}". Answers
+   * 201, the app with `rawKey`, shown this once.
+   *
+   * Refuses a bad app key, params that are not an object, and any field but
+   * `scopes`, with `SirenError` before sending. Siren answers 409
+   * `app_key_exists` when the app holds an active key, and 400 with
+   * `data.limit` when the organization holds its cap of keys. Throws
+   * `UnexpectedResponseError` when the 2xx body is not an app or lacks
+   * `rawKey`. Siren had made the key by then, so rotate it to get one you
+   * can read.
    */
-  async rotate(key: string): Promise<RotatedApp> {
-    const path = `${appPath(key, 'apps.rotate()')}/rotate`;
-    const app = await writeRecord<Record<string, unknown>>(this.http, 'POST', path, undefined);
-    const problem = appProblem(app, `POST ${path}`);
-    if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: app });
-    if (typeof app.rawKey !== 'string' || typeof app.signingSecret !== 'string') {
-      throw new UnexpectedResponseError(`Siren answered POST ${path} without the new rawKey and signingSecret.`, { data: app });
+  async createKey(key: string, params: { scopes?: string[] } = {}): Promise<AppWithRawKey> {
+    const path = `${appPath(key, 'apps.createKey()')}/key`;
+    if (!isJsonObject(params)) throw new SirenError('Siren: apps.createKey() takes { scopes } as an object.');
+    const sent = pickFields(params, ['scopes'] as const, (field) => `Siren: apps.createKey() does not take ${field}.`);
+    return writeWithSecret<AppWithRawKey>(this.http, path, 'POST', sent, 'rawKey', 'Rotate the key with apps.rotateKey() to get a new one.');
+  }
+
+  /**
+   * Replaces the app's key with `POST /apps/{key}/key/rotate`, sent once.
+   * Siren revokes the old key first, then makes a new one with the old
+   * label, scopes and `propertyId`. The signing secret never changes with
+   * the key. Answers the app with `rawKey`, shown this once.
+   *
+   * Refuses a bad app key with `SirenError` before sending. Siren answers
+   * 409 `app_key_missing` for an app with no key. Throws
+   * `UnexpectedResponseError` when the 2xx body is not an app or lacks
+   * `rawKey`. Siren had rotated the key by then, so rotate again.
+   */
+  async rotateKey(key: string): Promise<AppWithRawKey> {
+    const path = `${appPath(key, 'apps.rotateKey()')}/key/rotate`;
+    return writeWithSecret<AppWithRawKey>(this.http, path, 'POST', undefined, 'rawKey', 'Rotate the key again to get one you can read.');
+  }
+
+  /**
+   * Revokes the app's key with `DELETE /apps/{key}/key`, sent once, and
+   * answers the app, which keeps its address. Refuses a bad app key with
+   * `SirenError` before sending. Siren answers 409 `app_key_missing` for an
+   * app with no key, 409 `app_needs_a_part` for an app with no address, and
+   * 409 `app_items_need_key_and_address` for an app with features. Throws
+   * `UnexpectedResponseError` when the 2xx body is not an app.
+   */
+  async revokeKey(key: string): Promise<App> {
+    const path = `${appPath(key, 'apps.revokeKey()')}/key`;
+    const app = await deleteRecord<App>(this.http, path);
+    checkApp(app, `DELETE ${path}`);
+    return app as App;
+  }
+
+  /**
+   * Gives the app's address a new signing secret with
+   * `POST /apps/{key}/secret/rotate`, sent once. Siren signs every delivery
+   * with it from that moment, and the key never changes with the secret.
+   * Answers the app with `signingSecret`, shown this once.
+   *
+   * Refuses a bad app key with `SirenError` before sending. Siren answers
+   * 409 `app_address_missing` for an app with no address. Throws
+   * `UnexpectedResponseError` when the 2xx body is not an app or lacks
+   * `signingSecret`. Siren had rotated the secret by then, so rotate again.
+   */
+  async rotateSecret(key: string): Promise<AppWithSigningSecret> {
+    const path = `${appPath(key, 'apps.rotateSecret()')}/secret/rotate`;
+    return writeWithSecret<AppWithSigningSecret>(this.http, path, 'POST', undefined, 'signingSecret', 'Rotate the secret again to get one you can read.');
+  }
+
+  /**
+   * Sends the app's address one signed `webhook.test` delivery now, with
+   * `POST /apps/{key}/test`, and answers what the address did. Siren answers
+   * 200 whether or not it arrived, so read `delivered`. The test shows in
+   * {@link deliveries}.
+   *
+   * Sent once, since each call sends a request. Refuses a bad app key with
+   * `SirenError` before sending. Siren answers 409 `app_address_missing` for
+   * an app with no address, 409 `app_inactive` for an app that is off, 403
+   * `plan_required` with `data.plan` below Pro, since a test goes out of
+   * Siren, and 429 past 20 tests an hour for one app or 60 from one address.
+   * Throws `UnexpectedResponseError` when the 2xx body is not an object with
+   * a boolean `delivered`.
+   */
+  async test(key: string): Promise<WebhookTestResult> {
+    const path = `${appPath(key, 'apps.test()')}/test`;
+    const result = await writeRecord<Record<string, unknown>>(this.http, 'POST', path, undefined);
+    if (typeof result.delivered !== 'boolean') {
+      throw new UnexpectedResponseError(`Siren answered POST ${path} with a body that is not a test result.`, { data: result });
     }
-    return app as unknown as RotatedApp;
+    return result as unknown as WebhookTestResult;
+  }
+
+  /**
+   * The app's address's latest deliveries, newest first, at most 50, from
+   * `GET /apps/{key}/deliveries`, as `GET /webhooks/{id}/deliveries` lists
+   * them, and `[]` for an app with no address. Each holds the payload Siren
+   * sent, its status, its tries and the first 200 bytes of the answer. A
+   * request Siren sent the app shows as `{request id}.{send}` in `eventId`.
+   * Retries as a read. Refuses a bad app key with `SirenError` before
+   * sending. Throws `UnexpectedResponseError` when the 2xx body is not an
+   * array of objects.
+   */
+  async deliveries(key: string): Promise<WebhookDelivery[]> {
+    const path = `${appPath(key, 'apps.deliveries()')}/deliveries`;
+    return readList<WebhookDelivery>(this.http, path, (rows) =>
+      rows.every(isJsonObject) ? undefined : `Siren answered GET ${path} with a delivery that is not a JSON object.`,
+    );
+  }
+
+  /**
+   * The events an app's address may receive, from `GET /apps/events`, each
+   * `{ event, category, label }` (WebhookCatalog::all()). Retries as a read.
+   * Throws `UnexpectedResponseError` when the body is not a list of objects.
+   */
+  async events(): Promise<WebhookCatalogEntry[]> {
+    return readList<WebhookCatalogEntry>(this.http, '/apps/events', (rows) =>
+      rows.every(isJsonObject) ? undefined : 'Siren answered GET /apps/events with a body that is not a list of event objects.',
+    );
+  }
+
+  /**
+   * The scopes an app's key may hold, grouped by resource, from
+   * `GET /apps/scopes`, the same groups the API keys screen offers
+   * (ApiKeyScopePolicy::issuableGroups()). Retries as a read. Throws
+   * `UnexpectedResponseError` when the body is not an object of lists of
+   * objects.
+   */
+  async scopes(): Promise<ApiKeyScopeGroups> {
+    return readObject<ApiKeyScopeGroups>(this.http, '/apps/scopes', {}, (body) =>
+      Object.values(body).every((group) => Array.isArray(group) && group.every(isJsonObject))
+        ? undefined
+        : 'Siren answered GET /apps/scopes with a body that is not an object of scope lists.',
+    );
+  }
+
+  /**
+   * The kinds of feature an app may add, in the order the dashboard lists
+   * them, from `GET /apps/kinds` (AppItemKindCatalog::catalog()): each
+   * kind's documentation term, readable name, mode, direction, other names
+   * and settings fields, and whether the plan can use it. Retries as a
+   * read. Throws `UnexpectedResponseError` when the body is not a list of
+   * objects, each with a text `kind`.
+   */
+  async kinds(): Promise<AppItemKindEntry[]> {
+    return readList<AppItemKindEntry>(this.http, '/apps/kinds', (rows) =>
+      rows.every((row) => isJsonObject(row) && typeof row.kind === 'string')
+        ? undefined
+        : 'Siren answered GET /apps/kinds with a body that is not a list of kinds.',
+    );
   }
 
   /**
    * Deletes an app no record selects and with no open ask, with
    * `DELETE /apps/{key}`, sent once. Siren revokes its key and deletes its
-   * items and subscription. Its requests stay readable. Refuses a bad app key
-   * with `SirenError` before sending. Siren answers 409, raised as
-   * `ConflictError` with `data.reason` `app_in_use` and `data.uses`, while a
-   * record selects one of its items or an ask is open, and 404 for a key the
-   * org lacks, raised as `NotFoundError`. Read the code with `appErrorCode()`.
+   * items, its address and its delivery log. Its requests stay readable.
+   * Refuses a bad app key with `SirenError` before sending. Siren answers
+   * 409, raised as `ConflictError` with `data.reason` `app_in_use` and
+   * `data.uses`, while a record selects one of its items or an ask is open,
+   * and 404 for a key the org lacks, raised as `NotFoundError`. Read the
+   * code with `appErrorCode()`.
    */
   async delete(key: string): Promise<void> {
     await deleteRecord(this.http, appPath(key, 'apps.delete()'));

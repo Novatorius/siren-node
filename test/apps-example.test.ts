@@ -79,7 +79,7 @@ describe('apps-cli: the example app', () => {
   });
 
   it('pays a payout with its own reference, and divides a pool by each metric in whole minor units', () => {
-    expect(answerFor({ item: { kind: 'fulfillmentMethod', key: 'acme-ledger', id: 'app:12' }, data: { payoutId: 88, amount: 2500, currency: 'USD' } })).toEqual({
+    expect(answerFor({ item: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' }, data: { payoutId: 88, amount: 2500, currency: 'USD' } })).toEqual({
       outcome: 'paid',
       reference: 'acme-88',
     });

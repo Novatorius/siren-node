@@ -426,13 +426,13 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('rotates the key into the env file apply wrote, replacing only its three lines, never in the working folder', async () => {
-    const h = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
+    const h = harness([reply(200, { ...app, rawKey: RAW_KEY_2 }), reply(200, { ...app, signingSecret: SIGNING_SECRET_2 })]);
     const envFile = join(h.cwd, 'acme', '.env.sandbox');
     mkdirSync(join(h.cwd, 'acme'));
     h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [KEY]: envFile } }) });
     h.write('acme/.env.sandbox', `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
     expect(await h.run(['apps', 'rotate', KEY]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`POST /apps/${KEY}/rotate`]);
+    expect(h.paths()).toEqual([`POST /apps/${KEY}/key/rotate`, `POST /apps/${KEY}/secret/rotate`]);
     expect(h.file('acme/.env.sandbox')).toBe(
       `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`,
     );
@@ -571,7 +571,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', REQUEST]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', 'GET /webhooks/31/deliveries']);
+    expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', `GET /apps/${KEY}/deliveries`]);
     expect(h.out()).toContain(`${REQUEST}.1`);
     expect(h.out()).toContain('upstream timeout');
     expect(h.out()).toContain('{"received":true}');

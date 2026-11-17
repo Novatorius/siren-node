@@ -82,7 +82,7 @@ describe('apps-cli: apps.verifyRequest', () => {
         type: 'app.request',
         mode: 'ask',
         app: 'acme-payouts',
-        item: { kind: 'fulfillmentMethod', key: 'acme-ledger', id: 'app:12' },
+        item: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
         createdAt: '2026-11-17T09:14:03+00:00',
         answerBy: '2026-11-18T09:14:03+00:00',
         answerUrl: 'https://api.siren.test/siren/v1/apps/requests/apr_b79943ff8ca353ce5cf5312bb3fa66c7/answer',
