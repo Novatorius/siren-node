@@ -1,7 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { SignatureVerificationError, SirenError } from '../errors';
+import { SignatureVerificationError, SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
 import type {
+  AppAnswer,
+  AppAnswerReceipt,
   AppRequest,
   AppRequestListParams,
   AppRequestRecord,
@@ -92,6 +94,70 @@ export async function listAppRequests(
 export async function resendAppRequest(http: Pick<HttpTransport, 'request'>, id: string): Promise<AppRequestRecord> {
   const key = appRequestId(id, 'apps.requests.resend()');
   return writeRecord<AppRequestRecord>(http, 'POST', `/apps/requests/${key}/resend`, undefined);
+}
+
+/**
+ * Sends an answer once with `POST /apps/requests/{id}/answer`, as a new
+ * object of the answer's own keys, and answers Siren's receipt.
+ *
+ * Refuses with `SirenError` before sending: a bad id, an answer that is not
+ * a plain object (an array, `null`, a class instance), one with no text
+ * `outcome`, one JSON cannot write, and one longer than `maxBytes` bytes as
+ * JSON. Throws `UnexpectedResponseError` when a 2xx body is not
+ * `{ status: 'accepted' }` with an optional boolean `duplicate`.
+ *
+ * @internal
+ */
+export async function answerAppRequest(
+  http: Pick<HttpTransport, 'request'>,
+  id: string,
+  answer: AppAnswer,
+  maxBytes: number,
+): Promise<AppAnswerReceipt> {
+  const method = 'apps.requests.answer()';
+  const key = appRequestId(id, method);
+  if (!isPlainObject(answer)) {
+    throw new SirenError(`${method} takes the answer as a plain object, such as { outcome: 'paid', reference: 'TX-1' }.`);
+  }
+  const copy: Record<string, unknown> = { ...answer };
+  if (typeof copy.outcome !== 'string' || copy.outcome === '') {
+    throw new SirenError(`${method} needs a text outcome in the answer, such as 'paid' or 'resolved'.`);
+  }
+  let json: string;
+  try {
+    json = JSON.stringify(copy);
+  } catch (cause) {
+    throw new SirenError(`${method} could not write the answer as JSON.`, { cause });
+  }
+  if (Buffer.byteLength(json, 'utf8') > maxBytes) {
+    throw new SirenError(`${method} takes an answer of at most ${maxBytes} bytes as JSON, which Siren also refuses past.`);
+  }
+
+  const path = `/apps/requests/${key}/answer`;
+  // writeRecord sends once and answers only the body, so keep the status for the error below.
+  let status: number | undefined;
+  const sending: Pick<HttpTransport, 'request'> = {
+    request: async (request) => {
+      const response = await http.request(request);
+      status = response.status;
+      return response;
+    },
+  };
+  const reply = await writeRecord<Record<string, unknown>>(sending, 'POST', path, copy);
+  if (reply.status !== 'accepted' || (reply.duplicate !== undefined && typeof reply.duplicate !== 'boolean')) {
+    throw new UnexpectedResponseError(`Siren answered POST ${path} with a body that is not an accepted answer.`, {
+      statusCode: status,
+      data: reply,
+    });
+  }
+  return { status: 'accepted', duplicate: reply.duplicate === true };
+}
+
+/** True for an object made by `{}` or `Object.create(null)`, and nothing else. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!isJsonObject(value)) return false;
+  const proto: unknown = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
 /**

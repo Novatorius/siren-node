@@ -1,5 +1,5 @@
 import type { HttpTransport } from '../http';
-import { listAppRequests, resendAppRequest, verifyAppRequest } from './app-requests';
+import { answerAppRequest, listAppRequests, resendAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
   AppAnswer,
@@ -105,9 +105,7 @@ export class AppRequestsResource {
    * Packet sdk-answer.
    */
   async answer(id: string, answer: AppAnswer): Promise<AppAnswerReceipt> {
-    void id;
-    void answer;
-    return { status: 'accepted', duplicate: false };
+    return answerAppRequest(this.http, id, answer, MAX_APP_ANSWER_BYTES);
   }
 }
 

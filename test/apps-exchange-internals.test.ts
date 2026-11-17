@@ -1,8 +1,8 @@
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { SignatureVerificationError, SirenError } from '../src/errors';
-import { listAppRequests, verifyAppRequest } from '../src/resources/app-requests';
+import { SignatureVerificationError, SirenError, UnexpectedResponseError } from '../src/errors';
+import { answerAppRequest, listAppRequests, verifyAppRequest } from '../src/resources/app-requests';
 import { reply } from './http-fakes';
 import { transportOver } from './record-fakes';
 
@@ -77,5 +77,24 @@ describe('apps-cli internals: listAppRequests', () => {
     const { http, transport } = transportOver([reply(200, { requests: [] })]);
     await expect(listAppRequests(transport, null as unknown as object, ['status'])).rejects.toBeInstanceOf(SirenError);
     expect(http.requests).toHaveLength(0);
+  });
+});
+
+describe('apps-cli internals: answerAppRequest', () => {
+  const id = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
+
+  it('refuses an answer JSON cannot write with SirenError, before sending', async () => {
+    const { http, transport } = transportOver([reply(200, { status: 'accepted' })]);
+    const error = await answerAppRequest(transport, id, { outcome: 'paid', amount: 10n }, 16384).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SirenError);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it('gives a receipt of the wrong shape the status Siren sent', async () => {
+    const { transport } = transportOver([reply(200, { status: 'queued' })]);
+    const error = await answerAppRequest(transport, id, { outcome: 'paid' }, 16384).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as UnexpectedResponseError).statusCode).toBe(200);
+    expect((error as UnexpectedResponseError).data).toEqual({ status: 'queued' });
   });
 });

@@ -253,7 +253,7 @@ const answers = JSON.parse(
   readFileSync(new URL('./fixtures/apps-exchange/answer.json', import.meta.url), 'utf8'),
 ) as AnswerFixture;
 
-describe.skip('apps-cli: apps.requests.answer', () => {
+describe('apps-cli: apps.requests.answer', () => {
   it("replays Siren's answer fixture: accepted, then a duplicate, then a different answer refused", async () => {
     const replies = answers.exchanges.map((exchange) =>
       exchange.status === 200

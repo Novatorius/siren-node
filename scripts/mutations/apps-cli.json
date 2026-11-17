@@ -357,9 +357,9 @@
   },
   {
     "id": "answer-retried",
-    "file": "src/resources/apps.ts",
-    "find": "    const response = await this.http.request({ method: 'POST', path, body: copy, retriable: false });",
-    "replace": "    const response = await this.http.request({ method: 'POST', path, body: copy, retriable: true });",
+    "file": "src/resources/app-requests.ts",
+    "find": "      const response = await http.request(request);",
+    "replace": "      const response = await http.request({ ...request, retriable: true });",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests.answer > is sent once"
@@ -367,9 +367,9 @@
   },
   {
     "id": "answer-size-boundary",
-    "file": "src/resources/apps.ts",
-    "find": "    if (Buffer.byteLength(JSON.stringify(copy), 'utf8') > MAX_APP_ANSWER_BYTES) {",
-    "replace": "    if (Buffer.byteLength(JSON.stringify(copy), 'utf8') >= MAX_APP_ANSWER_BYTES) {",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Buffer.byteLength(json, 'utf8') > maxBytes) {",
+    "replace": "  if (Buffer.byteLength(json, 'utf8') >= maxBytes) {",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests.answer > refuses a bad id, an answer that is not an object"
@@ -377,9 +377,9 @@
   },
   {
     "id": "answer-outcome-unchecked",
-    "file": "src/resources/apps.ts",
-    "find": "    if (typeof copy.outcome !== 'string' || copy.outcome === '') {",
-    "replace": "    if (false) {",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof copy.outcome !== 'string' || copy.outcome === '') {",
+    "replace": "  if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests.answer > refuses a bad id, an answer that is not an object"
@@ -387,9 +387,9 @@
   },
   {
     "id": "answer-class-instance",
-    "file": "src/resources/apps.ts",
-    "find": " || Object.getPrototypeOf(answer) !== Object.prototype && Object.getPrototypeOf(answer) !== null) {",
-    "replace": ") {",
+    "file": "src/resources/app-requests.ts",
+    "find": "  return proto === Object.prototype || proto === null;",
+    "replace": "  return true;",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests.answer > refuses a bad id, an answer that is not an object"
@@ -397,12 +397,42 @@
   },
   {
     "id": "answer-receipt-unchecked",
-    "file": "src/resources/apps.ts",
-    "find": "      reply.status !== 'accepted' ||\n",
+    "file": "src/resources/app-requests.ts",
+    "find": "reply.status !== 'accepted' || ",
     "replace": "",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.requests.answer > raises each of Siren"
+    ]
+  },
+  {
+    "id": "answer-duplicate-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "(reply.duplicate !== undefined && typeof reply.duplicate !== 'boolean')",
+    "replace": "false",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > raises each of Siren"
+    ]
+  },
+  {
+    "id": "answer-json-unwritable",
+    "file": "src/resources/app-requests.ts",
+    "find": "  } catch (cause) {\n    throw new SirenError(`${method} could not write the answer as JSON.`, { cause });\n  }",
+    "replace": "  } finally {\n  }",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: answerAppRequest > refuses an answer JSON cannot write"
+    ]
+  },
+  {
+    "id": "answer-receipt-status-dropped",
+    "file": "src/resources/app-requests.ts",
+    "find": "      statusCode: status,\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: answerAppRequest > gives a receipt of the wrong shape the status"
     ]
   },
   {
