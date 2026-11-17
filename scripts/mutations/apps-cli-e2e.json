@@ -1,0 +1,48 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const apps = await run.siren().apps.list();",
+    "replace": "  const apps: App[] = [];",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const apps = await run.siren().apps.list();",
+    "replace": "  const apps = [...(await run.siren().apps.list())];",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/cli/io.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const apps = await run.siren().apps.list();",
+    "replace": "  const apps: App[] = [];",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-cli: the hidden password prompt in a terminal"
+    ]
+  },
+  {
+    "id": "e2e-1-question-before-raw-mode",
+    "file": "src/cli/io.ts",
+    "find": "      input.setRawMode(true);\n      process.stderr.write(question);",
+    "replace": "      process.stderr.write(question);\n      input.setRawMode(true);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the hidden password prompt in a terminal"
+    ]
+  }
+]

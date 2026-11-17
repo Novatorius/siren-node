@@ -192,7 +192,13 @@ client mints a connector token for a connected site, and the app routes need an 
 session (AP-A606).
 
 The password comes from a hidden prompt or from standard input with `--password-stdin`, never a
-flag, and is sent once. `PasswordSignIn` is the one `SignInMethod`. Device sign-in (slice 9) adds a
+flag, and is sent once. The hidden prompt turns the terminal's echo off before it writes
+`Password: `, and puts the terminal back however the prompt ends, Ctrl-C included. The order
+matters: Node sets raw mode only once the terminal has taken the output already written (libuv
+uses TCSADRAIN), so with the question written first, a person or a password manager typing the
+instant it appeared got in while echo was still on. The checkpoint saw that in 3 of 6 runs, and
+test/cli-hidden-prompt.test.ts saw it in 45 of 60 runs before the fix and in none of 180 after.
+`PasswordSignIn` is the one `SignInMethod`. Device sign-in (slice 9) adds a
 second method that ends with the same `LoginResult`, so nothing after sign-in changes. That
 interface is the seam slice 9 builds on.
 

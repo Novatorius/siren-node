@@ -222,7 +222,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file renamed over the old one. It refuses an env file that is a symbolic link, and a later
   `apps apply` and `apps rotate` stop before sending when the env file holds another Siren's key. `signup` and
   `login` refuse a credentials file others can read before the password is sent. It talks to the
-  sandbox unless told otherwise, and needs `--live` for a live organization.
+  sandbox unless told otherwise, and needs `--live` for a live organization. Its hidden password
+  prompt turns the terminal's echo off before it shows `Password: `, so a password typed the moment
+  the prompt appears is never shown, and gives the echo back however the prompt ends.
 - examples/apps/acme, an example app that checks each request, answers every ask and sends a sale
   with the app's own key.
 - `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppItem`,

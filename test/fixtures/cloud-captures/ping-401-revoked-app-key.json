@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-11-17T09:09:03.577Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "GET /siren/v1/ping",
+  "query": null,
+  "request": {
+    "authorization": "Bearer sk_test_<API_KEY>",
+    "contentType": null,
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "API key has been revoked.",
+        "context": []
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "capturedAt": "2026-11-17T09:06:30.249Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/event/site-visited",
+  "query": null,
+  "request": {
+    "authorization": "Bearer sk_test_<API_KEY>",
+    "contentType": "application/json",
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": {
+      "collaboratorId": "tracking:acmee2e"
+    }
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "status": "recorded",
+      "attributed": false,
+      "opportunityId": 1,
+      "message": "The visit was recorded. No active program of this collaborator rewards a site visit."
+    }
+  }
+}

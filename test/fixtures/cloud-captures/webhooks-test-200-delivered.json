@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-11-17T09:08:12.611Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/webhooks/2/test",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": null,
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "delivered": true,
+      "httpStatus": 200,
+      "error": null,
+      "eventType": "webhook.test"
+    }
+  }
+}

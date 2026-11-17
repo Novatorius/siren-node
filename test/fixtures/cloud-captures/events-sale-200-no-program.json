@@ -1,0 +1,31 @@
+{
+  "capturedAt": "2026-11-17T09:06:30.427Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/event/sale",
+  "query": null,
+  "request": {
+    "authorization": "Bearer sk_test_<API_KEY>",
+    "contentType": "application/json",
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": {
+      "trackingId": 1,
+      "total": 49,
+      "currency": "USD",
+      "externalId": "acme-1794906389880",
+      "source": "acme-example"
+    }
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "status": "recorded",
+      "created": true,
+      "transactionId": 1,
+      "conversions": [],
+      "message": "The sale was recorded. Nothing was awarded because no active program accepts sales.",
+      "reason": "no_program"
+    }
+  }
+}

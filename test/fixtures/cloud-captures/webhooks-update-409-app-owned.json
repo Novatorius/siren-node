@@ -1,0 +1,29 @@
+{
+  "capturedAt": "2026-11-17T09:07:29.980Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "PUT /siren/v1/webhooks/1",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": {
+      "status": "paused"
+    }
+  },
+  "response": {
+    "status": 409,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "App 1 owns this webhook, so it changes only when the app is declared again.",
+        "code": "app_owned_subscription",
+        "context": {
+          "reason": "app_owned_subscription",
+          "appId": 1
+        }
+      }
+    }
+  }
+}

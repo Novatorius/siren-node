@@ -1,0 +1,42 @@
+{
+  "capturedAt": "2026-11-17T09:07:07.677Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "GET /siren/v1/apps/requests",
+  "query": "status=bogus",
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": null,
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "Validations failed.",
+        "context": {
+          "type": "VALIDATION_FAILED",
+          "failedValidations": [
+            {
+              "field": "status",
+              "message": "status must be one of: pending, sent, delivered, answered, applied, needs_attention.",
+              "type": "REQUIRES_ANY",
+              "context": {
+                "validValues": [
+                  "pending",
+                  "sent",
+                  "delivered",
+                  "answered",
+                  "applied",
+                  "needs_attention"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
