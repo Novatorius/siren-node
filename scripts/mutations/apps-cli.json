@@ -688,9 +688,19 @@
   },
   {
     "id": "login-edition-unchecked",
-    "file": "src/cli/run.ts",
-    "find": "      const edition = await run.auth.edition();\n      assertEditionAllowed(target, edition);\n      let result;",
-    "replace": "      const edition = await run.auth.edition();\n      let result;",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const edition = await run.auth.edition();\n  assertEditionAllowed(run.target, edition);\n\n  let result: LoginResult;",
+    "replace": "  const edition = await run.auth.edition();\n\n  let result: LoginResult;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
+    ]
+  },
+  {
+    "id": "signup-edition-unchecked",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const edition = await run.auth.edition();\n  assertEditionAllowed(run.target, edition);\n\n  const orgName",
+    "replace": "  const edition = await run.auth.edition();\n\n  const orgName",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
@@ -699,8 +709,8 @@
   {
     "id": "default-target-live",
     "file": "src/cli/targets.ts",
-    "find": "  else chosen = env.SIREN_BASE_URL || SANDBOX_BASE_URL;",
-    "replace": "  else chosen = env.SIREN_BASE_URL || LIVE_BASE_URL;",
+    "find": "    chosen = flags.live ? LIVE_BASE_URL : SANDBOX_BASE_URL;",
+    "replace": "    chosen = LIVE_BASE_URL;",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > chooses the sandbox unless told otherwise"
@@ -729,8 +739,8 @@
   {
     "id": "credentials-file-0644",
     "file": "src/cli/credentials.ts",
-    "find": "    await writeFile(temporary, `${JSON.stringify(file, null, 2)}\\n`, { mode: 0o600 });",
-    "replace": "    await writeFile(temporary, `${JSON.stringify(file, null, 2)}\\n`, { mode: 0o644 });",
+    "find": "      await writeFile(temporary, `${JSON.stringify(file, null, 2)}\\n`, { mode: 0o600, flag: 'wx' });",
+    "replace": "      await writeFile(temporary, `${JSON.stringify(file, null, 2)}\\n`, { mode: 0o644, flag: 'wx' });",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > signs up on the sandbox"
@@ -739,7 +749,7 @@
   {
     "id": "credentials-dir-open",
     "file": "src/cli/credentials.ts",
-    "find": "    await mkdir(this.configDir, { recursive: true, mode: 0o700 });\n    if (process.platform !== 'win32') await chmod(this.configDir, 0o700);",
+    "find": "    const made = await mkdir(this.configDir, { recursive: true, mode: 0o700 });\n    if (made !== undefined && POSIX) await chmod(this.configDir, 0o700);",
     "replace": "    await mkdir(this.configDir, { recursive: true });",
     "expect": "caught",
     "failing": [
@@ -747,9 +757,19 @@
     ]
   },
   {
+    "id": "credentials-shape-unchecked",
+    "file": "src/cli/credentials.ts",
+    "find": "  if (version !== 1 || typeof sessions !== 'object'",
+    "replace": "  if (typeof sessions !== 'object'",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > refuses a credentials file of another shape"
+    ]
+  },
+  {
     "id": "refresh-not-before-expiry",
-    "file": "src/cli/run.ts",
-    "find": "    if (session.accessExpiresAt - 60 <= this.io.now() / 1000) return this.refresh();",
+    "file": "src/cli/context.ts",
+    "find": "    if (session.accessExpiresAt - REFRESH_EARLY_SECONDS <= this.io.now() / 1000) return this.refresh();",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -758,8 +778,8 @@
   },
   {
     "id": "refresh-refusal-raw",
-    "file": "src/cli/run.ts",
-    "find": "    } catch {\n      throw new CliRefusal('Your session has ended. Run siren login to sign in again.');",
+    "file": "src/cli/context.ts",
+    "find": "    } catch (error) {\n      throw refreshRefusal(error);",
     "replace": "    } catch (error) {\n      throw error;",
     "expect": "caught",
     "failing": [
@@ -768,7 +788,7 @@
   },
   {
     "id": "refresh-not-kept",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/context.ts",
     "find": "    await this.store.put(this.target.baseUrl, this.session);\n    return tokens.accessToken;",
     "replace": "    return tokens.accessToken;",
     "expect": "caught",
@@ -777,8 +797,38 @@
     ]
   },
   {
+    "id": "refresh-unavailable-signs-out",
+    "file": "src/cli/context.ts",
+    "find": "  if (error instanceof ConnectionError || error instanceof ApiError) {",
+    "replace": "  if (error instanceof ConnectionError) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > keeps the session and says to try again when Siren cannot renew it"
+    ]
+  },
+  {
+    "id": "refresh-plan-raw",
+    "file": "src/cli/context.ts",
+    "find": "  if (code !== undefined && PLAN_LINES[code] !== undefined) return new CliRefusal(PLAN_LINES[code]);\n  if (error instanceof ConnectionError",
+    "replace": "  if (error instanceof ConnectionError",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > keeps the session and says to try again when Siren cannot renew it"
+    ]
+  },
+  {
+    "id": "session-route-not-refreshed",
+    "file": "src/cli/context.ts",
+    "find": "      return call(await this.refresh());",
+    "replace": "      throw error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > refreshes once and asks again"
+    ]
+  },
+  {
     "id": "no-session-message",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/context.ts",
     "find": "Run siren login first.",
     "replace": "Sign in first.",
     "expect": "caught",
@@ -788,9 +838,9 @@
   },
   {
     "id": "login-org-by-id-only",
-    "file": "src/cli/run.ts",
-    "find": "        memberships.find((membership) => membership.orgSlug === wanted || String(membership.orgId) === wanted);",
-    "replace": "        memberships.find((membership) => String(membership.orgId) === wanted);",
+    "file": "src/cli/commands/session.ts",
+    "find": "  return memberships.find((membership) => membership.orgSlug === wanted || String(membership.orgId) === wanted);",
+    "replace": "  return memberships.find((membership) => String(membership.orgId) === wanted);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > picks one of several organizations"
@@ -798,19 +848,49 @@
   },
   {
     "id": "login-first-org-silently",
-    "file": "src/cli/run.ts",
-    "find": "        if (org === undefined) {\n          throw new CliRefusal(`You belong to several organizations.",
-    "replace": "        if (org === undefined) org = result.memberships[0]!;\n        if (org === undefined) {\n          throw new CliRefusal(`You belong to several organizations.",
+    "file": "src/cli/commands/session.ts",
+    "find": "    org = choice === undefined ? undefined : findOrg(memberships, choice);",
+    "replace": "    org = (choice === undefined ? undefined : findOrg(memberships, choice)) ?? memberships[0];",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > picks one of several organizations"
     ]
   },
   {
+    "id": "select-org-plan-raw",
+    "file": "src/cli/commands/session.ts",
+    "find": "      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);\n    } catch (error) {\n      throw signInRefusal(error);",
+    "replace": "      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);\n    } catch (error) {\n      throw error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > says what to do about a plan when choosing"
+    ]
+  },
+  {
+    "id": "login-other-org-kept",
+    "file": "src/cli/commands/session.ts",
+    "find": "    if (wanted !== undefined && findOrg([org], wanted) === undefined) {",
+    "replace": "    if (wanted === 'never-an-org') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > refuses --org that names another organization"
+    ]
+  },
+  {
+    "id": "stdin-password-trimmed",
+    "file": "src/cli/session-auth.ts",
+    "find": "  if (fromStdin) password = (await io.readStdin()).replace(/\\r?\\n$/, '');",
+    "replace": "  if (fromStdin) password = (await io.readStdin()).trim();",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > sends the password with a line break at its end taken off"
+    ]
+  },
+  {
     "id": "logout-keeps-refresh",
     "file": "src/cli/session-auth.ts",
-    "find": "    await this.send('POST', '/auth/logout', { refreshToken }, accessToken);",
-    "replace": "    await this.send('POST', '/auth/logout', {}, accessToken);",
+    "find": "    await this.send('POST', '/auth/logout', { refreshToken }, accessToken, false, [refreshToken]);",
+    "replace": "    await this.send('POST', '/auth/logout', {}, accessToken, false, [refreshToken]);",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > logs out by revoking both tokens"
@@ -838,7 +918,7 @@
   },
   {
     "id": "orgs-no-marker",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/session.ts",
     "find": "membership.orgId === session.orgId ? '*' : ' '",
     "replace": "' '",
     "expect": "caught",
@@ -848,19 +928,29 @@
   },
   {
     "id": "signup-terms-unchecked",
-    "file": "src/cli/run.ts",
-    "find": "      if (!accepted) throw new CliRefusal(",
-    "replace": "      if (false) throw new CliRefusal(",
+    "file": "src/cli/commands/session.ts",
+    "find": "  if (!accepted) {",
+    "replace": "  if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > refuses sign-up without the terms"
     ]
   },
   {
+    "id": "flags-not-needed",
+    "file": "src/cli/commands/session.ts",
+    "find": "  if (missing.length > 0) throw new CliUsageError(",
+    "replace": "  if (false) throw new CliUsageError(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > asks for --email and --password-stdin before sending"
+    ]
+  },
+  {
     "id": "usage-exit-1",
     "file": "src/cli/run.ts",
-    "find": "      return 2;\n    }\n    io.stderr(`siren: ${(error as Error).message}\\n`);",
-    "replace": "      return 1;\n    }\n    io.stderr(`siren: ${(error as Error).message}\\n`);",
+    "find": "      return 2;\n    }\n    io.stderr(`siren: ${(error instanceof Error",
+    "replace": "      return 1;\n    }\n    io.stderr(`siren: ${(error instanceof Error",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > answers exit code 2"
@@ -869,8 +959,8 @@
   {
     "id": "parse-not-strict",
     "file": "src/cli/run.ts",
-    "find": "{ ...GLOBAL, ...spec.options }, strict: true,",
-    "replace": "{ ...GLOBAL, ...spec.options }, strict: false,",
+    "find": "    return parseArgs({ args: [...argv], options, strict: true, allowPositionals: true });",
+    "replace": "    return parseArgs({ args: [...argv], options, strict: false, allowPositionals: true });",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > answers exit code 2"
@@ -879,8 +969,8 @@
   {
     "id": "positionals-unchecked",
     "file": "src/cli/run.ts",
-    "find": "    if (args.length < spec.positionals[0] || args.length > spec.positionals[1])",
-    "replace": "    if (args.length > spec.positionals[1])",
+    "find": "    if (args.length < spec.positionals[0] || args.length > spec.positionals[1]) {",
+    "replace": "    if (args.length > spec.positionals[1]) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > answers exit code 2"
@@ -1338,9 +1428,9 @@
   },
   {
     "id": "signup-off-raw",
-    "file": "src/cli/run.ts",
-    "find": "        if ((error as SirenError).statusCode === 404) {",
-    "replace": "        if ((error as SirenError).statusCode === 410) {",
+    "file": "src/cli/commands/session.ts",
+    "find": "    if ((error as SirenError).statusCode === 404) {",
+    "replace": "    if ((error as SirenError).statusCode === 410) {",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > says what to do when Siren asks"
@@ -1348,9 +1438,9 @@
   },
   {
     "id": "signup-unconfirmed-vague",
-    "file": "src/cli/run.ts",
-    "find": "Open it from your inbox, confirm the address, then run siren login.`);",
-    "replace": "Confirm it.`);",
+    "file": "src/cli/commands/session.ts",
+    "find": "        'Open it from your inbox, confirm the address, then run siren login.',",
+    "replace": "        'Confirm it.',",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > says what to do when Siren asks"
@@ -1358,9 +1448,9 @@
   },
   {
     "id": "signup-window-silent",
-    "file": "src/cli/run.ts",
-    "find": "      const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n      if (pending !== null) run.print(pending);",
-    "replace": "      const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n      void pending;",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n  if (pending !== null) run.print(pending);",
+    "replace": "  const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n  void pending;",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > says what to do when Siren asks"
@@ -1368,9 +1458,9 @@
   },
   {
     "id": "login-window-silent",
-    "file": "src/cli/run.ts",
-    "find": "      const pending = confirmationLine(tokens.emailConfirmation, io.now());\n      if (pending !== null) run.print(pending);",
-    "replace": "      const pending = confirmationLine(tokens.emailConfirmation, io.now());\n      void pending;",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const pending = confirmationLine(tokens.emailConfirmation, io.now());\n  if (pending !== null) run.print(pending);",
+    "replace": "  const pending = confirmationLine(tokens.emailConfirmation, io.now());\n  void pending;",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > says what to do when Siren asks"
@@ -1378,7 +1468,7 @@
   },
   {
     "id": "login-unconfirmed-raw",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/session.ts",
     "find": "  if (code === 'email_unconfirmed') {",
     "replace": "  if (code === 'email_not_confirmed') {",
     "expect": "caught",
@@ -1388,7 +1478,7 @@
   },
   {
     "id": "login-plan-raw",
-    "file": "src/cli/run.ts",
+    "file": "src/cli/commands/session.ts",
     "find": "  if (code !== undefined && PLAN_LINES[code] !== undefined) return new CliRefusal(PLAN_LINES[code]);\n",
     "replace": "",
     "expect": "caught",
@@ -1398,9 +1488,9 @@
   },
   {
     "id": "logout-needs-live",
-    "file": "src/cli/run.ts",
-    "find": "      const session = await run.store.get(target.baseUrl);\n      if (session === null) throw new CliRefusal(`You are not signed in to ${target.baseUrl}.`);\n      run.adopt(session);",
-    "replace": "      const session = await run.signedIn();",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const session = await run.store.get(run.target.baseUrl);\n  if (session === null) throw new CliRefusal(`You are not signed in to ${run.target.baseUrl}.`);\n  run.adopt(session);",
+    "replace": "  const session = await run.signedIn();",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > logs out by revoking both tokens"

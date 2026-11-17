@@ -1,7 +1,10 @@
+import { getEventListeners } from 'node:events';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { FetchHttpClient } from '../http';
 import type { HttpClient } from '../http';
+import { CliRefusal } from './targets';
 
 /**
  * Everything the `siren` command reads from or writes to the world outside
@@ -60,13 +63,20 @@ export function defaultConfigDir(
  * environment and folder, a {@link FetchHttpClient}, the real clock, and a
  * signal that Ctrl-C aborts.
  *
- * Stub: `prompt`, `promptSecret` and `readStdin` answer an empty string and
- * `interactive` is false. Packet cli-session builds them with
- * `node:readline`, hiding typed characters for `promptSecret`.
+ * Prompts write their question to standard error, so standard output keeps
+ * only results. Ctrl-C at a prompt stops the command with exit code 1 and
+ * leaves the terminal as it was. Ctrl-C at any other time aborts `signal`
+ * when something listens for it, as `apps requests --follow` and `sleep`
+ * do, and otherwise ends the process with exit code 130. A second Ctrl-C
+ * always ends it.
  */
 export function nodeIo(): CliIo {
   const controller = new AbortController();
-  process.once('SIGINT', () => controller.abort());
+  process.on('SIGINT', () => {
+    const listening = getEventListeners(controller.signal, 'abort').length > 0;
+    if (controller.signal.aborted || !listening) process.exit(130);
+    controller.abort();
+  });
   return {
     stdout: (text) => {
       process.stdout.write(text);
@@ -74,16 +84,85 @@ export function nodeIo(): CliIo {
     stderr: (text) => {
       process.stderr.write(text);
     },
-    interactive: false,
-    prompt: async () => '',
-    promptSecret: async () => '',
-    readStdin: async () => '',
+    interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+    prompt: askVisible,
+    promptSecret: askHidden,
+    readStdin: async () => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
+      return Buffer.concat(chunks).toString('utf8');
+    },
     env: process.env,
     cwd: process.cwd(),
     configDir: defaultConfigDir(process.env),
     httpClient: new FetchHttpClient(),
     now: () => Date.now(),
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: (ms) =>
+      new Promise<void>((resolve) => {
+        if (controller.signal.aborted) return resolve();
+        const done = () => {
+          clearTimeout(timer);
+          controller.signal.removeEventListener('abort', done);
+          resolve();
+        };
+        const timer = setTimeout(done, ms);
+        controller.signal.addEventListener('abort', done);
+      }),
     signal: controller.signal,
   };
+}
+
+/** The error a prompt answers when the person presses Ctrl-C at it. */
+function stopped(): CliRefusal {
+  return new CliRefusal('Stopped.');
+}
+
+/** Asks on standard error and answers the line typed, through `node:readline`. */
+function askVisible(question: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const rl = createInterface({ input: process.stdin, output: process.stderr, terminal: true });
+    rl.once('SIGINT', () => {
+      rl.close();
+      process.stderr.write('\n');
+      reject(stopped());
+    });
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+/**
+ * Asks on standard error and answers the line typed, echoing nothing. It
+ * puts the terminal in raw mode, so no character is shown and Ctrl-C reaches
+ * it as a character, and puts the mode back however the prompt ends.
+ * Backspace removes the last character. Enter or Ctrl-D ends the line.
+ */
+function askHidden(question: string): Promise<string> {
+  const input = process.stdin;
+  process.stderr.write(question);
+  return new Promise((resolve, reject) => {
+    let typed = '';
+    const wasRaw = input.isRaw;
+    const finish = (error?: Error) => {
+      input.off('data', onData);
+      input.setRawMode(wasRaw);
+      input.pause();
+      process.stderr.write('\n');
+      if (error === undefined) resolve(typed);
+      else reject(error);
+    };
+    const onData = (chunk: Buffer | string) => {
+      for (const char of chunk.toString()) {
+        if (char === '\r' || char === '\n' || char === '\u0004') return finish();
+        if (char === '\u0003') return finish(stopped());
+        if (char === '\u007f' || char === '\b') typed = [...typed].slice(0, -1).join('');
+        else if (char >= ' ') typed += char;
+      }
+    };
+    input.setRawMode(true);
+    input.on('data', onData);
+    input.resume();
+  });
 }

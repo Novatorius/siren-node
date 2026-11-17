@@ -26,7 +26,7 @@ function siren(args: string[]) {
   return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env, timeout: 10_000 });
 }
 
-describe.skip('apps-cli: the siren command in the package', () => {
+describe('apps-cli: the siren command in the package', () => {
   it('names dist/cli.js as the siren bin', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { bin?: unknown; files?: string[] };
     expect(pkg.bin).toEqual({ siren: './dist/cli.js' });

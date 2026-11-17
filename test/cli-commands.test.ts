@@ -52,7 +52,7 @@ function bearer(h: ReturnType<typeof harness>, index: number): string | undefine
   return h.http.bearers()[index];
 }
 
-describe.skip('apps-cli: siren signup, login and the session', () => {
+describe('apps-cli: siren signup, login and the session', () => {
   it('signs up on the sandbox, sends the sign-up once, and keeps the session but never the password', async () => {
     const h = harness([AuthAnswers.sandbox(), AuthAnswers.registered()], { stdin: `${PASSWORD}\n` });
     const code = await h.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms']);
