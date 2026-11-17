@@ -1020,6 +1020,8 @@ export interface App {
   /** The first 16 characters of the app's key, `sk_test_` or `sk_live_` and 8 more. */
   apiKeyPrefix: string | null;
   items: AppItem[];
+  /** How many of the app's requests need a person now, as Siren's AppAttention counts them. */
+  needsAttention: number;
   dateCreated?: string | null;
   dateModified?: string | null;
   [field: string]: unknown;

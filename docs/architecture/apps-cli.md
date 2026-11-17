@@ -145,8 +145,8 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren use <slug or id>` | memberships, then `POST /auth/switch-org` | The organization now in use. |
 | `siren apps init [--key] [--name]` | nothing | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
 | `siren apps apply [file]` | `PUT /apps/{key}` once | The app and each item with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate <key>` (AP-A635). |
-| `siren apps list [--json]` | `GET /apps` | One block per app with its items, or the JSON Siren sent. |
-| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it. |
+| `siren apps list [--json]` | `GET /apps` | One block per app with its items, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
+| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
 | `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
 | `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request's line, the data Siren sent, the answer Siren took and who gave it, or that none came yet, then each send with its HTTP status and what the app said back. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
@@ -973,3 +973,14 @@ data Siren sent, and the answer with who gave it, then the sends from the app's 
 deliveries as before. The data comes from the request, not from the last delivery's payload, so it
 shows even when the deliveries have moved past it. The test that pinned the list read now pins the
 one-request read.
+
+### 8. How many requests need attention
+
+Every app Siren answers now carries `needsAttention`, how many of its requests need a person, from
+AppAttention::count() (AppSerializer.php line 57 at 27169452a, captures apps-list-200-count-1 and
+apps-retrieve-200-with-count). The `App` type, the `appRecord` fake and openapi's `App` schema
+carry it. The fakes held against the captures taken at 1557b0030 leave it out, since Siren did
+not send it then. `siren apps list` and `siren apps show` print, under an app whose count is above
+0, "1 request needs attention. See it with siren apps requests --app <key> --attention." or the
+plural, with the target flags. A count of 0 prints nothing. The hint names `--app` beside
+`--attention` so the list holds only that app's requests.

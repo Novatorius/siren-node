@@ -172,7 +172,10 @@ export async function appsList(input: CommandInput): Promise<number> {
     return 0;
   }
   if (apps.length === 0) run.print(`No apps on ${run.target.baseUrl} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
-  for (const app of apps) for (const line of appLines(app)) run.print(line);
+  for (const app of apps) {
+    for (const line of appLines(app)) run.print(line);
+    attentionLine(run, app);
+  }
   return 0;
 }
 
@@ -183,8 +186,23 @@ export async function appsShow(input: CommandInput): Promise<number> {
   await run.signedIn();
   const app = await run.siren().apps.retrieve(key);
   if (input.values.json === true) run.print(JSON.stringify(app, null, 2));
-  else for (const line of appLines(app)) run.print(line);
+  else {
+    for (const line of appLines(app)) run.print(line);
+    attentionLine(run, app);
+  }
   return 0;
+}
+
+/**
+ * Under an app with requests that need a person, how many, and the command
+ * that lists them. Prints nothing for a count of zero, or for a Siren that
+ * sends no count.
+ */
+function attentionLine(run: CommandContext, app: App): void {
+  const count = app.needsAttention;
+  if (typeof count !== 'number' || count <= 0) return;
+  const command = run.command(`apps requests --app ${app.key} --attention`);
+  run.print(count === 1 ? `  1 request needs attention. See it with ${command}.` : `  ${count} requests need attention. See them with ${command}.`);
 }
 
 /** `siren apps on <key>`: turns the app on. */

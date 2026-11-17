@@ -440,5 +440,57 @@
     "failing": [
       "puts every public method of the Siren client in exactly one of the two tables"
     ]
+  },
+  {
+    "id": "attention-never-shown",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (typeof count !== 'number' || count <= 0) return;",
+    "replace": "  return;",
+    "expect": "caught",
+    "failing": [
+      "list says how many need attention under an app",
+      "show says the count when it is above zero"
+    ]
+  },
+  {
+    "id": "attention-shown-at-zero",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (typeof count !== 'number' || count <= 0) return;",
+    "replace": "  if (typeof count !== 'number') return;",
+    "expect": "caught",
+    "failing": [
+      "show says the count when it is above zero, and nothing when it is zero"
+    ]
+  },
+  {
+    "id": "attention-hint-no-flags",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const command = run.command(`apps requests --app ${app.key} --attention`);",
+    "replace": "  const command = `siren apps requests --app ${app.key} --attention`;",
+    "expect": "caught",
+    "failing": [
+      "list says how many need attention under an app",
+      "list with an app whose requests need attention"
+    ]
+  },
+  {
+    "id": "attention-show-missing",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    for (const line of appLines(app)) run.print(line);\n    attentionLine(run, app);\n  }\n  return 0;\n}\n\n/**\n * Under an app",
+    "replace": "    for (const line of appLines(app)) run.print(line);\n  }\n  return 0;\n}\n\n/**\n * Under an app",
+    "expect": "caught",
+    "failing": [
+      "show says the count when it is above zero"
+    ]
+  },
+  {
+    "id": "docs-attention-openapi",
+    "file": "openapi.yaml",
+    "find": "        needsAttention: { type: integer, minimum: 0,",
+    "replace": "        attention: { type: integer, minimum: 0,",
+    "expect": "caught",
+    "failing": [
+      "name needsAttention and where the command shows it"
+    ]
   }
 ]

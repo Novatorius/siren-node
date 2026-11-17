@@ -261,6 +261,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sending, retries as a read, and raises 404 `app_request_not_found` as `NotFoundError`. openapi
   gains the route and the `AppRequestDetail` schema. `siren apps requests <id>` reads it, so it
   shows a request older than the latest 50, with its data, its answer and who gave it.
+- `App.needsAttention`, how many of the app's requests need a person, which Siren now sends on
+  every app, and in openapi's `App` schema. `siren apps list` and `siren apps show` print the count
+  under an app when it is above 0, with `siren apps requests --app <key> --attention`.
 
 ### Changed
 

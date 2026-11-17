@@ -133,6 +133,8 @@ const LIVE_CASES: Case[] = [
     command: `siren login${LIVE}`,
   },
   { name: 'one request the organization does not have', argv: ['apps', 'requests', 'apr_0123456789abcdef0123456789abcdef'], replies: [AppAnswers.requestNotFound()], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests${LIVE}` },
+  { name: 'list with an app whose requests need attention', argv: ['apps', 'list'], replies: [reply(200, [appRecord({ needsAttention: 2 })])], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${LIVE}` },
+  { name: 'show of an app whose requests need attention', argv: ['apps', 'show', KEY], replies: [reply(200, appRecord({ needsAttention: 1 }))], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${LIVE}` },
   { name: 'apps init', argv: ['apps', 'init', '--key', KEY], command: `siren apps apply${LIVE}` },
 ];
 

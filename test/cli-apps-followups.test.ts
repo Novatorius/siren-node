@@ -119,3 +119,34 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     }
   });
 });
+
+describe('apps-sdk-followups-1: how many of an app\'s requests need attention', () => {
+  it('types needsAttention as the count Siren sends on every app', () => {
+    const listed = capturedBody<App[]>('apps-list-200-count-1');
+    const counts: number[] = listed.map((one) => one.needsAttention);
+    expect(counts).toEqual([1, 0]);
+    expect(capturedBody<App>('apps-retrieve-200-with-count').needsAttention).toBe(0);
+  });
+
+  it('list says how many need attention under an app that has any, with the command that shows them', async () => {
+    const h = harness([capturedReply('apps-list-200-count-1')]);
+    h.signedIn();
+    expect(await h.run(['apps', 'list', '--sandbox']), h.err()).toBe(0);
+    const lines = h.out().split('\n');
+    const note = '  1 request needs attention. See it with siren apps requests --app acme-payouts --attention --sandbox.';
+    expect(lines).toContain(note);
+    expect(lines.indexOf(note)).toBeLessThan(lines.findIndex((line) => line.startsWith('ledger-sync')));
+    expect(h.out().match(/need(s)? attention/g)).toHaveLength(1);
+  });
+
+  it('show says the count when it is above zero, and nothing when it is zero', async () => {
+    const body = capturedBody<App>('apps-retrieve-200-with-count');
+    const h = harness([reply(200, { ...body, needsAttention: 2 }), capturedReply('apps-retrieve-200-with-count')]);
+    h.signedIn();
+    expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
+    expect(h.out().split('\n')).toContain('  2 requests need attention. See them with siren apps requests --app acme-payouts --attention.');
+    const before = h.out().length;
+    expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
+    expect(h.out().slice(before)).not.toContain('attention');
+  });
+});

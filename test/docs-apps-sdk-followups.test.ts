@@ -66,4 +66,11 @@ describe('apps-sdk-followups-1: the records', () => {
     expect(openapi).toContain('AppRequestDetail: allOf:');
     expect(read('test/cloud-capture-fakes.test.ts')).not.toContain('GET /apps/requests/{id} has no route.');
   });
+
+  it('name needsAttention and where the command shows it', () => {
+    expect(read('openapi.yaml')).toContain('needsAttention: { type: integer, minimum: 0');
+    expect(read('CHANGELOG.md')).toContain('`App.needsAttention`');
+    expect(read('README.md')).toContain('how many and the `siren apps requests --app <key> --attention` that lists them');
+    expect(read('docs/architecture/apps-cli.md')).toContain('### 8. How many requests need attention');
+  });
 });

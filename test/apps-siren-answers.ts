@@ -14,7 +14,10 @@ export const APP_REQUEST_ID = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
  * An app as the app routes answer it: lib/Apps/Service/Services/AppSerializer.php
  * lines 15 to 30, with `rawKey` and `signingSecret` only on a first declare.
  * Each item as lib/Apps/Core/Models/Adapters/AppItemAdapter.php lines 43 to 53
- * gives it, on `feat/apps` at 1557b0030.
+ * gives it, on `feat/apps` at 1557b0030. `needsAttention` is the count
+ * AppSerializer.php line 57 adds on `feat/apps` at 27169452a, from
+ * AppAttention::count() (captures apps-retrieve-200-with-count and
+ * apps-list-200-count-1, from the second Cloud run at 57999d085).
  */
 export function appRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -59,6 +62,7 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
         dateModified: '2026-11-16 21:00:00',
       },
     ],
+    needsAttention: 0,
     ...overrides,
   };
 }
