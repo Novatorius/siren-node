@@ -55,6 +55,23 @@ describe('apps-sdk-gaps: the client carries both resources', () => {
     expect(siren.fulfillments).toBeInstanceOf(FulfillmentsResource);
   });
 
+  it('sends a read from both through the client the caller gave, with its key', async () => {
+    const http = new FakeHttpClient([
+      reply(200, PayoutAnswers.retrieved),
+      reply(200, page([], 0)),
+    ]);
+    const siren = new Siren({ apiKey: 'sk_live_x', httpClient: http, baseUrl: BASE });
+
+    await siren.payouts.retrieve(31);
+    await siren.fulfillments.list();
+
+    expect(http.requests.map((request) => pathOf(request))).toEqual(['/payouts/31', '/fulfillments']);
+    for (const request of http.requests) {
+      expect(new URL(request.url).origin).toBe(new URL(BASE).origin);
+      expect(request.headers['Authorization']).toBe('Bearer sk_live_x');
+    }
+  });
+
   it('only reads, since Cloud keeps every payout and fulfillment write from an API key', () => {
     const { transport } = transportOver([reply(200, {})]);
     for (const resource of [new PayoutsResource(transport), new FulfillmentsResource(transport)]) {
@@ -202,6 +219,32 @@ describe('apps-sdk-gaps: fulfillments.list', () => {
     );
     expect(http.requests).toHaveLength(0);
   });
+
+  it.each(['payoutStatus', 'currency'] as const)(
+    'refuses a %s of "", which Siren reads as no filter, before sending',
+    async (key) => {
+      const { http, fulfillments } = fulfillmentsOver([reply(200, page([], 0))]);
+
+      await expect(fulfillments.list({ [key]: '' })).rejects.toThrow(
+        `fulfillments.list() cannot send a ${key} of "", which Siren reads as no filter and answers every fulfillment.`,
+      );
+      expect(http.requests).toHaveLength(0);
+    },
+  );
+
+  it.each(['payoutStatus', 'currency'] as const)(
+    'refuses a %s that is not one string, a list included, before sending',
+    async (key) => {
+      const { http, fulfillments } = fulfillmentsOver([reply(200, page([], 0))]);
+
+      for (const value of [['failed', 'paid'], 5, null]) {
+        await expect(fulfillments.list({ [key]: value } as never)).rejects.toThrow(
+          `fulfillments.list() takes one ${key} as a string, since Siren matches it as one value.`,
+        );
+      }
+      expect(http.requests).toHaveLength(0);
+    },
+  );
 
   it('throws UnexpectedResponseError when a 2xx body is not a record list', async () => {
     const { fulfillments } = fulfillmentsOver([reply(200, { error: 'Something went wrong.' })]);

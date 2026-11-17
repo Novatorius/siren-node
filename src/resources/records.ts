@@ -80,9 +80,9 @@ export function toListQuery(params: ListParams): Query {
  *
  * The record resources that extend it (collaborators, collaborator groups,
  * programs, program groups, opportunities, engagements, distributors,
- * custom currencies and mappings) replace `list` with a stricter one that
- * refuses a key its route does not read, and their own docs govern.
- * Conversions and transactions keep this `list`.
+ * custom currencies, mappings and fulfillments) replace `list` with a
+ * stricter one that refuses a key its route does not read, and their own
+ * docs govern. Conversions, transactions and payouts keep this `list`.
  */
 export class RecordsResource<T = Record<string, unknown>> {
   constructor(
