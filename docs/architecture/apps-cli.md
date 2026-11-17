@@ -695,7 +695,12 @@ A later lane runs this against a local sandbox Cloud. Nothing here ran it.
     verifies.
 11. Capture every answer the steps saw (S1) and replace the hand-written fakes in
     test/sdk-gaps-fakes.ts, test/cli-fakes.ts and test/apps-siren-answers.ts where they differ.
-12. `docker compose -p apps-e2e-cloud down -v` and remove the image.
+12. Install the SDK as a git dependency, as Siren's Node connector does: in an empty folder with a
+    bare package.json, `npm install --offline 'git+file://<this checkout>#<commit>'`, then check
+    `node_modules/@novatorius/siren/dist` holds the build and `node -e "require('@novatorius/siren')"`
+    works. On 953f355 it took 20 seconds with a warm npm cache and built 34 files, too slow for the
+    suite, so test/cli-build.test.ts checks package.json in its place.
+13. `docker compose -p apps-e2e-cloud down -v` and remove the image.
 
 A production-edition UAT Cloud needs `--live` on every command, and its app address must be public
 https.

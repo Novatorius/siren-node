@@ -326,13 +326,13 @@
     ]
   },
   {
-    "id": "e2e-8-prepare-again",
+    "id": "e2e-8-prepare-dropped",
     "file": "package.json",
-    "find": "\"prepack\": \"tsup\"",
-    "replace": "\"prepare\": \"tsup\"",
+    "find": "\"prepare\": \"tsup\"",
+    "replace": "\"prepack\": \"tsup\"",
     "expect": "caught",
     "failing": [
-      "apps-cli: the siren command in the package > builds dist before packing, and gives an install nothing to run"
+      "apps-cli: the siren command in the package > builds dist in prepare, which a git dependency install runs"
     ]
   }
 ]
