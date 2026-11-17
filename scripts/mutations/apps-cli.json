@@ -466,6 +466,26 @@
     ]
   },
   {
+    "id": "sandbox-origin-raw",
+    "file": "src/client.ts",
+    "find": "  const origin = new URL(resolved).origin;",
+    "replace": "  const origin = resolved;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: sandbox and live keys > refuses a sandbox key sent to the live API"
+    ]
+  },
+  {
+    "id": "sandbox-message-quotes-key",
+    "file": "src/client.ts",
+    "find": "cannot reach the live API. Leave",
+    "replace": "cannot reach the live API with ${apiKey}. Leave",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: sandbox and live keys > refuses a sandbox key sent to the live API"
+    ]
+  },
+  {
     "id": "file-stanza-allowed",
     "file": "src/cli/app-file.ts",
     "find": "    if (['version', 'name', 'description', 'apps'].includes(key)) continue;",

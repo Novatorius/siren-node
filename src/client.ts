@@ -221,14 +221,24 @@ export function createHttpTransport(options: SirenOptions): HttpTransport {
  * either kind. Origins are compared after `new URL`, so case and a trailing
  * slash do not matter. No message quotes the key.
  *
- * Stub: answers `resolved` unchanged. Packet sdk-sandbox-guard.
- *
  * @internal
  */
 export function baseUrlForKey(apiKey: unknown, resolved: string, defaulted: boolean): string {
-  void apiKey;
-  void defaulted;
-  void SANDBOX_BASE_URL;
+  if (typeof apiKey !== 'string') return resolved;
+  const origin = new URL(resolved).origin;
+  if (apiKey.startsWith('sk_test_')) {
+    if (defaulted) return SANDBOX_BASE_URL;
+    if (origin === new URL(DEFAULT_BASE_URL).origin) {
+      throw new SirenError(
+        `Siren: a sandbox key (sk_test_) cannot reach the live API. Leave baseUrl out to reach the sandbox at ${SANDBOX_BASE_URL}, or use a live key (sk_live_) there.`,
+      );
+    }
+  }
+  if (apiKey.startsWith('sk_live_') && origin === new URL(SANDBOX_BASE_URL).origin) {
+    throw new SirenError(
+      `Siren: a live key (sk_live_) cannot reach the sandbox. Use a sandbox key (sk_test_) there, or leave baseUrl out to reach the live API at ${DEFAULT_BASE_URL}.`,
+    );
+  }
   return resolved;
 }
 
