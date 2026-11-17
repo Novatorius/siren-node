@@ -207,7 +207,8 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
       expect(error, name).toBeInstanceOf(AuthenticationError);
       expect((error as Error).message, name).toBe(
         "Siren did not accept this key on the answer route. An app answers with its own key, the SIREN_API_KEY that siren apps apply saved beside its app file. " +
-          'When that key is lost or revoked, run siren apps rotate-key <app key> to make a new one.',
+          'When that key is lost, run siren apps rotate-key <app key> to make a new one. ' +
+          'When the app holds no key, as after its key was revoked, run siren apps add-key <app key>.',
       );
       expect((error as Error).message).not.toContain('under API keys');
     }

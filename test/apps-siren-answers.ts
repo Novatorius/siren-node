@@ -169,6 +169,20 @@ export const PartAnswers = {
     reply(409, {
       error: { message: 'The app "acme-payouts" already has a key. Rotate it to get a new one.', code: 'app_key_exists', context: { reason: 'app_key_exists' } },
     }),
+  /** AppPartRefusedException::keyMissing() on Siren's feat/apps at c8dbb1ab3, for a rotate or revoke on an app with no key. */
+  keyMissing: () =>
+    reply(409, {
+      error: { message: 'The app "acme-payouts" has no key. Add one first.', code: 'app_key_missing', context: { reason: 'app_key_missing', app: 'acme-payouts' } },
+    }),
+  /** AppPartRefusedException::addressMissing() on Siren's feat/apps at c8dbb1ab3, for a secret rotation on an app with no address. */
+  addressMissing: () =>
+    reply(409, {
+      error: {
+        message: 'The app "acme-payouts" has no address. Give it one first.',
+        code: 'app_address_missing',
+        context: { reason: 'app_address_missing', app: 'acme-payouts' },
+      },
+    }),
   itemsNeedKeyAndAddress: () =>
     reply(409, {
       error: {

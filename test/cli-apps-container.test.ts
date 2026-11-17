@@ -320,7 +320,7 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     expect(h.printed()).not.toContain(RAW_KEY);
 
     expect(await h.run(['apps', 'add-key', KEY])).toBe(1);
-    expect(h.err()).toContain('already has a key');
+    expect(h.err()).toContain('already holds a key');
   });
 });
 

@@ -206,7 +206,12 @@ export async function appsApply(input: CommandInput): Promise<number> {
   // A later declaration that gave the app its first address answers the address's secret once.
   if (app.signingSecret !== undefined && !(await saveSecrets(run, key, envPath, { signingSecret: app.signingSecret }, false))) return 1;
   if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
-    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate-key ${key}`)} to make a new key and save it there.`);
+    // An app made in the dashboard may hold no key, and Siren refuses to rotate one it lacks (409 `app_key_missing`).
+    if (app.apiKey === null || app.apiKey === undefined) {
+      run.print(`${key} holds no key, so ${envPath} has none. Run ${run.command(`apps add-key ${key}`)} to make one and save it there.`);
+    } else {
+      run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate-key ${key}`)} to make a new key and save it there.`);
+    }
   }
   return 0;
 }
@@ -358,12 +363,17 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
   }
 
   const siren = run.siren();
-  const secrets =
-    part === 'key'
-      ? { rawKey: (await siren.apps.rotateKey(key)).rawKey }
-      : part === 'secret'
-        ? { signingSecret: (await siren.apps.rotateSecret(key)).signingSecret }
-        : { rawKey: (await siren.apps.createKey(key)).rawKey };
+  let secrets: ShownSecrets;
+  try {
+    secrets =
+      part === 'key'
+        ? { rawKey: (await siren.apps.rotateKey(key)).rawKey }
+        : part === 'secret'
+          ? { signingSecret: (await siren.apps.rotateSecret(key)).signingSecret }
+          : { rawKey: (await siren.apps.createKey(key)).rawKey };
+  } catch (error) {
+    throw partRefusal(run, key, error) ?? error;
+  }
   const saved = await saveSecrets(run, key, envPath, secrets, part !== 'add-key');
   await run.remember(key, envPath);
   if (saved) {
@@ -376,6 +386,30 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
     );
   }
   return saved ? 0 : 1;
+}
+
+/**
+ * The tool's words for Siren's 409 when the app lacks the part a command
+ * changes, or already holds the key `add-key` would make
+ * (AppPartRefusedException on Siren's feat/apps at c8dbb1ab3), naming the
+ * one command that fits the app. Undefined for any other error.
+ */
+function partRefusal(run: CommandContext, key: string, error: unknown): CliRefusal | undefined {
+  if (!(error instanceof ConflictError)) return undefined;
+  switch (appErrorCode(error)) {
+    case 'app_key_missing':
+      return new CliRefusal(`${key} holds no key to rotate, so nothing changed. Run ${run.command(`apps add-key ${key}`)} to make one.`);
+    case 'app_key_exists':
+      return new CliRefusal(
+        `${key} already holds a key, so nothing changed. Run ${run.command(`apps rotate-key ${key}`)} for a new one, which revokes the old one at once.`,
+      );
+    case 'app_address_missing':
+      return new CliRefusal(
+        `${key} has no address, so it has no signing secret to rotate. Give it a url in its app file, then run ${run.command('apps apply')}.`,
+      );
+    default:
+      return undefined;
+  }
 }
 
 /**
