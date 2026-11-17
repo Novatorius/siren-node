@@ -63,7 +63,7 @@ async function refused(run: () => Promise<unknown>): Promise<unknown> {
   throw new Error('the call answered instead of refusing');
 }
 
-describe.skip('apps-cli: apps.declare', () => {
+describe('apps-cli: apps.declare', () => {
   it('sends the whole app once with PUT and answers the secrets of a new app', async () => {
     const { http, apps: resource } = apps([reply(201, { ...app, ...secrets })]);
     const declared = await resource.declare(KEY, declaration);
@@ -129,7 +129,7 @@ describe.skip('apps-cli: apps.declare', () => {
   });
 });
 
-describe.skip('apps-cli: apps reads and changes', () => {
+describe('apps-cli: apps reads and changes', () => {
   it('lists the apps from a bare array, retried', async () => {
     const { http, apps: resource } = apps([reply(200, [app])]);
     expect(await resource.list()).toEqual([app]);

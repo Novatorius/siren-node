@@ -193,12 +193,17 @@ export type AppErrorCode = (typeof AppErrorCode)[keyof typeof AppErrorCode];
  * `code` when Siren sent one in `error.code`, else `data.reason` from
  * `error.context.reason`, else `undefined`. Siren is moving the app routes'
  * codes from `context.reason` to `error.code`, so read them through this one
- * function and either shape works.
- *
- * Stub: answers `undefined`. Packet sdk-apps.
+ * function and either shape works. Answers `undefined` for an error this SDK
+ * did not raise, and for an empty code or reason.
  */
 export function appErrorCode(error: unknown): AppErrorCode | (string & {}) | undefined {
-  void error;
+  if (!(error instanceof SirenError)) return undefined;
+  if (typeof error.code === 'string' && error.code !== '') return error.code;
+  const data = error.data;
+  if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    const reason = (data as { reason?: unknown }).reason;
+    if (typeof reason === 'string' && reason !== '') return reason;
+  }
   return undefined;
 }
 

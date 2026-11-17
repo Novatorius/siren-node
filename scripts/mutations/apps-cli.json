@@ -12,8 +12,8 @@
   {
     "id": "control-harmless",
     "file": "src/resources/apps.ts",
-    "find": "    const name = appKey(key, 'apps.declare()');",
-    "replace": "    const name = String(appKey(key, 'apps.declare()'));",
+    "find": "    const path = appPath(key, 'apps.declare()');",
+    "replace": "    const path = String(appPath(key, 'apps.declare()'));",
     "expect": "survives",
     "failing": []
   },
@@ -198,7 +198,7 @@
   {
     "id": "declare-name-url-optional",
     "file": "src/resources/apps.ts",
-    "find": "    if (sent.name === undefined || sent.url === undefined) throw new SirenError('Siren: apps.declare() needs a name and a url.');",
+    "find": "    if (sent.name == null || sent.url == null) throw new SirenError('Siren: apps.declare() needs a name and a url.');",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -208,8 +208,8 @@
   {
     "id": "declare-one-secret-accepted",
     "file": "src/resources/apps.ts",
-    "find": "    if (problem !== undefined || hasKey !== hasSecret) {",
-    "replace": "    if (problem !== undefined) {",
+    "find": "    if (created && (typeof app.rawKey !== 'string' || typeof app.signingSecret !== 'string')) {",
+    "replace": "    if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.declare > throws UnexpectedResponseError"
@@ -218,7 +218,7 @@
   {
     "id": "declare-shape-unchecked",
     "file": "src/resources/apps.ts",
-    "find": "  return typeof body.key === 'string' && Array.isArray(body.items) ? undefined :",
+    "find": "  return isJsonObject(body) && typeof body.key === 'string' && Array.isArray(body.items) ? undefined :",
     "replace": "  return true ? undefined :",
     "expect": "caught",
     "failing": [
@@ -233,6 +233,76 @@
     "expect": "caught",
     "failing": [
       "apps-cli: apps.declare > sends only its own fields"
+    ]
+  },
+  {
+    "id": "declare-params-not-object",
+    "file": "src/resources/apps.ts",
+    "find": "    if (!isJsonObject(params)) throw new SirenError('Siren: apps.declare() needs the app as an object.');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a bad key on every call"
+    ]
+  },
+  {
+    "id": "declare-secrets-not-text",
+    "file": "src/resources/apps.ts",
+    "find": "    if (created && (typeof app.rawKey !== 'string' || typeof app.signingSecret !== 'string')) {",
+    "replace": "    if (created && (app.rawKey === undefined || app.signingSecret === undefined)) {",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a declare whose secrets are not text"
+    ]
+  },
+  {
+    "id": "list-rows-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "      rows.map((row) => appProblem(row, 'GET /apps')).find((problem) => problem !== undefined),",
+    "replace": "      rows.length < 0 ? 'never' : undefined,",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a list with a row that is not an app"
+    ]
+  },
+  {
+    "id": "retrieve-shape-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    return readObject<App>(this.http, path, {}, (body) => appProblem(body, `GET ${path}`));",
+    "replace": "    return readObject<App>(this.http, path, {});",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a retrieve, a status change and a rotation"
+    ]
+  },
+  {
+    "id": "status-shape-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: app });\n    return app;",
+    "replace": "    return app;",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a retrieve, a status change and a rotation"
+    ]
+  },
+  {
+    "id": "rotate-shape-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: app });\n    if (typeof app.rawKey",
+    "replace": "    if (typeof app.rawKey",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a retrieve, a status change and a rotation"
+    ]
+  },
+  {
+    "id": "key-check-skipped-on-delete",
+    "file": "src/resources/apps.ts",
+    "find": "    await deleteRecord(this.http, appPath(key, 'apps.delete()'));",
+    "replace": "    await deleteRecord(this.http, `/apps/${key}`);",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a bad key on every call"
     ]
   },
   {
