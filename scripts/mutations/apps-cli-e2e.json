@@ -164,5 +164,25 @@
     "failing": [
       "apps-cli: every hint names a command the person can run as printed > on the sandbox named by --sandbox or by nothing"
     ]
+  },
+  {
+    "id": "e2e-4-uncoded-401-passes",
+    "file": "src/resources/app-requests.ts",
+    "find": "    throw unauthorizedAnswer(error);",
+    "replace": "    throw error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized"
+    ]
+  },
+  {
+    "id": "e2e-4-coded-401-recoded",
+    "file": "src/resources/app-requests.ts",
+    "find": " || (error.code !== undefined && error.code !== '')) return error;",
+    "replace": ") return error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized"
+    ]
   }
 ]

@@ -198,7 +198,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`POST /apps/requests/{id}/answer`, with the app's own key or an admin's session).
   `requests.answer` throws
   `SirenError` before sending for an id that is not `apr_` and 32 hex characters, or an answer that
-  is not a plain object with a text `outcome` of at most 16384 bytes as JSON. It is sent once, and
+  is not a plain object with a text `outcome` of at most 16384 bytes as JSON. The 401 Siren sends
+  with no code for a missing or unknown bearer is raised as `AuthenticationError` with `code`
+  `app_answer_unauthorized`. It is sent once, and
   sending the same answer again after a lost one answers `duplicate: true`. `requests.resend`
   sends nothing to the app for a request that holds an answer Siren has not applied, and Siren
   applies that answer instead. It raises `ConflictError` with `app_request_not_resendable` for an

@@ -1209,7 +1209,7 @@ try {
 | `app_request_not_found` | 404 | Check the id, and that the key is the app's the request went to. |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
 | `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
-| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. |
+| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code. |
 
 ### The sandbox
 

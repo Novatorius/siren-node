@@ -98,7 +98,9 @@ export class AppRequestsResource {
    * came first, and it stands), 404 `app_request_not_found` as
    * `NotFoundError`, 403 `app_inactive` or `app_answer_forbidden` as
    * `PermissionError`, 422 `app_answer_invalid` as `ValidationError`, and 401
-   * `app_answer_unauthorized` as `AuthenticationError`. Throws
+   * `app_answer_unauthorized` as `AuthenticationError`. Siren's key check
+   * answers a missing or unknown bearer with 401 and no code, and this call
+   * gives that 401 the code `app_answer_unauthorized` too. Throws
    * `UnexpectedResponseError` when a 2xx body is not `{ status: 'accepted' }`
    * with an optional boolean `duplicate`.
    */

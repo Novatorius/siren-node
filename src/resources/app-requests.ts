@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { SignatureVerificationError, SirenError, UnexpectedResponseError } from '../errors';
+import { AppErrorCode, AuthenticationError, SignatureVerificationError, SirenError, UnexpectedResponseError } from '../errors';
 import type { HttpTransport } from '../http';
 import type {
   AppAnswer,
@@ -143,7 +143,12 @@ export async function answerAppRequest(
       return response;
     },
   };
-  const reply = await writeRecord<Record<string, unknown>>(sending, 'POST', path, copy);
+  let reply: Record<string, unknown>;
+  try {
+    reply = await writeRecord<Record<string, unknown>>(sending, 'POST', path, copy);
+  } catch (error) {
+    throw unauthorizedAnswer(error);
+  }
   if (reply.status !== 'accepted' || (reply.duplicate !== undefined && typeof reply.duplicate !== 'boolean')) {
     throw new UnexpectedResponseError(`Siren answered POST ${path} with a body that is not an accepted answer.`, {
       statusCode: status,
@@ -151,6 +156,20 @@ export async function answerAppRequest(
     });
   }
   return { status: 'accepted', duplicate: reply.duplicate === true };
+}
+
+/**
+ * The error a refused answer raises. Siren's key check, which every route
+ * shares, answers a missing or unknown bearer with 401 and no code
+ * (saas/Auth/ApiKeyAuthMiddleware.php line 133 on feat/apps at 1557b0030,
+ * captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), before
+ * the answer route can send `app_answer_unauthorized`. That 401 gets the
+ * code here, with Siren's message, status and context kept, so a caller acts
+ * on one code for every unauthorized answer. Any other error passes as it is.
+ */
+function unauthorizedAnswer(error: unknown): unknown {
+  if (!(error instanceof AuthenticationError) || error.statusCode !== 401 || (error.code !== undefined && error.code !== '')) return error;
+  return new AuthenticationError(error.message, { code: AppErrorCode.AnswerUnauthorized, statusCode: 401, data: error.data, cause: error });
 }
 
 /** True for an object made by `{}` or `Object.create(null)`, and nothing else. */

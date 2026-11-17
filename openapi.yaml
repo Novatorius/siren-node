@@ -3273,11 +3273,14 @@ paths:
         object with a text `outcome`, at most 16384 bytes.
 
         Siren takes each answer once. The same answer again answers
-        `duplicate: true` and applies nothing. Each refusal carries its code
-        in `error.code`: 401 app_answer_unauthorized, 403 app_inactive or
+        `duplicate: true` and applies nothing. Each refusal of the route
+        carries its code in `error.code`: 403 app_inactive or
         app_answer_forbidden, 409 app_request_already_answered for a
         different answer after one was accepted, 422 app_answer_invalid, and
-        404 app_request_not_found.
+        404 app_request_not_found, which an org key that is no app's also
+        gets. A missing or unknown bearer gets 401 from the key check every
+        route shares, with no code, and the SDK reads it as
+        app_answer_unauthorized.
       security:
         - apiKey: []
         - dashboardSession: []

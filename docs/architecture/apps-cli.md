@@ -88,7 +88,7 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 404 `app_request_not_found` | `NotFoundError` | Checks the id and the key's app. |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
 | 422 `app_answer_invalid` | `ValidationError` | Fixes the answer for the item's kind. |
-| 401 `app_answer_unauthorized` | `AuthenticationError` | Uses the app's own key, not an org key. |
+| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
 | a bad signature, an old timestamp, or no V2 header | `SignatureVerificationError` from `verifyRequest` | Answers 400 and does nothing else. |
 
 `appErrorCode(error)` in src/errors.ts reads the code in one place: the error's `code` (Siren's

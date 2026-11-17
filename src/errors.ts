@@ -171,7 +171,12 @@ export const AppErrorCode = {
   AlreadyAnswered: 'app_request_already_answered',
   /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the item's kind refuses. */
   AnswerInvalid: 'app_answer_invalid',
-  /** 401 from the answer route: a bearer that is no app's key, such as a legacy org key. */
+  /**
+   * 401 from the answer route: no bearer, or one Siren does not know. Siren's
+   * key check sends that 401 with no code (captures apps-answer-401-no-bearer
+   * and apps-answer-401-unknown-key), and `apps.requests.answer()` gives it
+   * this code. An org key that is no app's gets 404 `app_request_not_found`.
+   */
   AnswerUnauthorized: 'app_answer_unauthorized',
   /** 403 from the answer route: a signed-in person who may not change apps. */
   AnswerForbidden: 'app_answer_forbidden',
