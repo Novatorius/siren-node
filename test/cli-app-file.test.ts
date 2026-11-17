@@ -32,7 +32,7 @@ function lineOf(text: string, needle: string): number {
   return text.slice(0, index).split('\n').length;
 }
 
-describe.skip('apps-cli: the app file', () => {
+describe('apps-cli: the app file', () => {
   it('reads the example app and turns it into the declaration Siren takes', () => {
     const parsed = parseAppFile(example, env);
     expect(parsed.problems).toEqual([]);
@@ -159,7 +159,7 @@ describe.skip('apps-cli: the app file', () => {
   });
 });
 
-describe.skip("apps-cli: the app file's JSON reader", () => {
+describe("apps-cli: the app file's JSON reader", () => {
   it('reads strings, numbers and nesting exactly as JSON.parse does', () => {
     const tricky = 'Tab\there, \u00e9, "quoted", a \\ slash, and \ud83d\ude00.';
     const text = file({ ...good, description: tricky, items: { pay: { kind: 'fulfillmentMethod', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 1.5e1 } } });

@@ -458,7 +458,7 @@
   {
     "id": "file-env-unset-silent",
     "file": "src/cli/app-file.ts",
-    "find": "        problem(path, where, `${path} needs the environment variable ${name}, which is not set.`);\n",
+    "find": "        this.problem(path, where, `${path} needs the environment variable ${name}, which is not set.`);\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -468,7 +468,7 @@
   {
     "id": "file-duplicate-key",
     "file": "src/cli/app-file.ts",
-    "find": "      if (seen.has(key)) this.problems.push(",
+    "find": "      if (twice) this.problems.push(",
     "replace": "      if (false) this.problems.push(",
     "expect": "caught",
     "failing": [
@@ -478,8 +478,8 @@
   {
     "id": "file-currencies-anywhere",
     "file": "src/cli/app-file.ts",
-    "find": "          } else if (entry.currencies !== undefined) {",
-    "replace": "          } else if (false) {",
+    "find": "    } else if (entry.currencies !== undefined) {",
+    "replace": "    } else if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: the app file > refuses each broken app or item field"
@@ -488,8 +488,8 @@
   {
     "id": "file-window-upper",
     "file": "src/cli/app-file.ts",
-    "find": "(window as number) > 43200)",
-    "replace": "(window as number) > 43201)",
+    "find": "(window as number) > MAX_ANSWER_WINDOW_MINUTES)",
+    "replace": "(window as number) > MAX_ANSWER_WINDOW_MINUTES + 1)",
     "expect": "caught",
     "failing": [
       "apps-cli: the app file > refuses each broken app or item field"
@@ -498,8 +498,8 @@
   {
     "id": "file-http-allowed",
     "file": "src/cli/app-file.ts",
-    "find": "!(fields.url.startsWith('https://') || local.test(fields.url))",
-    "replace": "!fields.url.startsWith('http')",
+    "find": "  return url.protocol === 'https:' || (url.protocol === 'http:' && LOCAL_HOSTS.includes(url.hostname));",
+    "replace": "  return url.protocol === 'https:' || url.protocol === 'http:';",
     "expect": "caught",
     "failing": [
       "apps-cli: the app file > refuses each broken app or item field",
@@ -509,8 +509,8 @@
   {
     "id": "file-http-local-loose",
     "file": "src/cli/app-file.ts",
-    "find": "(?::\\d+)?(?:\\/|$)/;",
-    "replace": "/;",
+    "find": "LOCAL_HOSTS.includes(url.hostname)",
+    "replace": "LOCAL_HOSTS.some((host) => url.hostname.startsWith(host))",
     "expect": "caught",
     "failing": [
       "apps-cli: the app file > takes http only"
@@ -519,8 +519,8 @@
   {
     "id": "file-kind-unchecked",
     "file": "src/cli/app-file.ts",
-    "find": "          if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {",
-    "replace": "          if (false) {",
+    "find": "    if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {",
+    "replace": "    if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: the app file > refuses each broken app or item field"
@@ -529,8 +529,8 @@
   {
     "id": "file-column-off",
     "file": "src/cli/app-file.ts",
-    "find": "      if (next === '}') return { type: 'object', ...start, entries };\n      if (next !== ',') {\n        this.at -= 1;\n",
-    "replace": "      if (next === '}') return { type: 'object', ...start, entries };\n      if (next !== ',') {\n",
+    "find": "      if (next === '}') return result;\n      if (next !== ',') {\n        this.at -= 1;\n",
+    "replace": "      if (next === '}') return result;\n      if (next !== ',') {\n",
     "expect": "caught",
     "failing": [
       "apps-cli: the app file > gives the line and column"
@@ -1099,7 +1099,7 @@
   {
     "id": "file-filled-unreported",
     "file": "src/cli/app-file.ts",
-    "find": "      filled.add(name);\n",
+    "find": "      this.filled.add(name);\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -1109,11 +1109,101 @@
   {
     "id": "file-description-optional",
     "file": "src/cli/app-file.ts",
-    "find": "  if (typeof top.description !== 'string') problem(",
-    "replace": "  if (top.description !== undefined && typeof top.description !== 'string') problem(",
+    "find": "    if (typeof top.description !== 'string') this.problem(",
+    "replace": "    if (top.description !== undefined && typeof top.description !== 'string') this.problem(",
     "expect": "caught",
     "failing": [
       "apps-cli: the app file > refuses each broken app or item field"
+    ]
+  },
+  {
+    "id": "file-unclosed-placeholder",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (text.replace(PLACEHOLDER, '').includes('${')) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a placeholder with no closing brace"
+    ]
+  },
+  {
+    "id": "file-empty-variable-fills",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (set === undefined || set === '') {",
+    "replace": "      if (set === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a placeholder with no closing brace"
+    ]
+  },
+  {
+    "id": "file-lists-unchecked",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (app[list] !== undefined && !isTextList(app[list])) {",
+    "replace": "      if (false) {",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses scopes or events"
+    ]
+  },
+  {
+    "id": "file-url-unparsed",
+    "file": "src/cli/app-file.ts",
+    "find": "  } catch {\n    return false;\n  }",
+    "replace": "  } catch {\n    return true;\n  }",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses scopes or events"
+    ]
+  },
+  {
+    "id": "file-top-not-object",
+    "file": "src/cli/app-file.ts",
+    "find": "      this.problem('', this.where(''), 'An app file is a JSON object.');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a file that is not a JSON object"
+    ]
+  },
+  {
+    "id": "reader-proto-assigned",
+    "file": "src/cli/app-file.ts",
+    "find": "  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });",
+    "replace": "  target[key] = value;",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > keeps __proto__ as a plain key"
+    ]
+  },
+  {
+    "id": "reader-unicode-escape",
+    "file": "src/cli/app-file.ts",
+    "find": "        out += String.fromCharCode(parseInt(this.text.slice(this.at + 2, this.at + 6), 16));",
+    "replace": "        out += 'u';",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > reads \\u escapes"
+    ]
+  },
+  {
+    "id": "reader-bad-escape-place",
+    "file": "src/cli/app-file.ts",
+    "find": "        this.fail(this.at, 'JSON does not read this backslash escape.');",
+    "replace": "        this.fail(this.at + 1, 'JSON does not read this backslash escape.');",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > reads \\u escapes"
+    ]
+  },
+  {
+    "id": "reader-unclosed-string-place",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (character === undefined) this.fail(start, 'This string is not closed before the end of the file.');",
+    "replace": "      if (character === undefined) this.fail(this.at, 'This string is not closed before the end of the file.');",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a file that ends inside a string"
     ]
   },
   {
