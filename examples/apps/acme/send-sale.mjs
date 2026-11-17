@@ -7,7 +7,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Siren } from '@novatorius/siren';
 import { loadAppEnv } from './env.mjs';
-import { sendSale } from './sale.mjs';
+import { saleLine, sendSale } from './sale.mjs';
 
 const [collaborator, total = '49.00'] = process.argv.slice(2);
 if (!collaborator) {
@@ -34,4 +34,4 @@ try {
   console.error(error.message);
   process.exit(1);
 }
-console.log(`Sent a sale of ${total} USD through ${path}: ${result.status ?? 'sent'}, opportunity ${result.opportunityId ?? 'none'}.`);
+console.log(saleLine(total, path, result));

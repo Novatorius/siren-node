@@ -36,6 +36,10 @@ CJS, and full type declarations.
 npm install @novatorius/siren
 ```
 
+npm 11 may warn that the package has an install script not covered by `allowScripts`. It names
+`prepare: tsup`, the build that a Git install of this package needs. npm does not run it for a
+registry or tarball install, so you can ignore the warning.
+
 ## Quickstart: record a sale
 
 Mint an API key in the Siren dashboard (Settings → API Keys), then:
@@ -1154,7 +1158,10 @@ needing attention. The route passes anything else that throws to `next`, so Expr
 ### Answer an ask
 
 `apps.requests.answer(id, answer)` posts the answer with `POST /apps/requests/{id}/answer`, from a
-`Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand. The
+`Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand,
+but only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses
+a person's answer to any other ask with 409 `app_request_not_needing_attention`, since the app may
+still answer it. The app's own key answers its own ask at any time before it is applied. The
 answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
 `{ status: 'accepted', duplicate }`.
 
@@ -1206,10 +1213,11 @@ try {
 | `app_in_use` | 409 | Turn the app off instead, or move the records in `uses` first. |
 | `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
 | `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
+| `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
 | `app_request_not_found` | 404 | Check the id, and that the key is the app's the request went to. |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
 | `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
-| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. |
+| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code. |
 
 ### The sandbox
 
@@ -1235,7 +1243,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 |---|---|
 | `siren signup` | Makes an organization and signs in. It asks for the organization's name, your email, the terms and a password, or takes `--org-name`, `--email`, `--accept-terms` and `--password-stdin`. |
 | `siren login` | Signs in. `--org <slug or id>` picks one of your organizations. |
-| `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. |
+| `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. A session made when the Siren was the other edition is forgotten here and its tokens are not sent. |
 | `siren orgs` | Lists your organizations, `*` on the one in use. |
 | `siren use <slug or id>` | Switches to another of your organizations. |
 | `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
@@ -1243,7 +1251,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps list` | Lists the apps and their items. `--json` prints what Siren sent. |
 | `siren apps show <key>` | Shows one app and its items. |
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
-| `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. |
+| `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
 | `siren apps resend <id>` | Sends a request again. |
 | `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
@@ -1256,14 +1264,37 @@ and column, and nothing is sent.
 
 The tool talks to `SIREN_BASE_URL`, else the sandbox. `--base-url <url>` names another Siren, and
 takes plain http only for `localhost`, `127.0.0.1` and `host.docker.internal`. A live organization
-needs `--live` on every command but `siren logout`, and `--live` against a sandbox is refused. The
-session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,
+needs `--live` on every command but `siren logout`, and `--live` against a sandbox is refused. Every
+command that sends anything first asks the Siren whether it is a sandbox or live, and refuses a
+session made when it was the other, so a sandbox session never reaches a Siren that became live.
+The session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,
 readable by you alone. It never holds your password, an app's key or its secret. The tool answers 0
 when it did what you asked, 1 when Siren or the tool refused, and 2 for a command line it cannot
 read.
 
 examples/apps/acme in this repository is a small app that checks each request, answers every ask,
 and sends a sale with the app's own key. Its README walks through running it against the sandbox.
+
+### Running against your own Siren Cloud
+
+The `siren` command and an app work against a Siren Cloud you run yourself, such as the sandbox
+stack in Siren's uat/sandbox/docker-compose.yml. That file as it ships leaves out four things an app
+needs. Set them in a compose override on the `app` service:
+
+| Setting | Why |
+|---|---|
+| `SIREN_SAAS_SIGNUP_ENABLED: "true"` | Without it, `siren signup` gets 404, since Siren answers the sign-up route only when sign-up is on. Build the image with `--build-arg SIREN_SAAS_SIGNUP_ENABLED=true` as well, so the dashboard offers it. |
+| `SIREN_DURABLE_TASKS: "true"` | The sandbox file sets it to `"false"`, so no task worker starts and nothing can wait until later. An ask is sent once, but the wake that should follow when its answer window closes cannot be held, so the ask's job fails there. Siren never sends it again, and it never comes to need attention. With it on, the image starts its worker. |
+| `SIREN_OUTBOUND_DEV_ALLOW_HOSTS: host.docker.internal` | Siren sends only to public https addresses. This lets it send to your app over plain http at that host name. Without it, `siren apps apply` with an http url gets `The URL must start with https://`. |
+| `extra_hosts: ["host.docker.internal:host-gateway"]` | A Siren in a container reads `localhost` and `127.0.0.1` as the container itself, so it cannot reach a server on your machine there. Give the app's url as `http://host.docker.internal:8787`, and this line makes that name reach your machine on Linux. `siren apps apply` says so when the url names `localhost` or `127.0.0.1`. |
+
+Siren's own build, `docker build -f saas/Dockerfile`, fetches private packages and needs a GitHub
+token in `COMPOSER_AUTH`. Without one, run `composer install` in the Siren checkout so its vendor
+folder is filled, and build the UAT image instead, which copies that folder:
+`docker build -f uat/saas/Dockerfile --build-arg SIREN_EDITION=sandbox --build-arg SIREN_SAAS_SIGNUP_ENABLED=true -t siren-sandbox:local .`
+That image seeds a UAT organization when it starts, so give the override `command:
+/usr/local/bin/startup.sh`, Siren's ordinary start. Then point the tool at the stack with
+`--base-url http://localhost:18090/siren/v1`, or `SIREN_BASE_URL`.
 
 ## Other SDKs
 

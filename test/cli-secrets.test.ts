@@ -45,7 +45,7 @@ describe('apps-cli internals: no secret in an error', () => {
     const signup = await failureOf(client([echo()]).auth.registerOrg({ orgName: 'Acme', email: EMAIL, password: PASSWORD, acceptTerms: true }));
     expect(shown(signup)).not.toContain(PASSWORD);
 
-    const h = harness([AuthAnswers.sandbox(), echo()], { stdin: PASSWORD });
+    const h = harness([echo()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
     expect(h.printed()).toContain('[redacted]');
     expect(h.printed()).not.toContain(PASSWORD);

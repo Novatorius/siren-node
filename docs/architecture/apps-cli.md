@@ -85,10 +85,11 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 409 with `data.reason` `app_in_use` and `data.uses` | `ConflictError` | Turns the app off instead, or moves the records in `uses` first. |
 | 409 `app_request_not_resendable` | `ConflictError` | Reads the request. It is applied, or it would be sent and its app is off. A request that holds an answer not yet applied, `answered` or `needs_attention`, is never refused: Siren applies the stored answer, even while the app is off. |
 | 409 `app_request_already_answered` | `ConflictError` | Stops. A different answer came first, and it stands. |
+| 409 `app_request_not_needing_attention` | `ConflictError` | A person answered an ask that does not need attention, such as one `pending` or `sent`. Waits for the app, or answers once `siren apps requests --attention` lists the ask. The app's own key answers its own ask at any time before it is applied. Siren checks the status before the answer's fit, so a misfit answer gets this and not 422. The code is named by Siren (lib/Apps/Service/Services/AppRequestService.php lines 680 to 687 on pkt/apps-screen-a at fcf19b1f0). |
 | 404 `app_request_not_found` | `NotFoundError` | Checks the id and the key's app. |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
 | 422 `app_answer_invalid` | `ValidationError` | Fixes the answer for the item's kind. |
-| 401 `app_answer_unauthorized` | `AuthenticationError` | Uses the app's own key, not an org key. |
+| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
 | a bad signature, an old timestamp, or no V2 header | `SignatureVerificationError` from `verifyRequest` | Answers 400 and does nothing else. |
 
 `appErrorCode(error)` in src/errors.ts reads the code in one place: the error's `code` (Siren's
@@ -147,7 +148,7 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items. |
 | `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, prints each new request or status change once, and ends with 0 on Ctrl-C. |
 | `siren apps requests <id>` | `GET /apps/requests`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request, each send with its HTTP status and the app's answer, and the body Siren sent. |
-| `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. |
+| `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend` | The request as it now stands. |
 | `siren apps rotate <key> [--app-file <path>]` | `POST /apps/{key}/rotate` | The new prefix and the absolute path of the env file. Writes the new key and secret where `apply` wrote the first pair, or beside the named app file (AP-A634). |
 | `siren apps on <key>` and `siren apps off <key>` | `POST /apps/{key}/status` | The app's new state. |
@@ -156,6 +157,14 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 Every command takes `--sandbox`, `--live`, `--base-url <url>` and `--help`. Exit codes: 0 for done,
 1 when Siren or the tool refused, 2 for a command line the tool cannot read, with nothing sent.
 Results go to standard output and every refusal is one message on standard error.
+
+A command checks what it was given on the line before it sends anything, the edition read
+included, and answers 2 in its own words with the usage line: a request id that is not `apr_` and
+32 lowercase hex characters (`answer`, `resend`, `requests <id>`), an app key Siren cannot hold
+(`show`, `on`, `off`, `rotate`, `delete`, `requests --app`), and an answer that is not JSON, not
+an object, has no text `outcome`, or is longer than 16384 bytes. Before, `siren apps answer
+apr_xyz` exited 1 with the SDK's line, which named `apps.requests.answer()` (e2e step 11d), and
+`requests --app <bad key>` sent the list before it refused. test/cli-arguments.test.ts covers each.
 
 ### Confirmation and plan answers
 
@@ -192,7 +201,13 @@ client mints a connector token for a connected site, and the app routes need an 
 session (AP-A606).
 
 The password comes from a hidden prompt or from standard input with `--password-stdin`, never a
-flag, and is sent once. `PasswordSignIn` is the one `SignInMethod`. Device sign-in (slice 9) adds a
+flag, and is sent once. The hidden prompt turns the terminal's echo off before it writes
+`Password: `, and puts the terminal back however the prompt ends, Ctrl-C included. The order
+matters: Node sets raw mode only once the terminal has taken the output already written (libuv
+uses TCSADRAIN), so with the question written first, a person or a password manager typing the
+instant it appeared got in while echo was still on. The checkpoint saw that in 3 of 6 runs, and
+test/cli-hidden-prompt.test.ts saw it in 45 of 60 runs before the fix and in none of 180 after.
+`PasswordSignIn` is the one `SignInMethod`. Device sign-in (slice 9) adds a
 second method that ends with the same `LoginResult`, so nothing after sign-in changes. That
 interface is the seam slice 9 builds on.
 
@@ -205,7 +220,8 @@ It holds one session per Siren address:
 
 ```json
 { "version": 1, "sessions": { "https://sandbox.sirenaffiliates.com/siren/v1": {
-  "edition": "sandbox", "email": "dev@acme.example", "userId": 7, "orgId": 3, "orgName": "Acme",
+  "edition": "sandbox", "baseUrl": "https://sandbox.sirenaffiliates.com/siren/v1",
+  "email": "dev@acme.example", "userId": 7, "orgId": 3, "orgName": "Acme",
   "role": "admin", "accessToken": "<JWT>", "refreshToken": "<JWT>", "accessExpiresAt": 1794916800,
   "envFiles": { "acme-payouts": "/home/dev/acme/.env.sandbox" } } } }
 ```
@@ -247,11 +263,34 @@ as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps in
 - `--base-url` and `SIREN_BASE_URL` take `http://` only for `localhost`, `127.0.0.1` and
   `host.docker.internal`. Any other address must be https, or the command is a usage error, exit 2,
   with nothing sent, since every command sends a password or a session token (AP-A632).
-- `signup` and `login` read the edition from `GET /auth/signup-options` before they ask for the
-  password. A Siren that names no edition counts as live.
+- Every command that sends anything reads the edition from `GET /auth/signup-options` first, on
+  every run, before anything else is sent. `signup` and `login` read it before they ask for the
+  password. A Siren that names no edition counts as live. The read costs one GET with no
+  credential, a few dozen bytes, retried like any read. It is made once per run: `CommandContext`
+  keeps the answer, so a refresh, a second call and every loop of `apps requests --follow` use it.
+  `apps init` sends nothing and reads nothing.
 - A live edition needs `--live` on every command but `logout`, whatever address chose it. Signing
-  out sends only the session's own tokens, to revoke them. `--live` against a
-  sandbox is refused. A stored session keeps its edition, so the check runs before anything is sent.
+  out sends only the session's own tokens, to revoke them. `--live` against a sandbox is refused.
+- A stored session keeps the edition and the address it was made for (`edition`, `baseUrl`). A
+  command whose target now reports another edition, or a session stored for another address,
+  stops with one line before it sends anything with the session: what the target is now, what the
+  session was made for, and the `siren login` to run, with `--live` when the target is live. So a
+  session made on a sandbox never lists or changes a live organization because the same address
+  became live, and a live session never acts on a Siren that became a sandbox. The checkpoint saw
+  both against a real Cloud (e2e steps 20a and 20l) before this check.
+- Every hint that names a command carries the flags that reach the same Siren: `--live` for a live
+  one, and the `--base-url <address>` or `--sandbox` the person typed. An address that came from
+  `SIREN_BASE_URL` or the default adds nothing, since the next command reads it the same way.
+  `commandLine` in src/cli/targets.ts builds every such hint, `apps init` included. Before, `apply
+  --live` printed `Run siren apps rotate <key> ...`, which a live Siren refuses without `--live`
+  (e2e step 20g). test/cli-hints.test.ts runs each path that prints a hint against a live Siren
+  and checks every `siren` command it printed.
+- `logout` reads the edition too. On a mismatch it sends the tokens nowhere and forgets the
+  session on this machine, since the tokens were made for another Siren. When the edition cannot
+  be read, it forgets the session anyway, as it does when Siren refuses the sign-out.
+- test/cli-edition-check.test.ts covers a stored sandbox session against a live target, a stored
+  live session against a sandbox, every command that sends anything, and the built command against
+  a fake Cloud on 127.0.0.1 whose edition changes between two commands.
 
 ## The app file
 
@@ -357,6 +396,14 @@ from src.
 `package.json` gains `"bin": { "siren": "./dist/cli.js" }`. tsup gains the `cli` entry. The build
 also writes dist/cli.cjs and its type files, which nothing names. The version stays 0.3.0 and
 `CLI_VERSION` must equal it, which a test checks.
+
+The build is `"prepare": "tsup"`, and it stays. npm builds a git dependency by running `prepare` in
+the clone, never `prepack`, and Siren's Node connector installs this SDK as
+`git+https://github.com/Novatorius/siren-node.git#<commit>`. Without `prepare` that install has no
+dist and the package cannot be required. npm 11 lists `prepare` as an install script and warns
+about it on `npm i -g` of the tarball and on the example's `file:` install (e2e step 03), though it
+does not run it there. The warning is harmless. test/cli-build.test.ts fails when `prepare` no longer
+runs the build, and the checkpoint script below installs the SDK as a git dependency.
 
 ## Tests and proof
 
@@ -597,13 +644,13 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | 5 | `siren apps apply` | `Declared acme-payouts on <address>.`, the app line, one line per item with its `app:{id}`, `Its url came from SIREN_APP_URL.`, and `Key sk_test_<8 hex> and its signing secret are in <folder>/.env.sandbox.` No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |
 | 6 | `npm start` | `Acme example app on http://localhost:8787, for <address> (<folder>/.env.sandbox).` | example-app |
 | 7 | In the dashboard, signed in with the same email and password: make a program with a sale reward, pick "Acme: Tell the CRM" among its post-conversion actions and "Acme: Acme split" as its distributor's resolver, and add a collaborator with a tracking code. Open Webhooks. | The three Acme items in the pickers, and the app's subscription marked as managed by the app | Siren slices 1, 3 (claim C3), 4 and 11, not this slice |
-| 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: created, opportunity <id>.` | example-app |
+| 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: Siren made 1 conversion on opportunity <id>.` A sale no program pays for prints `Siren recorded it on opportunity <id> and made no conversion (no_program).` and Siren's message, which is what step 7 skipped gives (capture events-sale-200-no-program). | example-app |
 | 9 | Approve the conversion in the dashboard. Then `siren apps requests --follow`, and in another terminal `siren apps requests <id>` for the tell | The tell's line going from `sent` to `delivered`. The single request shows the send, `HTTP 200`, the app's answer and the body Siren sent. Ctrl-C ends `--follow` with exit 0. | cli-requests, Siren slices 2 and 3 |
 | 10 | Close the program's distribution with slice 4's test route (claim C7) | `--follow` shows the ask `sent`, then `answered`, then `applied`. The server logs the answer, and the distribution completes with the app's shares. | example-app, sdk-verify, sdk-answer, Siren slice 4 |
 | 11 | With slice 5 only: pick "Acme: Acme ledger" on an autofulfiller and run a payout through it | The payout waits, then shows as paid with reference `acme-<payoutId>` | example-app, Siren slice 5 |
-| 12 | Stop the server with Ctrl-C, close another distribution as in step 10, and run `siren apps requests --attention --follow` | Nothing at first. About three minutes later, after three one-minute windows, the ask's line with `needs_attention` and its send error. The Apps screen marks it too. | cli-requests, the shortest window in the example's app file, Siren slices 2 and 3 |
+| 12 | Stop the server with Ctrl-C, close another distribution as in step 10, and run `siren apps requests --attention --follow` | Nothing at first. About three minutes later, after three one-minute windows, the ask's line with `needs_attention` and its send error. The Apps screen marks it too. Each window's end is a wake on Siren's task queue, so this needs a Siren whose worker runs: the public sandbox, or a Siren you run with `SIREN_DURABLE_TASKS` on (README, "Running against your own Siren Cloud"). With it off, the ask is sent once, its job fails at the first wake, and it never needs attention. | cli-requests, the shortest window in the example's app file, Siren slices 2 and 3 |
 | 13 | `npm start` again, then `siren apps resend <id>` | The request's line back at `sent`, then `--follow` shows `answered` and `applied` | cli-requests |
-| 14 | Or, with the server still stopped, read the metric ids with `siren apps requests <id>` and run `siren apps answer <id> --body '{"outcome":"resolved","shares":[{"id":"<metric id>","amount":<minor units>}]}'` | `Siren accepted the answer.` Sending it again prints `Siren already had this answer. Nothing changed.` | cli-requests, sdk-answer |
+| 14 | Or, with the server still stopped and the ask still shown by `siren apps requests --attention` after step 12, read the metric ids with `siren apps requests <id>` and run `siren apps answer <id> --body '{"outcome":"resolved","shares":[{"id":"<metric id>","amount":<minor units>}]}'` | `Siren accepted the answer.` Sending it again prints `Siren already had this answer. Nothing changed.` A person may answer only a request that needs attention, so the same answer to an ask still `pending` or `sent` is refused with Siren's line and `See the requests that need attention with siren apps requests --attention.` | cli-requests, sdk-answer |
 | 15 | `siren logout` | `Signed out of <address>.` | cli-session |
 
 Without a tunnel, step 4 sets `SIREN_APP_URL` to any https address, deliveries fail, and steps 9 to
@@ -614,11 +661,19 @@ Without a tunnel, step 4 sets `SIREN_APP_URL` to any https address, deliveries f
 A later lane runs this against a local sandbox Cloud. Nothing here ran it.
 
 1. Run `df -h /` and stop below 10 GB. In a Siren worktree of feat/apps with slices 1, 2 and 7
-   merged, build the sandbox image:
-   `docker build -f saas/Dockerfile --build-arg SIREN_EDITION=sandbox --build-arg COMPOSER_AUTH="$COMPOSER_AUTH" -t siren-sandbox:apps-e2e .`
+   merged, build the sandbox image. `saas/Dockerfile` needs a GitHub token in `COMPOSER_AUTH`.
+   Without one, fill the vendor folder with `composer install` and build the UAT image, which copies
+   it: `docker build -f uat/saas/Dockerfile --build-arg SIREN_EDITION=sandbox --build-arg SIREN_SAAS_SIGNUP_ENABLED=true -t siren-sandbox:apps-e2e .`
+   The slice 8 checkpoint built it this way.
 2. Write an override beside uat/sandbox/docker-compose.yml that sets, on `app`,
-   `SIREN_SAAS_SIGNUP_ENABLED: "true"`, `SIREN_OUTBOUND_DEV_ALLOW_HOSTS: host.docker.internal` and
-   `extra_hosts: ["host.docker.internal:host-gateway"]`. Start it as its own project:
+   `SIREN_SAAS_SIGNUP_ENABLED: "true"`, `SIREN_DURABLE_TASKS: "true"`,
+   `SIREN_OUTBOUND_DEV_ALLOW_HOSTS: host.docker.internal`,
+   `extra_hosts: ["host.docker.internal:host-gateway"]`, and, for the UAT image,
+   `command: /usr/local/bin/startup.sh`, so it starts as Siren does and seeds no UAT organization.
+   The sandbox file sets `SIREN_DURABLE_TASKS` to `"false"`, and with it off no worker starts and an
+   ask's job fails at its first wake, so step 8 never sees a second send or `needs_attention`. The
+   README's "Running against your own Siren Cloud" says why each setting matters. Start it as its
+   own project:
    `SIREN_SANDBOX_IMAGE=siren-sandbox:apps-e2e SIREN_SANDBOX_PORT=33918 docker compose -p apps-e2e-cloud -f uat/sandbox/docker-compose.yml -f <override> up -d`.
    Check `curl -s localhost:33918/siren/v1/auth/signup-options` names `"edition":"sandbox"`.
 3. In this repository: `npm ci && npm run build && npm pack`, then install the tarball in an empty
@@ -640,7 +695,12 @@ A later lane runs this against a local sandbox Cloud. Nothing here ran it.
     verifies.
 11. Capture every answer the steps saw (S1) and replace the hand-written fakes in
     test/sdk-gaps-fakes.ts, test/cli-fakes.ts and test/apps-siren-answers.ts where they differ.
-12. `docker compose -p apps-e2e-cloud down -v` and remove the image.
+12. Install the SDK as a git dependency, as Siren's Node connector does: in an empty folder with a
+    bare package.json, `npm install --offline 'git+file://<this checkout>#<commit>'`, then check
+    `node_modules/@novatorius/siren/dist` holds the build and `node -e "require('@novatorius/siren')"`
+    works. On 953f355 it took 20 seconds with a warm npm cache and built 34 files, too slow for the
+    suite, so test/cli-build.test.ts checks package.json in its place.
+13. `docker compose -p apps-e2e-cloud down -v` and remove the image.
 
 A production-edition UAT Cloud needs `--live` on every command, and its app address must be public
 https.

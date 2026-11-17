@@ -1,0 +1,46 @@
+{
+  "capturedAt": "2026-11-17T09:14:01.198Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "PUT /siren/v1/apps/e2e-app",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": {
+      "name": "E2E app",
+      "description": "",
+      "url": "https://example.invalid/hook",
+      "scopes": [],
+      "events": [],
+      "items": [
+        {
+          "kind": "postConversionAction",
+          "key": "notify",
+          "name": "Tell my service about each approved conversion"
+        },
+        {
+          "kind": "fulfillmentMethod",
+          "key": "pay",
+          "name": "Pay through my service",
+          "currencies": [
+            "USD"
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 400,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "The URL must use a public host name, such as hooks.example.com.",
+        "context": {
+          "field": "url"
+        }
+      }
+    }
+  }
+}

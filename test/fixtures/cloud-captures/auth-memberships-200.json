@@ -1,0 +1,28 @@
+{
+  "capturedAt": "2026-11-17T09:09:52.320Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "GET /siren/v1/auth/memberships",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": null,
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "memberships": [
+        {
+          "orgId": 1,
+          "orgName": "Apps E2E",
+          "orgSlug": "apps-e2e",
+          "orgLogoUrl": null,
+          "role": "admin"
+        }
+      ]
+    }
+  }
+}

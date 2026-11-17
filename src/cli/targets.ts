@@ -21,6 +21,12 @@ export interface Target {
   /** With no trailing slash. Also the key of its session in `credentials.json`. */
   baseUrl: string;
   live: boolean;
+  /**
+   * The flag that chose the address, as a hint should repeat it: ` --sandbox`,
+   * ` --base-url <address>`, or empty when the address came from
+   * `SIREN_BASE_URL` or the default, which the next command reads the same way.
+   */
+  addressFlag: string;
 }
 
 /**
@@ -63,7 +69,52 @@ export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, s
     source = flags.live ? '--live' : 'the default';
   }
 
-  return { baseUrl: checkedAddress(chosen, source), live: flags.live === true };
+  const baseUrl = checkedAddress(chosen, source);
+  const addressFlag = flags.baseUrl !== undefined ? ` --base-url ${baseUrl}` : flags.sandbox ? ' --sandbox' : '';
+  return { baseUrl, live: flags.live === true, addressFlag };
+}
+
+/**
+ * A `siren` command line for a hint, with the flags that reach the same
+ * Siren: the address flag the person typed, and `--live` when `live`, which
+ * is the target's own `--live` unless the caller says otherwise. A hint that
+ * names a command a person cannot run as printed is no help, so every hint
+ * that names a command is built here.
+ */
+export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live): string {
+  return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;
+}
+
+/** What the tool calls an edition in a message. */
+function editionName(edition: Edition): string {
+  return edition === 'production' ? 'live' : 'sandbox';
+}
+
+/**
+ * The guard that keeps a stored session on the Siren it was made for, run on
+ * every command that sends anything with a session, after the target's
+ * edition was read and before anything else is sent.
+ *
+ * - A session made for another address is refused. Sessions are kept by
+ *   address, so only a file edited by hand gets here.
+ * - A session made while the target reported another edition is refused, so
+ *   a sandbox session never reaches a Siren that is now live, and a live one
+ *   never reaches a Siren that is now a sandbox.
+ *
+ * Throws {@link CliRefusal} with one line: what the target is, what the
+ * session was made for, and the `siren login` that makes a new one.
+ */
+export function assertSessionMatches(target: Target, session: { edition: Edition; baseUrl?: string }, edition: Edition): void {
+  const login = commandLine(target, 'login', edition === 'production');
+  if (session.baseUrl !== undefined && session.baseUrl !== target.baseUrl) {
+    throw new CliRefusal(`The session stored for ${target.baseUrl} was made for ${session.baseUrl}, so nothing was sent with it. Run ${login} to sign in again.`);
+  }
+  if (session.edition !== edition) {
+    throw new CliRefusal(
+      `${target.baseUrl} is now a ${editionName(edition)} Siren, and your session was made when it was a ${editionName(session.edition)} one, ` +
+        `so nothing was sent with it. Run ${login} to sign in again.`,
+    );
+  }
 }
 
 /**
@@ -87,9 +138,9 @@ function checkedAddress(address: string, source: string): string {
 }
 
 /**
- * The guard that keeps the sandbox and live apart, run before a command
- * sends anything that needs a session, and by `signup` and `login` before
- * they send a password.
+ * The guard that keeps the sandbox and live apart, run on the edition the
+ * target reports now, read at the start of every command that sends
+ * anything, and before `signup` and `login` send a password.
  *
  * - An `edition` of `production` without `target.live` is refused: the
  *   person must type `--live` on every command that reaches a live

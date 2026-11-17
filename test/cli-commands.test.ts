@@ -52,13 +52,13 @@ function bearer(h: ReturnType<typeof harness>, index: number): string | undefine
 
 describe('apps-cli: siren signup, login and the session', () => {
   it('signs up on the sandbox, sends the sign-up once, and keeps the session but never the password', async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.registered()], { stdin: `${PASSWORD}\n` });
+    const h = harness([AuthAnswers.registered()], { stdin: `${PASSWORD}\n` });
     const code = await h.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms']);
 
     expect(code, h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /auth/signup-options', 'POST /auth/register-org']);
-    expect(h.http.requests[0]?.url.startsWith(SANDBOX_BASE_URL)).toBe(true);
-    expect(bodyOf(h.http.requests[1])).toEqual({ orgName: 'Acme', email: EMAIL, password: PASSWORD, acceptTerms: true });
+    expect(h.paths()).toEqual(['POST /auth/register-org']);
+    expect(h.editionReads[0]?.url.startsWith(SANDBOX_BASE_URL)).toBe(true);
+    expect(bodyOf(h.http.requests[0])).toEqual({ orgName: 'Acme', email: EMAIL, password: PASSWORD, acceptTerms: true });
     expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({
       edition: 'sandbox',
       email: EMAIL,
@@ -80,17 +80,18 @@ describe('apps-cli: siren signup, login and the session', () => {
   });
 
   it('refuses sign-up without the terms accepted, before sending it', async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.registered()], { stdin: PASSWORD });
+    const h = harness([AuthAnswers.registered()], { stdin: PASSWORD });
     expect(await h.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin'])).not.toBe(0);
     expect(h.paths()).not.toContain('POST /auth/register-org');
   });
 
   it('refuses a live Siren without --live, before asking for the password', async () => {
-    for (const answer of [AuthAnswers.production, AuthAnswers.noEdition]) {
+    for (const edition of ['production', 'none'] as const) {
       for (const argv of [['login', '--email', EMAIL], ['signup', '--org-name', 'Acme', '--email', EMAIL, '--accept-terms']]) {
-        const h = harness([answer()], { interactive: true, secrets: [PASSWORD], typed: ['y'] });
+        const h = harness([], { edition, interactive: true, secrets: [PASSWORD], typed: ['y'] });
         expect(await h.run(argv)).toBe(1);
-        expect(h.paths()).toEqual(['GET /auth/signup-options']);
+        expect(h.editionReads).toHaveLength(1);
+        expect(h.paths()).toEqual([]);
         expect(h.secretPrompts).toEqual([]);
         expect(h.err()).toContain('--live');
       }
@@ -99,7 +100,7 @@ describe('apps-cli: siren signup, login and the session', () => {
 
   it("says what to do when Siren asks for the address to be confirmed, or has sign-up turned off", async () => {
     const confirm = harness(
-      [AuthAnswers.sandbox(), ConfirmationAnswers.registeredUnconfirmed(membershipAcme, user)],
+      [ConfirmationAnswers.registeredUnconfirmed(membershipAcme, user)],
       { stdin: PASSWORD },
     );
     expect(await confirm.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms']), confirm.err()).toBe(0);
@@ -110,7 +111,6 @@ describe('apps-cli: siren signup, login and the session', () => {
 
     const pending = harness(
       [
-        AuthAnswers.sandbox(),
         ConfirmationAnswers.registeredPending(membershipAcme, user, { accessToken: ACCESS_1, refreshToken: REFRESH_1 }, NOW_S),
       ],
       { stdin: PASSWORD },
@@ -119,19 +119,19 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(pending.out()).toMatch(/confirm/i);
     expect(pending.out()).toContain('14 days');
 
-    const pendingLogin = harness([AuthAnswers.sandbox(), ConfirmationAnswers.loginPending(membershipAcme, user, { accessToken: ACCESS_1, refreshToken: REFRESH_1 }, NOW_S)], {
+    const pendingLogin = harness([ConfirmationAnswers.loginPending(membershipAcme, user, { accessToken: ACCESS_1, refreshToken: REFRESH_1 }, NOW_S)], {
       stdin: PASSWORD,
     });
     expect(await pendingLogin.run(['login', '--email', EMAIL, '--password-stdin']), pendingLogin.err()).toBe(0);
     expect(pendingLogin.out()).toContain('3 days');
 
-    const closed = harness([AuthAnswers.sandbox(), ConfirmationAnswers.signupOff()], { stdin: PASSWORD });
+    const closed = harness([ConfirmationAnswers.signupOff()], { stdin: PASSWORD });
     expect(await closed.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'])).toBe(1);
     expect(closed.err()).toContain(`Sign-up is turned off on ${SANDBOX_BASE_URL}. Ask its owner, or use siren login.`);
     expect(closed.err()).not.toMatch(/not found/i);
 
     const unconfirmed = harness(
-      [AuthAnswers.sandbox(), ConfirmationAnswers.loginUnconfirmed(EMAIL)],
+      [ConfirmationAnswers.loginUnconfirmed(EMAIL)],
       { stdin: PASSWORD },
     );
     expect(await unconfirmed.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
@@ -139,7 +139,7 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(unconfirmed.printed()).not.toContain('confirm-token');
 
     for (const code of ['no_entitlement', 'entitlement_lapsed', 'trial_ended', 'entitlements_unavailable'] as const) {
-      const plan = harness([AuthAnswers.sandbox(), ConfirmationAnswers.loginNoPlan(code)], { stdin: PASSWORD });
+      const plan = harness([ConfirmationAnswers.loginNoPlan(code)], { stdin: PASSWORD });
       expect(await plan.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
       expect(plan.err(), code).not.toContain('Raw entitlement text.');
       expect(plan.err(), code).toMatch(code === 'entitlements_unavailable' ? /try again/i : /plan/i);
@@ -147,10 +147,10 @@ describe('apps-cli: siren signup, login and the session', () => {
   });
 
   it('logs in to a person with one organization and keeps its session', async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.oneOrg()], { interactive: true, typed: [EMAIL], secrets: [PASSWORD] });
+    const h = harness([AuthAnswers.oneOrg()], { interactive: true, typed: [EMAIL], secrets: [PASSWORD] });
     expect(await h.run(['login']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /auth/signup-options', 'POST /auth/login']);
-    expect(bodyOf(h.http.requests[1])).toEqual({ email: EMAIL, password: PASSWORD });
+    expect(h.paths()).toEqual(['POST /auth/login']);
+    expect(bodyOf(h.http.requests[0])).toEqual({ email: EMAIL, password: PASSWORD });
     expect(h.secretPrompts).toHaveLength(1);
     expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 3, orgName: 'Acme', refreshToken: REFRESH_1 });
     for (const secret of [PASSWORD, ACCESS_1, REFRESH_1]) expect(h.printed()).not.toContain(secret);
@@ -158,22 +158,22 @@ describe('apps-cli: siren signup, login and the session', () => {
 
   it('picks one of several organizations by slug or id, and keeps no verification token', async () => {
     for (const choice of ['acme-two', '4']) {
-      const h = harness([AuthAnswers.sandbox(), AuthAnswers.severalOrgs(), AuthAnswers.tokens()], { stdin: PASSWORD });
+      const h = harness([AuthAnswers.severalOrgs(), AuthAnswers.tokens()], { stdin: PASSWORD });
       expect(await h.run(['login', '--email', EMAIL, '--password-stdin', '--org', choice]), h.err()).toBe(0);
-      expect(h.paths()).toEqual(['GET /auth/signup-options', 'POST /auth/login', 'POST /auth/select-org']);
-      expect(bodyOf(h.http.requests[2])).toEqual({ verificationToken: 'verification-token', orgId: 4 });
+      expect(h.paths()).toEqual(['POST /auth/login', 'POST /auth/select-org']);
+      expect(bodyOf(h.http.requests[1])).toEqual({ verificationToken: 'verification-token', orgId: 4 });
       expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 4, orgName: 'Acme Two', accessToken: ACCESS_2 });
       expect(h.credentialsText()).not.toContain('verification-token');
     }
 
-    const unchosen = harness([AuthAnswers.sandbox(), AuthAnswers.severalOrgs(), AuthAnswers.tokens()], { stdin: PASSWORD });
+    const unchosen = harness([AuthAnswers.severalOrgs(), AuthAnswers.tokens()], { stdin: PASSWORD });
     expect(await unchosen.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
     expect(unchosen.paths()).not.toContain('POST /auth/select-org');
     expect(unchosen.err()).toContain('acme-two');
   });
 
   it("answers a wrong password with Siren's message and keeps nothing", async () => {
-    const h = harness([AuthAnswers.sandbox(), AuthAnswers.wrongPassword()], { stdin: PASSWORD });
+    const h = harness([AuthAnswers.wrongPassword()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
     expect(h.err()).toContain("Invalid email or password. If you haven't set up your login yet, check your email for a link to set it up.");
     expect(h.printed()).not.toContain(PASSWORD);
@@ -181,12 +181,12 @@ describe('apps-cli: siren signup, login and the session', () => {
   });
 
   it('keeps --live for a live organization: refuses it on a sandbox, and requires it for a live session', async () => {
-    const sandbox = harness([AuthAnswers.sandbox()], { stdin: PASSWORD });
+    const sandbox = harness([], { stdin: PASSWORD });
     expect(await sandbox.run(['login', '--live', '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(sandbox.http.requests[0]?.url).toBe(`${LIVE_BASE_URL}/auth/signup-options`);
-    expect(sandbox.paths()).toEqual(['GET /auth/signup-options']);
+    expect(sandbox.editionReads[0]?.url).toBe(`${LIVE_BASE_URL}/auth/signup-options`);
+    expect(sandbox.paths()).toEqual([]);
 
-    const live = harness([reply(200, [app])]);
+    const live = harness([reply(200, [app])], { edition: 'production' });
     live.signedIn({ [BASE]: session({ edition: 'production' }) });
     expect(await live.run(['apps', 'list', '--base-url', BASE])).toBe(1);
     expect(live.http.requests).toHaveLength(0);
@@ -225,7 +225,7 @@ describe('apps-cli: siren signup, login and the session', () => {
       expect(h.err()).not.toBe('');
     }
 
-    const fromEnv = harness([AuthAnswers.sandbox()], { stdin: PASSWORD, env: { SIREN_BASE_URL: 'http://siren.example/siren/v1' } });
+    const fromEnv = harness([], { stdin: PASSWORD, env: { SIREN_BASE_URL: 'http://siren.example/siren/v1' } });
     expect(await fromEnv.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(2);
     expect(fromEnv.http.requests).toHaveLength(0);
   });
@@ -290,9 +290,10 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(bodyOf(h.http.requests[0])).toEqual({ refreshToken: REFRESH_1 });
     expect(Object.keys(h.credentials().sessions)).toEqual([BASE]);
 
-    const live = harness([AuthAnswers.loggedOut()]);
+    const live = harness([AuthAnswers.loggedOut()], { edition: 'production' });
     live.signedIn({ [BASE]: session({ edition: 'production' }) });
     expect(await live.run(['logout', '--base-url', BASE]), live.err()).toBe(0);
+    expect(live.paths()).toEqual(['POST /auth/logout']);
     expect(live.credentials().sessions).toEqual({});
   });
 
@@ -359,6 +360,27 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.out()).toContain('SIREN_APP_URL');
     expect(h.printed()).not.toContain(appEnv.SIREN_APP_URL);
     expect(h.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toEqual({ [KEY]: join(h.cwd, '.env.sandbox') });
+  });
+
+  it('says once, before sending, that a Siren in a container cannot reach an app on localhost, and names host.docker.internal', async () => {
+    const NOTE =
+      "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
+      'Use host.docker.internal in its place, and see "Running against your own Siren Cloud" in the README.\n';
+    for (const url of ['http://localhost:8787', 'http://127.0.0.1:8787/siren', 'http://localhost']) {
+      const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
+      h.signedIn();
+      h.write('siren.app.json', exampleFile);
+      expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+      expect(h.err(), url).toBe(NOTE);
+      expect(h.printed(), url).not.toContain(url);
+    }
+    for (const url of ['https://acme.example/siren', 'http://host.docker.internal:8787', 'https://localhost.acme.example']) {
+      const h = harness([reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });
+      h.signedIn();
+      h.write('siren.app.json', exampleFile);
+      expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+      expect(h.err(), url).toBe('');
+    }
   });
 
   it('leaves the env file as it is when a later apply answers no secret, and says when this machine holds no key', async () => {
@@ -601,6 +623,24 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     late.signedIn();
     expect(await late.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"failed"}'])).toBe(1);
     expect(late.err()).toContain('This request already has a different answer.');
+  });
+
+  it("says a person may answer only a request that needs attention, and where to see those, when Siren refuses a hand answer", async () => {
+    const early = harness([AppAnswers.notNeedingAttention()]);
+    early.signedIn();
+    expect(await early.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
+    expect(early.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`]);
+    expect(early.err()).toBe(
+      'siren: A person may answer only a request that needs attention. The app may still answer this one. ' +
+        'See the requests that need attention with siren apps requests --attention.\n',
+    );
+  });
+
+  it("prints Siren's message and its code for a refusal whose code the SDK does not know, and exits 1", async () => {
+    const h = harness([AppAnswers.unknownRefusal()]);
+    h.signedIn();
+    expect(await h.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
+    expect(h.err()).toBe("siren: Siren refused this answer for a reason this SDK does not know. Siren's code: made_up_refusal_code.\n");
   });
 
   it('sends a request again', async () => {

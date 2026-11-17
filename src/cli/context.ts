@@ -6,7 +6,7 @@ import type { StoredSession } from './credentials';
 import type { CliIo } from './io';
 import { SessionAuthClient } from './session-auth';
 import type { Edition, Membership, SessionTokens } from './session-auth';
-import { CliRefusal, assertEditionAllowed } from './targets';
+import { CliRefusal, assertEditionAllowed, assertSessionMatches, commandLine } from './targets';
 import type { Target } from './targets';
 
 /** How long before the access token's `exp` the tool refreshes it, in seconds. */
@@ -16,15 +16,25 @@ const REFRESH_EARLY_SECONDS = 60;
 const ACCESS_TOKEN_SECONDS = 3600;
 
 /**
- * The lines Siren's plan codes get, on login, organization choice, switch
- * and refresh (lib/Users/Service/Rest/Login.php, EntitlementException.php).
+ * The line Siren's plan code gets, on login, organization choice, switch and
+ * refresh (lib/Users/Service/Rest/Login.php, EntitlementException.php), with
+ * `login` the `siren login` line for this Siren, or undefined for a code
+ * that is no plan code.
  */
-export const PLAN_LINES: Readonly<Record<string, string>> = {
-  no_entitlement: 'The organization has no plan. Choose a plan in the Siren dashboard, then run siren login again.',
-  entitlement_lapsed: "The organization's plan has lapsed. Renew it in the Siren dashboard, then run siren login again.",
-  trial_ended: "The organization's trial has ended. Choose a plan in the Siren dashboard, then run siren login again.",
-  entitlements_unavailable: "Siren could not check the organization's plan just now. Try again in a minute.",
-};
+export function planLine(code: string | undefined, login: string): string | undefined {
+  switch (code) {
+    case 'no_entitlement':
+      return `The organization has no plan. Choose a plan in the Siren dashboard, then run ${login} again.`;
+    case 'entitlement_lapsed':
+      return `The organization's plan has lapsed. Renew it in the Siren dashboard, then run ${login} again.`;
+    case 'trial_ended':
+      return `The organization's trial has ended. Choose a plan in the Siren dashboard, then run ${login} again.`;
+    case 'entitlements_unavailable':
+      return "Siren could not check the organization's plan just now. Try again in a minute.";
+    default:
+      return undefined;
+  }
+}
 
 /** What `runCli` hands each command: its context, its own options and its arguments after the command words. */
 export interface CommandInput {
@@ -33,6 +43,12 @@ export interface CommandInput {
   io: CliIo;
   values: Readonly<Record<string, string | boolean | undefined>>;
   args: readonly string[];
+  /**
+   * A `siren` command line for a hint, with the flags that reach the Siren
+   * this command line named (`commandLine`). Set for every command, `apps
+   * init` included, which sends nothing.
+   */
+  command(words: string): string;
 }
 
 /** One command's body. Answers the exit code. Throws `CliRefusal`, `CliUsageError` or a `SirenError` to refuse. */
@@ -54,6 +70,7 @@ export class CommandContext {
   readonly store: CredentialStore;
   readonly auth: SessionAuthClient;
   private session: StoredSession | null = null;
+  private editionRead: Promise<Edition> | null = null;
 
   constructor(
     readonly io: CliIo,
@@ -74,15 +91,37 @@ export class CommandContext {
   }
 
   /**
-   * The stored session for this Siren, checked against `--live` before
-   * anything is sent. Refuses when there is none, naming `siren login`.
+   * The edition the target reports now, from `GET /auth/signup-options`.
+   * Read once per command run, at the first call, and the same answer is
+   * given to every later call in that run, so `apps requests --follow` and a
+   * refresh never read it again. A Siren that names none counts as live.
+   */
+  targetEdition(): Promise<Edition> {
+    this.editionRead ??= this.auth.edition();
+    return this.editionRead;
+  }
+
+  /**
+   * The stored session for this Siren, checked before anything else is sent
+   * with it: refused when there is none, naming `siren login`, and, once the
+   * target's edition is read, refused when the session was made for another
+   * address or edition (`assertSessionMatches`), or when `--live` does not
+   * match the edition (`assertEditionAllowed`). With no session nothing is
+   * sent at all.
    */
   async signedIn(): Promise<StoredSession> {
     const session = await this.store.get(this.target.baseUrl);
-    if (session === null) throw new CliRefusal(`You are not signed in to ${this.target.baseUrl}. Run siren login first.`);
-    assertEditionAllowed(this.target, session.edition);
+    if (session === null) throw new CliRefusal(`You are not signed in to ${this.target.baseUrl}. Run ${this.command('login')} first.`);
+    const edition = await this.targetEdition();
+    assertSessionMatches(this.target, session, edition);
+    assertEditionAllowed(this.target, edition);
     this.adopt(session);
     return session;
+  }
+
+  /** A `siren` command line for a hint, with the flags that reach this Siren (`commandLine`). */
+  command(words: string): string {
+    return commandLine(this.target, words);
   }
 
   /** Uses this session for the rest of the run, without the edition check. `logout` alone calls it directly. */
@@ -131,7 +170,7 @@ export class CommandContext {
     try {
       tokens = await this.auth.refresh(session.refreshToken);
     } catch (error) {
-      throw refreshRefusal(error);
+      throw refreshRefusal(error, this.command('login'));
     }
     this.session = { ...session, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, accessExpiresAt: this.expiryOf(tokens.accessToken) };
     await this.store.put(this.target.baseUrl, this.session);
@@ -163,6 +202,7 @@ export class CommandContext {
     const before = await this.store.get(this.target.baseUrl);
     const session: StoredSession = {
       edition,
+      baseUrl: this.target.baseUrl,
       email: tokens.user.email || email,
       userId: tokens.user.id,
       orgId: org.orgId,
@@ -209,12 +249,12 @@ export function jwtClaim(token: string, claim: string): unknown {
   }
 }
 
-/** The one line a failed refresh gets. */
-function refreshRefusal(error: unknown): CliRefusal {
-  const code = error instanceof SirenError ? error.code : undefined;
-  if (code !== undefined && PLAN_LINES[code] !== undefined) return new CliRefusal(PLAN_LINES[code]);
+/** The one line a failed refresh gets, with `login` the `siren login` line for this Siren. */
+function refreshRefusal(error: unknown, login: string): CliRefusal {
+  const plan = planLine(error instanceof SirenError ? error.code : undefined, login);
+  if (plan !== undefined) return new CliRefusal(plan);
   if (error instanceof ConnectionError || error instanceof ApiError) {
     return new CliRefusal('Siren could not renew your session just now. Try again in a minute.');
   }
-  return new CliRefusal('Your session has ended. Run siren login to sign in again.');
+  return new CliRefusal(`Your session has ended. Run ${login} to sign in again.`);
 }

@@ -1,0 +1,26 @@
+{
+  "capturedAt": "2026-11-17T09:07:29.830Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/apps/requests/apr_0123456789abcdef0123456789abcdef/answer",
+  "query": null,
+  "request": {
+    "authorization": "Bearer sk_test_<API_KEY>",
+    "contentType": "application/json",
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": {
+      "outcome": "paid"
+    }
+  },
+  "response": {
+    "status": 404,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "No request with this key was sent to this app.",
+        "code": "app_request_not_found",
+        "context": []
+      }
+    }
+  }
+}

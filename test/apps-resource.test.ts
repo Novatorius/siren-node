@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Siren } from '../src/client';
 import {
+  AppErrorCode,
   AuthenticationError,
   ConflictError,
   appErrorCode,
@@ -15,6 +16,7 @@ import { DEFAULT_BASE_URL, SANDBOX_BASE_URL } from '../src/http';
 import { AppsResource, MAX_APP_ANSWER_BYTES } from '../src/resources/apps';
 import type { DeclareAppParams } from '../src/record-types';
 import { FakeHttpClient, reply } from './http-fakes';
+import { capturedBody, capturedReply } from './cloud-captures';
 import { bodyOf, expectRetried, expectSentOnce, pathOf, queryOf, transportOver } from './record-fakes';
 
 import { APP_KEY, APP_REQUEST_ID, AppAnswers, appRecord, requestRow } from './apps-siren-answers';
@@ -328,6 +330,46 @@ describe('apps-cli: apps.requests.answer', () => {
         UnexpectedResponseError,
       );
     }
+  });
+
+  it("raises a person's answer to an ask that needs no attention as ConflictError app_request_not_needing_attention, and a code it does not know as Siren sent it", async () => {
+    const { apps: resource } = apps([AppAnswers.notNeedingAttention()]);
+    const error = await refused(() => resource.requests.answer(REQUEST, { outcome: 'paid' }));
+    expect(error).toBeInstanceOf(ConflictError);
+    expect(appErrorCode(error)).toBe(AppErrorCode.NotNeedingAttention);
+    expect(AppErrorCode.NotNeedingAttention).toBe('app_request_not_needing_attention');
+    expect((error as Error).message).toBe('A person may answer only a request that needs attention. The app may still answer this one.');
+
+    const unknown = apps([AppAnswers.unknownRefusal()]);
+    const other = await refused(() => unknown.apps.requests.answer(REQUEST, { outcome: 'paid' }));
+    expect(other).toBeInstanceOf(ConflictError);
+    expect(appErrorCode(other)).toBe('made_up_refusal_code');
+    expect((other as Error).message).toBe('Siren refused this answer for a reason this SDK does not know.');
+  });
+
+  // Siren's key check answers a missing or unknown bearer with 401 and no code, before the answer
+  // route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key, from
+  // saas/Auth/ApiKeyAuthMiddleware.php line 133 on feat/apps at 1557b0030).
+  it('gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized, with Siren\'s message', async () => {
+    for (const name of ['apps-answer-401-no-bearer', 'apps-answer-401-unknown-key']) {
+      const { http, apps: resource } = apps([capturedReply(name)]);
+      const error = await refused(() => resource.requests.answer(REQUEST, { outcome: 'paid' }));
+      expect(error, name).toBeInstanceOf(AuthenticationError);
+      expect((error as SirenError).code, name).toBe('app_answer_unauthorized');
+      expect(appErrorCode(error), name).toBe('app_answer_unauthorized');
+      expect((error as SirenError).statusCode).toBe(401);
+      expect((error as Error).message).toBe(capturedBody<{ error: { message: string } }>(name).error.message);
+      expect(http.requests.length, name).toBeLessThanOrEqual(2);
+    }
+
+    const other = apps([capturedReply('apps-answer-401-unknown-key')]);
+    const listed = await refused(() => other.apps.list());
+    expect(listed).toBeInstanceOf(AuthenticationError);
+    expect(appErrorCode(listed)).toBeUndefined();
+
+    const coded = apps([capturedReply('apps-list-401-app-key')]);
+    const keyRefused = await refused(() => coded.apps.requests.answer(REQUEST, { outcome: 'paid' }));
+    expect((keyRefused as SirenError).code).toBe('api_key_not_accepted');
   });
 });
 

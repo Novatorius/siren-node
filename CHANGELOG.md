@@ -198,7 +198,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`POST /apps/requests/{id}/answer`, with the app's own key or an admin's session).
   `requests.answer` throws
   `SirenError` before sending for an id that is not `apr_` and 32 hex characters, or an answer that
-  is not a plain object with a text `outcome` of at most 16384 bytes as JSON. It is sent once, and
+  is not a plain object with a text `outcome` of at most 16384 bytes as JSON. The 401 Siren sends
+  with no code for a missing or unknown bearer is raised as `AuthenticationError` with `code`
+  `app_answer_unauthorized`. A person may answer only a request that needs attention, and Siren
+  refuses any other hand answer with 409 `app_request_not_needing_attention`, which `AppErrorCode`
+  names as `NotNeedingAttention`. `siren apps answer` then prints Siren's line and points to
+  `siren apps requests --attention`, and prints the code of any refusal it does not know.
+  `WebhookSubscription` gains `appId`, the app that owns the subscription or `null`. The example's
+  `send-sale` prints how many conversions a sale made, or Siren's reason and message when it made
+  none, since a real Siren answers `recorded` for a visit or sale no program pays for.
+  `siren apps apply` says once, before sending, that a Siren in a container cannot reach an app url
+  on `localhost` or `127.0.0.1`, and names `host.docker.internal`. The README's new "Running against
+  your own Siren Cloud" lists the settings a self-run Siren needs. It is sent once, and
   sending the same answer again after a lost one answers `duplicate: true`. `requests.resend`
   sends nothing to the app for a request that holds an answer Siren has not applied, and Siren
   applies that answer instead. It raises `ConflictError` with `app_request_not_resendable` for an
@@ -222,7 +233,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file renamed over the old one. It refuses an env file that is a symbolic link, and a later
   `apps apply` and `apps rotate` stop before sending when the env file holds another Siren's key. `signup` and
   `login` refuse a credentials file others can read before the password is sent. It talks to the
-  sandbox unless told otherwise, and needs `--live` for a live organization.
+  sandbox unless told otherwise, and needs `--live` for a live organization. Its hidden password
+  prompt turns the terminal's echo off before it shows `Password: `, so a password typed the moment
+  the prompt appears is never shown, and gives the echo back however the prompt ends. Every command
+  that sends anything first reads the edition the Siren reports with `GET /auth/signup-options`,
+  once per run, and refuses a stored session made for another edition or address before it sends
+  anything with it, with one line that names the `siren login` to run. Every hint that names a
+  command carries the flags that reach the same Siren, such as `--live`. A request id, app key or
+  answer the command line gets wrong is refused in the tool's own words with exit code 2, before
+  anything is sent.
 - examples/apps/acme, an example app that checks each request, answers every ask and sends a sale
   with the app's own key.
 - `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppItem`,

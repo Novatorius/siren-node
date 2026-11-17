@@ -135,21 +135,37 @@ function askVisible(question: string): Promise<string> {
 
 /**
  * Asks on standard error and answers the line typed, echoing nothing. It
- * puts the terminal in raw mode, so no character is shown and Ctrl-C reaches
- * it as a character, and puts the mode back however the prompt ends.
- * Backspace removes the last character. Enter or Ctrl-D ends the line.
+ * puts the terminal in raw mode before it writes the question, so no
+ * character is shown and Ctrl-C reaches it as a character, and puts the mode
+ * back however the prompt ends. Backspace removes the last character. Enter
+ * or Ctrl-D ends the line.
+ *
+ * The order matters. `setRawMode` waits for the terminal to take the output
+ * already written (libuv sets the mode with TCSADRAIN), so a question written
+ * first lets a person who types the instant it appears get in before echo is
+ * off, and the terminal shows what they typed. The email prompt before this
+ * one leaves the terminal echoing, as readline does when it closes. Node
+ * itself also gives the terminal its mode back when the process exits.
  */
-function askHidden(question: string): Promise<string> {
-  const input = process.stdin;
-  process.stderr.write(question);
+export function askHidden(
+  question: string,
+  input: Pick<NodeJS.ReadStream, 'isRaw' | 'setRawMode' | 'on' | 'off' | 'resume' | 'pause'> = process.stdin,
+  output: Pick<NodeJS.WriteStream, 'write'> = process.stderr,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let typed = '';
+    let done = false;
     const wasRaw = input.isRaw;
+    const restore = () => {
+      if (input.isRaw !== wasRaw) input.setRawMode(wasRaw);
+    };
     const finish = (error?: Error) => {
+      if (done) return;
+      done = true;
       input.off('data', onData);
-      input.setRawMode(wasRaw);
+      restore();
       input.pause();
-      process.stderr.write('\n');
+      output.write('\n');
       if (error === undefined) resolve(typed);
       else reject(error);
     };
@@ -161,8 +177,14 @@ function askHidden(question: string): Promise<string> {
         else if (char >= ' ') typed += char;
       }
     };
-    input.setRawMode(true);
-    input.on('data', onData);
-    input.resume();
+    try {
+      // Echo goes off first, and only then does the question appear.
+      input.setRawMode(true);
+      output.write(question);
+      input.on('data', onData);
+      input.resume();
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }

@@ -1,0 +1,39 @@
+{
+  "capturedAt": "2026-11-17T09:07:31.100Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "GET /siren/v1/webhooks/1/deliveries",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": null,
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": [
+      {
+        "id": 1,
+        "webhookSubscriptionId": 1,
+        "eventType": "webhook.test",
+        "eventId": "evt_be33fdaa75b435abfa0092dc2da0b39a",
+        "payload": {
+          "test": true,
+          "webhookId": 1,
+          "message": "A test delivery from Siren. Real events carry the same headers and signature."
+        },
+        "status": "failed",
+        "attemptCount": 1,
+        "httpStatusCode": 400,
+        "responseBody": "{\"error\":\"unverified\"}",
+        "errorMessage": "HTTP 400",
+        "nextRetryAt": null,
+        "deliveredAt": null,
+        "dateCreated": "2026-11-17 09:07:30",
+        "dateModified": "2026-11-17 09:07:30"
+      }
+    ]
+  }
+}

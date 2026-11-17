@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadAppEnv } from '../examples/apps/acme/env.mjs';
 import { answerFor, createAcmeApp } from '../examples/apps/acme/handler.mjs';
-import { sendSale } from '../examples/apps/acme/sale.mjs';
+import { saleLine, sendSale } from '../examples/apps/acme/sale.mjs';
 import { Siren } from '../src/client';
 import type { HttpResponse } from '../src/http';
 import { FakeHttpClient, reply } from './http-fakes';
+import { capturedReply } from './cloud-captures';
 import { BASE, bodyOf, unavailable } from './record-fakes';
 
 /*
@@ -116,10 +117,9 @@ describe('apps-cli: the example app', () => {
   });
 
   it("sends a real sale with the app's own key: a visit, then a sale on its opportunity", async () => {
-    const http = new FakeHttpClient([
-      reply(200, { status: 'attributed' }, { 'X-Siren-OID': '501' }),
-      reply(200, { status: 'created' }, { 'X-Siren-OID': '501' }),
-    ]);
+    // A real Cloud answers both with `recorded` when no program pays for them
+    // (captures events-site-visited-200 and events-sale-200-no-program).
+    const http = new FakeHttpClient([capturedReply('events-site-visited-200'), capturedReply('events-sale-200-no-program')]);
     const siren = new Siren({ apiKey: APP_KEY, baseUrl: BASE, httpClient: http });
     const result = await sendSale(siren, { collaborator: 'tracking:ada', total: 49, currency: 'USD', externalId: 'acme-1' });
 
@@ -127,9 +127,37 @@ describe('apps-cli: the example app', () => {
     expect(http.bearers()).toEqual([`Bearer ${APP_KEY}`, `Bearer ${APP_KEY}`]);
     expect(bodyOf(http.requests[0])).toMatchObject({ collaboratorId: 'tracking:ada' });
     const sale = bodyOf(http.requests[1]) as Record<string, unknown>;
-    expect(sale).toMatchObject({ trackingId: 501, total: 49, currency: 'USD', externalId: 'acme-1', source: 'acme-example' });
+    expect(sale).toMatchObject({ trackingId: 1, total: 49, currency: 'USD', externalId: 'acme-1', source: 'acme-example' });
     expect(sale.test).not.toBe(true);
-    expect(result).toMatchObject({ opportunityId: 501, status: 'created' });
+    expect(result).toEqual({
+      opportunityId: 1,
+      status: 'recorded',
+      conversions: 0,
+      reason: 'no_program',
+      message: 'The sale was recorded. Nothing was awarded because no active program accepts sales.',
+    });
+  });
+
+  it('prints a sale that made a conversion apart from one that made none, with the reason Siren gave', async () => {
+    // A sale that made conversions: SaleIngestionService::ingest() answers
+    // `created` with each conversion's id and status
+    // (lib/Conversions/Engine/Core/Services/SaleIngestionService.php lines
+    // 208 to 217 and 478 to 493 on feat/apps at 1557b0030).
+    const made = new FakeHttpClient([
+      capturedReply('events-site-visited-200'),
+      reply(200, { status: 'created', created: true, transactionId: 7, conversions: [{ id: 88, status: 'pending' }], message: 'The sale was recorded and attributed.' }),
+    ]);
+    const conversion = await sendSale(new Siren({ apiKey: APP_KEY, baseUrl: BASE, httpClient: made }), { collaborator: 'tracking:ada', total: 49, currency: 'USD', externalId: 'acme-2' });
+    expect(saleLine('49', '/acme/.env.sandbox', conversion)).toBe(
+      'Sent a sale of 49 USD through /acme/.env.sandbox: Siren made 1 conversion on opportunity 1.',
+    );
+
+    const none = new FakeHttpClient([capturedReply('events-site-visited-200'), capturedReply('events-sale-200-no-program')]);
+    const recorded = await sendSale(new Siren({ apiKey: APP_KEY, baseUrl: BASE, httpClient: none }), { collaborator: 'tracking:ada', total: 49, currency: 'USD', externalId: 'acme-3' });
+    expect(saleLine('49', '/acme/.env.sandbox', recorded)).toBe(
+      'Sent a sale of 49 USD through /acme/.env.sandbox: Siren recorded it on opportunity 1 and made no conversion (no_program). ' +
+        'The sale was recorded. Nothing was awarded because no active program accepts sales.',
+    );
   });
 
   it('declares the scopes a sale needs and the shortest answer window on each ask', () => {

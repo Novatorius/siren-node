@@ -16,7 +16,9 @@ It checks every request with `siren.apps.verifyRequest()` and answers every ask 
 
 Each ask item declares the shortest answer window Siren allows, one minute, so an ask nobody answers
 needs attention after about three minutes: Siren sends it three times and waits one minute after
-each send.
+each send. That wait needs Siren's task worker. A Siren you run yourself needs
+`SIREN_DURABLE_TASKS` on, or the ask is sent once and never needs attention. "Running against your
+own Siren Cloud" in the package README lists that and the other settings a local Siren needs.
 
 ## Run it against the sandbox
 
@@ -26,7 +28,9 @@ From a checkout of this repository, with the `siren` command installed and signe
 1. Run `npm ci && npm run build` at the repository root, then `npm install` in this folder. The
    example takes the package from the checkout, so it runs in place.
 2. In a second terminal, start a tunnel to port 8787, such as
-   `cloudflared tunnel --url http://localhost:8787`, and keep the https address it prints.
+   `cloudflared tunnel --url http://localhost:8787`, and keep the https address it prints. Against a
+   Siren you run in a container, use `http://host.docker.internal:8787` instead, since that Siren
+   cannot reach `localhost` on your machine.
 3. Run `export SIREN_APP_URL=<that address>`, then `siren apps apply` in this folder. It declares
    the app, prints its items, and writes the app's key and signing secret to `.env.sandbox` in this
    folder, or `.env.live` for a live organization. Siren shows them once. Git ignores both files.
@@ -37,12 +41,14 @@ From a checkout of this repository, with the `siren` command installed and signe
    or "Acme: Acme ledger" on an autofulfiller, and give the program a collaborator.
 6. Run `npm run send-sale -- tracking:<code> 49` with that collaborator's tracking code. It records a
    visit and a sale with the app's own key, which holds the `event:site-visited` and `event:sale`
-   scopes, and prints what Siren did and the opportunity id.
+   scopes, and prints how many conversions the sale made on which opportunity. A sale that made none
+   prints Siren's reason, such as `no_program` when no active program accepts sales, and its message.
 7. Watch what Siren sends and what came back with `siren apps requests --follow`. The server prints
    a line for each request it acts on and each answer Siren accepts.
 
 Without a tunnel, set `SIREN_APP_URL` to any https address. Siren's deliveries then fail, and you
-answer each ask by hand with `siren apps answer`.
+answer each ask by hand with `siren apps answer` once `siren apps requests --attention` lists it. A
+person may answer only a request that needs attention.
 
 ## Before you copy it
 

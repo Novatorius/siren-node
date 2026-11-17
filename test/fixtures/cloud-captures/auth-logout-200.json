@@ -1,0 +1,22 @@
+{
+  "capturedAt": "2026-11-17T09:10:06.179Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/auth/logout",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": {
+      "refreshToken": "<REFRESHTOKEN>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "message": "Logged out successfully."
+    }
+  }
+}

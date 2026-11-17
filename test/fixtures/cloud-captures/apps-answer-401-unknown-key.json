@@ -1,0 +1,25 @@
+{
+  "capturedAt": "2026-11-17T09:07:07.176Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/apps/requests/apr_0123456789abcdef0123456789abcdef/answer",
+  "query": null,
+  "request": {
+    "authorization": "Bearer sk_test_<API_KEY>",
+    "contentType": "application/json",
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": {
+      "outcome": "paid"
+    }
+  },
+  "response": {
+    "status": 401,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "Invalid API key. Copy the key from Siren again, or make a new one under API keys.",
+        "context": []
+      }
+    }
+  }
+}

@@ -169,9 +169,21 @@ export const AppErrorCode = {
   RequestNotFound: 'app_request_not_found',
   /** 409 from the answer route: a different answer was accepted first, and it stands. */
   AlreadyAnswered: 'app_request_already_answered',
+  /**
+   * 409 from the answer route: a person answered an ask that does not need
+   * attention, such as one `pending` or `sent`, which the app may still
+   * answer. A person may answer only a request in `needs_attention`. The
+   * app's own key answers its own ask at any time before it is applied.
+   */
+  NotNeedingAttention: 'app_request_not_needing_attention',
   /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the item's kind refuses. */
   AnswerInvalid: 'app_answer_invalid',
-  /** 401 from the answer route: a bearer that is no app's key, such as a legacy org key. */
+  /**
+   * 401 from the answer route: no bearer, or one Siren does not know. Siren's
+   * key check sends that 401 with no code (captures apps-answer-401-no-bearer
+   * and apps-answer-401-unknown-key), and `apps.requests.answer()` gives it
+   * this code. An org key that is no app's gets 404 `app_request_not_found`.
+   */
   AnswerUnauthorized: 'app_answer_unauthorized',
   /** 403 from the answer route: a signed-in person who may not change apps. */
   AnswerForbidden: 'app_answer_forbidden',

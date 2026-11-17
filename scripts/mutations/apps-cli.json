@@ -689,8 +689,8 @@
   {
     "id": "login-edition-unchecked",
     "file": "src/cli/commands/session.ts",
-    "find": "  const edition = await run.auth.edition();\n  assertEditionAllowed(run.target, edition);\n\n  let result: LoginResult;",
-    "replace": "  const edition = await run.auth.edition();\n\n  let result: LoginResult;",
+    "find": "  const edition = await run.targetEdition();\n  assertEditionAllowed(run.target, edition);\n\n  let result: LoginResult;",
+    "replace": "  const edition = await run.targetEdition();\n\n  let result: LoginResult;",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
@@ -699,8 +699,8 @@
   {
     "id": "signup-edition-unchecked",
     "file": "src/cli/commands/session.ts",
-    "find": "  const edition = await run.auth.edition();\n  assertEditionAllowed(run.target, edition);\n\n  const orgName",
-    "replace": "  const edition = await run.auth.edition();\n\n  const orgName",
+    "find": "  const edition = await run.targetEdition();\n  assertEditionAllowed(run.target, edition);\n\n  const orgName",
+    "replace": "  const edition = await run.targetEdition();\n\n  const orgName",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
@@ -779,7 +779,7 @@
   {
     "id": "refresh-refusal-raw",
     "file": "src/cli/context.ts",
-    "find": "    } catch (error) {\n      throw refreshRefusal(error);",
+    "find": "    } catch (error) {\n      throw refreshRefusal(error, this.command('login'));",
     "replace": "    } catch (error) {\n      throw error;",
     "expect": "caught",
     "failing": [
@@ -809,7 +809,7 @@
   {
     "id": "refresh-plan-raw",
     "file": "src/cli/context.ts",
-    "find": "  if (code !== undefined && PLAN_LINES[code] !== undefined) return new CliRefusal(PLAN_LINES[code]);\n  if (error instanceof ConnectionError",
+    "find": "  if (plan !== undefined) return new CliRefusal(plan);\n  if (error instanceof ConnectionError",
     "replace": "  if (error instanceof ConnectionError",
     "expect": "caught",
     "failing": [
@@ -829,7 +829,7 @@
   {
     "id": "no-session-message",
     "file": "src/cli/context.ts",
-    "find": "Run siren login first.",
+    "find": "Run ${this.command('login')} first.",
     "replace": "Sign in first.",
     "expect": "caught",
     "failing": [
@@ -859,7 +859,7 @@
   {
     "id": "select-org-plan-raw",
     "file": "src/cli/commands/session.ts",
-    "find": "      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);\n    } catch (error) {\n      throw signInRefusal(error);",
+    "find": "      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);\n    } catch (error) {\n      throw signInRefusal(error, run.command('login'));",
     "replace": "      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);\n    } catch (error) {\n      throw error;",
     "expect": "caught",
     "failing": [
@@ -1019,7 +1019,7 @@
   {
     "id": "env-fallback-silent",
     "file": "src/cli/commands/apply.ts",
-    "find": "        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair.`,",
+    "find": "        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,",
     "replace": "        '',",
     "expect": "caught",
     "failing": [
@@ -1090,8 +1090,8 @@
   {
     "id": "init-key-unchecked",
     "file": "src/cli/commands/apply.ts",
-    "find": "  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {",
-    "replace": "  if (false) {",
+    "find": "  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {\n    throw new CliUsageError('--key takes",
+    "replace": "  if (false) {\n    throw new CliUsageError('--key takes",
     "expect": "caught",
     "failing": [
       "apps-cli internals: apply and the app key > refuses an app key Siren would refuse"
@@ -1290,8 +1290,8 @@
   {
     "id": "docs-answer-key",
     "file": "openapi.yaml",
-    "find": "404 app_request_not_found.\n      security:\n        - apiKey: []\n",
-    "replace": "404 app_request_not_found.\n      security:\n",
+    "find": "        app_answer_unauthorized.\n      security:\n        - apiKey: []\n",
+    "replace": "        app_answer_unauthorized.\n      security:\n",
     "expect": "caught",
     "failing": [
       "apps-cli docs > openapi.yaml documents the answer route"
@@ -1510,7 +1510,7 @@
   {
     "id": "signup-unconfirmed-vague",
     "file": "src/cli/commands/session.ts",
-    "find": "        'Open it from your inbox, confirm the address, then run siren login.',",
+    "find": "        `Open it from your inbox, confirm the address, then run ${run.command('login')}.`,",
     "replace": "        'Confirm it.',",
     "expect": "caught",
     "failing": [
@@ -1550,8 +1550,8 @@
   {
     "id": "login-plan-raw",
     "file": "src/cli/commands/session.ts",
-    "find": "  if (code !== undefined && PLAN_LINES[code] !== undefined) return new CliRefusal(PLAN_LINES[code]);\n",
-    "replace": "",
+    "find": "  const plan = planLine(code, login);\n  return plan === undefined ? error : new CliRefusal(plan);",
+    "replace": "  return error;",
     "expect": "caught",
     "failing": [
       "apps-cli: siren signup, login and the session > says what to do when Siren asks"
@@ -1580,7 +1580,7 @@
   {
     "id": "apply-no-key-silent",
     "file": "src/cli/commands/apply.ts",
-    "find": "    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run siren apps rotate ${key} to make a new key and save it there.`);\n",
+    "find": "    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate ${key}`)} to make a new key and save it there.`);\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -1681,7 +1681,7 @@
   {
     "id": "delete-open-asks-off",
     "file": "src/cli/commands/apply.ts",
-    "find": "Answer them, or wait for them to end: siren apps requests --app ${key}`);",
+    "find": "Answer them, or wait for them to end: ${run.command(`apps requests --app ${key}`)}`);",
     "replace": "Turn it off instead with siren apps off ${key}.`);",
     "expect": "caught",
     "failing": [
@@ -1960,8 +1960,8 @@
   {
     "id": "env-fate-prints-secret",
     "file": "src/cli/commands/apply.ts",
-    "find": "        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair.`,",
-    "replace": "        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair. ${rawKey} ${signingSecret}`,",
+    "find": "        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,",
+    "replace": "        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair. ${rawKey} ${signingSecret}`,",
     "expect": "caught",
     "failing": [
       "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"

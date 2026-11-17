@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { AppErrorCode, ErrorCode, SirenError, appErrorCode } from '../../errors';
 import type { AppAnswer, AppRequestListParams, AppRequestRecord } from '../../record-types';
+import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
+import { appKeyArgument } from './apply';
 import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
@@ -16,6 +19,15 @@ const FOLLOW_EVERY_MS = 2000;
 
 /** A request id: `apr_` and 32 lowercase hex characters. */
 const REQUEST_ID = /^apr_[0-9a-f]{32}$/;
+
+/**
+ * The request id a command line names, or `CliUsageError` in the tool's
+ * words, so the command answers 2 and sends nothing.
+ */
+export function requestIdArgument(id: string): string {
+  if (!REQUEST_ID.test(id)) throw new CliUsageError(`A request id is apr_ and 32 lowercase hex characters, and ${JSON.stringify(id)} is not one.`);
+  return id;
+}
 
 /**
  * `siren apps requests`: the latest requests, oldest first, one line each,
@@ -36,10 +48,10 @@ export async function appsRequests(input: CommandInput): Promise<number> {
 
   const run = contextOf(input);
   const { io } = input;
+  const appKey = typeof values.app === 'string' ? appKeyArgument(values.app) : undefined;
   await run.signedIn();
   const siren = run.siren();
   const filters: AppRequestListParams = values.attention ? { status: 'needs_attention' } : {};
-  const appKey = typeof values.app === 'string' ? values.app : undefined;
   let appId: number | undefined;
 
   const seen = new Map<string, string>();
@@ -77,7 +89,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
  * shown.
  */
 async function showRequest(input: CommandInput, id: string): Promise<number> {
-  if (!REQUEST_ID.test(id)) throw new CliUsageError('A request id is apr_ and 32 lowercase hex characters.');
+  requestIdArgument(id);
   const run = contextOf(input);
   await run.signedIn();
   const siren = run.siren();
@@ -114,7 +126,7 @@ async function showRequest(input: CommandInput, id: string): Promise<number> {
  */
 export async function appsAnswer(input: CommandInput): Promise<number> {
   const { io, values } = input;
-  const id = input.args[0] ?? '';
+  const id = requestIdArgument(input.args[0] ?? '');
   const body = typeof values.body === 'string' ? values.body : undefined;
   const file = typeof values.file === 'string' ? values.file : undefined;
   if ((body === undefined) === (file === undefined)) throw new CliUsageError('Give the answer with --body <json> or --file <path>, one of the two.');
@@ -129,10 +141,20 @@ export async function appsAnswer(input: CommandInput): Promise<number> {
   if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) {
     throw new CliUsageError('The answer must be a JSON object, such as {"outcome":"paid","reference":"acme-88"}.');
   }
+  const outcome = (answer as Record<string, unknown>).outcome;
+  if (typeof outcome !== 'string' || outcome === '') throw new CliUsageError('The answer needs a text outcome, such as {"outcome":"paid"}.');
+  if (Buffer.byteLength(JSON.stringify(answer), 'utf8') > MAX_APP_ANSWER_BYTES) {
+    throw new CliUsageError(`The answer is longer than ${MAX_APP_ANSWER_BYTES} bytes as JSON, which Siren refuses.`);
+  }
 
   const run = contextOf(input);
   await run.signedIn();
-  const receipt = await run.siren().apps.requests.answer(id, answer as AppAnswer);
+  let receipt;
+  try {
+    receipt = await run.siren().apps.requests.answer(id, answer as AppAnswer);
+  } catch (error) {
+    throw answerRefusal(run, error);
+  }
   run.print(receipt.duplicate ? 'Siren already had this answer. Nothing changed.' : 'Siren accepted the answer.');
   return 0;
 }
@@ -140,10 +162,31 @@ export async function appsAnswer(input: CommandInput): Promise<number> {
 /** `siren apps resend <id>`: sends the request again and prints it as it now stands. */
 export async function appsResend(input: CommandInput): Promise<number> {
   const run = contextOf(input);
+  const id = requestIdArgument(input.args[0] ?? '');
   await run.signedIn();
-  const row = await run.siren().apps.requests.resend(input.args[0] ?? '');
+  const row = await run.siren().apps.requests.resend(id);
   run.print(requestLine(row));
   return 0;
+}
+
+/** Every code this SDK knows, so a refusal with any other one prints the code beside Siren's message. */
+const KNOWN_CODES: ReadonlySet<string> = new Set<string>([...Object.values(AppErrorCode), ...Object.values(ErrorCode)]);
+
+/**
+ * The refusal `apps answer` prints for an error from the answer route. A
+ * person's answer to an ask that does not need attention says where to see
+ * the ones that do. A refusal with a code this SDK does not know, such as
+ * one a newer Siren sends, prints Siren's message and the code, and exits 1
+ * like any other refusal. Anything else passes as it is.
+ */
+function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unknown {
+  if (!(error instanceof SirenError) || error.statusCode === undefined) return error;
+  const code = appErrorCode(error);
+  if (code === AppErrorCode.NotNeedingAttention) {
+    return new CliRefusal(`${error.message} See the requests that need attention with ${run.command('apps requests --attention')}.`);
+  }
+  if (code !== undefined && !KNOWN_CODES.has(code)) return new CliRefusal(`${error.message} Siren's code: ${code}.`);
+  return error;
 }
 
 /** One request as a line: its id, status, mode and kind, item, subject, sends, time and last error. */
