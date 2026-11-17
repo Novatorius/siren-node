@@ -1,5 +1,5 @@
 import { SirenError } from '../../errors';
-import { PLAN_LINES, contextOf, jwtClaim } from '../context';
+import { contextOf, jwtClaim, planLine } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { PasswordSignIn, askLine, readPassword } from '../session-auth';
@@ -43,7 +43,7 @@ export async function signup(input: CommandInput): Promise<number> {
     (io.interactive && /^y(es)?$/i.test((await io.prompt("Do you accept Siren's Terms of Service and Privacy Policy? (y/N) ")).trim()));
   if (!accepted) {
     throw new CliRefusal(
-      "Siren makes an organization only for a person who accepts its Terms of Service and Privacy Policy. Run siren signup again with --accept-terms to accept them.",
+      `Siren makes an organization only for a person who accepts its Terms of Service and Privacy Policy. Run ${run.command('signup --accept-terms')} to accept them.`,
     );
   }
   if (orgName === '' || email === '') throw new CliRefusal('Siren needs an organization name and an email address to sign up.');
@@ -54,7 +54,7 @@ export async function signup(input: CommandInput): Promise<number> {
     registered = await run.auth.registerOrg({ orgName, email, password, acceptTerms: true });
   } catch (error) {
     if ((error as SirenError).statusCode === 404) {
-      throw new CliRefusal(`Sign-up is turned off on ${run.target.baseUrl}. Ask its owner, or use siren login.`);
+      throw new CliRefusal(`Sign-up is turned off on ${run.target.baseUrl}. Ask its owner, or use ${run.command('login')}.`);
     }
     throw error;
   }
@@ -63,7 +63,7 @@ export async function signup(input: CommandInput): Promise<number> {
   if (registered.tokens === null) {
     run.print(
       `Made ${org.orgName} (${org.orgSlug}) on ${run.target.baseUrl}. Siren sent a confirmation email to ${email}. ` +
-        'Open it from your inbox, confirm the address, then run siren login.',
+        `Open it from your inbox, confirm the address, then run ${run.command('login')}.`,
     );
     return 0;
   }
@@ -99,7 +99,7 @@ export async function login(input: CommandInput): Promise<number> {
   try {
     result = await new PasswordSignIn().signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
   } catch (error) {
-    throw signInRefusal(error);
+    throw signInRefusal(error, run.command('login'));
   }
 
   const wanted = text(values.org);
@@ -111,7 +111,7 @@ export async function login(input: CommandInput): Promise<number> {
     org = result.memberships.find((membership) => membership.orgId === orgId) ?? result.memberships[0];
     if (org === undefined) throw new CliRefusal('Siren signed you in but named no organization. Sign in to the dashboard to check your membership.');
     if (wanted !== undefined && findOrg([org], wanted) === undefined) {
-      throw new CliRefusal(`You belong only to ${org.orgName} (${org.orgSlug}). Run siren login again without --org.`);
+      throw new CliRefusal(`You belong only to ${org.orgName} (${org.orgSlug}). Run ${run.command('login')} without --org.`);
     }
   } else {
     const memberships = result.memberships;
@@ -119,13 +119,13 @@ export async function login(input: CommandInput): Promise<number> {
     org = choice === undefined ? undefined : findOrg(memberships, choice);
     if (org === undefined) {
       throw new CliRefusal(
-        `You belong to several organizations. Run siren login again with --org and one of: ${memberships.map((membership) => membership.orgSlug).join(', ')}.`,
+        `You belong to several organizations. Run ${run.command('login --org <slug>')} with one of: ${memberships.map((membership) => membership.orgSlug).join(', ')}.`,
       );
     }
     try {
       tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);
     } catch (error) {
-      throw signInRefusal(error);
+      throw signInRefusal(error, run.command('login'));
     }
   }
 
@@ -200,7 +200,7 @@ export async function use(input: CommandInput): Promise<number> {
   try {
     tokens = await run.withAccessToken((token) => run.auth.switchOrg(token, org.orgId));
   } catch (error) {
-    throw signInRefusal(error);
+    throw signInRefusal(error, run.command('login'));
   }
   await run.keep(tokens, org, session.edition, session.email);
   run.print(`Now using ${org.orgName} (${org.orgSlug}) on ${run.target.baseUrl}.`);
@@ -220,16 +220,17 @@ export function confirmationLine(window: EmailConfirmationWindow | undefined, no
 
 /**
  * The one line Siren's sign-in refusals get: an address to confirm, or a
- * plan to choose or renew. Any other error is answered as it is, so a wrong
- * password shows Siren's own message.
+ * plan to choose or renew, with `login` the `siren login` line for this
+ * Siren. Any other error is answered as it is, so a wrong password shows
+ * Siren's own message.
  */
-function signInRefusal(error: unknown): unknown {
+function signInRefusal(error: unknown, login: string): unknown {
   const code = error instanceof SirenError ? error.code : undefined;
   if (code === 'email_unconfirmed') {
-    return new CliRefusal('Confirm your email address first. Open the email Siren sent from your inbox, confirm the address, then run siren login again.');
+    return new CliRefusal(`Confirm your email address first. Open the email Siren sent from your inbox, confirm the address, then run ${login} again.`);
   }
-  if (code !== undefined && PLAN_LINES[code] !== undefined) return new CliRefusal(PLAN_LINES[code]);
-  return error;
+  const plan = planLine(code, login);
+  return plan === undefined ? error : new CliRefusal(plan);
 }
 
 /** The membership whose slug or id is `wanted`. */

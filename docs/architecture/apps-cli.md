@@ -269,6 +269,13 @@ as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps in
   session made on a sandbox never lists or changes a live organization because the same address
   became live, and a live session never acts on a Siren that became a sandbox. The checkpoint saw
   both against a real Cloud (e2e steps 20a and 20l) before this check.
+- Every hint that names a command carries the flags that reach the same Siren: `--live` for a live
+  one, and the `--base-url <address>` or `--sandbox` the person typed. An address that came from
+  `SIREN_BASE_URL` or the default adds nothing, since the next command reads it the same way.
+  `commandLine` in src/cli/targets.ts builds every such hint, `apps init` included. Before, `apply
+  --live` printed `Run siren apps rotate <key> ...`, which a live Siren refuses without `--live`
+  (e2e step 20g). test/cli-hints.test.ts runs each path that prints a hint against a live Siren
+  and checks every `siren` command it printed.
 - `logout` reads the edition too. On a mismatch it sends the tokens nowhere and forgets the
   session on this machine, since the tokens were made for another Siren. When the edition cannot
   be read, it forgets the session anyway, as it does when Siren refuses the sign-out.

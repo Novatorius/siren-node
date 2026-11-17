@@ -55,7 +55,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
     await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}.env.*\n`);
     io.stdout(`Added .env.* to ${ignorePath}, so the key apply saves stays out of git.\n`);
   }
-  io.stdout(`Set SIREN_APP_URL to your app's https address, then run siren apps apply.\n`);
+  io.stdout(`Set SIREN_APP_URL to your app's https address, then run ${input.command('apps apply')}.\n`);
   return 0;
 }
 
@@ -77,7 +77,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   const shown = input.args[0] ?? APP_FILE_NAME;
   const path = resolve(io.cwd, shown);
   const text = await readText(path);
-  if (text === undefined) throw new CliRefusal(`There is no app file at ${path}. Write one with siren apps init.`);
+  if (text === undefined) throw new CliRefusal(`There is no app file at ${path}. Write one with ${run.command('apps init')}.`);
 
   const parsed = parseAppFile(text, io.env);
   if (parsed.file === null) {
@@ -96,7 +96,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   if (held !== undefined && held !== run.target.baseUrl) {
     throw new CliRefusal(
       `${envPath} holds the key for ${held}, and this apply is for ${run.target.baseUrl}, so nothing was sent. ` +
-        `Move that file aside to keep its key, then run siren apps apply again.`,
+        `Move that file aside to keep its key, then run ${run.command('apps apply')} again.`,
     );
   }
   const siren = run.siren();
@@ -113,7 +113,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   }
   await run.remember(key, envPath);
   if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
-    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run siren apps rotate ${key} to make a new key and save it there.`);
+    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate ${key}`)} to make a new key and save it there.`);
   }
   return 0;
 }
@@ -127,7 +127,7 @@ export async function appsList(input: CommandInput): Promise<number> {
     run.print(JSON.stringify(apps, null, 2));
     return 0;
   }
-  if (apps.length === 0) run.print(`No apps on ${run.target.baseUrl} yet. Write one with siren apps init, then run siren apps apply.`);
+  if (apps.length === 0) run.print(`No apps on ${run.target.baseUrl} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
   for (const app of apps) for (const line of appLines(app)) run.print(line);
   return 0;
 }
@@ -175,7 +175,7 @@ export async function appsRotate(input: CommandInput): Promise<number> {
   }
   if (envPath === undefined) {
     throw new CliRefusal(
-      `This machine has no record of where ${key}'s key lives, so nothing was sent. Run siren apps rotate ${key} --app-file <path to siren.app.json>, and the new key goes beside that file.`,
+      `This machine has no record of where ${key}'s key lives, so nothing was sent. Run ${run.command(`apps rotate ${key} --app-file <path to siren.app.json>`)}, and the new key goes beside that file.`,
     );
   }
   const problem = await envFileProblem(envPath);
@@ -184,7 +184,7 @@ export async function appsRotate(input: CommandInput): Promise<number> {
   if (held !== undefined && held !== run.target.baseUrl) {
     throw new CliRefusal(
       `${envPath} holds the key for ${held}, and this rotate is for ${run.target.baseUrl}, so nothing was sent and both keys still work. ` +
-        `Move that file aside to keep its key, then run siren apps rotate ${key} again.`,
+        `Move that file aside to keep its key, then run ${run.command(`apps rotate ${key}`)} again.`,
     );
   }
 
@@ -207,13 +207,13 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   const key = input.args[0] ?? '';
   if (values.yes !== true) {
     const typed = io.interactive ? (await io.prompt(`Deleting ${key} revokes its key and cannot be undone. Type ${key} to delete it: `)).trim() : undefined;
-    if (typed !== key) throw new CliRefusal(`Deleting ${key} revokes its key and cannot be undone. Run siren apps delete ${key} --yes to delete it.`);
+    if (typed !== key) throw new CliRefusal(`Deleting ${key} revokes its key and cannot be undone. Run ${run.command(`apps delete ${key} --yes`)} to delete it.`);
   }
   await run.signedIn();
   try {
     await run.siren().apps.delete(key);
   } catch (error) {
-    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(inUseLines(key, error));
+    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(inUseLines(run, key, error));
     throw error;
   }
   run.print(`Deleted ${key} from ${run.target.baseUrl}. Its key no longer works.`);
@@ -242,17 +242,17 @@ async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Pr
 }
 
 /** The lines a delete that records or open asks still hold gets. */
-function inUseLines(key: string, error: ConflictError): string {
+function inUseLines(run: CommandContext, key: string, error: ConflictError): string {
   const data = (typeof error.data === 'object' && error.data !== null ? error.data : {}) as { uses?: unknown; openRequests?: unknown };
   const uses = typeof data.uses === 'object' && data.uses !== null && !Array.isArray(data.uses) ? Object.entries(data.uses as Record<string, unknown>) : [];
   const open = typeof data.openRequests === 'number' ? data.openRequests : 0;
   const lines = [`Siren kept ${key}.`];
   if (uses.length > 0) {
     lines.push(`Records still select its items: ${uses.map(([ref, count]) => `${ref} (${String(count)})`).join(', ')}.`);
-    lines.push(`Turn it off instead with siren apps off ${key}. Siren then stops calling it and keeps what it already did.`);
+    lines.push(`Turn it off instead with ${run.command(`apps off ${key}`)}. Siren then stops calling it and keeps what it already did.`);
   }
   if (open > 0) {
-    lines.push(`It has ${open} open ${open === 1 ? 'ask' : 'asks'}. Answer them, or wait for them to end: siren apps requests --app ${key}`);
+    lines.push(`It has ${open} open ${open === 1 ? 'ask' : 'asks'}. Answer them, or wait for them to end: ${run.command(`apps requests --app ${key}`)}`);
   }
   if (uses.length === 0 && open === 0) lines.push(error.message);
   return lines.join('\n');
@@ -275,7 +275,7 @@ async function saveSecrets(run: CommandContext, key: string, envPath: string, ra
     run.warn(
       `Siren issued a new key and signing secret for ${key}, and they could not be saved to ${envPath} (${(error as Error).message}). ` +
         (revoked ? `The old key in ${envPath} was revoked when Siren rotated it, so stop using it. ` : '') +
-        `Siren shows a pair only once, so this one is lost. Run siren apps rotate ${key} to issue a new pair.`,
+        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,
     );
     return false;
   }

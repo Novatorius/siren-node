@@ -6,7 +6,7 @@ import * as session from './commands/session';
 import { CommandContext } from './context';
 import type { CommandHandler } from './context';
 import type { CliIo } from './io';
-import { CliUsageError, resolveTarget } from './targets';
+import { CliUsageError, commandLine, resolveTarget } from './targets';
 
 /**
  * The version `siren --version` prints, the package's.
@@ -196,7 +196,13 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
 
     const flags = { sandbox: values.sandbox === true, live: values.live === true, baseUrl: typeof values['base-url'] === 'string' ? values['base-url'] : undefined };
     const context = spec.offline ? null : new CommandContext(io, resolveTarget(flags, io.env));
-    return await spec.run({ context, io, values: values as Record<string, string | boolean | undefined>, args });
+    // A command that sends nothing checks no address, so its hints repeat the flags as typed.
+    const hintTarget = context?.target ?? {
+      live: flags.live,
+      addressFlag: flags.baseUrl !== undefined ? ` --base-url ${flags.baseUrl}` : flags.sandbox ? ' --sandbox' : '',
+    };
+    const command = (words: string) => commandLine(hintTarget, words);
+    return await spec.run({ context, io, values: values as Record<string, string | boolean | undefined>, args, command });
   } catch (error) {
     if (error instanceof CliUsageError) {
       io.stderr(`siren: ${error.message}\n${spec === undefined ? 'Run siren --help to see the commands.' : `Usage: siren ${spec.usage}`}\n`);

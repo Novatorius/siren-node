@@ -104,5 +104,65 @@
     "failing": [
       "apps-cli: the edition the target reports now, on every command > refuses a session stored for a sandbox when the target is now live"
     ]
+  },
+  {
+    "id": "e2e-3-hint-drops-live",
+    "file": "src/cli/targets.ts",
+    "find": "  return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;",
+    "replace": "  return `siren ${words}${target.addressFlag}`;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: apply of an app this machine holds no key for"
+    ]
+  },
+  {
+    "id": "e2e-3-hint-drops-address",
+    "file": "src/cli/targets.ts",
+    "find": "  return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;",
+    "replace": "  return `siren ${words}${live ? ' --live' : ''}`;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: delete without --yes"
+    ]
+  },
+  {
+    "id": "e2e-3-rotate-hint-plain",
+    "file": "src/cli/commands/apply.ts",
+    "find": "Run ${run.command(`apps rotate ${key}`)} to make a new key and save it there.`);",
+    "replace": "Run siren apps rotate ${key} to make a new key and save it there.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: apply of an app this machine holds no key for"
+    ]
+  },
+  {
+    "id": "e2e-3-init-hint-plain",
+    "file": "src/cli/commands/apply.ts",
+    "find": "then run ${input.command('apps apply')}.\\n`);",
+    "replace": "then run siren apps apply.\\n`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: apps init"
+    ]
+  },
+  {
+    "id": "e2e-3-plan-hint-plain",
+    "file": "src/cli/context.ts",
+    "find": "      return `The organization's trial has ended. Choose a plan in the Siren dashboard, then run ${login} again.`;",
+    "replace": "      return `The organization's trial has ended. Choose a plan in the Siren dashboard, then run siren login again.`;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: a refresh refused for the plan"
+    ]
+  },
+  {
+    "id": "e2e-3-sandbox-hint-gains-live",
+    "file": "src/cli/targets.ts",
+    "find": "export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live): string {",
+    "replace": "export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = true): string {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on the sandbox named by --sandbox or by nothing"
+    ]
   }
 ]

@@ -81,7 +81,7 @@ export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, s
  * names a command a person cannot run as printed is no help, so every hint
  * that names a command is built here.
  */
-export function commandLine(target: Target, words: string, live: boolean = target.live): string {
+export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live): string {
   return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;
 }
 
