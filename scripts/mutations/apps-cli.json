@@ -27,9 +27,9 @@
   },
   {
     "id": "control-wrong-reason",
-    "file": "src/resources/apps.ts",
-    "find": "    if (Math.abs(now - t) > tolerance)",
-    "replace": "    if (Math.abs(now - t) > tolerance + 1e9)",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (Math.abs(now - t) > tolerance + 1e9)",
     "expect": "wrong-reason",
     "failing": [
       "apps-cli: apps.declare > is sent once"
@@ -37,9 +37,9 @@
   },
   {
     "id": "verify-legacy-fallback",
-    "file": "src/resources/apps.ts",
-    "find": "    if (v2 === undefined) throw new SignatureVerificationError('The request has no X-Siren-Signature-V2 header.');",
-    "replace": "    if (v2 === undefined) return JSON.parse(String(rawBody)) as AppRequest;",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (v2 === undefined) throw new SignatureVerificationError('The request has no X-Siren-Signature-V2 header.');",
+    "replace": "  if (v2 === undefined) return JSON.parse(String(rawBody)) as AppRequest;",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses a request with no timestamped signature"
@@ -47,9 +47,9 @@
   },
   {
     "id": "verify-tolerance-dropped",
-    "file": "src/resources/apps.ts",
-    "find": "    if (Math.abs(now - t) > tolerance)",
-    "replace": "    if (Math.abs(now - t) > tolerance + 1e9)",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (Math.abs(now - t) > tolerance + 1e9)",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses a timestamp more than 300 seconds off"
@@ -57,9 +57,9 @@
   },
   {
     "id": "verify-tolerance-boundary",
-    "file": "src/resources/apps.ts",
-    "find": "    if (Math.abs(now - t) > tolerance)",
-    "replace": "    if (Math.abs(now - t) >= tolerance)",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (Math.abs(now - t) >= tolerance)",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses a timestamp more than 300 seconds off"
@@ -67,9 +67,9 @@
   },
   {
     "id": "verify-tolerance-one-sided",
-    "file": "src/resources/apps.ts",
-    "find": "    if (Math.abs(now - t) > tolerance)",
-    "replace": "    if (now - t > tolerance)",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (now - t > tolerance)",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses a timestamp more than 300 seconds off"
@@ -77,9 +77,9 @@
   },
   {
     "id": "verify-tolerance-option-ignored",
-    "file": "src/resources/apps.ts",
-    "find": "    const tolerance = options.toleranceSeconds ?? DEFAULT_APP_REQUEST_TOLERANCE_SECONDS;",
-    "replace": "    const tolerance = DEFAULT_APP_REQUEST_TOLERANCE_SECONDS;",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const tolerance = given.toleranceSeconds ?? defaultTolerance;",
+    "replace": "  const tolerance = defaultTolerance;",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > reads toleranceSeconds"
@@ -87,7 +87,7 @@
   },
   {
     "id": "verify-time-not-signed",
-    "file": "src/resources/apps.ts",
+    "file": "src/resources/app-requests.ts",
     "find": "update(`${t}.`)",
     "replace": "update('')",
     "expect": "caught",
@@ -97,9 +97,9 @@
   },
   {
     "id": "verify-timestamp-header-ignored",
-    "file": "src/resources/apps.ts",
-    "find": "    if (stamp !== undefined && stamp !== String(t)) {",
-    "replace": "    if (false) {",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (stamp !== undefined && stamp !== String(t)) {",
+    "replace": "  if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses an X-Siren-Timestamp that differs"
@@ -107,9 +107,9 @@
   },
   {
     "id": "verify-event-ignored",
-    "file": "src/resources/apps.ts",
-    "find": "    if (event !== undefined && event !== 'app.request') {",
-    "replace": "    if (false) {",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (event !== undefined && event !== 'app.request') {",
+    "replace": "  if (false) {",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses an ordinary webhook"
@@ -117,9 +117,9 @@
   },
   {
     "id": "verify-empty-secret",
-    "file": "src/resources/apps.ts",
-    "find": "    if (typeof secret !== 'string' || secret === '')",
-    "replace": "    if (typeof secret !== 'string')",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof secret !== 'string' || secret === '')",
+    "replace": "  if (typeof secret !== 'string')",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses an empty secret or a bad tolerance"
@@ -127,9 +127,9 @@
   },
   {
     "id": "verify-tolerance-range",
-    "file": "src/resources/apps.ts",
-    "find": "    if (!Number.isInteger(tolerance) || tolerance < 1 || tolerance > 3600) {",
-    "replace": "    if (!Number.isInteger(tolerance) || tolerance < 1 || tolerance > 36000) {",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (!Number.isInteger(tolerance) || tolerance < 1 || tolerance > MAX_TOLERANCE_SECONDS) {",
+    "replace": "  if (!Number.isInteger(tolerance) || tolerance < 1 || tolerance > MAX_TOLERANCE_SECONDS * 10) {",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses an empty secret or a bad tolerance"
@@ -137,8 +137,8 @@
   },
   {
     "id": "verify-version-unchecked",
-    "file": "src/resources/apps.ts",
-    "find": "      body.version === 1 &&\n",
+    "file": "src/resources/app-requests.ts",
+    "find": "    body.version === 1 &&\n",
     "replace": "",
     "expect": "caught",
     "failing": [
@@ -147,9 +147,9 @@
   },
   {
     "id": "verify-ask-fields-unchecked",
-    "file": "src/resources/apps.ts",
-    "find": "      (body.mode === 'tell' || (typeof body.answerBy === 'string' && typeof body.answerUrl === 'string'));",
-    "replace": "      true;",
+    "file": "src/resources/app-requests.ts",
+    "find": "    (body.mode === 'tell' || (typeof body.answerBy === 'string' && typeof body.answerUrl === 'string'))",
+    "replace": "    true",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > refuses a signed body that is not an app request"
@@ -157,9 +157,9 @@
   },
   {
     "id": "verify-first-v1-only",
-    "file": "src/resources/apps.ts",
-    "find": "    const matched = signatures.some(",
-    "replace": "    const matched = signatures.slice(0, 1).some(",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const matched = signatures.some(",
+    "replace": "  const matched = signatures.slice(0, 1).some(",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > reads headers in any case"
@@ -167,12 +167,52 @@
   },
   {
     "id": "verify-delivery-dropped",
-    "file": "src/resources/apps.ts",
-    "find": "    const delivery = header(headers, 'X-Siren-Delivery');",
-    "replace": "    const delivery = undefined as string | undefined;",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const delivery = readHeader(headers, 'X-Siren-Delivery');",
+    "replace": "  const delivery = undefined as string | undefined;",
     "expect": "caught",
     "failing": [
       "apps-cli: apps.verifyRequest > checks the request Siren signed"
+    ]
+  },
+  {
+    "id": "verify-parsed-body",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof rawBody !== 'string' && !(rawBody instanceof Uint8Array)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses a parsed body with SirenError"
+    ]
+  },
+  {
+    "id": "verify-clock-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof now !== 'number' || !Number.isFinite(now)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses a clock that is not a finite number"
+    ]
+  },
+  {
+    "id": "verify-options-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (options !== undefined && !isJsonObject(options)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses options that are not an object"
+    ]
+  },
+  {
+    "id": "verify-two-times",
+    "file": "src/resources/app-requests.ts",
+    "find": "times.length === 1 && ",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses a V2 header that names two times"
     ]
   },
   {

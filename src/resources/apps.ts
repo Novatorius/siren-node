@@ -1,4 +1,5 @@
 import type { HttpTransport } from '../http';
+import { verifyAppRequest } from './app-requests';
 import type {
   App,
   AppAnswer,
@@ -266,10 +267,6 @@ export class AppsResource {
     secret: string,
     options: VerifyAppRequestOptions = {},
   ): AppRequest {
-    void rawBody;
-    void headers;
-    void secret;
-    void options;
-    return {} as AppRequest;
+    return verifyAppRequest(rawBody, headers, secret, options, DEFAULT_APP_REQUEST_TOLERANCE_SECONDS);
   }
 }
