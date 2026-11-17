@@ -99,14 +99,14 @@ describe('apps-cli internals: apply and the app key', () => {
   it('refuses --app-file that names no file, before sending', async () => {
     const h = harness([reply(200, { ...appRecord(), rawKey: `sk_test_${'1b'.repeat(32)}`, signingSecret: '9c'.repeat(32) })]);
     h.signedIn();
-    expect(await h.run(['apps', 'rotate', APP_KEY, '--app-file', 'missing/siren.app.json'])).toBe(1);
+    expect(await h.run(['apps', 'rotate-key', APP_KEY, '--yes', '--app-file', 'missing/siren.app.json'])).toBe(1);
     expect(h.http.requests).toHaveLength(0);
   });
 
   it('refuses --app-file that names no file in a folder that exists, before sending', async () => {
     const h = harness([reply(200, { ...appRecord(), rawKey: `sk_test_${'1b'.repeat(32)}`, signingSecret: '9c'.repeat(32) })]);
     h.signedIn();
-    expect(await h.run(['apps', 'rotate', APP_KEY, '--app-file', 'siren.app.json'])).toBe(1);
+    expect(await h.run(['apps', 'rotate-key', APP_KEY, '--yes', '--app-file', 'siren.app.json'])).toBe(1);
     expect(h.http.requests).toHaveLength(0);
     expect(h.err()).toContain('There is no app file');
   });
@@ -165,7 +165,7 @@ describe('apps-cli internals: the stored files before a secret is sent', () => {
       h.signedIn();
       h.write('siren.app.json', '{}');
       h.write('.env.sandbox', held);
-      expect(await h.run(['apps', 'rotate', APP_KEY, '--app-file', 'siren.app.json']), other).toBe(1);
+      expect(await h.run(['apps', 'rotate-key', APP_KEY, '--yes', '--app-file', 'siren.app.json']), other).toBe(1);
       expect(h.http.requests, other).toHaveLength(0);
       expect(h.err()).toContain(other);
       expect(h.err()).toContain(SANDBOX_BASE_URL);

@@ -11,14 +11,16 @@ import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
 
 /*
- * `siren apps init`, `apply`, `list`, `show`, `on`, `off`, `rotate` and
- * `delete`: the app file, the app on Siren, and its key on this machine.
+ * `siren apps init`, `apply`, `list`, `show`, `on`, `off`, `rotate-key`,
+ * `rotate-secret` and `delete`: the app file, the app on Siren, and its key
+ * and signing secret on this machine. `rotate` names the two that replace
+ * it.
  * Contract: docs/architecture/apps-cli.md, "The commands" and "Signing in
  * and the stored files".
  *
  * The files this tool writes: siren.app.json and a line in .gitignore
  * (`apps init`), and the env file `.env.sandbox` or `.env.live` beside the
- * app file, mode 0600 (`apps apply` on a first declaration, `apps rotate`).
+ * app file, mode 0600 (`apps apply`, `apps rotate-key`, `apps rotate-secret`).
  * credentials.json records the env file's path, never its contents.
  */
 
@@ -198,7 +200,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   // A later declaration that gave the app its first address answers the address's secret once.
   if (app.signingSecret !== undefined && !(await saveSecrets(run, key, envPath, { signingSecret: app.signingSecret }, false))) return 1;
   if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
-    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate ${key}`)} to make a new key and save it there.`);
+    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate-key ${key}`)} to make a new key and save it there.`);
   }
   return 0;
 }
@@ -257,16 +259,52 @@ export function appsOff(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren apps rotate <key> [--app-file <path>]`: gives the app a new key and
- * signing secret with `POST /apps/{key}/rotate`, and writes them to the env
- * file `apply` recorded, or beside the app file `--app-file` names. With
- * neither it refuses before sending, since Siren shows the new pair once
- * and it would have nowhere known to go.
+ * `siren apps rotate <key>`: gone, since an app's key and its signing secret
+ * now change apart (`POST /apps/{key}/key/rotate` and
+ * `POST /apps/{key}/secret/rotate` on Siren's int/preview-apps). Sends
+ * nothing, names the two commands that replace it, and exits 1.
  */
 export async function appsRotate(input: CommandInput): Promise<number> {
+  const key = appKeyArgument(input.args[0] ?? '');
+  throw new CliRefusal(
+    `Rotating is now two commands, since an app's key and its signing secret change apart. Nothing was sent. ` +
+      `Run ${input.command(`apps rotate-key ${key}`)} for a new key, or ${input.command(`apps rotate-secret ${key}`)} for a new signing secret.`,
+  );
+}
+
+/**
+ * `siren apps rotate-key <key> [--app-file <path>] [--yes]`: gives the app a
+ * new key with `POST /apps/{key}/key/rotate`, and writes it to the env file
+ * as `SIREN_API_KEY`. Siren revokes the old key at once, so it asks first.
+ */
+export function appsRotateKey(input: CommandInput): Promise<number> {
+  return rotatePart(input, 'key');
+}
+
+/**
+ * `siren apps rotate-secret <key> [--app-file <path>] [--yes]`: gives the
+ * app's address a new signing secret with `POST /apps/{key}/secret/rotate`,
+ * and writes it to the env file as `SIREN_SIGNING_SECRET`. Siren signs with
+ * the new secret at once, so it asks first.
+ */
+export function appsRotateSecret(input: CommandInput): Promise<number> {
+  return rotatePart(input, 'secret');
+}
+
+/**
+ * Rotates one secret and writes it to the env file `apply` recorded, or
+ * beside the app file `--app-file` names, replacing only its own line and
+ * `SIREN_BASE_URL`, mode 0600, through a temporary file and a rename. With
+ * neither it refuses before sending, since Siren shows the new secret once
+ * and it would have nowhere known to go. It asks before sending, since the
+ * old secret stops working at once: `--yes` skips the question, and with no
+ * terminal and no `--yes` it refuses.
+ */
+async function rotatePart(input: CommandInput, part: 'key' | 'secret'): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
   const key = appKeyArgument(input.args[0] ?? '');
+  const command = part === 'key' ? 'apps rotate-key' : 'apps rotate-secret';
   const session = await run.signedIn();
 
   let envPath: string | undefined;
@@ -279,24 +317,40 @@ export async function appsRotate(input: CommandInput): Promise<number> {
   }
   if (envPath === undefined) {
     throw new CliRefusal(
-      `This machine has no record of where ${key}'s key lives, so nothing was sent. Run ${run.command(`apps rotate ${key} --app-file <path to siren.app.json>`)}, and the new key goes beside that file.`,
+      `This machine has no record of where ${key}'s ${part === 'key' ? 'key' : 'signing secret'} lives, so nothing was sent. Run ${run.command(`${command} ${key} --app-file <path to siren.app.json>`)}, and the new one goes beside that file.`,
     );
   }
+  const what = part === 'key' ? 'the old key' : 'the old signing secret';
   const problem = await envFileProblem(envPath);
-  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);
+  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and ${what} still works.`);
   const held = await envValue(envPath, 'SIREN_BASE_URL');
   if (held !== undefined && held !== run.target.baseUrl) {
     throw new CliRefusal(
-      `${envPath} holds the key for ${held}, and this rotate is for ${run.target.baseUrl}, so nothing was sent and both keys still work. ` +
-        `Move that file aside to keep its key, then run ${run.command(`apps rotate ${key}`)} again.`,
+      `${envPath} holds the key for ${held}, and this rotation is for ${run.target.baseUrl}, so nothing was sent and ${what} still works. ` +
+        `Move that file aside to keep its key, then run ${run.command(`${command} ${key}`)} again.`,
     );
+  }
+  if (values.yes !== true) {
+    const warning =
+      part === 'key'
+        ? `Rotating ${key}'s key revokes the old key at once, so anything still using it stops working.`
+        : `Rotating ${key}'s signing secret makes Siren sign with the new one at once, so the app refuses requests until it reads the new one.`;
+    if (!io.interactive) throw new CliRefusal(`${warning} Nothing was sent. Run ${run.command(`${command} ${key} --yes`)} to rotate it.`);
+    const typed = (await io.prompt(`${warning} Type yes to rotate it: `)).trim().toLowerCase();
+    if (typed !== 'yes' && typed !== 'y') throw new CliRefusal(`Nothing was sent, and ${what} still works.`);
   }
 
   const siren = run.siren();
-  const rotated = { rawKey: (await siren.apps.rotateKey(key)).rawKey, signingSecret: (await siren.apps.rotateSecret(key)).signingSecret };
-  const saved = await saveSecrets(run, key, envPath, rotated, true);
+  const secrets = part === 'key' ? { rawKey: (await siren.apps.rotateKey(key)).rawKey } : { signingSecret: (await siren.apps.rotateSecret(key)).signingSecret };
+  const saved = await saveSecrets(run, key, envPath, secrets, true);
   await run.remember(key, envPath);
-  if (saved) run.print(`Siren revoked the old key. Restart your app so it reads the new pair.`);
+  if (saved) {
+    run.print(
+      part === 'key'
+        ? 'Siren revoked the old key. Restart your app so it reads the new key.'
+        : 'Siren signs every request with the new secret from now on. Restart your app so it reads it.',
+    );
+  }
   return saved ? 0 : 1;
 }
 
@@ -394,9 +448,10 @@ interface ShownSecrets {
  * mode 0600, and prints the key's prefix and the file's absolute path. It
  * never writes an empty line for a secret Siren did not send. `apply` and `rotate` have already refused a file
  * that holds another Siren's key. When a write the checks before sending
- * could not foresee fails, says on standard error that Siren issued a pair
- * it could not save and that `siren apps rotate` issues a new one, and,
- * after a rotate, that the old key left in the file is revoked. Never
+ * could not foresee fails, says on standard error that Siren issued a secret
+ * it could not save and names `siren apps rotate-key` or `rotate-secret`,
+ * which issue a new one, and, after a rotation, that the old one left in
+ * the file is revoked. Never
  * prints either value, and answers false.
  */
 async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<boolean> {
@@ -410,10 +465,15 @@ async function saveSecrets(run: CommandContext, key: string, envPath: string, se
     });
   } catch (error) {
     const what = both ? 'a new key and signing secret' : rawKey !== undefined ? 'a new key' : 'a new signing secret';
+    const again = [
+      ...(rawKey !== undefined ? [`${run.command(`apps rotate-key ${key}`)} to issue a new key`] : []),
+      ...(signingSecret !== undefined ? [`${run.command(`apps rotate-secret ${key}`)} to issue a new signing secret`] : []),
+    ];
+    const old = rawKey !== undefined ? 'The old key' : 'The old signing secret';
     run.warn(
       `Siren issued ${what} for ${key}, and ${both ? 'they' : 'it'} could not be saved to ${envPath} (${(error as Error).message}). ` +
-        (revoked ? `The old key in ${envPath} was revoked when Siren rotated it, so stop using it. ` : '') +
-        `Siren shows ${both ? 'a pair' : 'each secret'} only once, so ${both ? 'this one is' : 'it is'} lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,
+        (revoked ? `${old} in ${envPath} was revoked when Siren rotated it, so stop using it. ` : '') +
+        `Siren shows each secret only once, so ${both ? 'they are' : 'it is'} lost. Run ${again.join(', and ')}.`,
     );
     return false;
   }

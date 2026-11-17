@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
-import { harness } from './cli-fakes';
+import { harness, session } from './cli-fakes';
 import { APP_KEY, appRecord, itemPage } from './apps-siren-answers';
 import { capturedReply } from './cloud-captures';
 
@@ -172,5 +172,67 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
         '  adds feature payoutMethod acme-ledger (Acme ledger)\n',
     );
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+  });
+});
+
+describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
+  const OLD = `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`;
+  const NEW_KEY = `sk_test_${'1b'.repeat(32)}`;
+  const NEW_SECRET = '9c'.repeat(32);
+
+  function rotating(replies: Parameters<typeof harness>[0], options: Parameters<typeof harness>[1] = {}) {
+    const h = harness(replies, options);
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [KEY]: join(h.cwd, '.env.sandbox') } }) });
+    h.write('.env.sandbox', OLD);
+    return h;
+  }
+
+  it('rotate-key asks first, then writes only the new key, mode 0600', async () => {
+    const h = rotating([reply(200, { ...appRecord(), rawKey: NEW_KEY })], { interactive: true, typed: ['yes'] });
+    expect(await h.run(['apps', 'rotate-key', KEY]), h.err()).toBe(0);
+    expect(h.prompts).toEqual([`Rotating ${KEY}'s key revokes the old key at once, so anything still using it stops working. Type yes to rotate it: `]);
+    expect(h.paths()).toEqual([`POST /apps/${KEY}/key/rotate`]);
+    expect(h.file('.env.sandbox')).toBe(OLD.replace(RAW_KEY, NEW_KEY));
+    if (process.platform !== 'win32') expect(h.modeOf(join(h.cwd, '.env.sandbox'))).toBe(0o600);
+    expect(h.out()).toContain('Siren revoked the old key. Restart your app so it reads the new key.');
+    expect(h.printed()).not.toContain(NEW_KEY);
+  });
+
+  it('rotate-secret asks first, then writes only the new signing secret', async () => {
+    const h = rotating([reply(200, { ...appRecord(), signingSecret: NEW_SECRET })], { interactive: true, typed: ['y'] });
+    expect(await h.run(['apps', 'rotate-secret', KEY]), h.err()).toBe(0);
+    expect(h.prompts[0]).toBe(
+      `Rotating ${KEY}'s signing secret makes Siren sign with the new one at once, so the app refuses requests until it reads the new one. Type yes to rotate it: `,
+    );
+    expect(h.paths()).toEqual([`POST /apps/${KEY}/secret/rotate`]);
+    expect(h.file('.env.sandbox')).toBe(OLD.replace(SIGNING_SECRET, NEW_SECRET));
+    expect(h.out()).toContain(`Its new signing secret is in ${join(h.cwd, '.env.sandbox')}.`);
+    expect(h.printed()).not.toContain(NEW_SECRET);
+  });
+
+  it('each sends nothing when the person declines, or with no terminal and no --yes', async () => {
+    for (const command of ['rotate-key', 'rotate-secret']) {
+      const declined = rotating([reply(200, appRecord())], { interactive: true, typed: ['no'] });
+      expect(await declined.run(['apps', command, KEY]), command).toBe(1);
+      expect(declined.http.requests).toHaveLength(0);
+      expect(declined.file('.env.sandbox')).toBe(OLD);
+
+      const script = rotating([reply(200, appRecord())]);
+      expect(await script.run(['apps', command, KEY]), command).toBe(1);
+      expect(script.http.requests).toHaveLength(0);
+      expect(script.err()).toContain(`Run siren apps ${command} ${KEY} --yes to rotate it.`);
+    }
+  });
+
+  it('siren apps rotate explains the split, sends nothing and exits non-zero', async () => {
+    const h = rotating([reply(200, { ...appRecord(), rawKey: NEW_KEY, signingSecret: NEW_SECRET })]);
+    expect(await h.run(['apps', 'rotate', KEY])).toBe(1);
+    expect(h.http.requests).toHaveLength(0);
+    expect(h.editionReads).toHaveLength(0);
+    expect(h.file('.env.sandbox')).toBe(OLD);
+    expect(h.err()).toContain(
+      `Rotating is now two commands, since an app's key and its signing secret change apart. Nothing was sent. ` +
+        `Run siren apps rotate-key ${KEY} for a new key, or siren apps rotate-secret ${KEY} for a new signing secret.`,
+    );
   });
 });

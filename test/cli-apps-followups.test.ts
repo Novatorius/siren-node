@@ -200,14 +200,14 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     expect(h.err()).toBe(`siren: Siren sent nothing: ${RESEND_ID} is applied, so its answer already did its work.\n`);
   });
 
-  it("the uncoded 401 on the answer route names siren apps rotate, not the API keys screen", async () => {
+  it("the uncoded 401 on the answer route names siren apps rotate-key, not the API keys screen", async () => {
     for (const name of ['apps-answer-401-unknown-key', 'apps-answer-401-no-bearer']) {
       const siren = new Siren({ apiKey: 'made-up-key', baseUrl: BASE, httpClient: new FakeHttpClient([capturedReply(name)]), maxRetries: 0 });
       const error = await siren.apps.requests.answer(RESEND_ID, { outcome: 'paid' }).then(() => undefined, (caught: unknown) => caught);
       expect(error, name).toBeInstanceOf(AuthenticationError);
       expect((error as Error).message, name).toBe(
         "Siren did not accept this key on the answer route. An app answers with its own key, the SIREN_API_KEY that siren apps apply saved beside its app file. " +
-          'When that key is lost or revoked, run siren apps rotate <app key> to make a new one.',
+          'When that key is lost or revoked, run siren apps rotate-key <app key> to make a new one.',
       );
       expect((error as Error).message).not.toContain('under API keys');
     }

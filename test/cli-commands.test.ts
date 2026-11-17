@@ -391,13 +391,13 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(await h.run(['apps', 'apply', 'siren.app.json', '--yes']), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe(`PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
-    expect(h.printed()).not.toContain('siren apps rotate');
+    expect(h.printed()).not.toContain('siren apps rotate-key');
 
     h.write('.env.sandbox', 'PORT=8787\n');
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`, `GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
-    expect(h.printed()).toContain(`siren apps rotate ${KEY}`);
+    expect(h.printed()).toContain(`siren apps rotate-key ${KEY}`);
   });
 
   it('prints each problem in the app file with its line, and sends nothing', async () => {
@@ -425,13 +425,18 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.printed()).not.toContain(SIGNING_SECRET);
   });
 
-  it('rotates the key into the env file apply wrote, replacing only its three lines, never in the working folder', async () => {
+  // Slice C6 item 5: the key and the secret rotate apart, each into its own line of the same file.
+  it('rotates the key and then the secret into the env file apply wrote, each replacing only its own line, never in the working folder', async () => {
     const h = harness([reply(200, { ...app, rawKey: RAW_KEY_2 }), reply(200, { ...app, signingSecret: SIGNING_SECRET_2 })]);
     const envFile = join(h.cwd, 'acme', '.env.sandbox');
     mkdirSync(join(h.cwd, 'acme'));
     h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [KEY]: envFile } }) });
     h.write('acme/.env.sandbox', `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
-    expect(await h.run(['apps', 'rotate', KEY]), h.err()).toBe(0);
+    expect(await h.run(['apps', 'rotate-key', KEY, '--yes']), h.err()).toBe(0);
+    expect(h.file('acme/.env.sandbox')).toBe(
+      `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`,
+    );
+    expect(await h.run(['apps', 'rotate-secret', KEY, '--yes']), h.err()).toBe(0);
     expect(h.paths()).toEqual([`POST /apps/${KEY}/key/rotate`, `POST /apps/${KEY}/secret/rotate`]);
     expect(h.file('acme/.env.sandbox')).toBe(
       `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`,
@@ -447,7 +452,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   it('refuses to rotate before sending when it does not know where the key lives, or when the env file holds another Siren\'s key', async () => {
     const unknown = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
     unknown.signedIn();
-    expect(await unknown.run(['apps', 'rotate', KEY])).toBe(1);
+    expect(await unknown.run(['apps', 'rotate-key', KEY, '--yes'])).toBe(1);
     expect(unknown.http.requests).toHaveLength(0);
     expect(unknown.err()).toContain('--app-file');
 
@@ -456,7 +461,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     other.signedIn();
     other.write('siren.app.json', exampleFile);
     other.write('.env.sandbox', held);
-    expect(await other.run(['apps', 'rotate', KEY, '--app-file', 'siren.app.json'])).toBe(1);
+    expect(await other.run(['apps', 'rotate-key', KEY, '--yes', '--app-file', 'siren.app.json'])).toBe(1);
     expect(other.http.requests).toHaveLength(0);
     expect(other.file('.env.sandbox')).toBe(held);
     expect(other.err()).toContain('http://localhost:33918/siren/v1');
@@ -465,7 +470,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     named.signedIn();
     named.write('siren.app.json', exampleFile);
     named.write('.env.sandbox', `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
-    expect(await named.run(['apps', 'rotate', KEY, '--app-file', 'siren.app.json']), named.err()).toBe(0);
+    expect(await named.run(['apps', 'rotate-key', KEY, '--yes', '--app-file', 'siren.app.json']), named.err()).toBe(0);
     expect(named.file('.env.sandbox')).toContain(`SIREN_API_KEY=${RAW_KEY_2}`);
     expect(named.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toEqual({ [KEY]: join(named.cwd, '.env.sandbox') });
   });

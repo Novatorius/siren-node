@@ -57,7 +57,7 @@ const LIVE_CASES: Case[] = [
       h.signedIn(signedInLive);
       h.write('siren.app.json', exampleFile);
     },
-    command: `siren apps rotate ${KEY}${LIVE}`,
+    command: `siren apps rotate-key ${KEY}${LIVE}`,
   },
   {
     name: 'apply that leaves an archived item',
@@ -84,16 +84,18 @@ const LIVE_CASES: Case[] = [
     command: `siren apps apply${LIVE}`,
   },
   { name: 'list with no apps', argv: ['apps', 'list'], replies: [reply(200, [])], setup: (h) => h.signedIn(signedInLive), command: `siren apps apply${LIVE}` },
-  { name: 'rotate with no known env file', argv: ['apps', 'rotate', KEY], setup: (h) => h.signedIn(signedInLive), command: `siren apps rotate ${KEY} --app-file <path to siren.app.json>${LIVE}` },
+  { name: 'rotate-key with no known env file', argv: ['apps', 'rotate-key', KEY, '--yes'], setup: (h) => h.signedIn(signedInLive), command: `siren apps rotate-key ${KEY} --app-file <path to siren.app.json>${LIVE}` },
+  { name: 'rotate-secret with no known env file', argv: ['apps', 'rotate-secret', KEY, '--yes'], setup: (h) => h.signedIn(signedInLive), command: `siren apps rotate-secret ${KEY} --app-file <path to siren.app.json>${LIVE}` },
+  { name: 'the old rotate', argv: ['apps', 'rotate', KEY], setup: (h) => h.signedIn(signedInLive), command: `siren apps rotate-key ${KEY}${LIVE}` },
   {
     name: "rotate where the env file holds another Siren's key",
-    argv: ['apps', 'rotate', KEY],
+    argv: ['apps', 'rotate-key', KEY, '--yes'],
     setup: (h) => {
       mkdirSync(join(h.cwd, 'acme'));
       h.write('acme/.env.live', 'SIREN_BASE_URL=https://other.example/siren/v1\n');
       h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE, envFiles: { [KEY]: join(h.cwd, 'acme', '.env.live') } }) });
     },
-    command: `siren apps rotate ${KEY}${LIVE}`,
+    command: `siren apps rotate-key ${KEY}${LIVE}`,
   },
   { name: 'delete without --yes', argv: ['apps', 'delete', KEY], setup: (h) => h.signedIn(signedInLive), command: `siren apps delete ${KEY} --yes${LIVE}` },
   { name: 'delete of an app records use', argv: ['apps', 'delete', KEY, '--yes'], replies: [AppAnswers.inUse()], setup: (h) => h.signedIn(signedInLive), command: `siren apps off ${KEY}${LIVE}` },
@@ -179,6 +181,6 @@ describe('apps-cli: every hint names a command the person can run as printed', (
     plain.signedIn();
     plain.write('siren.app.json', exampleFile);
     expect(await plain.run(['apps', 'apply', '--yes']), plain.err()).toBe(0);
-    expect(plain.out()).toContain(`Run siren apps rotate ${KEY} to make a new key and save it there.`);
+    expect(plain.out()).toContain(`Run siren apps rotate-key ${KEY} to make a new key and save it there.`);
   });
 });

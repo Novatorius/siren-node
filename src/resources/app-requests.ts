@@ -208,7 +208,7 @@ function unauthorizedAnswer(error: unknown): unknown {
  */
 const UNAUTHORIZED_ANSWER =
   'Siren did not accept this key on the answer route. An app answers with its own key, the SIREN_API_KEY that siren apps apply saved beside its app file. ' +
-  'When that key is lost or revoked, run siren apps rotate <app key> to make a new one.';
+  'When that key is lost or revoked, run siren apps rotate-key <app key> to make a new one.';
 
 /** True for an object made by `{}` or `Object.create(null)`, and nothing else. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {

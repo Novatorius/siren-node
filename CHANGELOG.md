@@ -323,6 +323,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removes. It asks before it writes, says the last write wins, and takes `--yes` to skip the
   question. With no terminal and no `--yes` it sends nothing, and with nothing to change it says so
   and writes nothing.
+- `siren apps rotate` splits in two, since an app's key and its signing secret change apart.
+  `siren apps rotate-key` and `siren apps rotate-secret` each ask first, take `--yes`, and write
+  only their own line to the env file, mode 0600, through a temporary file and a rename.
+  `siren apps rotate` sends nothing, names the two, and exits 1. Every hint that named
+  `siren apps rotate`, `requests.answer()`'s 401 message included, names `rotate-key`.
 - `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
   refuses the webhook routes for a subscription an app owns.
 - `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,

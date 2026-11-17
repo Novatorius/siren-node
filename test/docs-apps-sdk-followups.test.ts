@@ -79,7 +79,7 @@ describe('apps-sdk-followups-1: the records', () => {
     const note = read('docs/architecture/apps-cli.md');
     expect(note).toContain('### 9. Three hints that sent a person the wrong way');
     expect(read('README.md')).toContain('names the `siren apps on <key>` that turns it on');
-    expect(read('README.md')).toContain('a message that says to run `siren apps rotate <app key>`');
+    expect(read('README.md')).toContain('a message that says to run `siren apps rotate-key <app key>`');
     expect(read('CHANGELOG.md')).toContain('`siren apps delete` says to turn an app off only while it is on');
   });
 });
