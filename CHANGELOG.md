@@ -255,6 +255,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AppCurrency` the `currency` Siren sends beside each `value`. `value` is the stored integer, not
   the amount a person reads. `ShownAmount` types what `shownAmount` answers. The example app logs
   each tell's amount through `shownAmount`.
+- `siren.apps.requests.retrieve(id)` reads one request, however old, with
+  `GET /apps/requests/{requestKey}`, and answers `AppRequestDetail`: the list's fields, the `data`
+  Siren sent, the `answer` it took or `null`, and `answeredByUser`. It refuses a bad id before
+  sending, retries as a read, and raises 404 `app_request_not_found` as `NotFoundError`. openapi
+  gains the route and the `AppRequestDetail` schema. `siren apps requests <id>` reads it, so it
+  shows a request older than the latest 50, with its data, its answer and who gave it.
 
 ### Changed
 

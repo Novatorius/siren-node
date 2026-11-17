@@ -83,6 +83,8 @@ const REPLAYED: Record<string, string> = {
   'webhooks-delete-409-app-owned': 'this file, the app-owned subscription',
   'webhooks-update-409-app-owned': 'this file, the app-owned subscription',
   'apps-declare-200-dropped-selected-item': 'test/cli-apps-followups.test.ts, the archived item',
+  'apps-request-one-200-needs-attention': 'test/apps-request-retrieve.test.ts and test/cli-apps-followups.test.ts, one request',
+  'apps-request-one-404': 'test/apps-request-retrieve.test.ts and test/cli-apps-followups.test.ts, a request the organization does not have',
 };
 
 /**
@@ -101,7 +103,7 @@ const UNFAKED: Record<string, string> = {
   'apps-declare-400-http-url': 'A RestException 400 with context.field. The CLI prints Siren\'s message, as for any 400.',
   'apps-declare-400-unresolvable-url': 'The same envelope as apps-declare-400-http-url.',
   'apps-delete-200': '{"success":true}, which the delete tests already send.',
-  'apps-request-one-404-no-route': 'GET /apps/requests/{id} has no route. The SDK reads one request from the list.',
+  'apps-request-one-404-no-route': 'Siren had no GET /apps/requests/{id} at 1557b0030. It has GET /apps/requests/{requestKey} since, which apps-request-one-200-needs-attention and apps-request-one-404 record.',
   'apps-requests-list-400-bad-status': 'VALIDATION_FAILED, which the SDK refuses before sending for any status it does not know.',
   'apps-requests-list-401-app-key': 'api_key_not_accepted, the same body as apps-list-401-app-key.',
   'apps-requests-list-attention-empty': '{"requests":[]}. No capture holds a request row, since no ask ran.',

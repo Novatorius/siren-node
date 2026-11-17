@@ -5,6 +5,7 @@ import type {
   AppAnswer,
   AppAnswerReceipt,
   AppRequest,
+  AppRequestDetail,
   AppRequestListParams,
   AppRequestRecord,
   VerifyAppRequestOptions,
@@ -83,6 +84,31 @@ export async function listAppRequests(
       : 'Siren answered GET /apps/requests with no list of requests in `requests`.',
   );
   return answer.requests;
+}
+
+/**
+ * Reads `GET /apps/requests/{id}`, retried as a read, and answers the
+ * request with its `data`, `answer` and `answeredByUser`. Refuses a bad id
+ * before sending. Throws `UnexpectedResponseError` when the 2xx body is not
+ * this request: an `id` other than the one asked for, `data` that is not an
+ * object, an `answer` that is neither an object nor null, or an
+ * `answeredByUser` that is neither `{ id, email }` nor null.
+ *
+ * @internal
+ */
+export async function retrieveAppRequest(http: Pick<HttpTransport, 'request'>, id: string): Promise<AppRequestDetail> {
+  const key = appRequestId(id, 'apps.requests.retrieve()');
+  const path = `/apps/requests/${key}`;
+  return readObject<AppRequestDetail>(http, path, {}, (body) => {
+    if (body.id !== key) return `Siren answered GET ${path} with another request's id.`;
+    if (!isJsonObject(body.data)) return `Siren answered GET ${path} with no object in \`data\`.`;
+    if (body.answer !== null && !isJsonObject(body.answer)) return `Siren answered GET ${path} with an \`answer\` that is neither an object nor null.`;
+    const user = body.answeredByUser;
+    if (user !== null && !(isJsonObject(user) && typeof user.id === 'number' && typeof user.email === 'string')) {
+      return `Siren answered GET ${path} with an \`answeredByUser\` that is neither { id, email } nor null.`;
+    }
+    return undefined;
+  });
 }
 
 /**

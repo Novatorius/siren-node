@@ -1,0 +1,26 @@
+{
+  "capturedAt": "2026-11-17T12:20:32.992Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 57999d085, http://localhost:33918",
+  "route": "GET /siren/v1/apps/requests/apr_00000000000000000000000000000000",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "node",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "App request not found.",
+        "code": "app_request_not_found",
+        "context": {
+          "reason": "app_request_not_found"
+        }
+      }
+    }
+  }
+}

@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { appLines } from '../src/cli/commands/apply';
 import type { App } from '../src/record-types';
-import { APP_KEY } from './apps-siren-answers';
+import { APP_KEY, AppAnswers, appRecord } from './apps-siren-answers';
 import { harness } from './cli-fakes';
 import { capturedBody, capturedReply } from './cloud-captures';
+import { reply } from './http-fakes';
 
 /*
  * What the `siren` command says about what a real Siren Cloud answered, for
@@ -64,5 +65,57 @@ describe('apps-sdk-followups-1: an archived item', () => {
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(h.out().slice(before).split('\n')).toContain(ARCHIVED_LINE);
     expect(appLines(body)).toContain(ARCHIVED_LINE);
+  });
+});
+
+const ONE = 'apps-request-one-200-needs-attention';
+const ONE_ID = 'apr_e221f712e2dd08c2daa566d3ac5ce340';
+
+describe('apps-sdk-followups-1: siren apps requests <id> reads the one request', () => {
+  it('reads it with GET /apps/requests/{id}, and shows its line, the data Siren sent, and that no one has answered', async () => {
+    const h = harness([capturedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
+    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /webhooks/31/deliveries']);
+    const out = h.out();
+    expect(out.split('\n')[0]).toBe(
+      `${ONE_ID}  needs_attention  tell postConversionAction  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
+    );
+    expect(out).toContain(`The data Siren sent:\n${JSON.stringify(capturedBody<{ data: unknown }>(ONE).data, null, 2)}\n`);
+    expect(out).toContain('A tell takes no answer.');
+    expect(out).not.toContain('not among the latest 50');
+  });
+
+  it('shows the answer Siren took and the person who gave it, or that the app gave it', async () => {
+    const body = capturedBody<Record<string, unknown>>(ONE);
+    const byPerson = { ...body, mode: 'ask', status: 'applied', answer: { outcome: 'paid', reference: 'TX-1' }, answeredBy: 'user:5', answeredAt: '2026-11-17T12:40:00+00:00', answeredByUser: { id: 5, email: 'jane@store.invalid' } };
+    const h = harness([reply(200, byPerson), reply(200, []), reply(200, { ...byPerson, answeredBy: 'app:1', answeredByUser: null }), reply(200, [])]);
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
+    expect(h.out()).toContain('The answer Siren took, from jane@store.invalid (user 5) at 2026-11-17T12:40:00+00:00:\n{\n  "outcome": "paid",\n  "reference": "TX-1"\n}\n');
+    const before = h.out().length;
+    expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
+    expect(h.out().slice(before)).toContain('The answer Siren took, from the app at 2026-11-17T12:40:00+00:00:');
+
+    const waiting = harness([reply(200, { ...body, mode: 'ask', status: 'sent' }), reply(200, [])]);
+    waiting.signedIn();
+    expect(await waiting.run(['apps', 'requests', ONE_ID]), waiting.err()).toBe(0);
+    expect(waiting.out()).toContain('No answer yet.');
+  });
+
+  it('shows a request older than the latest 50, since it no longer looks among them', async () => {
+    const h = harness([capturedReply(ONE), reply(200, []), reply(200, [])]);
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
+    expect(h.paths()).not.toContain('GET /apps/requests');
+  });
+
+  it("refuses a request the organization does not have in one line that says where to see the latest, with the target flags", async () => {
+    for (const answer of [capturedReply('apps-request-one-404'), AppAnswers.requestNotFound()]) {
+      const h = harness([answer]);
+      h.signedIn();
+      expect(await h.run(['apps', 'requests', ONE_ID, '--sandbox'])).toBe(1);
+      expect(h.err()).toBe(`siren: This organization has no request ${ONE_ID}. See the latest with siren apps requests --sandbox.\n`);
+    }
   });
 });

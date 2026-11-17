@@ -3233,6 +3233,32 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /apps/requests/{requestKey}:
+    get:
+      tags: [Apps]
+      operationId: retrieveAppRequest
+      summary: Read one request Siren sent an app
+      description: |
+        One of the organization's requests by its key, however old: the
+        list's fields, the `data` Siren sent the app (`{}` when empty), the
+        `answer` Siren took or null, and `answeredByUser`, the person whose
+        answer it is when `answeredBy` is `user:{id}`, or null. A signed-in
+        admin only. An API key gets 401 `api_key_not_accepted`. 404
+        `app_request_not_found` for a request the organization does not have
+        (GetAppRequest.php on Siren's feat/apps at 27169452a).
+      security:
+        - dashboardSession: []
+      parameters:
+        - { name: requestKey, in: path, required: true, schema: { type: string, pattern: '^apr_[0-9a-f]{32}$' } }
+      responses:
+        '200':
+          description: The request with its data and answer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppRequestDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /apps/requests/{id}/resend:
     post:
       tags: [Apps]
@@ -3637,6 +3663,21 @@ components:
         answeredAt: { type: [string, 'null'], format: date-time }
         lastError: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
+    AppRequestDetail:
+      allOf:
+        - { $ref: '#/components/schemas/AppRequestRecord' }
+        - type: object
+          required: [data, answer, answeredByUser]
+          properties:
+            data: { type: object, additionalProperties: true, description: 'The data Siren sent the app, `{}` when there was none.' }
+            answer: { type: [object, 'null'], additionalProperties: true, description: 'The answer Siren took, or null before one.' }
+            answeredByUser:
+              type: [object, 'null']
+              description: The person behind a `user:{id}` answer, or null when the app answered, before an answer, or when that user is gone.
+              required: [id, email]
+              properties:
+                id: { type: integer }
+                email: { type: string }
     AppAnswer:
       type: object
       required: [outcome]

@@ -542,7 +542,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(new URL(h.http.requests[3]!.url).searchParams.get('status')).toBe('needs_attention');
   });
 
-  it('shows one request: each send, what the app answered, and the body Siren sent', async () => {
+  it('shows one request: the data Siren sent, each send, and what the app answered', async () => {
     const delivery = (eventId: string, httpStatusCode: number, responseBody: string) => ({
       id: httpStatusCode,
       webhookSubscriptionId: 31,
@@ -560,7 +560,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
       dateModified: '2026-11-17 09:14:04',
     });
     const h = harness([
-      reply(200, { requests: [{ ...row, sendCount: 2 }] }),
+      reply(200, { ...row, sendCount: 2, data: { payoutId: 88, amount: 2500, currency: 'USD' }, answer: null, answeredByUser: null }),
       reply(200, [app]),
       reply(200, [
         delivery(`${REQUEST}.1`, 500, 'upstream timeout'),
@@ -570,7 +570,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', REQUEST]), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps', 'GET /webhooks/31/deliveries']);
+    expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', 'GET /webhooks/31/deliveries']);
     expect(h.out()).toContain(`${REQUEST}.1`);
     expect(h.out()).toContain('upstream timeout');
     expect(h.out()).toContain('{"received":true}');

@@ -37,6 +37,7 @@ slice copies), and 55b9ea76a with the apps-sandbox branch at ec1b3a190 (`sk_test
 | `siren.apps.delete(key)` | `DELETE /apps/{key}` | admin session | src/resources/apps.ts |
 | `siren.apps.verifyRequest(rawBody, headers, secret, options)` | none, it reads what Siren sent | the app's signing secret | src/resources/apps.ts |
 | `siren.apps.requests.list(params)` | `GET /apps/requests` | admin session | src/resources/apps.ts |
+| `siren.apps.requests.retrieve(id)` | `GET /apps/requests/{requestKey}` | admin session | src/resources/apps.ts |
 | `siren.apps.requests.resend(id)` | `POST /apps/requests/{id}/resend` | admin session | src/resources/apps.ts |
 | `siren.apps.requests.answer(id, answer)` | `POST /apps/requests/{id}/answer` | the app's key, or an admin session | src/resources/apps.ts |
 
@@ -86,7 +87,7 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 409 `app_request_not_resendable` | `ConflictError` | Reads the request. It is applied, or it would be sent and its app is off. A request that holds an answer not yet applied, `answered` or `needs_attention`, is never refused: Siren applies the stored answer, even while the app is off. |
 | 409 `app_request_already_answered` | `ConflictError` | Stops. A different answer came first, and it stands. |
 | 409 `app_request_not_needing_attention` | `ConflictError` | A person answered an ask that does not need attention, such as one `pending` or `sent`. Waits for the app, or answers once `siren apps requests --attention` lists the ask. The app's own key answers its own ask at any time before it is applied. Siren checks the status before the answer's fit, so a misfit answer gets this and not 422. The code is named by Siren (lib/Apps/Service/Services/AppRequestService.php lines 680 to 687 on pkt/apps-screen-a at fcf19b1f0). |
-| 404 `app_request_not_found` | `NotFoundError` | Checks the id. The answer route tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers another app's request (AppRequestService.php line 698 at 27169452a). The resend route says "App request not found." |
+| 404 `app_request_not_found` | `NotFoundError` | Checks the id. The answer route tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers another app's request (AppRequestService.php line 698 at 27169452a). The resend and read routes say "App request not found." |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
 | 422 `app_answer_invalid` | `ValidationError` | Fixes the answer for the item's kind. |
 | 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
@@ -147,7 +148,7 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren apps list [--json]` | `GET /apps` | One block per app with its items, or the JSON Siren sent. |
 | `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it. |
 | `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
-| `siren apps requests <id>` | `GET /apps/requests`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request, each send with its HTTP status and the app's answer, and the body Siren sent. |
+| `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request's line, the data Siren sent, the answer Siren took and who gave it, or that none came yet, then each send with its HTTP status and what the app said back. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend` | The request as it now stands. |
 | `siren apps rotate <key> [--app-file <path>]` | `POST /apps/{key}/rotate` | The new prefix and the absolute path of the env file. Writes the new key and secret where `apply` wrote the first pair, or beside the named app file (AP-A634). |
@@ -756,8 +757,10 @@ https.
 2. Siren lets one app hold two items with the same key under two kinds. The file keys items by key,
    so a key is unique within an app, which keeps `app:<appKey>/<itemKey>` unambiguous. A file cannot
    declare the same key twice under two kinds.
-3. There is no `GET /apps/requests/{id}`. `siren apps requests <id>` finds the request among the
-   latest 50 and its sends through the app's webhook deliveries. An older request cannot be shown.
+3. Siren had no `GET /apps/requests/{id}` at 1557b0030 (capture apps-request-one-404-no-route).
+   It has `GET /apps/requests/{requestKey}` on feat/apps at 27169452a, and
+   `siren.apps.requests.retrieve(id)` reads it, so `siren apps requests <id>` shows any request
+   however old ("Follow-ups after the merge", section 7).
 4. The app routes put their code in `error.context.reason` and the exchange routes in `error.code`
    when this note was written. `appErrorCode()` reads both in one place, code first. Slices 1 and 2
    have since moved every app refusal to carry `error.code` (Claims on others).
@@ -949,3 +952,24 @@ and AppService::redeclareItems() at 27169452a). The second Cloud run found that 
 `list` and `show` share. `apply` then says once what archiving means and that naming the item in
 the file again, then running `apply`, brings it back. That hint carries the target flags and the
 file as it was typed.
+
+### 7. Reading one request
+
+Siren's feat/apps at 27169452a answers `GET /apps/requests/{requestKey}` for an admin with
+AppRequestSerializer::toDetail(): the list's fields plus `data` (`{}` when empty), `answer` or
+null, and `answeredByUser`, `{ id, email }` or null (GetAppRequest.php, AppRequestSerializer.php
+lines 87 to 97). An API key gets 401 `api_key_not_accepted`, and a request the organization does
+not have gets 404 `app_request_not_found` with "App request not found." (captures
+apps-request-one-200-needs-attention and apps-request-one-404 from the second run).
+
+`siren.apps.requests.retrieve(id)` reads it through `readObject`, so it retries as a read. It
+refuses a bad id with `SirenError` before sending, and raises `UnexpectedResponseError` for a 2xx
+body whose `id` is another request's, whose `data` is not an object, or whose `answer` or
+`answeredByUser` has the wrong shape. Its answer is `AppRequestDetail`.
+
+`siren apps requests <id>` used to look for the request among the latest 50 and refuse an older
+one with "not among the latest 50". It now reads the request by its id and prints its line, the
+data Siren sent, and the answer with who gave it, then the sends from the app's webhook
+deliveries as before. The data comes from the request, not from the last delivery's payload, so it
+shows even when the deliveries have moved past it. The test that pinned the list read now pins the
+one-request read.

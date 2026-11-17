@@ -672,6 +672,7 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
 | `siren.apps.shownAmount()` | None. It reads the value and currency of a tell, which Siren sends as `POST /` to the app's own address | Reads a stored amount and its currency as a person reads them, such as `$15.00` for 1500 in dollars and `¥100` for 10000 in yen. |
 | `siren.apps.requests.list()` | `GET /apps/requests` | Lists the latest requests Siren sent the organization's apps. |
+| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` | Reads one request, however old, with the data Siren sent, the answer it took and the person who answered by hand. |
 | `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
 | `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
 
@@ -1210,7 +1211,11 @@ sets none.
 
 `apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
 `pending`, `sent`, `delivered` (a tell the app received), `answered`, `applied` (an ask whose answer
-did its work) or `needs_attention`. `apps.requests.resend(id)` sends a request again under the same
+did its work) or `needs_attention`. `apps.requests.retrieve(id)` reads one request, however old,
+with `GET /apps/requests/{requestKey}`: the list's fields, the `data` Siren sent the app, the
+`answer` Siren took or `null`, and `answeredByUser`, `{ id, email }` of the person who answered by
+hand or `null`. It is a read, retried like one, and an admin's session only. Siren answers 404
+`app_request_not_found` for a request the organization does not have. `apps.requests.resend(id)` sends a request again under the same
 id with a new answer window. A request that holds an answer Siren has not applied, in
 `needs_attention` after its apply ran out of tries or still `answered` because the wake after the
 answer was lost, is not sent to the app again. Siren applies the stored answer instead, even while
@@ -1245,7 +1250,7 @@ try {
 | `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
 | `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
 | `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
-| `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route says "App request not found." |
+| `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
 | `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
 | `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code. |
@@ -1282,6 +1287,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps list` | Lists the apps and their items. `--json` prints what Siren sent. |
 | `siren apps show <key>` | Shows one app and its items, with each archived item marked beside it. |
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
+| `siren apps requests <id>` | Shows one request, however old: its line, the data Siren sent, the answer Siren took and who gave it, then each send with its HTTP status and what the app said back. |
 | `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
 | `siren apps resend <id>` | Sends a request again. |
 | `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |

@@ -1063,6 +1063,20 @@ export interface AppRequestRecord {
   [field: string]: unknown;
 }
 
+/**
+ * One request as `GET /apps/requests/{requestKey}` answers it
+ * (AppRequestSerializer::toDetail()): the list's fields, the data Siren
+ * sent, the answer it took, and the person who gave that answer.
+ */
+export interface AppRequestDetail extends AppRequestRecord {
+  /** The `data` Siren sent the app, `{}` when there was none. */
+  data: Record<string, unknown>;
+  /** The answer Siren took, or null before one. A tell takes none. */
+  answer: Record<string, unknown> | null;
+  /** The person behind a `user:{id}` answer, or null when the app answered, before an answer, or when that user is gone. */
+  answeredByUser: { id: number; email: string } | null;
+}
+
 /** Filters for `apps.requests.list()`. */
 export interface AppRequestListParams {
   status?: AppRequestStatus;

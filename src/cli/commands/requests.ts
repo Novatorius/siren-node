@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { AppErrorCode, ErrorCode, SirenError, appErrorCode } from '../../errors';
-import type { AppAnswer, AppRequestListParams, AppRequestRecord } from '../../record-types';
+import { AppErrorCode, ErrorCode, NotFoundError, SirenError, appErrorCode } from '../../errors';
+import type { AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument } from './apply';
 import { contextOf } from '../context';
@@ -86,11 +86,13 @@ export async function appsRequests(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren apps requests <id>`: finds the request among the latest 50, its
- * app, and the app's webhook deliveries whose event id is `<id>.<send>`, and
- * prints each send with its HTTP status and the app's answer, then the body
- * Siren sent. There is no route for one request, so an older one cannot be
- * shown.
+ * `siren apps requests <id>`: reads the request with
+ * `GET /apps/requests/{id}`, however old, and prints its line, the data
+ * Siren sent, and the answer Siren took with who gave it. Then it finds the
+ * app's webhook deliveries whose event id is `<id>.<send>` and prints each
+ * send with its HTTP status and what the app said back. A request the
+ * organization does not have is refused in one line that says where to see
+ * the latest.
  */
 async function showRequest(input: CommandInput, id: string): Promise<number> {
   requestIdArgument(id);
@@ -98,11 +100,27 @@ async function showRequest(input: CommandInput, id: string): Promise<number> {
   await run.signedIn();
   const siren = run.siren();
 
-  const row = (await siren.apps.requests.list()).find((request) => request.id === id);
-  if (row === undefined) throw new CliRefusal(`${id} is not among the latest 50 requests, and Siren shows no older one.`);
-  run.print(requestLine(row));
+  let request: AppRequestDetail;
+  try {
+    request = await siren.apps.requests.retrieve(id);
+  } catch (error) {
+    if (error instanceof NotFoundError && appErrorCode(error) === AppErrorCode.RequestNotFound) {
+      throw new CliRefusal(`This organization has no request ${id}. See the latest with ${run.command('apps requests')}.`);
+    }
+    throw error;
+  }
+  run.print(requestLine(request));
+  run.print('The data Siren sent:');
+  run.print(JSON.stringify(request.data, null, 2));
+  if (request.answer !== null) {
+    const who = request.answeredByUser !== null ? `${request.answeredByUser.email} (user ${request.answeredByUser.id})` : request.answeredBy?.startsWith('app:') ? 'the app' : (request.answeredBy ?? 'no one Siren names');
+    run.print(`The answer Siren took, from ${who}${request.answeredAt ? ` at ${request.answeredAt}` : ''}:`);
+    run.print(JSON.stringify(request.answer, null, 2));
+  } else {
+    run.print(request.mode === 'tell' ? 'A tell takes no answer.' : 'No answer yet.');
+  }
 
-  const app = (await siren.apps.list()).find((candidate) => candidate.id === row.appId);
+  const app = (await siren.apps.list()).find((candidate) => candidate.id === request.appId);
   if (app === undefined || app.webhookSubscriptionId === null) {
     run.print('Its app is gone, so its sends cannot be shown.');
     return 0;
@@ -118,8 +136,6 @@ async function showRequest(input: CommandInput, id: string): Promise<number> {
     run.print(`Send ${send.eventId}: ${send.status}, ${send.httpStatusCode === null ? 'no HTTP answer' : `HTTP ${send.httpStatusCode}`}${send.errorMessage ? `, ${send.errorMessage}` : ''}`);
     if (send.responseBody !== null && send.responseBody !== '') run.print(`  The app answered: ${send.responseBody}`);
   }
-  run.print('The body Siren sent:');
-  run.print(JSON.stringify(sends[sends.length - 1]?.payload, null, 2));
   return 0;
 }
 

@@ -330,5 +330,115 @@
     "failing": [
       "say what an archived item is"
     ]
+  },
+  {
+    "id": "retrieve-id-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const key = appRequestId(id, 'apps.requests.retrieve()');\n  const path = `/apps/requests/${key}`;",
+    "replace": "  const key = id;\n  const path = `/apps/requests/${key}`;",
+    "expect": "caught",
+    "failing": [
+      "refuses an id that is not a request key before sending"
+    ]
+  },
+  {
+    "id": "retrieve-data-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (!isJsonObject(body.data)) return",
+    "replace": "    if (body.data === undefined) return",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "retrieve-answer-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (body.answer !== null && !isJsonObject(body.answer)) return",
+    "replace": "    if (body.answer === undefined) return",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "retrieve-user-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (user !== null && !(isJsonObject(user) && typeof user.id === 'number' && typeof user.email === 'string')) {",
+    "replace": "    if (user === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "retrieve-id-mismatch-ok",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (body.id !== key) return",
+    "replace": "    if (typeof body.id !== 'string') return",
+    "expect": "caught",
+    "failing": [
+      "for a 2xx body of the wrong shape"
+    ]
+  },
+  {
+    "id": "show-from-list",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    request = await siren.apps.requests.retrieve(id);",
+    "replace": "    request = { ...(await siren.apps.requests.list()).find((row) => row.id === id)!, data: {}, answer: null, answeredByUser: null };",
+    "expect": "caught",
+    "failing": [
+      "reads it with GET /apps/requests/{id}"
+    ]
+  },
+  {
+    "id": "show-no-data",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  run.print(JSON.stringify(request.data, null, 2));",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "reads it with GET /apps/requests/{id}"
+    ]
+  },
+  {
+    "id": "show-no-person",
+    "file": "src/cli/commands/requests.ts",
+    "find": "request.answeredByUser !== null ? `${request.answeredByUser.email} (user ${request.answeredByUser.id})` :",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "shows the answer Siren took and the person who gave it"
+    ]
+  },
+  {
+    "id": "show-tell-no-answer-yet",
+    "file": "src/cli/commands/requests.ts",
+    "find": "request.mode === 'tell' ? 'A tell takes no answer.' : 'No answer yet.'",
+    "replace": "'No answer yet.'",
+    "expect": "caught",
+    "failing": [
+      "reads it with GET /apps/requests/{id}"
+    ]
+  },
+  {
+    "id": "show-404-raw",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    if (error instanceof NotFoundError && appErrorCode(error) === AppErrorCode.RequestNotFound) {",
+    "replace": "    if (error instanceof NotFoundError && appErrorCode(error) === 'made_up') {",
+    "expect": "caught",
+    "failing": [
+      "refuses a request the organization does not have"
+    ]
+  },
+  {
+    "id": "parity-retrieve-row",
+    "file": "README.md",
+    "find": "| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` |",
+    "replace": "| `siren.apps.requests.fetch()` | `GET /apps/requests/{requestKey}` |",
+    "expect": "caught",
+    "failing": [
+      "puts every public method of the Siren client in exactly one of the two tables"
+    ]
   }
 ]

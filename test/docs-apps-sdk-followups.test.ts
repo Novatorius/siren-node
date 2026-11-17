@@ -53,4 +53,17 @@ describe('apps-sdk-followups-1: the records', () => {
     expect(read('docs/architecture/apps-cli.md')).toContain('"archived, so Siren no longer calls it"');
     expect(read('CHANGELOG.md')).toContain('`siren apps apply`, `list` and `show` mark an archived item');
   });
+
+  it('name the one-request read, and no longer say the route is missing', () => {
+    const note = read('docs/architecture/apps-cli.md');
+    expect(note).not.toContain('There is no `GET /apps/requests/{id}`');
+    expect(note).toContain('| `siren.apps.requests.retrieve(id)` | `GET /apps/requests/{requestKey}` | admin session |');
+    expect(note).toContain('| `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`');
+    expect(read('README.md')).toContain('| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` |');
+    expect(read('CHANGELOG.md')).toContain('`siren.apps.requests.retrieve(id)` reads one request');
+    const openapi = read('openapi.yaml');
+    expect(openapi).toContain('/apps/requests/{requestKey}: get: tags: [Apps] operationId: retrieveAppRequest');
+    expect(openapi).toContain('AppRequestDetail: allOf:');
+    expect(read('test/cloud-capture-fakes.test.ts')).not.toContain('GET /apps/requests/{id} has no route.');
+  });
 });

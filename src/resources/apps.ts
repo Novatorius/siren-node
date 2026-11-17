@@ -1,6 +1,6 @@
 import type { HttpTransport } from '../http';
 import { shownAmount } from './app-amounts';
-import { answerAppRequest, listAppRequests, resendAppRequest, verifyAppRequest } from './app-requests';
+import { answerAppRequest, listAppRequests, resendAppRequest, retrieveAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
   AppCurrency,
@@ -8,6 +8,7 @@ import type {
   AppAnswerReceipt,
   AppRequest,
   AppRequestListParams,
+  AppRequestDetail,
   AppRequestRecord,
   DeclareAppParams,
   DeclaredApp,
@@ -58,6 +59,26 @@ export class AppRequestsResource {
    */
   async list(params: AppRequestListParams = {}): Promise<AppRequestRecord[]> {
     return listAppRequests(this.http, params, AppRequestsResource.LIST_FILTERS);
+  }
+
+  /**
+   * One request by its id, with `GET /apps/requests/{id}`, however old: the
+   * list's fields, the `data` Siren sent the app, the `answer` it took or
+   * null, and `answeredByUser`, `{ id, email }` of the person who answered
+   * by hand or null. The route takes an admin's session, as every app route
+   * does. An app's key gets 401 `api_key_not_accepted`, raised as
+   * `ApiKeyNotAcceptedError`.
+   *
+   * Refuses an `id` that is not `apr_` and 32 lowercase hex characters with
+   * `SirenError` before sending. Retries on a network error, 429 or 5xx, as
+   * a read. Siren answers 404 `app_request_not_found` for a request the
+   * organization does not have, raised as `NotFoundError`
+   * (GetAppRequest.php on Siren's feat/apps at 27169452a). Throws
+   * `UnexpectedResponseError` when the 2xx body is not this request with an
+   * object in `data`.
+   */
+  async retrieve(id: string): Promise<AppRequestDetail> {
+    return retrieveAppRequest(this.http, id);
   }
 
   /**

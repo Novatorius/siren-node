@@ -132,6 +132,7 @@ const LIVE_CASES: Case[] = [
     options: { stdin: PASSWORD },
     command: `siren login${LIVE}`,
   },
+  { name: 'one request the organization does not have', argv: ['apps', 'requests', 'apr_0123456789abcdef0123456789abcdef'], replies: [AppAnswers.requestNotFound()], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests${LIVE}` },
   { name: 'apps init', argv: ['apps', 'init', '--key', KEY], command: `siren apps apply${LIVE}` },
 ];
 
