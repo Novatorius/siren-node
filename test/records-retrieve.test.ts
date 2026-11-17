@@ -128,11 +128,16 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
   });
 });
 
+// This test once held payouts to no retrieve as well, matching the PHP SDK.
+// The apps-sdk-gaps slice added payouts.retrieve on purpose, because Siren
+// Cloud serves GET /payouts/{id} to a key with ledger:payouts:read
+// (saas/Auth/ApiKeyRoutes.php at 20c47873d) and an app that pays out needs
+// to read one payout. test/payouts-fulfillments.test.ts covers it. Obligations
+// still have no retrieve.
 describe('P7: the other ledger readers', () => {
-  it('give obligations and payouts no retrieve, as the PHP SDK does', () => {
+  it('give obligations no retrieve, as the PHP SDK does', () => {
     const ctx = makeClient([jsonResponse(200, [])]);
 
     expect('retrieve' in ctx.client.obligations).toBe(false);
-    expect('retrieve' in ctx.client.payouts).toBe(false);
   });
 });

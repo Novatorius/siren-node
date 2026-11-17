@@ -4,7 +4,9 @@ import type {
   CreditHoldStatus,
   CustomCurrencyType,
   DistributorStatus,
+  FulfillmentStatus,
   OpportunityStatus,
+  PayoutStatus,
   ProgramGroupSorter,
   ProgramStatus,
 } from './taxonomy';
@@ -835,4 +837,114 @@ export interface RecoveredCredit {
   alreadyCredited: number[];
   credited: number[];
   result: BulkResult | null;
+}
+
+/**
+ * A payout: what Siren owes one collaborator in one currency, inside a
+ * fulfillment. `payouts.list()` and `payouts.retrieve()` answer the default
+ * fields below unless `fields` names others.
+ */
+export interface Payout {
+  id: number;
+  status?: PayoutStatus | (string & {});
+  /** In the currency's smallest unit, such as cents, as a whole number. */
+  value?: number;
+  currency?: string;
+  collaboratorId?: number;
+  fulfillmentId?: number;
+  /** As ISO 8601 with an offset, or `null` until it is paid. */
+  datePaid?: string | null;
+  /** As ISO 8601 with an offset. */
+  dateCreated?: string | null;
+  /** As ISO 8601 with an offset. */
+  dateModified?: string | null;
+  /** Why the last automatic payment failed. `null` unless the caller sees the whole organization. */
+  failureReason?: string | null;
+  dateFailed?: string | null;
+  /**
+   * Why an unpaid payout waits on its collaborator's payout setup, such as
+   * `stripe_account_missing`, `stripe_account_incomplete` or
+   * `paypal_email_missing`, or `null` for one that does not wait.
+   */
+  waitingReason?: string | null;
+  dateWaiting?: string | null;
+  /** With `include: 'extended'` or by name in `fields`. */
+  collaboratorName?: string;
+  /** With `include: 'extended'` or by name in `fields`. */
+  collaboratorEmail?: string;
+  [field: string]: unknown;
+}
+
+/**
+ * One payout inside a fulfillment's `payouts` field. Siren builds it from
+ * the stored payout, so its dates are `Y-m-d H:i:s` rather than ISO 8601,
+ * and it carries the collaborator's name.
+ */
+export interface FulfillmentPayout {
+  id: number;
+  status?: PayoutStatus | (string & {});
+  value?: number;
+  currency?: string;
+  collaboratorId?: number;
+  collaboratorName?: string;
+  fulfillmentId?: number;
+  datePaid?: string | null;
+  failureReason?: string | null;
+  dateFailed?: string | null;
+  waitingReason?: string | null;
+  dateWaiting?: string | null;
+  dateCreated?: string | null;
+  dateModified?: string | null;
+  [field: string]: unknown;
+}
+
+/**
+ * A fulfillment: one batch of payouts. Siren answers `id`, `status`,
+ * `dateCreated` and `dateModified` unless `fields` names others or the read
+ * asks for `include: 'extended'`.
+ */
+export interface Fulfillment {
+  id: number;
+  status?: FulfillmentStatus | (string & {});
+  /** As ISO 8601 with an offset. */
+  dateCreated?: string | null;
+  /** As ISO 8601 with an offset. */
+  dateModified?: string | null;
+  payoutCount?: number;
+  paidCount?: number;
+  /** Every payout that is not paid, the failed and waiting ones included. */
+  unpaidCount?: number;
+  failedCount?: number;
+  /** Payouts waiting on their collaborator's payout setup. Only by name in `fields`. */
+  waitingCount?: number;
+  /** The sum of the payouts' values, in the currency's smallest unit. */
+  totalValue?: number;
+  /** The first payout's currency, or `null` for a fulfillment with none. */
+  currency?: string | null;
+  /** With `include: 'extended'` on `retrieve()`, or by name in `fields`. */
+  payouts?: FulfillmentPayout[];
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `fulfillments.list()`. */
+export interface FulfillmentListParams extends RecordListParams {
+  status?: FulfillmentStatus | (string & {}) | ReadonlyArray<string>;
+  /**
+   * Only fulfillments that hold at least one payout in this status:
+   * `paid`, `unpaid`, `processing`, `failed`, or `waiting` for an unpaid
+   * payout held for its collaborator's payout setup. `failed` finds the
+   * batches that need attention.
+   */
+  payoutStatus?: 'paid' | 'unpaid' | 'processing' | 'failed' | 'waiting';
+  /** Only fulfillments holding a payout in this currency. */
+  currency?: string;
+  /**
+   * The first day to include, `YYYY-MM-DD`, both days included. With no
+   * `payoutStatus` the days are the day a payout was paid, and with one the
+   * day it was made.
+   */
+  from?: string;
+  /** The last day to include, `YYYY-MM-DD`. */
+  to?: string;
+  orderBy?: 'id' | 'status' | 'dateCreated';
 }
