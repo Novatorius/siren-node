@@ -46,6 +46,16 @@
     ]
   },
   {
+    "id": "e2e-1-mode-not-restored",
+    "file": "src/cli/io.ts",
+    "find": "      input.off('data', onData);\n      restore();",
+    "replace": "      input.off('data', onData);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the hidden password prompt > turns echo off before the question appears, and gives the mode back after Enter"
+    ]
+  },
+  {
     "id": "e2e-2-session-edition-unchecked",
     "file": "src/cli/targets.ts",
     "find": "  if (session.edition !== edition) {",
