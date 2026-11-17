@@ -190,7 +190,7 @@ export async function answerAppRequest(
  * (saas/Auth/ApiKeyAuthMiddleware.php line 133 on feat/apps at 1557b0030,
  * captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), before
  * the answer route can send `app_answer_unauthorized`. That 401 gets the
- * code here and a message that names `siren apps rotate`, with Siren's
+ * code here and a message that names `siren apps rotate-key`, with Siren's
  * status and context kept and its error as `cause`, so a caller acts on one
  * code for every unauthorized answer. Any other error passes as it is.
  */

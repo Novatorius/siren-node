@@ -328,6 +328,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only their own line to the env file, mode 0600, through a temporary file and a rename.
   `siren apps rotate` sends nothing, names the two, and exits 1. Every hint that named
   `siren apps rotate`, `requests.answer()`'s 401 message included, names `rotate-key`.
+- `siren apps show`, `list` and `apply` print `requires Pro`, or the plan Siren names in
+  `requiredPlan`, beside a feature or the events the plan cannot use, and print the app's events.
+  `apply` warns when the file names scopes and the app holds no key, and names
+  `siren apps add-key <key>`, a new command that makes the key with `POST /apps/{key}/key` and
+  writes it to the env file.
 - `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
   refuses the webhook routes for a subscription an app owns.
 - `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,

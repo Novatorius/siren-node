@@ -4,7 +4,7 @@ import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
 import { harness, session } from './cli-fakes';
-import { APP_KEY, appRecord, itemPage } from './apps-siren-answers';
+import { APP_KEY, PartAnswers, PlanFields, appRecord, itemPage } from './apps-siren-answers';
 import { capturedReply } from './cloud-captures';
 
 /*
@@ -234,5 +234,91 @@ describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
       `Rotating is now two commands, since an app's key and its signing secret change apart. Nothing was sent. ` +
         `Run siren apps rotate-key ${KEY} for a new key, or siren apps rotate-secret ${KEY} for a new signing secret.`,
     );
+  });
+});
+
+describe('apps-sdk-container item 6: plans in the output', () => {
+  /** The app as Siren answers it on Plus (AppsOutIsProFlowTest everyPlan()): the outward feature and the events need Pro. */
+  const onPlus = appRecord({
+    events: ['obligation.approved'],
+    address: { ...appRecord().address, events: ['obligation.approved'] },
+    items: [
+      { ...appRecord().items[0], ...PlanFields.needsPro() },
+      { ...appRecord().items[1], kind: 'distributionResolver', key: 'acme-split', name: 'Acme split', settings: {} },
+    ],
+    eventsAccess: PlanFields.needsPro(),
+  });
+
+  it('show and list print requires Pro beside a feature and the events the plan cannot use, and nothing beside one it can', async () => {
+    const h = harness([reply(200, onPlus), reply(200, [onPlus])]);
+    h.signedIn();
+    expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
+    expect(await h.run(['apps', 'list']), h.err()).toBe(0);
+    const lines = h.out().split('\n');
+    for (const line of [
+      '  app:11  postConversionAction  notify-crm  Tell the CRM  requires Pro',
+      '  app:12  distributionResolver  acme-split  Acme split',
+      '  events  obligation.approved  requires Pro, so Siren does not send them',
+    ]) {
+      expect(lines.filter((printed) => printed === line), line).toHaveLength(2);
+    }
+  });
+
+  it('names the plan Siren names, says only that the plan cannot use it when Siren names none, and never guesses', async () => {
+    const app = appRecord({
+      items: [
+        { ...appRecord().items[0], entitled: false, requiredCapability: 'outbound-apps', requiredPlan: 'enterprise' },
+        { ...appRecord().items[1], entitled: false, requiredCapability: null, requiredPlan: null },
+      ],
+    });
+    const older = appRecord({ items: appRecord().items.map(({ entitled: _e, requiredCapability: _c, requiredPlan: _p, ...item }) => item) });
+    const h = harness([reply(200, app), reply(200, older)]);
+    h.signedIn();
+    expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
+    expect(h.out()).toContain('  app:11  postConversionAction  notify-crm  Tell the CRM  requires Enterprise\n');
+    expect(h.out()).toContain('  app:12  payoutMethod  acme-ledger  Acme ledger  your plan cannot use it\n');
+    expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
+    expect(h.out().split('\n').slice(-3, -1)).toEqual(['  app:11  postConversionAction  notify-crm  Tell the CRM', '  app:12  payoutMethod  acme-ledger  Acme ledger']);
+    expect(h.out()).not.toMatch(/requires Pro/);
+  });
+
+  it('apply prints the marks on the app it declared', async () => {
+    const h = harness([reply(200, appRecord({ name: 'Old' })), reply(200, onPlus)], { env: URL_ENV });
+    h.signedIn();
+    h.write('siren.app.json', exampleFile);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
+    expect(h.out()).toContain('  app:11  postConversionAction  notify-crm  Tell the CRM  requires Pro\n');
+    expect(h.out()).toContain('  events  obligation.approved  requires Pro, so Siren does not send them\n');
+  });
+
+  it('apply warns when the file names scopes and the app holds no key, and names the command that makes one', async () => {
+    const noKey = appRecord({ apiKey: null, apiKeyPrefix: null, scopes: [] });
+    const h = harness([reply(200, noKey), reply(200, noKey)], { env: URL_ENV });
+    h.signedIn();
+    h.write('siren.app.json', exampleFile.replace('"scopes":[]', '"scopes":["records:programs:read"]'));
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
+    expect(h.err()).toContain(
+      `siren: siren.app.json names scopes, and ${KEY} holds no key, so they reach nothing. Make one with siren apps add-key ${KEY}, then run siren apps apply again to give it these scopes.\n`,
+    );
+
+    const none = harness([reply(200, noKey), reply(200, noKey)], { env: URL_ENV });
+    none.signedIn();
+    none.write('siren.app.json', exampleFile);
+    await none.run(['apps', 'apply', '--yes']);
+    expect(none.err()).not.toContain('add-key');
+  });
+
+  it('add-key makes a key once and writes only it to the env file, and Siren refuses one for an app that holds a key', async () => {
+    const h = harness([reply(201, { ...appRecord(), rawKey: RAW_KEY }), PartAnswers.keyExists()]);
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [KEY]: join(h.cwd, '.env.sandbox') } }) });
+    h.write('.env.sandbox', `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
+    expect(await h.run(['apps', 'add-key', KEY]), h.err()).toBe(0);
+    expect(h.paths()).toEqual([`POST /apps/${KEY}/key`]);
+    expect(h.file('.env.sandbox')).toBe(`SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\nSIREN_API_KEY=${RAW_KEY}\n`);
+    expect(h.out()).toContain('The key holds no scopes yet. Run siren apps apply to give it the scopes your app file names.');
+    expect(h.printed()).not.toContain(RAW_KEY);
+
+    expect(await h.run(['apps', 'add-key', KEY])).toBe(1);
+    expect(h.err()).toContain('already has a key');
   });
 });

@@ -149,6 +149,12 @@ export async function appsApply(input: CommandInput): Promise<number> {
     throw error;
   });
   const changes = appChanges(current, params);
+  if (current !== undefined && (current.apiKey === null || current.apiKey === undefined) && (params.scopes ?? []).length > 0) {
+    run.warn(
+      `siren: ${shown} names scopes, and ${key} holds no key, so they reach nothing. ` +
+        `Make one with ${run.command(`apps add-key ${key}`)}, then run ${run.command('apps apply')} again to give it these scopes.`,
+    );
+  }
   const removals = await Promise.all(
     changes.dropped.map(({ item }) =>
       siren.apps.items.retrieve(key, item.id).then(
@@ -292,7 +298,18 @@ export function appsRotateSecret(input: CommandInput): Promise<number> {
 }
 
 /**
- * Rotates one secret and writes it to the env file `apply` recorded, or
+ * `siren apps add-key <key> [--app-file <path>]`: makes a key for an app
+ * that holds none with `POST /apps/{key}/key`, and writes it to the env
+ * file as `SIREN_API_KEY`. The key holds no scopes until the next
+ * `siren apps apply` gives it the file's. Nothing is revoked, so it does not
+ * ask. Siren answers 409 `app_key_exists` for an app that holds a key.
+ */
+export function appsAddKey(input: CommandInput): Promise<number> {
+  return rotatePart(input, 'add-key');
+}
+
+/**
+ * Rotates one secret, or makes the key, and writes it to the env file `apply` recorded, or
  * beside the app file `--app-file` names, replacing only its own line and
  * `SIREN_BASE_URL`, mode 0600, through a temporary file and a rename. With
  * neither it refuses before sending, since Siren shows the new secret once
@@ -300,11 +317,11 @@ export function appsRotateSecret(input: CommandInput): Promise<number> {
  * old secret stops working at once: `--yes` skips the question, and with no
  * terminal and no `--yes` it refuses.
  */
-async function rotatePart(input: CommandInput, part: 'key' | 'secret'): Promise<number> {
+async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key'): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
   const key = appKeyArgument(input.args[0] ?? '');
-  const command = part === 'key' ? 'apps rotate-key' : 'apps rotate-secret';
+  const command = part === 'key' ? 'apps rotate-key' : part === 'secret' ? 'apps rotate-secret' : 'apps add-key';
   const session = await run.signedIn();
 
   let envPath: string | undefined;
@@ -317,20 +334,20 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret'): Promise<
   }
   if (envPath === undefined) {
     throw new CliRefusal(
-      `This machine has no record of where ${key}'s ${part === 'key' ? 'key' : 'signing secret'} lives, so nothing was sent. Run ${run.command(`${command} ${key} --app-file <path to siren.app.json>`)}, and the new one goes beside that file.`,
+      `This machine has no record of where ${key}'s ${part === 'secret' ? 'signing secret' : 'key'} lives, so nothing was sent. Run ${run.command(`${command} ${key} --app-file <path to siren.app.json>`)}, and the new one goes beside that file.`,
     );
   }
-  const what = part === 'key' ? 'the old key' : 'the old signing secret';
+  const what = part === 'key' ? 'the old key' : part === 'secret' ? 'the old signing secret' : 'the app';
   const problem = await envFileProblem(envPath);
-  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and ${what} still works.`);
+  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent${part === 'add-key' ? '' : `, and ${what} still works`}.`);
   const held = await envValue(envPath, 'SIREN_BASE_URL');
   if (held !== undefined && held !== run.target.baseUrl) {
     throw new CliRefusal(
-      `${envPath} holds the key for ${held}, and this rotation is for ${run.target.baseUrl}, so nothing was sent and ${what} still works. ` +
+      `${envPath} holds the key for ${held}, and this ${part === 'add-key' ? 'key' : 'rotation'} is for ${run.target.baseUrl}, so nothing was sent${part === 'add-key' ? '' : ` and ${what} still works`}. ` +
         `Move that file aside to keep its key, then run ${run.command(`${command} ${key}`)} again.`,
     );
   }
-  if (values.yes !== true) {
+  if (part !== 'add-key' && values.yes !== true) {
     const warning =
       part === 'key'
         ? `Rotating ${key}'s key revokes the old key at once, so anything still using it stops working.`
@@ -341,14 +358,21 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret'): Promise<
   }
 
   const siren = run.siren();
-  const secrets = part === 'key' ? { rawKey: (await siren.apps.rotateKey(key)).rawKey } : { signingSecret: (await siren.apps.rotateSecret(key)).signingSecret };
-  const saved = await saveSecrets(run, key, envPath, secrets, true);
+  const secrets =
+    part === 'key'
+      ? { rawKey: (await siren.apps.rotateKey(key)).rawKey }
+      : part === 'secret'
+        ? { signingSecret: (await siren.apps.rotateSecret(key)).signingSecret }
+        : { rawKey: (await siren.apps.createKey(key)).rawKey };
+  const saved = await saveSecrets(run, key, envPath, secrets, part !== 'add-key');
   await run.remember(key, envPath);
   if (saved) {
     run.print(
       part === 'key'
         ? 'Siren revoked the old key. Restart your app so it reads the new key.'
-        : 'Siren signs every request with the new secret from now on. Restart your app so it reads it.',
+        : part === 'secret'
+          ? 'Siren signs every request with the new secret from now on. Restart your app so it reads it.'
+          : `The key holds no scopes yet. Run ${run.command('apps apply')} to give it the scopes your app file names.`,
     );
   }
   return saved ? 0 : 1;
@@ -381,9 +405,10 @@ export async function appsDelete(input: CommandInput): Promise<number> {
 
 /**
  * An app's lines: its key, name, state and, when `showUrl`, its url, then
- * one line per item with its `app:{id}`. An item Siren archived, because a
- * later declaration left it out while a record still selects it, says so
- * beside it. `apply` leaves the url out, since it may have come from the
+ * one line per feature with its `app:{id}`, then its events when it has
+ * any. A feature Siren archived, because a later declaration left it out
+ * while a record still selects it, says so beside it, and a feature or the
+ * events the plan cannot use say which plan they need. `apply` leaves the url out, since it may have come from the
  * environment.
  */
 export function appLines(app: App, showUrl = true): string[] {
@@ -391,9 +416,25 @@ export function appLines(app: App, showUrl = true): string[] {
   const lines = [`${app.key}  ${app.name}  ${state}${showUrl && app.url ? `  ${app.url}` : ''}`];
   for (const item of app.items) {
     const archived = item.status === 'archived' ? '  archived, so Siren no longer calls it' : '';
-    lines.push(`  ${item.ref}  ${item.kind}  ${item.key}  ${item.name}${archived}`);
+    lines.push(`  ${item.ref}  ${item.kind}  ${item.key}  ${item.name}${archived}${planMark(item)}`);
   }
+  const events = Array.isArray(app.events) ? app.events : [];
+  if (events.length > 0) lines.push(`  events  ${events.join(', ')}${planMark(app.eventsAccess, ', so Siren does not send them')}`);
   return lines;
+}
+
+/**
+ * `  requires Pro` beside a feature or the events the plan cannot use, read
+ * from Siren's `entitled` and `requiredPlan` (AppPlanAccess on Siren's
+ * int/preview-apps). The plan is the one Siren names, never a guess: when
+ * `requiredPlan` is null the mark says only that the plan cannot use it.
+ * Nothing when Siren sends no `entitled`, as an older Siren does not.
+ */
+function planMark(access: { entitled?: unknown; requiredPlan?: unknown } | undefined, then = ''): string {
+  if (access === undefined || access === null || access.entitled !== false) return '';
+  const plan = typeof access.requiredPlan === 'string' && access.requiredPlan !== '' ? access.requiredPlan : undefined;
+  if (plan === undefined) return `  your plan cannot use it${then}`;
+  return `  requires ${plan.charAt(0).toUpperCase()}${plan.slice(1)}${then}`;
 }
 
 /** Turns the app on or off and prints its new state. */
