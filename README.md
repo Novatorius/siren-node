@@ -1223,7 +1223,7 @@ needing attention. The route passes anything else that throws to `next`, so Expr
 
 ### Read what a tell says
 
-A tell's `data` belongs to the item's kind. A `postConversionAction` gets
+A tell's `data` belongs to the feature's kind. A `postConversionAction` gets
 `AppConversionApprovedData`: the `conversion`, its `reward` as `{ value, units, currency }` or
 `null` when it has none, and the `program`. A `postAllocationAction` gets
 `AppAllocationCompletedData`: the `allocation`, with `value`, `units` and `currency`, and the
@@ -1266,8 +1266,8 @@ nothing more was applied. A different answer after an accepted one gets 409
 `app_request_already_answered`, and the first one stands.
 
 An ask carries `answerBy`. Siren sends an unanswered ask again when its window closes, three sends
-in all, then marks it `needs_attention`. An item's `answerWindowMinutes` sets the window, from 1 to
-43200 minutes. A fulfillment method waits a day and a distribution resolver an hour when the item
+in all, then marks it `needs_attention`. A feature's `answerWindowMinutes` sets the window, from 1
+to 43200 minutes. A payout method waits a day and a distribution resolver an hour when the feature
 sets none.
 
 ### See what Siren sent
@@ -1321,7 +1321,7 @@ try {
 | `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
 | `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
-| `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
+| `app_answer_invalid` | 422 | Fix the answer for the feature's kind. |
 | `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate-key <app key>` when the app's key is lost or revoked. |
 
 ### The sandbox

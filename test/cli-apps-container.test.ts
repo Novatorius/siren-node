@@ -1,10 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
 import { harness, session } from './cli-fakes';
-import { APP_KEY, PartAnswers, PlanFields, appRecord, itemPage } from './apps-siren-answers';
+import { APP_KEY, AppAnswers, PartAnswers, PlanFields, appRecord, itemPage } from './apps-siren-answers';
 import { capturedReply } from './cloud-captures';
 
 /*
@@ -320,5 +321,36 @@ describe('apps-sdk-container item 6: plans in the output', () => {
 
     expect(await h.run(['apps', 'add-key', KEY])).toBe(1);
     expect(h.err()).toContain('already has a key');
+  });
+});
+
+describe('apps-sdk-container item 7: a person reads feature, never item', () => {
+  it('the tool says feature in what it prints for apply, show, list and a refused delete', async () => {
+    const archived = appRecord({ items: appRecord().items.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) });
+    const h = harness(
+      [reply(200, appRecord({ name: 'Old' })), reply(200, archived), reply(200, archived), reply(200, [archived]), AppAnswers.inUse(), reply(200, archived)],
+      { env: URL_ENV },
+    );
+    h.signedIn();
+    h.write('siren.app.json', exampleFile);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
+    expect(await h.run(['apps', 'list']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'delete', KEY, '--yes'])).toBe(1);
+    const printed = h.printed();
+    expect(printed).toContain('An archived feature is one siren.app.json no longer names');
+    expect(printed).toContain('Records still select its features');
+    expect(printed.replace(/app:\d+/g, '')).not.toMatch(/\bitems?\b/i);
+  });
+
+  it("the README's apps and command-line sections say feature outside code, but for the line that names the code's word", () => {
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+    const part = readme.slice(readme.indexOf('## Siren apps'), readme.indexOf('## Other SDKs'));
+    const prose = part
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`[^`]*`/g, '')
+      .replace(/The code calls a feature an item, so the routes are/, '');
+    expect(prose).toMatch(/\bfeatures?\b/);
+    expect(prose).not.toMatch(/\bitems?\b/i);
   });
 });

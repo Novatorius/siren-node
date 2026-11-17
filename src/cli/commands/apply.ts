@@ -191,7 +191,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   if (app.items.some((item) => item.status === 'archived')) {
     const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);
     run.print(
-      `An archived item is one ${shown} no longer names while a record still selects it. ` +
+      `An archived feature is one ${shown} no longer names while a record still selects it. ` +
         'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
         `To bring it back, name it in ${shown} again with the same kind and key, and run ${again}.`,
     );
@@ -211,7 +211,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   return 0;
 }
 
-/** `siren apps list [--json]`: one block per app with its items, or the JSON Siren sent. */
+/** `siren apps list [--json]`: one block per app with its features, or the JSON Siren sent. */
 export async function appsList(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   await run.signedIn();
@@ -228,7 +228,7 @@ export async function appsList(input: CommandInput): Promise<number> {
   return 0;
 }
 
-/** `siren apps show <key> [--json]`: the app and its items. */
+/** `siren apps show <key> [--json]`: the app and its features. */
 export async function appsShow(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const key = appKeyArgument(input.args[0] ?? '');
@@ -381,7 +381,7 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
 /**
  * `siren apps delete <key> --yes`: deletes the app and revokes its key.
  * Without `--yes` it asks for the key in a terminal, and refuses elsewhere.
- * A 409 `app_in_use` names the records that still use its items, with
+ * A 409 `app_in_use` names the records that still use its features, with
  * `siren apps off`, and the open asks, with `siren apps requests --app`.
  */
 export async function appsDelete(input: CommandInput): Promise<number> {
@@ -459,13 +459,13 @@ async function inUseLines(run: CommandContext, key: string, error: ConflictError
   const open = typeof data.openRequests === 'number' ? data.openRequests : 0;
   const lines = [`Siren kept ${key}.`];
   if (uses.length > 0) {
-    lines.push(`Records still select its items: ${uses.map(([ref, count]) => `${ref} (${String(count)})`).join(', ')}.`);
+    lines.push(`Records still select its features: ${uses.map(([ref, count]) => `${ref} (${String(count)})`).join(', ')}.`);
     const status = await run
       .siren()
       .apps.retrieve(key)
       .then((app) => app.status, () => undefined);
     const turnOff = `Turn it off instead with ${run.command(`apps off ${key}`)}. Siren then stops calling it and keeps what it already did.`;
-    const change = `To delete it, change each record that selects those items to another choice, then run ${run.command(`apps delete ${key} --yes`)}.`;
+    const change = `To delete it, change each record that selects those features to another choice, then run ${run.command(`apps delete ${key} --yes`)}.`;
     if (status === 'active') lines.push(turnOff);
     else if (status !== undefined) lines.push(`It is already off, so Siren no longer calls it. ${change}`);
     else lines.push(`If it is on, ${turnOff.charAt(0).toLowerCase()}${turnOff.slice(1)} ${change}`);

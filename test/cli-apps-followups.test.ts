@@ -35,11 +35,11 @@ describe('apps-sdk-followups-1: an archived item', () => {
     // The capture predates the payout kind's new word, so Siren answered the old one.
     expect(lines).toContain('  app:2  fulfillmentMethod  acme-ledger  Acme ledger');
     expect(lines).toContain(
-      'An archived item is one siren.app.json no longer names while a record still selects it. ' +
+      'An archived feature is one siren.app.json no longer names while a record still selects it. ' +
         'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
         'To bring it back, name it in siren.app.json again with the same kind and key, and run siren apps apply.',
     );
-    expect(h.out().match(/An archived item is/g)).toHaveLength(1);
+    expect(h.out().match(/An archived feature is/g)).toHaveLength(1);
   });
 
   it('keeps the target flags in the apply hint, and names the file as it was given', async () => {
@@ -65,7 +65,7 @@ describe('apps-sdk-followups-1: an archived item', () => {
     h.signedIn();
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
     expect(h.out().split('\n')).toContain(ARCHIVED_LINE);
-    expect(h.out()).not.toContain('An archived item is');
+    expect(h.out()).not.toContain('An archived feature is');
     const before = h.out().length;
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(h.out().slice(before).split('\n')).toContain(ARCHIVED_LINE);
@@ -165,7 +165,7 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     expect(await on.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
     expect(on.paths()).toEqual(['DELETE /apps/ledger-sync', 'GET /apps/ledger-sync']);
     expect(on.err()).toBe(
-      'siren: Siren kept ledger-sync.\nRecords still select its items: app:4 (1), app:5 (1).\n' +
+      'siren: Siren kept ledger-sync.\nRecords still select its features: app:4 (1), app:5 (1).\n' +
         'Turn it off instead with siren apps off ledger-sync --sandbox. Siren then stops calling it and keeps what it already did.\n',
     );
 
@@ -173,8 +173,8 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     off.signedIn();
     expect(await off.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
     expect(off.err()).toBe(
-      'siren: Siren kept ledger-sync.\nRecords still select its items: app:4 (1), app:5 (1).\n' +
-        'It is already off, so Siren no longer calls it. To delete it, change each record that selects those items to another choice, ' +
+      'siren: Siren kept ledger-sync.\nRecords still select its features: app:4 (1), app:5 (1).\n' +
+        'It is already off, so Siren no longer calls it. To delete it, change each record that selects those features to another choice, ' +
         'then run siren apps delete ledger-sync --yes --sandbox.\n',
     );
     expect(off.err()).not.toContain('Turn it off');

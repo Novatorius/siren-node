@@ -333,6 +333,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `apply` warns when the file names scopes and the app holds no key, and names
   `siren apps add-key <key>`, a new command that makes the key with `POST /apps/{key}/key` and
   writes it to the env file.
+- The tool's output and the README say feature where they said item. Technical terms such as
+  `items`, `AppItem` and `app:{id}` stay as they are.
 - `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
   refuses the webhook routes for a subscription an app owns.
 - `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,
