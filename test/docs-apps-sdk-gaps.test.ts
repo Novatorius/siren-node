@@ -66,10 +66,10 @@ describe('apps-sdk-gaps docs: openapi.yaml', () => {
   it('documents the four fields PUT /webhooks/{id} reads, and a delivery schema', () => {
     const openapi = read('openapi.yaml');
     const put = path(openapi, '/webhooks/{id}').split('\n    put:\n')[1]!.split('\n    delete:\n')[0]!;
+    const body = put.split('\n      requestBody:\n')[1]!.split('\n      responses:\n')[0]!;
+    const fields = [...body.matchAll(/\n {16}(\w+):/g)].map((match) => match[1]);
 
-    for (const field of ['targetUrl', 'events', 'status', 'description']) {
-      expect(put, field).toContain(`${field}:`);
-    }
+    expect(fields).toEqual(['targetUrl', 'events', 'status', 'description']);
     expect(path(openapi, '/webhooks/{id}/deliveries')).toContain("$ref: '#/components/schemas/WebhookDelivery'");
     expect(openapi).toContain('\n    WebhookDelivery:\n');
   });
