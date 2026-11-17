@@ -205,8 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AppRequestMode` are Siren's app vocabularies, and `App`, `AppItem`, `DeclareAppParams`,
   `DeclaredApp`, `RotatedApp`, `AppRequest`, `AppRequestRecord`, `AppAnswer` and
   `AppAnswerReceipt` type the calls.
-- `SANDBOX_BASE_URL`, `https://sandbox.sirenaffiliates.com/siren/v1`. A client built with an
-  `sk_test_` key and no `baseUrl` goes to `SANDBOX_BASE_URL`.
+- The sandbox's address, `https://sandbox.sirenaffiliates.com/siren/v1`, as an exported constant. A
+  client built with an `sk_test_` key and no `baseUrl` goes to `SANDBOX_BASE_URL`.
 - The `siren` command-line tool, this package's bin: `signup`, `login`, `logout`, `orgs`, `use`,
   and `apps init`, `apply`, `list`, `show`, `requests`, `answer`, `resend`, `rotate`, `on`, `off`
   and `delete`. It keeps the session in credentials.json, mode 0600, and saves an app's key and

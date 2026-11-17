@@ -1104,8 +1104,8 @@ const app = await siren.apps.declare('acme-payouts', {
 if (app.created) saveSecrets(app.rawKey, app.signingSecret);
 ```
 
-`apps.list()` and `apps.retrieve(key)` read the apps with their items. `apps.setStatus(key,
-'inactive')` turns an app off, which takes its items out of every picker and stops Siren sending it
+`apps.list()` and `apps.retrieve(key)` read the apps with their items.
+`apps.setStatus(key, 'inactive')` turns an app off, which takes its items out of every picker and stops Siren sending it
 anything. `apps.rotate(key)` gives the app a new key and signing secret, revokes the old key at
 once, and shows the pair once. `apps.delete(key)` deletes an app that no record selects and that
 has no open ask. Siren refuses one still in use with 409 `app_in_use`, and its `uses` and

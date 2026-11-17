@@ -343,8 +343,8 @@ also writes dist/cli.cjs and its type files, which nothing names. The version st
 
 ## Tests and proof
 
-109 tests are pending in seven files, 17 more than round 1. Each describe's name starts with
-`apps-cli`.
+109 acceptance tests in seven files, 17 more than round 1, and every one is on. Each describe's
+name starts with `apps-cli`.
 
 | File | Tests | Round 2 | Packet |
 | --- | --- | --- | --- |
@@ -525,6 +525,28 @@ OK   docs-count-three: caught (expected caught)
 OK   docs-changelog-constructor: caught (expected caught)
 
 134 of 134 mutations scored as expected.
+```
+
+### The run on the built branch
+
+The finished branch holds every packet's code, so each packet's implementer rewrote the `find` texts
+of its own guards. Four were still stale at the end and were rewritten: the three example mutations
+written against the scratch handler, and `docs-drop-by-key`, whose sentence the README wraps. Two
+more prove the example's own unit tests: `example-inflight-twice` (a repeat that arrives while the
+first answer is on its way) and `example-sale-unattributed` (a visit with no opportunity). The list
+holds 179 mutations.
+
+Run offline under the heavy lock, the first pass scored 178 of 179. `docs-changelog-sandbox`
+survived, because the CHANGELOG named `SANDBOX_BASE_URL` twice in one bullet, so removing one left
+the other for the test to find. The bullet now names it once, and a rerun of that mutation with the
+four controls scored 5 of 5:
+
+```
+OK   control-break: caught (expected caught)
+OK   control-harmless: survives (expected survives)
+OK   control-malformed: refused (expected refused)
+OK   control-wrong-reason: wrong-reason (expected wrong-reason)
+OK   docs-changelog-sandbox: caught (expected caught)
 ```
 
 ## The founder's walk
