@@ -175,5 +175,105 @@
     "failing": [
       "names the command that writes each missing line, never the old joint rotate"
     ]
+  },
+  {
+    "id": "review1-apply-names-rotate-for-keyless",
+    "file": "src/cli/commands/apply.ts",
+    "find": "Run ${run.command(`apps add-key ${key}`)} to make one and save it there.",
+    "replace": "Run ${run.command(`apps rotate-key ${key}`)} to make one and save it there.",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 1: the command for a missing key fits the app > apply names add-key, never rotate-key, when the app holds no key"
+    ]
+  },
+  {
+    "id": "review1-key-missing-unmapped",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    case 'app_key_missing':",
+    "replace": "    case 'app_key_missing_unmapped':",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 1: the command for a missing key fits the app > rotate-key on an app with no key names add-key"
+    ]
+  },
+  {
+    "id": "review2-header-claims-dashboard",
+    "file": "src/cli/commands/apply.ts",
+    "find": "      : `Applying ${shown} changes ${key} on ${run.target.baseUrl}:`,",
+    "replace": "      : `Applying ${shown} changes ${key} on ${run.target.baseUrl}, a change made in the dashboard included:`,",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 2: apply says what will change, and claims no dashboard change"
+    ]
+  },
+  {
+    "id": "review3-duplicate-lines-allowed",
+    "file": "src/cli/commands/apply.ts",
+    "find": "      if (at.length > 1) {",
+    "replace": "      if (at.length > 99) {",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 3: a name the env file holds twice > rotate-key, rotate-secret and add-key refuse before sending"
+    ]
+  },
+  {
+    "id": "review4-bare-kind",
+    "file": "src/cli/app-kinds.ts",
+    "find": "  return name === undefined ? kind : `${name} (${kind})`;",
+    "replace": "  return name === undefined ? kind : kind;",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 4: a kind shows its readable name beside its technical one > show, list and apply print the readable name beside the kind"
+    ]
+  },
+  {
+    "id": "review5-scopes-as-written",
+    "file": "src/cli/app-changes.ts",
+    "find": "  if (!unique.includes('*')) return unique;",
+    "replace": "  if (unique.length >= 0) return unique;",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 5: scopes compared the way Siren stores them > a file with * beside event scopes"
+    ]
+  },
+  {
+    "id": "review6-rotate-needs-a-key",
+    "file": "src/cli/run.ts",
+    "find": "    positionals: [0, 1],\n    offline: true,",
+    "replace": "    positionals: [1, 1],\n    offline: true,",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 6: small command-line edges > siren apps rotate with no key prints the same split explanation"
+    ]
+  },
+  {
+    "id": "review6-only-requests-reserved",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  return key.length <= 64 && APP_KEY.test(key) && !(RESERVED_APP_KEYS as readonly string[]).includes(key);",
+    "replace": "  return key.length <= 64 && APP_KEY.test(key) && key !== 'requests' && RESERVED_APP_KEYS.length > 0;",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 6: small command-line edges > each reserved word gets the tool's own refusal"
+    ]
+  },
+  {
+    "id": "review7-openapi-revoke-undeprecated",
+    "file": "openapi.yaml",
+    "find": "      operationId: revokeApiKey\n      deprecated: true\n",
+    "replace": "      operationId: revokeApiKey\n",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 7: openapi.yaml marks the old routes deprecated > revokeApiKey is deprecated"
+    ]
+  },
+  {
+    "id": "review8-secret-in-error-data",
+    "file": "src/resources/apps.ts",
+    "find": "  if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: withoutSecrets(body) });",
+    "replace": "  if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: body });",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-container review fix 8: a malformed answer never carries a secret in error.data > drops rawKey and signingSecret"
+    ]
   }
 ]

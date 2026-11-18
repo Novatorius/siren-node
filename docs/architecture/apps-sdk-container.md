@@ -52,6 +52,13 @@ an `@deprecated` line naming the app call that replaces it. The calls still
 work, since Siren keeps their routes until slice C5 removes them, and they go
 then. `webhooks.constructEvent()` and `webhooks.verifySignature()` stay as
 they are, because an app's address receives events signed the same way.
+openapi.yaml marks each old `/webhooks` and `/api-keys` operation
+`deprecated: true`, with a first description line naming the app route that
+replaces it.
+
+A malformed answer to a call that made a secret throws
+`UnexpectedResponseError` with the body as `data`, less `rawKey` and
+`signingSecret`, so a caller that logs the error never logs a secret.
 
 ## The app file
 
@@ -60,7 +67,19 @@ features and no `url` is refused at `apps.X.items`, since Siren sends a
 feature its requests at the app's address. The payout kind is
 `payoutMethod`. The file refuses `fulfillmentMethod` and names the new
 word. App keys never take `requests`, `events`, `scopes` or `kinds`, which
-Siren keeps for its own routes.
+Siren keeps for its own routes, and every command that takes an app key
+refuses them in the tool's own words.
+
+## Kind names
+
+Wherever a person reads a feature's kind, the tool prints its readable name
+beside the term, as Payout method (payoutMethod): `show`, `list`, apply's
+changes, the request lines and the app file's messages. The README's feature
+table does the same. The names are `name` in Siren's
+`AppItemKindCatalog::entries()` (lines 189, 199, 209 and 228 on feat/apps at
+`c8dbb1ab3`), held in `src/cli/app-kinds.ts` and pinned to Siren's by a test,
+since those commands read no catalog. A kind the copy lacks prints its term
+alone.
 
 ## Apply shows what it will change
 
@@ -68,19 +87,29 @@ Siren keeps for its own routes.
 it with the file the way Siren does when it applies a declaration: names
 trimmed, a description as written, events and scopes as sets, currencies
 upper-cased in order, and a feature matched by its kind and key
-(`src/cli/app-changes.ts`). It prints each change, then asks
+(`src/cli/app-changes.ts`). Scopes are first reduced as Siren stores them:
+each once, and with `*` present, `*` and the record scopes only
+(`ApiKeyService::normalizeScopes()`, lib/ApiKeys/Service/Services/ApiKeyService.php
+line 51, applied by lib/Apps/Service/Services/AppService.php line 1764, both
+on feat/apps at `c8dbb1ab3`). So a file that names `*` beside `event:*`
+matches on the next run. It prints a header that says what applying the
+file changes, then each change, then asks
 "Type yes to apply". `--yes` skips the question. With no terminal and no
 `--yes` it sends nothing. With nothing to change it says so and writes
 nothing.
 
 A feature the file leaves out is read with `apps.items.retrieve()`, so the
 line says whether records still select it and Siren archives it, or nothing
-does and Siren deletes it. The question says the last write wins, since a
-difference may be a change someone made in the dashboard, and the SDK cannot
-tell the two apart.
+does and Siren deletes it. The question says the last write wins. A
+difference may be a change someone made in the dashboard, and the tool
+cannot tell that from an edit to the file, so neither the header nor the
+lines say who made it.
 
 When the file names scopes and the app holds no key, apply warns that the
-scopes reach nothing and names `siren apps add-key`.
+scopes reach nothing and names `siren apps add-key`. When this machine's env
+file holds no key, apply names `add-key` for an app that holds none and
+`rotate-key` for one that holds a key, never both, since Siren refuses to
+rotate a key the app lacks (409 `app_key_missing`).
 
 ## The commands
 
@@ -89,10 +118,15 @@ scopes reach nothing and names `siren apps add-key`.
 | `siren apps rotate-key <key>` | Asks, rotates the key, writes only `SIREN_API_KEY` |
 | `siren apps rotate-secret <key>` | Asks, rotates the signing secret, writes only `SIREN_SIGNING_SECRET` |
 | `siren apps add-key <key>` | Makes a key with no scopes for an app that holds none |
-| `siren apps rotate <key>` | Sends nothing, explains the split and exits non-zero |
+| `siren apps rotate [<key>]` | Sends nothing, explains the split and exits non-zero, with or without a key |
 
 Apply saves only the secrets Siren sent, so a key-only app gets no empty
-signing secret line.
+signing secret line. `rotate-key`, `rotate-secret` and `add-key` turn
+Siren's 409 for a missing key, a missing address or an existing key into the
+one command that fits. Apply and the three key commands refuse, before they
+send, an env file that holds one of the tool's three names on more than one
+line, and name the lines, so a rotation never leaves the revoked key on a
+line a loader reads.
 
 ## Plans in the output
 
@@ -125,22 +159,26 @@ SDK keeps `decimal` and `text` in step with `format()`.
 | `test/cli-apps-container.test.ts` | Items 3 to 7 in the tool |
 | `test/apps-amounts.test.ts` | Item 8 |
 | `test/apps-example.test.ts` | Item 9 |
+| `test/cli-apps-container-review.test.ts` | The review's fixes 1 to 6 and 8 |
+| `test/docs-apps-sdk-container.test.ts` | This note, the mutation list and the review's fix 7 |
 
 The fixtures in `test/apps-siren-answers.ts` copy Siren's tests, and each
 names the file and lines it copies. `test/fixtures/apps-exchange/signed-request.json`
 is Siren's copy.
 
-`scripts/mutations/apps-sdk-container.json` holds 14 breaks, at least one per
-item, and the four controls. Run it with the slice's test files:
+`scripts/mutations/apps-sdk-container.json` holds 24 breaks, at least one per
+item and per review fix, and the four controls. Run it with the slice's test
+files:
 
 ```sh
 MUTATION_VITEST_ARGS="--maxWorkers=4 --minWorkers=1 test/apps-container.test.ts \
   test/apps-container-deprecations.test.ts test/cli-app-file-container.test.ts \
-  test/cli-apps-container.test.ts test/apps-amounts.test.ts test/apps-example.test.ts" \
+  test/cli-apps-container.test.ts test/apps-amounts.test.ts test/apps-example.test.ts \
+  test/cli-apps-container-review.test.ts test/docs-apps-sdk-container.test.ts" \
   node scripts/mutation-proof.mjs scripts/mutations/apps-sdk-container.json
 ```
 
-It scored 18 of 18 as expected: every break caught for the reason named, the
+It scored 28 of 28 as expected: every break caught for the reason named, the
 harmless change survived, the malformed entry was refused, and the
 wrong-reason control scored wrong-reason.
 
@@ -167,12 +205,15 @@ Left open: the optional line that says when the app last changed, from
   way and marks it deprecated.
 - `format()` and `toDecimalString()` disagree on the sign, so the SDK
   follows `format()`.
-- The 401 hint names `siren apps rotate-key`, since the key is the part a
-  401 points at.
+- The 401 hint names `siren apps rotate-key` for a lost key and
+  `siren apps add-key` for an app that holds none, since a 401 points at the
+  key and the SDK cannot tell which case it is.
 
 ## What the PHP SDK needs
 
 The same calls and the items resource, `payoutMethod` with the old name as a
 deprecated alias, optional `url`, the new `App` fields and the feature plan
 fields, `@deprecated` on the old key and webhook methods, and `decimal`
-taking its sign from the stored value.
+taking its sign from the stored value. Its errors should keep no secret in
+their data, and any comparison of scope lists should reduce them as
+`normalizeScopes()` does.

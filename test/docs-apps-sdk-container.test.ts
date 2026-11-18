@@ -42,6 +42,9 @@ describe('apps-sdk-container: the note and the mutation list', () => {
     for (let item = 1; item <= 9; item += 1) {
       expect(caught.some((entry) => entry.id.startsWith(`item${item}-`)), `item ${item}`).toBe(true);
     }
+    for (let fix = 1; fix <= 8; fix += 1) {
+      expect(caught.some((entry) => entry.id.startsWith(`review${fix}-`)), `review fix ${fix}`).toBe(true);
+    }
   });
 });
 
