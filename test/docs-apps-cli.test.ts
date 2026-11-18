@@ -42,7 +42,21 @@ const ROUTES: Array<[string, string]> = [
   ['/apps/{key}', 'put'],
   ['/apps/{key}', 'delete'],
   ['/apps/{key}/status', 'post'],
-  ['/apps/{key}/rotate', 'post'],
+  ['/apps', 'post'],
+  ['/apps/{key}', 'patch'],
+  ['/apps/{key}/key', 'post'],
+  ['/apps/{key}/key', 'delete'],
+  ['/apps/{key}/key/rotate', 'post'],
+  ['/apps/{key}/secret/rotate', 'post'],
+  ['/apps/{key}/test', 'post'],
+  ['/apps/{key}/deliveries', 'get'],
+  ['/apps/{key}/items', 'post'],
+  ['/apps/{key}/items/{id}', 'get'],
+  ['/apps/{key}/items/{id}', 'patch'],
+  ['/apps/{key}/items/{id}', 'delete'],
+  ['/apps/events', 'get'],
+  ['/apps/scopes', 'get'],
+  ['/apps/kinds', 'get'],
   ['/apps/requests', 'get'],
   ['/apps/requests/{id}/resend', 'post'],
 ];
@@ -83,9 +97,9 @@ describe('apps-cli docs', () => {
     for (const line of keyLines) expect(line).toMatch(/\b(not|never)\b/);
   });
 
-  it('the parity section counts thirteen Node-only methods', () => {
+  it('the parity section counts twenty-nine Node-only methods', () => {
     const parity = section(read('README.md'), '## Parity with the PHP SDK');
-    expect(parity.replace(/\s+/g, ' ')).toContain('It also has thirteen methods the PHP SDK does not have yet');
+    expect(parity.replace(/\s+/g, ' ')).toContain('It also has twenty-nine methods the PHP SDK does not have yet');
   });
 
   it('the CHANGELOG names the apps calls, the siren command and the sandbox key rule', () => {

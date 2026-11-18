@@ -23,7 +23,7 @@ export const MAX_BULK_IDS = 500;
 type Transport = Pick<HttpTransport, 'request'>;
 
 /** A write's HTTP method. */
-export type RecordWriteMethod = 'POST' | 'PUT';
+export type RecordWriteMethod = 'POST' | 'PUT' | 'PATCH';
 
 /**
  * True for a positive safe integer, the only id Siren reads as sent.

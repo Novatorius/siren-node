@@ -4,6 +4,7 @@ import { AppErrorCode, ConflictError, ErrorCode, NotFoundError, SirenError, appE
 import type { AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument } from './apply';
+import { kindLabel } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
@@ -89,7 +90,8 @@ export async function appsRequests(input: CommandInput): Promise<number> {
  * `siren apps requests <id>`: reads the request with
  * `GET /apps/requests/{id}`, however old, and prints its line, the data
  * Siren sent, and the answer Siren took with who gave it. Then it finds the
- * app's webhook deliveries whose event id is `<id>.<send>` and prints each
+ * app's deliveries, `GET /apps/{key}/deliveries`, whose event id is
+ * `<id>.<send>` and prints each
  * send with its HTTP status and what the app said back. A request the
  * organization does not have is refused in one line that says where to see
  * the latest.
@@ -121,11 +123,15 @@ async function showRequest(input: CommandInput, id: string): Promise<number> {
   }
 
   const app = (await siren.apps.list()).find((candidate) => candidate.id === request.appId);
-  if (app === undefined || app.webhookSubscriptionId === null) {
+  if (app === undefined) {
     run.print('Its app is gone, so its sends cannot be shown.');
     return 0;
   }
-  const sends = (await siren.webhooks.subscriptions.deliveries(app.webhookSubscriptionId))
+  if (app.address === null) {
+    run.print('Its app has no address now, so its sends cannot be shown.');
+    return 0;
+  }
+  const sends = (await siren.apps.deliveries(app.key))
     .filter((delivery) => delivery.eventId.startsWith(`${id}.`))
     .sort((a, b) => sendNumber(a.eventId) - sendNumber(b.eventId));
   if (sends.length === 0) {
@@ -237,11 +243,11 @@ function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unkno
   return error;
 }
 
-/** One request as a line: its id, status, mode and kind, item, subject, sends, time and last error. */
+/** One request as a line: its id, status, mode and kind with the kind's readable name, item, subject, sends, time and last error. */
 function requestLine(row: AppRequestRecord): string {
   const subject = row.subject ? `${row.subject.type} ${row.subject.id}` : '';
   const sends = `${row.sendCount} ${row.sendCount === 1 ? 'send' : 'sends'}`;
-  return [row.id, row.status, `${row.mode} ${row.kind}`, row.item, subject, sends, row.createdAt, row.lastError ?? '']
+  return [row.id, row.status, `${row.mode} ${kindLabel(row.kind)}`, row.item, subject, sends, row.createdAt, row.lastError ?? '']
     .filter((part) => part !== '')
     .join('  ');
 }

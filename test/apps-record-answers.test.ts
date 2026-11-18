@@ -45,7 +45,7 @@ describe('apps answers that are not apps', () => {
     const runs: Array<(resource: AppsResource) => Promise<unknown>> = [
       (resource) => resource.retrieve(APP_KEY),
       (resource) => resource.setStatus(APP_KEY, 'active'),
-      (resource) => resource.rotate(APP_KEY),
+      (resource) => resource.rotateKey(APP_KEY),
     ];
     for (const run of runs) {
       const { apps: resource } = apps([reply(200, { ...notAnApp, rawKey: 'sk_test_x', signingSecret: 'y' })]);
@@ -63,7 +63,7 @@ describe('apps answers that are not apps', () => {
   it('refuses a bad key on every call that takes one, before sending', async () => {
     const runs: Array<(resource: AppsResource) => Promise<unknown>> = [
       (resource) => resource.setStatus('Acme', 'active'),
-      (resource) => resource.rotate('requests'),
+      (resource) => resource.rotateKey('requests'),
       (resource) => resource.delete('acme/payouts'),
       (resource) => resource.declare(APP_KEY, null as never),
     ];

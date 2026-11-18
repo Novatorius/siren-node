@@ -8,6 +8,9 @@ import type { ApiKey, ApiKeyScopeGroups, CreateApiKeyParams, CreatedApiKey } fro
  * These routes take a signed-in dashboard session's access token, passed as
  * `apiKey`. No API key scope reaches them, so Siren answers an API key with a
  * 401 that the SDK throws as `ApiKeyNotAcceptedError`.
+ *
+ * Deprecated: an app holds its key now, and each method names the app call
+ * that replaces it. These calls go when Siren removes `/api-keys`.
  */
 export class ApiKeysResource {
   constructor(private readonly http: HttpTransport) {}
@@ -24,6 +27,9 @@ export class ApiKeysResource {
    * the ledger, and `webhook-subscriptions:read` or
    * `webhook-subscriptions:manage` to read or manage webhook subscriptions.
    * Siren answers 400 for an older resource scope such as `programs:read`.
+   *
+   * @deprecated An app holds its key now. Make one with `apps.createKey()`, or `apps.create()` with
+   * `scopes`. This call goes when Siren removes its route.
    */
   create(params: CreateApiKeyParams): Promise<CreatedApiKey> {
     return this.http.requestData<CreatedApiKey>({
@@ -34,7 +40,12 @@ export class ApiKeysResource {
     });
   }
 
-  /** List API keys (raw key material is never included). */
+  /**
+   * List API keys (raw key material is never included).
+   *
+   * @deprecated An app holds its key now. Read each app's `apiKey` from `apps.list()`. This call
+   * goes when Siren removes its route.
+   */
   list(): Promise<ApiKey[]> {
     return this.http.requestData<ApiKey[]>({
       method: 'GET',
@@ -52,6 +63,9 @@ export class ApiKeysResource {
    * body is not an object, a group is not a list, or an entry is not an
    * object. It is a retriable read, like `list()`: the transport retries it
    * on 429 and 5xx up to `maxRetries`.
+   *
+   * @deprecated An app holds its key now. Read the scopes an app's key may hold from
+   * `apps.scopes()`. This call goes when Siren removes its route.
    */
   async scopes(): Promise<ApiKeyScopeGroups> {
     const path = '/api-keys/scopes';
@@ -69,7 +83,12 @@ export class ApiKeysResource {
     return body as ApiKeyScopeGroups;
   }
 
-  /** Revoke an API key. */
+  /**
+   * Revoke an API key.
+   *
+   * @deprecated An app holds its key now. Revoke it with `apps.revokeKey()`. This call goes when
+   * Siren removes its route.
+   */
   async revoke(id: number): Promise<void> {
     await this.http.request({
       method: 'DELETE',

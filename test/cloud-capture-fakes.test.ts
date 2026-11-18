@@ -38,11 +38,27 @@ function body(response: HttpResponse | unknown): unknown {
 }
 
 /**
+ * The app fake in the shape Siren answered before an app owned its parts:
+ * `apiKeyId` and `webhookSubscriptionId` in place of `source`, `apiKey`,
+ * `address` and `eventsAccess`, and no plan fields on an item. Every capture
+ * here predates Siren's int/preview-apps (a22547327), so each is held against
+ * this shape. No Cloud run has captured the new shape yet, and
+ * test/apps-siren-answers.ts names the Siren tests the new fake copies.
+ */
+function beforeOwnParts(overrides: Record<string, unknown> = {}) {
+  const { source: _s, apiKey: _k, address: _a, eventsAccess: _e, items, ...rest } = appRecord(overrides);
+  const oldItems = (items as Array<Record<string, unknown>>).map(
+    ({ entitled: _en, requiredCapability: _rc, requiredPlan: _rp, ...item }) => item,
+  );
+  return { ...rest, webhookSubscriptionId: 31, apiKeyId: 52, items: oldItems };
+}
+
+/**
  * The app fake as Siren sent it at 1557b0030, before AppSerializer added
  * `needsAttention`, for the captures taken then.
  */
 function before27169452a(overrides: Record<string, unknown> = {}) {
-  const { needsAttention: _, ...app } = appRecord(overrides);
+  const { needsAttention: _, ...app } = beforeOwnParts(overrides);
   return app;
 }
 
@@ -67,9 +83,9 @@ const HELD: Record<string, () => unknown> = {
   'apps-declare-201-first': () => before27169452a({ rawKey: 'k', signingSecret: 's' }),
   'apps-rotate-200': () => before27169452a({ rawKey: 'k', signingSecret: 's' }),
   'apps-rotate-200-production-edition': () => before27169452a({ rawKey: 'k', signingSecret: 's' }),
-  'apps-retrieve-200-with-count': () => appRecord(),
-  'apps-list-200-with-counts': () => [appRecord()],
-  'apps-list-200-count-1': () => [appRecord({ needsAttention: 1 })],
+  'apps-retrieve-200-with-count': () => beforeOwnParts(),
+  'apps-list-200-with-counts': () => [beforeOwnParts()],
+  'apps-list-200-count-1': () => [beforeOwnParts({ needsAttention: 1 })],
   'apps-list-after-logout-with-old-access-token': () => CloudAnswers.authenticationRequired,
   'webhooks-retrieve-200-app-owned': () => WebhookAnswers.subscription,
   'webhooks-list-200': () => [WebhookAnswers.paused],

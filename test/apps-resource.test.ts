@@ -44,7 +44,7 @@ const declaration: DeclareAppParams = {
   scopes: [],
   events: ['conversion.approved'],
   items: [
-    { kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 4320 },
+    { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 4320 },
     { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
   ],
 };
@@ -100,9 +100,9 @@ describe('apps-cli: apps.declare', () => {
       [KEY, { ...declaration, items: {} }],
       [KEY, { ...declaration, items: ['acme-ledger'] }],
       [KEY, { ...declaration, items: [{ key: 'acme-ledger', name: 'Acme ledger' }] }],
-      [KEY, { ...declaration, items: [{ kind: 'fulfillmentMethod', name: 'Acme ledger' }] }],
-      [KEY, { ...declaration, items: [{ kind: 'fulfillmentMethod', key: 'acme-ledger' }] }],
-      [KEY, { ...declaration, items: [{ kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'A', settings: {} }] }],
+      [KEY, { ...declaration, items: [{ kind: 'payoutMethod', name: 'Acme ledger' }] }],
+      [KEY, { ...declaration, items: [{ kind: 'payoutMethod', key: 'acme-ledger' }] }],
+      [KEY, { ...declaration, items: [{ kind: 'payoutMethod', key: 'acme-ledger', name: 'A', settings: {} }] }],
     ];
     for (const [key, params] of cases) {
       const { http, apps: resource } = apps([reply(200, app)]);
@@ -119,8 +119,8 @@ describe('apps-cli: apps.declare', () => {
     expect(bodyOf(http.requests[0])).toEqual(declaration);
   });
 
-  it('throws UnexpectedResponseError for an answer that is not an app, or holds one secret', async () => {
-    for (const body of [{ success: true }, { ...app, items: undefined }, { ...app, rawKey: secrets.rawKey }]) {
+  it('throws UnexpectedResponseError for an answer that is not an app, or holds a secret that is not text', async () => {
+    for (const body of [{ success: true }, { ...app, items: undefined }, { ...app, rawKey: 7 }, { ...app, signingSecret: null }]) {
       const { apps: resource } = apps([reply(200, body)]);
       expect(await refused(() => resource.declare(KEY, declaration)), JSON.stringify(body)).toBeInstanceOf(
         UnexpectedResponseError,
@@ -163,17 +163,6 @@ describe('apps-cli: apps reads and changes', () => {
     const bad = apps([reply(200, app)]);
     expect(await refused(() => bad.apps.setStatus(KEY, 'paused' as 'active'))).toBeInstanceOf(SirenError);
     expect(bad.http.requests).toHaveLength(0);
-  });
-
-  it('rotates once and answers the new secrets, or throws when one is missing', async () => {
-    const { http, apps: resource } = apps([reply(200, { ...app, ...secrets })]);
-    expect(await resource.rotate(KEY)).toMatchObject(secrets);
-    expect(http.requests[0]?.method).toBe('POST');
-    expect(pathOf(http.requests[0])).toBe('/apps/acme-payouts/rotate');
-    await expectSentOnce((transport) => new AppsResource(transport).rotate(KEY), reply(200, { ...app, ...secrets }));
-
-    const half = apps([reply(200, { ...app, rawKey: secrets.rawKey })]);
-    expect(await refused(() => half.apps.rotate(KEY))).toBeInstanceOf(UnexpectedResponseError);
   });
 
   it('reads an app error code from error.code first, then from context.reason', async () => {
@@ -350,7 +339,7 @@ describe('apps-cli: apps.requests.answer', () => {
   // Siren's key check answers a missing or unknown bearer with 401 and no code, before the answer
   // route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key, from
   // saas/Auth/ApiKeyAuthMiddleware.php line 133 on feat/apps at 1557b0030).
-  it('gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized, with a message that names siren apps rotate', async () => {
+  it('gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized, with a message that names siren apps rotate-key', async () => {
     for (const name of ['apps-answer-401-no-bearer', 'apps-answer-401-unknown-key']) {
       const { http, apps: resource } = apps([capturedReply(name)]);
       const error = await refused(() => resource.requests.answer(REQUEST, { outcome: 'paid' }));
@@ -358,7 +347,7 @@ describe('apps-cli: apps.requests.answer', () => {
       expect((error as SirenError).code, name).toBe('app_answer_unauthorized');
       expect(appErrorCode(error), name).toBe('app_answer_unauthorized');
       expect((error as SirenError).statusCode).toBe(401);
-      expect((error as Error).message).toContain('run siren apps rotate <app key>');
+      expect((error as Error).message).toContain('run siren apps rotate-key <app key>');
       expect(((error as Error).cause as Error).message).toBe(capturedBody<{ error: { message: string } }>(name).error.message);
       expect(http.requests.length, name).toBeLessThanOrEqual(2);
     }

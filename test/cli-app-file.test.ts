@@ -46,7 +46,7 @@ describe('apps-cli: the app file', () => {
         events: [],
         items: [
           { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
-          { kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 1 },
+          { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 1 },
           { kind: 'distributionResolver', key: 'acme-split', name: 'Acme split', answerWindowMinutes: 1 },
         ],
       },
@@ -106,13 +106,13 @@ describe('apps-cli: the app file', () => {
         file({ ...good, items: { notify: { kind: 'postConversionAction', name: 'x', currencies: ['USD'] } } }),
         'apps.acme-payouts.items.notify.currencies',
       ],
-      [file({ ...good, items: { pay: { kind: 'fulfillmentMethod', name: 'x' } } }), 'apps.acme-payouts.items.pay.currencies'],
+      [file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'x' } } }), 'apps.acme-payouts.items.pay.currencies'],
       [
-        file({ ...good, items: { pay: { kind: 'fulfillmentMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 0 } } }),
+        file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 0 } } }),
         'apps.acme-payouts.items.pay.answerWindowMinutes',
       ],
       [
-        file({ ...good, items: { pay: { kind: 'fulfillmentMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 43201 } } }),
+        file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 43201 } } }),
         'apps.acme-payouts.items.pay.answerWindowMinutes',
       ],
     ];
@@ -151,7 +151,7 @@ describe('apps-cli: the app file', () => {
     expect(params.name).toBe('Acme');
     expect(params.items?.map((item) => [item.kind, item.key])).toEqual([
       ['postConversionAction', 'notify'],
-      ['fulfillmentMethod', 'pay'],
+      ['payoutMethod', 'pay'],
     ]);
     expect(parseAppFile(text, {}).problems[0]?.message).toContain('SIREN_APP_URL');
   });
@@ -160,12 +160,12 @@ describe('apps-cli: the app file', () => {
 describe("apps-cli: the app file's JSON reader", () => {
   it('reads strings, numbers and nesting exactly as JSON.parse does', () => {
     const tricky = 'Tab\there, \u00e9, "quoted", a \\ slash, and \ud83d\ude00.';
-    const text = file({ ...good, description: tricky, items: { pay: { kind: 'fulfillmentMethod', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 1.5e1 } } });
+    const text = file({ ...good, description: tricky, items: { pay: { kind: 'payoutMethod', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 1.5e1 } } });
     const parsed = parseAppFile(text, env);
     expect(parsed.problems).toEqual([]);
     const { params } = declarationFor(parsed.file!);
     expect(params.description).toBe(tricky);
-    expect(params.items).toEqual([{ kind: 'fulfillmentMethod', key: 'pay', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 15 }]);
+    expect(params.items).toEqual([{ kind: 'payoutMethod', key: 'pay', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 15 }]);
   });
 
   it.each([
@@ -182,7 +182,7 @@ describe("apps-cli: the app file's JSON reader", () => {
   });
 
   it('places a problem deep in an item at that key', () => {
-    const text = file({ ...good, items: { pay: { kind: 'fulfillmentMethod', name: 'Pay', currencies: ['USD'], colour: 'red' } } });
+    const text = file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'Pay', currencies: ['USD'], colour: 'red' } } });
     const found = problems(text).find((problem) => problem.path === 'apps.acme-payouts.items.pay.colour');
     expect(found?.line).toBe(lineOf(text, '"colour"'));
     expect(found?.column).toBe(text.split('\n')[found!.line - 1]!.indexOf('"colour"') + 1);

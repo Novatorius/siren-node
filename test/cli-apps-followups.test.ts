@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { appLines } from '../src/cli/commands/apply';
 import type { App } from '../src/record-types';
-import { APP_KEY, AppAnswers, appRecord } from './apps-siren-answers';
+import { APP_KEY, AppAnswers, appBefore, appRecord } from './apps-siren-answers';
 import { harness } from './cli-fakes';
 import { Siren } from '../src/client';
 import { AuthenticationError } from '../src/errors';
@@ -22,39 +22,40 @@ import { reply } from './http-fakes';
 const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
 const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
 const DROPPED = 'apps-declare-200-dropped-selected-item';
-const ARCHIVED_LINE = '  app:1  postConversionAction  notify-crm  Tell the CRM  archived, so Siren no longer calls it';
+const ARCHIVED_LINE = '  app:1  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM  archived, so Siren no longer calls it';
 
 describe('apps-sdk-followups-1: an archived item', () => {
   it('apply marks the archived item beside it, and says once what archiving means and how to bring it back', async () => {
-    const h = harness([capturedReply(DROPPED)], { env: appEnv });
+    const h = harness([appBefore(), capturedReply(DROPPED)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const lines = h.out().split('\n');
     expect(lines).toContain(ARCHIVED_LINE);
+    // The capture predates the payout kind's new word, so Siren answered the old one.
     expect(lines).toContain('  app:2  fulfillmentMethod  acme-ledger  Acme ledger');
     expect(lines).toContain(
-      'An archived item is one siren.app.json no longer names while a record still selects it. ' +
+      'An archived feature is one siren.app.json no longer names while a record still selects it. ' +
         'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
         'To bring it back, name it in siren.app.json again with the same kind and key, and run siren apps apply.',
     );
-    expect(h.out().match(/An archived item is/g)).toHaveLength(1);
+    expect(h.out().match(/An archived feature is/g)).toHaveLength(1);
   });
 
   it('keeps the target flags in the apply hint, and names the file as it was given', async () => {
-    const h = harness([capturedReply(DROPPED)], { env: appEnv });
+    const h = harness([appBefore(), capturedReply(DROPPED)], { env: appEnv });
     h.signedIn();
     h.write('my.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply', 'my.app.json', '--sandbox']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', 'my.app.json', '--sandbox', '--yes']), h.err()).toBe(0);
     expect(h.out()).toContain('name it in my.app.json again with the same kind and key, and run siren apps apply my.app.json --sandbox.');
   });
 
   it('says nothing about archiving when no item is archived', async () => {
     const body = capturedBody<App>(DROPPED);
-    const h = harness([capturedReply(DROPPED)].map(() => ({ status: 200, headers: {}, body: JSON.stringify({ ...body, items: body.items.map((item) => ({ ...item, status: 'active' })) }) })), { env: appEnv });
+    const h = harness([appBefore(), ...[capturedReply(DROPPED)].map(() => ({ status: 200, headers: {}, body: JSON.stringify({ ...body, items: body.items.map((item) => ({ ...item, status: 'active' })) }) }))], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.out()).not.toContain('archived');
   });
 
@@ -64,7 +65,7 @@ describe('apps-sdk-followups-1: an archived item', () => {
     h.signedIn();
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
     expect(h.out().split('\n')).toContain(ARCHIVED_LINE);
-    expect(h.out()).not.toContain('An archived item is');
+    expect(h.out()).not.toContain('An archived feature is');
     const before = h.out().length;
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(h.out().slice(before).split('\n')).toContain(ARCHIVED_LINE);
@@ -80,10 +81,10 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     const h = harness([capturedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /webhooks/31/deliveries']);
+    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
     const out = h.out();
     expect(out.split('\n')[0]).toBe(
-      `${ONE_ID}  needs_attention  tell postConversionAction  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
+      `${ONE_ID}  needs_attention  tell Action after a conversion (postConversionAction)  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
     );
     expect(out).toContain(`The data Siren sent:\n${JSON.stringify(capturedBody<{ data: unknown }>(ONE).data, null, 2)}\n`);
     expect(out).toContain('A tell takes no answer.');
@@ -164,7 +165,7 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     expect(await on.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
     expect(on.paths()).toEqual(['DELETE /apps/ledger-sync', 'GET /apps/ledger-sync']);
     expect(on.err()).toBe(
-      'siren: Siren kept ledger-sync.\nRecords still select its items: app:4 (1), app:5 (1).\n' +
+      'siren: Siren kept ledger-sync.\nRecords still select its features: app:4 (1), app:5 (1).\n' +
         'Turn it off instead with siren apps off ledger-sync --sandbox. Siren then stops calling it and keeps what it already did.\n',
     );
 
@@ -172,8 +173,8 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     off.signedIn();
     expect(await off.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
     expect(off.err()).toBe(
-      'siren: Siren kept ledger-sync.\nRecords still select its items: app:4 (1), app:5 (1).\n' +
-        'It is already off, so Siren no longer calls it. To delete it, change each record that selects those items to another choice, ' +
+      'siren: Siren kept ledger-sync.\nRecords still select its features: app:4 (1), app:5 (1).\n' +
+        'It is already off, so Siren no longer calls it. To delete it, change each record that selects those features to another choice, ' +
         'then run siren apps delete ledger-sync --yes --sandbox.\n',
     );
     expect(off.err()).not.toContain('Turn it off');
@@ -199,14 +200,15 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     expect(h.err()).toBe(`siren: Siren sent nothing: ${RESEND_ID} is applied, so its answer already did its work.\n`);
   });
 
-  it("the uncoded 401 on the answer route names siren apps rotate, not the API keys screen", async () => {
+  it("the uncoded 401 on the answer route names siren apps rotate-key, not the API keys screen", async () => {
     for (const name of ['apps-answer-401-unknown-key', 'apps-answer-401-no-bearer']) {
       const siren = new Siren({ apiKey: 'made-up-key', baseUrl: BASE, httpClient: new FakeHttpClient([capturedReply(name)]), maxRetries: 0 });
       const error = await siren.apps.requests.answer(RESEND_ID, { outcome: 'paid' }).then(() => undefined, (caught: unknown) => caught);
       expect(error, name).toBeInstanceOf(AuthenticationError);
       expect((error as Error).message, name).toBe(
         "Siren did not accept this key on the answer route. An app answers with its own key, the SIREN_API_KEY that siren apps apply saved beside its app file. " +
-          'When that key is lost or revoked, run siren apps rotate <app key> to make a new one.',
+          'When that key is lost, run siren apps rotate-key <app key> to make a new one. ' +
+          'When the app holds no key, as after its key was revoked, run siren apps add-key <app key>.',
       );
       expect((error as Error).message).not.toContain('under API keys');
     }

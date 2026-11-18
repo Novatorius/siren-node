@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { harness, session } from './cli-fakes';
-import { APP_KEY, appRecord } from './apps-siren-answers';
+import { APP_KEY, appMissing, appRecord } from './apps-siren-answers';
 
 /*
  * The env file that holds an app's key and signing secret. Every write of
@@ -53,6 +53,8 @@ const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
 const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
 const OLD_ENV = `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`;
 const NEW_ENV = `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`;
+/** The env file after `rotate-key`: the new key beside the signing secret it already held. */
+const KEY_ROTATED_ENV = `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`;
 const rotated = () => reply(200, { ...appRecord(), rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 });
 const declared = () => reply(201, { ...appRecord(), rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 });
 
@@ -69,19 +71,19 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     rotate.write('.env.sandbox', OLD_ENV);
     chmodSync(join(rotate.cwd, '.env.sandbox'), 0o644);
     watch.key = RAW_KEY_2;
-    expect(await rotate.run(['apps', 'rotate', APP_KEY]), rotate.err()).toBe(0);
-    expect(rotate.file('.env.sandbox')).toBe(NEW_ENV);
+    expect(await rotate.run(['apps', 'rotate-key', APP_KEY, '--yes']), rotate.err()).toBe(0);
+    expect(rotate.file('.env.sandbox')).toBe(KEY_ROTATED_ENV);
     expect(watch.marks.length).toBeGreaterThan(0);
     for (const mark of watch.marks) expect(mark.mode, mark.path).toBe(0o600);
     expect(rotate.modeOf(join(rotate.cwd, '.env.sandbox'))).toBe(0o600);
 
     watch.marks = [];
-    const apply = harness([declared()], { env: appEnv });
+    const apply = harness([appMissing(), declared()], { env: appEnv });
     apply.signedIn();
     apply.write('siren.app.json', exampleFile);
     apply.write('.env.sandbox', 'PORT=8787\n');
     chmodSync(join(apply.cwd, '.env.sandbox'), 0o644);
-    expect(await apply.run(['apps', 'apply']), apply.err()).toBe(0);
+    expect(await apply.run(['apps', 'apply', '--yes']), apply.err()).toBe(0);
     expect(apply.file('.env.sandbox')).toBe(NEW_ENV);
     expect(watch.marks.length).toBeGreaterThan(0);
     for (const mark of watch.marks) expect(mark.mode, mark.path).toBe(0o600);
@@ -100,7 +102,7 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     rotate.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: join(rotate.cwd, '.env.sandbox') } }) });
     rotate.write('.env.sandbox', OLD_ENV);
     watch.key = RAW_KEY_2;
-    expect(await rotate.run(['apps', 'rotate', APP_KEY]), rotate.err()).toBe(0);
+    expect(await rotate.run(['apps', 'rotate-key', APP_KEY, '--yes']), rotate.err()).toBe(0);
     const names = [...new Set(watch.marks.map((mark) => mark.path.slice(mark.path.lastIndexOf('/') + 1)))];
     expect(names.length).toBeGreaterThan(1);
     for (const name of names) expect(patterns.some((pattern) => pattern.test(name)), name).toBe(true);
@@ -112,7 +114,7 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     mkdirSync(join(rotate.cwd, 'elsewhere'));
     rotate.write('elsewhere/target.env', 'OTHER=1\n');
     symlinkSync(join(rotate.cwd, 'elsewhere', 'target.env'), join(rotate.cwd, '.env.sandbox'));
-    expect(await rotate.run(['apps', 'rotate', APP_KEY])).toBe(1);
+    expect(await rotate.run(['apps', 'rotate-key', APP_KEY, '--yes'])).toBe(1);
     expect(rotate.http.requests).toHaveLength(0);
     expect(rotate.err()).toMatch(/symbolic link/);
     expect(rotate.file('elsewhere/target.env')).toBe('OTHER=1\n');
@@ -132,7 +134,7 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     const folder = harness([rotated()]);
     folder.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: join(folder.cwd, '.env.sandbox') } }) });
     mkdirSync(join(folder.cwd, '.env.sandbox'));
-    expect(await folder.run(['apps', 'rotate', APP_KEY])).toBe(1);
+    expect(await folder.run(['apps', 'rotate-key', APP_KEY, '--yes'])).toBe(1);
     expect(folder.http.requests).toHaveLength(0);
     expect(folder.err()).toMatch(/not a regular file/);
   });
@@ -143,22 +145,22 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     h.write('.env.sandbox', OLD_ENV);
     chmodSync(join(h.cwd, '.env.sandbox'), 0o600);
     watch.failWith = RAW_KEY_2;
-    expect(await h.run(['apps', 'rotate', APP_KEY])).toBe(1);
+    expect(await h.run(['apps', 'rotate-key', APP_KEY, '--yes'])).toBe(1);
     expect(h.file('.env.sandbox')).toBe(OLD_ENV);
     expect(readdirSync(h.cwd).sort()).toEqual(['.env.sandbox']);
     expect(h.err()).toMatch(/Siren issued/);
     expect(h.err()).toMatch(/could not be saved/);
-    expect(h.err()).toContain(`siren apps rotate ${APP_KEY}`);
+    expect(h.err()).toContain(`siren apps rotate-key ${APP_KEY}`);
     expect(h.err()).toMatch(/old key .*revoked/);
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
 
-    const apply = harness([declared()], { env: appEnv });
+    const apply = harness([appMissing(), declared()], { env: appEnv });
     apply.signedIn();
     apply.write('siren.app.json', exampleFile);
-    expect(await apply.run(['apps', 'apply'])).toBe(1);
+    expect(await apply.run(['apps', 'apply', '--yes'])).toBe(1);
     expect(apply.err()).toMatch(/Siren issued/);
-    expect(apply.err()).toContain(`siren apps rotate ${APP_KEY}`);
+    expect(apply.err()).toContain(`siren apps rotate-key ${APP_KEY} to issue a new key, and siren apps rotate-secret ${APP_KEY} to issue a new signing secret`);
     expect(apply.printed()).not.toContain(RAW_KEY_2);
     expect(apply.printed()).not.toContain(SIGNING_SECRET_2);
   });
@@ -166,7 +168,7 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
   it('refuses before sending an env path whose folder is missing or cannot be written', async () => {
     const gone = harness([rotated()]);
     gone.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: join(gone.cwd, 'moved', '.env.sandbox') } }) });
-    expect(await gone.run(['apps', 'rotate', APP_KEY])).toBe(1);
+    expect(await gone.run(['apps', 'rotate-key', APP_KEY, '--yes'])).toBe(1);
     expect(gone.http.requests).toHaveLength(0);
     expect(gone.err()).toMatch(/does not exist/);
 
@@ -175,7 +177,7 @@ describe.runIf(posix)('apps-cli internals: the env file', () => {
     if (statSync('/etc').uid !== process.getuid?.()) {
       const system = harness([rotated()]);
       system.signedIn();
-      expect(await system.run(['apps', 'rotate', APP_KEY, '--app-file', '/etc/passwd'])).toBe(1);
+      expect(await system.run(['apps', 'rotate-key', APP_KEY, '--yes', '--app-file', '/etc/passwd'])).toBe(1);
       expect(system.http.requests).toHaveLength(0);
       expect(system.err()).toMatch(/cannot write to \/etc/);
     }

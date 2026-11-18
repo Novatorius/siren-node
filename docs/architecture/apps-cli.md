@@ -90,7 +90,7 @@ They are this repository's rules (briefs/sdk-conventions.md), applied as follows
 | 404 `app_request_not_found` | `NotFoundError` | Checks the id. The answer route tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers another app's request (AppRequestService.php line 698 at 27169452a). The resend and read routes say "App request not found." |
 | 403 `app_inactive` or `app_answer_forbidden` | `PermissionError` | Turns the app on, or answers as an admin. |
 | 422 `app_answer_invalid` | `ValidationError` | Fixes the answer for the item's kind. |
-| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized`, and a message that names `siren apps rotate <app key>` in place of Siren's "make a new one under API keys", which is kept as `cause` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
+| 401 with no code, for a missing or unknown bearer | `AuthenticationError` with `code` `app_answer_unauthorized`, and a message that names `siren apps rotate-key <app key>` for a lost key and `siren apps add-key <app key>` for an app that holds none (slice C6) in place of Siren's "make a new one under API keys", which is kept as `cause` | Uses the app's own key or an admin's session. Siren's key check, which every route shares, sends this 401 with no code before the answer route runs (captures apps-answer-401-no-bearer and apps-answer-401-unknown-key), so `requests.answer()` gives it the code. An org key that is no app's gets 404 `app_request_not_found` (capture apps-answer-404-plain-org-key). |
 | a bad signature, an old timestamp, or no V2 header | `SignatureVerificationError` from `verifyRequest` | Answers 400 and does nothing else. |
 
 `appErrorCode(error)` in src/errors.ts reads the code in one place: the error's `code` (Siren's
@@ -144,14 +144,16 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren orgs` | `GET /auth/memberships` | One line per organization, `*` on the current one. |
 | `siren use <slug or id>` | memberships, then `POST /auth/switch-org` | The organization now in use. |
 | `siren apps init [--key] [--name]` | nothing | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
-| `siren apps apply [file]` | `PUT /apps/{key}` once | The app and each item with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate <key>` (AP-A635). |
+| `siren apps apply [file] [--yes]` | `GET /apps/{key}`, then `PUT /apps/{key}` once after the person agrees (slice C6) | Each change the file would make, then the question, then the app and each feature with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate-key <key>` (AP-A635). |
 | `siren apps list [--json]` | `GET /apps` | One block per app with its items, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
 | `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
 | `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
 | `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request's line, the data Siren sent, the answer Siren took and who gave it, or that none came yet, then each send with its HTTP status and what the app said back. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend`, and on 409 `app_request_not_resendable` for a request not `applied`, `GET /apps/requests/{requestKey}` and `GET /apps` | The request as it now stands. On that 409, that its app is off, with `siren apps on <key>` and the resend to run after. An `applied` request is told there is nothing to send. |
-| `siren apps rotate <key> [--app-file <path>]` | `POST /apps/{key}/rotate` | The new prefix and the absolute path of the env file. Writes the new key and secret where `apply` wrote the first pair, or beside the named app file (AP-A634). |
+| `siren apps rotate-key <key> [--app-file <path>] [--yes]` | `POST /apps/{key}/key/rotate` | The new prefix and the absolute path of the env file. Asks first. Writes the new key where `apply` wrote the first, or beside the named app file (AP-A634), and leaves the signing secret's line alone (slice C6). |
+| `siren apps rotate-secret <key> [--app-file <path>] [--yes]` | `POST /apps/{key}/secret/rotate` | The absolute path of the env file. Asks first, and writes only `SIREN_SIGNING_SECRET` (slice C6). |
+| `siren apps rotate [<key>]` | nothing | Names `rotate-key` and `rotate-secret` and exits 1, with or without a key (slice C6). |
 | `siren apps on <key>` and `siren apps off <key>` | `POST /apps/{key}/status` | The app's new state. |
 | `siren apps delete <key> --yes` | `DELETE /apps/{key}`, and `GET /apps/{key}` after a 409 that names records | That it is gone. On 409 `app_in_use`: the records in `uses` with the `siren apps off` command while the app is on, or, once it is off, that those records must change before a delete, and when `openRequests` is above 0, `siren apps requests --app <key>` and the advice to answer or wait for the open asks (AP-A641). |
 
@@ -252,7 +254,7 @@ folder and a folder the tool cannot write to are each refused with one line that
 Siren issues a pair once (the orchestrator's ruling in the fix round, AP-A904). The command prints
 the key's 16-character prefix and the file name, never the key or the secret. When a write the
 check could not foresee still fails, it says on standard error that Siren issued a pair it could
-not save and that `siren apps rotate <key>` issues a new one, prints neither value, and answers 1.
+not save and that `siren apps rotate-key <key>` or `rotate-secret` issues a new one, prints neither value, and answers 1.
 After a rotate it also says that the old key left in the file is revoked. The new file is written
 as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps init` writes covers.
 
@@ -316,7 +318,7 @@ later without a rewrite (design AP-A215):
       "events": [],
       "items": {
         "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
-        "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
+        "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
         "acme-split": { "kind": "distributionResolver", "name": "Acme split", "answerWindowMinutes": 1 }
       }
     }
@@ -331,12 +333,19 @@ column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url: ...` 
 - Any other recipe stanza, such as `programs`, is refused by name. Recipes made of apps and
   programs wait for slice 12. Any other key is refused as not a recipe key.
 - `apps` holds exactly one app, keyed by its app key.
-- An app takes `name`, `description`, `url`, `scopes`, `events` and `items`, and nothing else.
-  `url` starts with `https://`, or with `http://` for `localhost`, `127.0.0.1` or
-  `host.docker.internal`, which only a local Cloud reaches (AP-A616).
-- `items` is an object keyed by item key, so a key is unique within the app. An item takes `kind`,
-  `name`, `description`, `currencies` and `answerWindowMinutes`. `currencies` is required for a
-  `fulfillmentMethod` and refused for any other kind. `answerWindowMinutes` runs from 1 to 43200.
+- An app takes `name`, `description`, `url`, `scopes`, `events` and `items`, and nothing else. Its
+  key is never `requests`, `events`, `scopes` or `kinds`, which Siren keeps for its own routes.
+  `url` is optional, and an app with none is a key-only app (slice C6). When given, it starts with
+  `https://`, or with `http://` for `localhost`, `127.0.0.1` or `host.docker.internal`, which only a
+  local Cloud reaches (AP-A616).
+- `items` holds the app's features, an object keyed by feature key, so a key is unique within the
+  app. A feature takes `kind`, `name`, `description`, `currencies` and `answerWindowMinutes`.
+  `currencies` is required for a `payoutMethod` and refused for any other kind. The old word
+  `fulfillmentMethod` is refused with a message that names `payoutMethod`. `answerWindowMinutes`
+  runs from 1 to 43200. A file with features and no `url` is refused before anything is sent, since
+  Siren asks a feature at the app's address. A feature's kind and key lock once Siren makes it:
+  Siren matches the file's features to its own by kind and key, so a renamed key is a new feature,
+  and the old one is archived while a record selects it and deleted otherwise.
 - `${NAME}` is filled from the environment only in the app's `url`, and only from a variable whose
   name starts with `SIREN_APP_` (AP-A633). A placeholder anywhere else, any other name, or a name
   that is not set is a problem at that key, naming the place and never a value. `parseAppFile`
@@ -348,8 +357,9 @@ column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url: ...` 
   tests: it reads what `JSON.parse` reads, and refuses a trailing comma, single quotes, a comment,
   `NaN`, text after the object and a raw line break, each at its place.
 
-`declarationFor(file)` turns the one app into what `PUT /apps/{key}` takes: the same fields, and
-`items` as a list in the file's order, each with its `key`.
+`declarationFor(file)` turns the one app into what `PUT /apps/{key}` takes: the same fields, a
+field the file leaves out left out, `url` included, and `items` as a list in the file's order, each
+with its `key`.
 
 ## The example app
 

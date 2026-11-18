@@ -329,7 +329,17 @@ const NODE_ONLY = [
   'siren.apps.list()',
   'siren.apps.retrieve()',
   'siren.apps.setStatus()',
-  'siren.apps.rotate()',
+  'siren.apps.create()',
+  'siren.apps.update()',
+  'siren.apps.createKey()',
+  'siren.apps.rotateKey()',
+  'siren.apps.revokeKey()',
+  'siren.apps.rotateSecret()',
+  'siren.apps.test()',
+  'siren.apps.deliveries()',
+  'siren.apps.events()',
+  'siren.apps.scopes()',
+  'siren.apps.kinds()',
   'siren.apps.delete()',
   'siren.apps.verifyRequest()',
   'siren.apps.shownAmount()',
@@ -337,6 +347,10 @@ const NODE_ONLY = [
   'siren.apps.requests.list()',
   'siren.apps.requests.resend()',
   'siren.apps.requests.answer()',
+  'siren.apps.items.create()',
+  'siren.apps.items.retrieve()',
+  'siren.apps.items.update()',
+  'siren.apps.items.delete()',
 ];
 
 /**
@@ -413,7 +427,7 @@ describe('Parity: Node methods the PHP SDK does not have yet', () => {
 
     expect(rows.map((row) => code(row.node)).sort()).toEqual([...NODE_ONLY].sort());
     for (const row of rows) {
-      expect(row.route, `${row.node} names its route`).toMatch(/`(GET|POST|PUT|DELETE) \//);
+      expect(row.route, `${row.node} names its route`).toMatch(/`(GET|POST|PUT|PATCH|DELETE) \//);
       expect(row.does.length, `${row.node} says what it does`).toBeGreaterThan(10);
     }
   });

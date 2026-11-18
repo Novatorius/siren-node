@@ -48,7 +48,8 @@ describe('apps-sdk-followups-1: the records', () => {
 
   it('say what an archived item is and how to bring it back', () => {
     const readme = read('README.md');
-    expect(readme).toContain('An item the file no longer names while a record still selects it is archived');
+    // Slice C6 item 7: a person reads "feature", never "item".
+    expect(readme).toContain('A feature the file no longer names while a record still selects it is archived');
     expect(readme).toContain('naming it in the file again brings it back');
     expect(read('docs/architecture/apps-cli.md')).toContain('"archived, so Siren no longer calls it"');
     expect(read('CHANGELOG.md')).toContain('`siren apps apply`, `list` and `show` mark an archived item');
@@ -78,7 +79,7 @@ describe('apps-sdk-followups-1: the records', () => {
     const note = read('docs/architecture/apps-cli.md');
     expect(note).toContain('### 9. Three hints that sent a person the wrong way');
     expect(read('README.md')).toContain('names the `siren apps on <key>` that turns it on');
-    expect(read('README.md')).toContain('a message that says to run `siren apps rotate <app key>`');
+    expect(read('README.md')).toContain('a message that says to run `siren apps rotate-key <app key>`');
     expect(read('CHANGELOG.md')).toContain('`siren apps delete` says to turn an app off only while it is on');
   });
 });

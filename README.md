@@ -241,6 +241,9 @@ const catalog = await siren.webhooks.subscriptions.events();
 
 ### Check and change a subscription
 
+These calls are deprecated for a Siren app, which holds its address now. Siren refuses them for an
+address an app owns. See [The old key and webhook calls](#the-old-key-and-webhook-calls).
+
 `retrieve(id)` reads one subscription, and `deliveries(id)` reads its latest 50 deliveries, newest
 first, each with the payload Siren sent, its status (`pending`, `delivered` or `failed`), the tries
 it took and the first 200 bytes of your endpoint's answer. Both take `webhook-subscriptions:read`
@@ -507,7 +510,7 @@ for any other key, naming it.
 
 The first table compares this SDK with the Siren PHP SDK's next release, which adds seven calls and
 the record scope list to PHP 0.3.0. The Node SDK carries every public method of that release under
-the same name, with one left out. It also has thirteen methods the PHP SDK does not have yet, listed
+the same name, with one left out. It also has twenty-nine methods the PHP SDK does not have yet, listed
 in the second table below.
 The first table lists each PHP method, its Node name, and how the two differ where they do.
 Across every record resource, Node throws `SirenError` before sending where PHP throws
@@ -663,11 +666,21 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.events.forward()` | `POST /event/{eventSlug}` | Sends a connected site's event in Siren's versioned envelope, once. |
 | `siren.conversions.recoverCreate()` | `GET /conversions`, then `POST /conversions` | After `create` lost its answer, sends it again only when Siren holds no such conversion. |
 | `siren.transactions.recoverCreditCollaborator()` | `GET /conversions`, then `POST /transactions/credit-collaborator` | After `creditCollaborator` lost its answer, credits only the transactions that hold no conversion for the collaborator. |
-| `siren.apps.declare()` | `PUT /apps/{key}` | Declares an app from its whole description, once, and answers its key and signing secret the first time. |
-| `siren.apps.list()` | `GET /apps` | Lists the organization's apps with their items. |
-| `siren.apps.retrieve()` | `GET /apps/{key}` | Reads one app with its items. |
+| `siren.apps.declare()` | `PUT /apps/{key}` | Declares an app from its whole description, once. The first call answers its key, and its signing secret when the file names a `url`. |
+| `siren.apps.create()` | `POST /apps` | Makes an app from the dashboard's door, with a key when `scopes` is sent and an address when `url` is, and answers each new secret once. |
+| `siren.apps.update()` | `PATCH /apps/{key}` | Changes only the fields sent. `url: null` removes the address. |
+| `siren.apps.list()` | `GET /apps` | Lists the organization's apps with their key, address and features. |
+| `siren.apps.retrieve()` | `GET /apps/{key}` | Reads one app with its key, address and features. |
 | `siren.apps.setStatus()` | `POST /apps/{key}/status` | Turns an app on or off. |
-| `siren.apps.rotate()` | `POST /apps/{key}/rotate` | Gives an app a new key and signing secret, shown once. |
+| `siren.apps.createKey()` | `POST /apps/{key}/key` | Makes a key for an app that has none, and answers it once. |
+| `siren.apps.rotateKey()` | `POST /apps/{key}/key/rotate` | Gives an app a new key, shown once. The signing secret stays. |
+| `siren.apps.revokeKey()` | `DELETE /apps/{key}/key` | Revokes an app's key. The app keeps its address. |
+| `siren.apps.rotateSecret()` | `POST /apps/{key}/secret/rotate` | Gives an app's address a new signing secret, shown once. The key stays. |
+| `siren.apps.test()` | `POST /apps/{key}/test` | Sends the app's address one signed `webhook.test` delivery and answers what it did. |
+| `siren.apps.deliveries()` | `GET /apps/{key}/deliveries` | Lists the latest 50 deliveries to the app's address. |
+| `siren.apps.events()` | `GET /apps/events` | Lists the events an app's address may receive. |
+| `siren.apps.scopes()` | `GET /apps/scopes` | Lists the scopes an app's key may hold, grouped by resource. |
+| `siren.apps.kinds()` | `GET /apps/kinds` | Lists the kinds of feature an app may add, with their settings and whether the plan can use each. |
 | `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
 | `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
 | `siren.apps.shownAmount()` | None. It reads the value and currency of a tell, which Siren sends as `POST /` to the app's own address | Reads a stored amount and its currency as a person reads them, such as `$15.00` for 1500 in dollars and `¥100` for 10000 in yen. |
@@ -675,6 +688,10 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` | Reads one request, however old, with the data Siren sent, the answer it took and the person who answered by hand. |
 | `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
 | `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
+| `siren.apps.items.create()` | `POST /apps/{app}/items` | Adds one feature to an app that holds a key and an address. |
+| `siren.apps.items.retrieve()` | `GET /apps/{app}/items/{id}` | Reads one feature with how many records select it and which. |
+| `siren.apps.items.update()` | `PATCH /apps/{app}/items/{id}` | Changes a feature's name, description or settings. Its kind and key never change. |
+| `siren.apps.items.delete()` | `DELETE /apps/{app}/items/{id}` | Archives a feature a record selects, and deletes one nothing selects. |
 
 ## Storefront module (browser)
 
@@ -1075,15 +1092,24 @@ header.
 
 ## Siren apps
 
-A Siren app is a service you host that acts as part of Siren's engine. It declares items, and each
-item joins one of Siren's pickers, so an organization chooses it as it chooses a built-in one:
+A Siren app is a service you host that acts as part of Siren's engine. An app holds three parts:
+its API key, its address (where Siren sends requests and events, signed with its signing secret)
+and its features. Each feature joins one of Siren's pickers, so an organization chooses it as it
+chooses a built-in one:
 
-| Item kind | Picked on | Siren sends |
+| Feature kind | Picked on | Siren sends |
 |---|---|---|
-| `postConversionAction` | a program | A tell after each approved conversion. |
-| `postAllocationAction` | a distributor | A tell after each completed allocation. |
-| `fulfillmentMethod` | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
-| `distributionResolver` | a distributor | An ask to divide each pool. |
+| Action after a conversion (`postConversionAction`) | a program | A tell after each approved conversion. |
+| Action after an allocation (`postAllocationAction`) | a distributor | A tell after each completed allocation. |
+| Payout method (`payoutMethod`) | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
+| Distribution resolver (`distributionResolver`) | a distributor | An ask to divide each pool. |
+
+Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
+The tool prints it beside the kind, as Payout method (payoutMethod).
+
+The code calls a feature an item, so the routes are `/apps/{app}/items` and the types are
+`AppItem` and `AppItemKind`. `AppItemKind.FulfillmentMethod` is an old name for `payoutMethod`,
+and Siren refuses the string `fulfillmentMethod`.
 
 Apps are a Siren Cloud feature. The app routes take a signed-in admin's session token as
 `accessToken`, and refuse an API key with `ApiKeyNotAcceptedError`. The `siren` command below signs
@@ -1092,9 +1118,15 @@ in for you and is the usual way to declare an app. Only the answer route takes t
 ### Declare an app
 
 `apps.declare(key, app)` sends the app's whole description with `PUT /apps/{key}`. The first call
-makes the app, its API key and its webhook subscription, and answers `created: true` with `rawKey`
-and `signingSecret`. Siren shows both this once, so keep them. Each later call updates the app in
-place and answers `created: false`.
+makes the app and its API key, and its address when you give a `url`. It answers `created: true`
+with `rawKey`, and `signingSecret` when it made an address. Siren shows each secret this once, so
+keep them. Each later call updates the app in place and answers `created: false`. A later call
+never makes or revokes a key. It makes an address when the `url` is new, and answers its
+`signingSecret` once, and it removes the address and its delivery log when the `url` is gone.
+
+An app with no `url` is a key-only app, for a script that reads Siren. An app with features needs a
+`url`, since Siren asks the app at its address, so `declare` refuses features with no `url` before
+sending. A feature's kind and key lock once Siren makes it.
 
 ```ts
 const siren = new Siren({ accessToken: adminSessionToken });
@@ -1105,23 +1137,57 @@ const app = await siren.apps.declare('acme-payouts', {
   scopes: ['event:sale'],
   items: [
     { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
-    { kind: 'fulfillmentMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] },
+    { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] },
   ],
 });
 if (app.created) saveSecrets(app.rawKey, app.signingSecret);
 ```
 
-`apps.list()` and `apps.retrieve(key)` read the apps with their items.
-`apps.setStatus(key, 'inactive')` turns an app off, which takes its items out of every picker and stops Siren sending it
-anything. `apps.rotate(key)` gives the app a new key and signing secret, revokes the old key at
-once, and shows the pair once. `apps.delete(key)` deletes an app that no record selects and that
-has no open ask. Siren refuses one still in use with 409 `app_in_use`, and its `uses` and
+`apps.list()` and `apps.retrieve(key)` read the apps with their key (`apiKey`, never more than its
+prefix and last four characters), their address (`address`, never its secret) and their features.
+`apps.setStatus(key, 'inactive')` turns an app off, which takes its features out of every picker
+and stops Siren sending it anything. `apps.delete(key)` deletes an app that no record selects and
+that has no open ask. Siren refuses one still in use with 409 `app_in_use`, and its `uses` and
 `openRequests` say why.
 
 An app key is lowercase letters and digits joined by single dashes, at most 64 characters, and
-never `requests`. Each call refuses any other key, and any field `PUT /apps/{key}` does not take,
-with `SirenError` before sending. The reads retry on a lost connection, 429 and 5xx. Every write is
-sent once.
+never `requests`, `events`, `scopes` or `kinds`. Each call refuses any other key, and any field its
+route does not take, with `SirenError` before sending. The reads retry on a lost connection, 429
+and 5xx. Every write is sent once.
+
+### Change an app's parts
+
+The dashboard changes an app one part at a time, and so can you:
+
+- `apps.create({ name, url, scopes, events })` makes an app from the dashboard's door, with a key
+  when `scopes` is a list, even `[]`, and an address when `url` is given. Siren picks its key.
+- `apps.update(key, { name, description, url, events, scopes })` changes only the fields you send.
+  `url: null` removes the address.
+- `apps.createKey(key, { scopes })`, `apps.rotateKey(key)` and `apps.revokeKey(key)` make, rotate
+  and revoke the key. A rotated key keeps its scopes, and the signing secret stays.
+- `apps.rotateSecret(key)` gives the address a new signing secret. The key stays.
+- `apps.test(key)` sends the address one signed `webhook.test` and answers what it did, and
+  `apps.deliveries(key)` reads the address's latest 50 deliveries.
+- `apps.items.create(key, feature)`, `apps.items.retrieve(key, id)`, `apps.items.update(key, id,
+  change)` and `apps.items.delete(key, id)` add, read, change and remove one feature. `retrieve`
+  answers how many records select it in `uses`, and which in `usedBy`. `update` refuses a change to
+  its `kind` or `key`.
+- `apps.events()`, `apps.scopes()` and `apps.kinds()` read the events an address may receive, the
+  scopes a key may hold, and the kinds of feature with their settings.
+
+Each call that makes a secret answers it once, as `rawKey` or `signingSecret`. A feature, a kind
+and the app's `eventsAccess` carry `entitled`, `requiredCapability` and `requiredPlan`. Everything
+that goes out of Siren needs Pro, so on Plus an outward feature and the events read
+`{ entitled: false, requiredPlan: 'pro' }`.
+
+### The old key and webhook calls
+
+`siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, because an app holds its key and
+its address now. Each call's doc comment names the app call that replaces it: `apps.createKey()`
+for a key, `apps.update()` for an address's url and events, `apps.deliveries()` for its deliveries,
+and `apps.test()` for a test. Siren already refuses the webhook routes for an address an app owns.
+These calls go when Siren removes their routes. `siren.webhooks.constructEvent()` and
+`verifySignature()` stay, since an app's address receives events signed the same way.
 
 ### Check a request
 
@@ -1160,9 +1226,9 @@ needing attention. The route passes anything else that throws to `next`, so Expr
 
 ### Read what a tell says
 
-A tell's `data` belongs to the item's kind. A `postConversionAction` gets
+A tell's `data` belongs to the feature's kind. An Action after a conversion (`postConversionAction`) gets
 `AppConversionApprovedData`: the `conversion`, its `reward` as `{ value, units, currency }` or
-`null` when it has none, and the `program`. A `postAllocationAction` gets
+`null` when it has none, and the `program`. An Action after an allocation (`postAllocationAction`) gets
 `AppAllocationCompletedData`: the `allocation`, with `value`, `units` and `currency`, and the
 `distributor`.
 
@@ -1203,8 +1269,8 @@ nothing more was applied. A different answer after an accepted one gets 409
 `app_request_already_answered`, and the first one stands.
 
 An ask carries `answerBy`. Siren sends an unanswered ask again when its window closes, three sends
-in all, then marks it `needs_attention`. An item's `answerWindowMinutes` sets the window, from 1 to
-43200 minutes. A fulfillment method waits a day and a distribution resolver an hour when the item
+in all, then marks it `needs_attention`. A feature's `answerWindowMinutes` sets the window, from 1
+to 43200 minutes. A payout method waits a day and a distribution resolver an hour when the feature
 sets none.
 
 ### See what Siren sent
@@ -1244,6 +1310,12 @@ try {
 | Code | Status | What to do |
 |---|---|---|
 | `app_limit_reached` | 403 | Turn another app off, or move to a plan with room. |
+| `app_cap_reached` | 400 | The organization holds 250 apps, on or off. Delete one first. |
+| `app_needs_a_part` | 422, 409 | Give the app a key, an address or both. |
+| `app_items_need_key_and_address` | 422, 409 | An app with features needs a key and an address. `missing` names the part it lacks. |
+| `app_key_exists` | 409 | Rotate the key instead of making one. |
+| `app_key_missing` | 409 | Make a key with `apps.createKey()` first. |
+| `app_address_missing` | 409 | Give the app a `url` first. |
 | `org_access_required` | 403 | Ask an admin who sees every store. |
 | `app_change_in_progress` | 409 | Send it again in a moment. |
 | `app_in_use` | 409 | Turn the app off instead, or move the records in `uses` first. |
@@ -1252,8 +1324,8 @@ try {
 | `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
 | `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
-| `app_answer_invalid` | 422 | Fix the answer for the item's kind. |
-| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate <app key>` when the app's key is lost or revoked. |
+| `app_answer_invalid` | 422 | Fix the answer for the feature's kind. |
+| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate-key <app key>` when the app's key is lost, and `siren apps add-key <app key>` when the app holds no key, as after a revoke. |
 
 ### The sandbox
 
@@ -1271,7 +1343,7 @@ package globally, or run it with `npx siren`.
 ```sh
 siren signup                         # make an organization, or: siren login
 siren apps init --key acme-payouts   # write siren.app.json
-siren apps apply                     # declare the app, and save its key in .env.sandbox
+siren apps apply                     # show the changes, ask, declare the app, and save its key in .env.sandbox
 siren apps requests --follow         # watch what Siren sends and what comes back
 ```
 
@@ -1283,21 +1355,33 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren orgs` | Lists your organizations, `*` on the one in use. |
 | `siren use <slug or id>` | Switches to another of your organizations. |
 | `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
-| `siren apps apply [file]` | Declares the app in the file, then prints each item's `app:{id}`. An item the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the item and says that naming it in the file again brings it back. On the first apply it saves the key and signing secret in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
-| `siren apps list` | Lists the apps and their items, and under an app with requests that need attention, how many and the `siren apps requests --app <key> --attention` that lists them. `--json` prints what Siren sent. |
-| `siren apps show <key>` | Shows one app and its items, with each archived item marked beside it, and how many of its requests need attention when any do. |
+| `siren apps apply [file] [--yes]` | Reads the app on Siren first and prints each change the file would make: name, description, the address added, moved or removed (never its url), events, the key's scopes, and each feature added, changed, brought back or removed, with how many records select a removed one. It then asks before it writes, since the last write wins. `--yes` skips the question, and with no terminal and no `--yes` it sends nothing. With nothing to change it says so and writes nothing. It declares the app, then prints each feature's `app:{id}`. A feature the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the feature and says that naming it in the file again brings it back. On the first apply it saves the key, and the signing secret when the file names a `url`, in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
+| `siren apps list` | Lists the apps, their features and their events, and under an app with requests that need attention, how many and the `siren apps requests --app <key> --attention` that lists them. `--json` prints what Siren sent. |
+| `siren apps show <key>` | Shows one app, its features and its events, with each archived feature marked beside it, and how many of its requests need attention when any do. |
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
 | `siren apps requests <id>` | Shows one request, however old: its line, the data Siren sent, the answer Siren took and who gave it, then each send with its HTTP status and what the app said back. |
 | `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
 | `siren apps resend <id>` | Sends a request again. When Siren refuses because the request's app is off, it names the `siren apps on <key>` that turns it on. |
-| `siren apps rotate <key>` | Gives the app a new key and secret and writes them where apply wrote the first pair, or beside the file named by `--app-file`. |
+| `siren apps rotate-key <key>` | Gives the app a new key, which revokes the old one at once, and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. It asks first, and `--yes` skips the question. |
+| `siren apps rotate-secret <key>` | Gives the app's address a new signing secret and writes it as `SIREN_SIGNING_SECRET` the same way. Siren signs with it at once. It asks first, and `--yes` skips the question. |
+| `siren apps add-key <key>` | Makes a key for an app that holds none and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. The key holds no scopes until the next `siren apps apply`. |
+| `siren apps rotate [<key>]` | Sends nothing, names `rotate-key` and `rotate-secret`, which replace it, and exits 1, with or without a key. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
 
-siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its items keyed by
-item key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment, from a variable
-whose name starts with `SIREN_APP_`, and only there. A mistake in the file is printed with its line
-and column, and nothing is sent.
+`list`, `show` and `apply` print `requires Pro`, or the plan Siren names, beside a feature or the
+events the organization's plan cannot use, and say only that the plan cannot use it when Siren names
+no plan. They read this from what Siren sends and never guess a plan. When the file names scopes
+and the app holds no key, `apply` says so and names `siren apps add-key <key>`.
+
+siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its features in
+`items`, keyed by feature key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment,
+from a variable whose name starts with `SIREN_APP_`, and only there. `url` is optional: a file with
+no `url` declares a key-only app, which holds no features. A file with features and no `url` is
+refused. A feature's kind and key lock once Siren makes it, so renaming a key makes a new feature
+and archives or deletes the old one. The Payout method kind is `payoutMethod`, and the old
+`fulfillmentMethod` is refused with a message that names it. A mistake in the file is printed with
+its line and column, and nothing is sent.
 
 The tool talks to `SIREN_BASE_URL`, else the sandbox. `--base-url <url>` names another Siren, and
 takes plain http only for `localhost`, `127.0.0.1` and `host.docker.internal`. A live organization

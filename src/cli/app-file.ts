@@ -1,5 +1,6 @@
 import type { AppItemDeclaration, DeclareAppParams } from '../record-types';
 import { AppItemKind } from '../taxonomy';
+import { kindLabel } from './app-kinds';
 
 /*
  * The app file, `siren.app.json`: a Siren recipe that holds one `apps`
@@ -17,7 +18,7 @@ import { AppItemKind } from '../taxonomy';
  *         "events": [],
  *         "items": {
  *           "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
- *           "acme-ledger": { "kind": "fulfillmentMethod", "name": "Acme ledger", "currencies": ["USD"] }
+ *           "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"] }
  *         }
  *       }
  *     }
@@ -27,7 +28,12 @@ import { AppItemKind } from '../taxonomy';
 /** The file name `apps init` writes and `apps apply` reads when given none. */
 export const APP_FILE_NAME = 'siren.app.json';
 
-/** One item as the file declares it, keyed by its item key in `items`. */
+/**
+ * One feature as the file declares it, keyed by its feature key in `items`.
+ * The code calls a feature an item. Its kind and key lock once Siren makes
+ * it, so a renamed key is a new feature and the old one is archived or
+ * deleted.
+ */
 export interface AppFileItem {
   kind: AppItemKind;
   name: string;
@@ -40,7 +46,8 @@ export interface AppFileItem {
 export interface AppFileApp {
   name: string;
   description?: string;
-  url: string;
+  /** The app's address. Left out, the app is key-only, and it may hold no features. */
+  url?: string;
   scopes?: string[];
   events?: string[];
   items?: Record<string, AppFileItem>;
@@ -108,7 +115,8 @@ export function parseAppFile(
 export function declarationFor(file: AppFile): { key: string; params: DeclareAppParams } {
   const [key = ''] = Object.keys(file.apps);
   const app = file.apps[key] as AppFileApp;
-  const params: DeclareAppParams = { name: app.name, ...(app.description === undefined ? {} : { description: app.description }), url: app.url };
+  const params: DeclareAppParams = { name: app.name, ...(app.description === undefined ? {} : { description: app.description }) };
+  if (app.url !== undefined) params.url = app.url;
   if (app.scopes !== undefined) params.scopes = [...app.scopes];
   if (app.events !== undefined) params.events = [...app.events];
   if (app.items !== undefined) {
@@ -126,7 +134,7 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
 /**
  * The text `apps init` writes: a file that passes {@link parseAppFile} once
  * `SIREN_APP_URL` is set, declaring the app `key` named `name` with one
- * post-conversion action, `notify`, and one fulfillment method, `pay`,
+ * post-conversion action, `notify`, and one payout method, `pay`,
  * paying `USD`.
  */
 export function appFileTemplate(key: string, name: string): string {
@@ -143,7 +151,7 @@ export function appFileTemplate(key: string, name: string): string {
         events: [],
         items: {
           notify: { kind: 'postConversionAction', name: 'Tell my service about each approved conversion' },
-          pay: { kind: 'fulfillmentMethod', name: 'Pay through my service', currencies: ['USD'] },
+          pay: { kind: 'payoutMethod', name: 'Pay through my service', currencies: ['USD'] },
         },
       },
     },
@@ -178,13 +186,22 @@ const RECIPE_KEYS = [
 /** The fields `PUT /apps/{key}` reads (DeclareApp.php). */
 const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'items'];
 
-/** The fields Siren stores for an item (AppService, "Items"). */
+/** The fields Siren stores for a feature (AppService, "Items"). */
 const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes'];
 
-/** Siren's item kinds (lib/Apps/Core/Enums/AppItemKinds.php). */
-const KINDS: readonly string[] = Object.values(AppItemKind);
+/**
+ * Siren's feature kinds (lib/Apps/Core/Enums/AppItemKinds.php), each once:
+ * `AppItemKind.FulfillmentMethod` is an alias of `payoutMethod`.
+ */
+const KINDS: readonly string[] = [...new Set<string>(Object.values(AppItemKind))];
 
-/** An app or item key, as Siren's `AppService::KEY_PATTERN` reads it, at most 64 characters. */
+/** The payout kind's old word, which Siren refuses since it took the documentation's. */
+const OLD_PAYOUT_KIND = 'fulfillmentMethod';
+
+/** The app keys Siren keeps for its own routes (`AppService::RESERVED_KEYS`). */
+const RESERVED_APP_KEYS = ['requests', 'events', 'scopes', 'kinds'];
+
+/** An app or feature key, as Siren's `AppService::KEY_PATTERN` reads it, at most 64 characters. */
 const KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** The longest answer window Siren takes, `AppService::ANSWER_WINDOW_MAX_MINUTES`. */
@@ -472,11 +489,11 @@ class AppFileCheck {
 
   private checkApp(appKey: string, app: unknown): void {
     const path = `apps.${appKey}`;
-    if (!isKey(appKey) || appKey === 'requests') {
+    if (!isKey(appKey) || RESERVED_APP_KEYS.includes(appKey)) {
       this.problem(
         path,
         this.where(path),
-        `${path}: an app key is lowercase letters and digits joined by single dashes, at most 64 characters, and never requests.`,
+        `${path}: an app key is lowercase letters and digits joined by single dashes, at most 64 characters, and never requests, events, scopes or kinds.`,
       );
     }
     if (!isObject(app)) {
@@ -495,7 +512,7 @@ class AppFileCheck {
       this.problem(`${path}.description`, this.where(`${path}.description`), `${path}.description must be text.`);
     }
     const urlPath = `${path}.url`;
-    if (!this.unfilled.has(urlPath) && (typeof app.url !== 'string' || !isAppUrl(app.url))) {
+    if (app.url !== undefined && !this.unfilled.has(urlPath) && (typeof app.url !== 'string' || !isAppUrl(app.url))) {
       this.problem(
         urlPath,
         this.where(urlPath),
@@ -509,15 +526,22 @@ class AppFileCheck {
     }
     if (app.items === undefined) return;
     if (!isObject(app.items)) {
-      this.problem(`${path}.items`, this.where(`${path}.items`), `${path}.items must be an object that holds each item under its item key.`);
+      this.problem(`${path}.items`, this.where(`${path}.items`), `${path}.items must be an object that holds each feature under its feature key.`);
       return;
+    }
+    if (app.url === undefined && Object.keys(app.items).length > 0) {
+      this.problem(
+        `${path}.items`,
+        this.where(`${path}.items`),
+        `${path} has features and no url. Siren sends a feature its requests at the app's address, so add a url, or remove the features for a key-only app.`,
+      );
     }
     for (const [itemKey, item] of Object.entries(app.items)) this.checkItem(`${path}.items.${itemKey}`, itemKey, item);
   }
 
   private checkItem(path: string, itemKey: string, entry: unknown): void {
     if (!isKey(itemKey)) {
-      this.problem(path, this.where(path), `${path}: an item key is lowercase letters and digits joined by single dashes, at most 64 characters.`);
+      this.problem(path, this.where(path), `${path}: a feature key is lowercase letters and digits joined by single dashes, at most 64 characters.`);
     }
     if (!isObject(entry)) {
       this.problem(path, this.where(path), `${path} must be an object.`);
@@ -525,11 +549,17 @@ class AppFileCheck {
     }
     for (const field of Object.keys(entry)) {
       if (!ITEM_FIELDS.includes(field)) {
-        this.problem(`${path}.${field}`, this.where(`${path}.${field}`), `${path}.${field} is not an item field. An item takes ${ITEM_FIELDS.join(', ')}.`);
+        this.problem(`${path}.${field}`, this.where(`${path}.${field}`), `${path}.${field} is not a feature field. A feature takes ${ITEM_FIELDS.join(', ')}.`);
       }
     }
-    if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {
-      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind must be one of ${KINDS.join(', ')}.`);
+    if (entry.kind === OLD_PAYOUT_KIND) {
+      this.problem(
+        `${path}.kind`,
+        this.where(`${path}.kind`),
+        `${path}.kind fulfillmentMethod is the old name of this kind. Write payoutMethod, the word Siren and its documentation use.`,
+      );
+    } else if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {
+      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind must be one of ${KINDS.map(kindLabel).join(', ')}.`);
     }
     if (typeof entry.name !== 'string' || entry.name === '') {
       this.problem(`${path}.name`, this.where(`${path}.name`), `${path}.name is required, as text.`);
@@ -537,12 +567,13 @@ class AppFileCheck {
     if (entry.description !== undefined && typeof entry.description !== 'string') {
       this.problem(`${path}.description`, this.where(`${path}.description`), `${path}.description must be text.`);
     }
-    if (entry.kind === AppItemKind.FulfillmentMethod) {
+    // The old word names the same kind, so its currencies are checked as a payout method's are.
+    if (entry.kind === AppItemKind.PayoutMethod || entry.kind === OLD_PAYOUT_KIND) {
       if (!isTextList(entry.currencies) || entry.currencies.length === 0) {
-        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a fulfillmentMethod: a list of the currency codes it pays.`);
+        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a ${kindLabel(AppItemKind.PayoutMethod)}: a list of the currency codes it pays.`);
       }
     } else if (entry.currencies !== undefined) {
-      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a fulfillmentMethod.`);
+      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a ${kindLabel(AppItemKind.PayoutMethod)}.`);
     }
     const window = entry.answerWindowMinutes;
     if (window !== undefined && (!Number.isInteger(window) || (window as number) < 1 || (window as number) > MAX_ANSWER_WINDOW_MINUTES)) {

@@ -2,6 +2,7 @@ import type {
   AppItemKind,
   AppRequestMode,
   AppRequestStatus,
+  AppSource,
   AppStatus,
   CollaboratorStatus,
   ConversionStatus,
@@ -960,7 +961,12 @@ export interface FulfillmentListParams extends RecordListParams {
  * (AppRequestEnvelope, tests/Fixtures/apps-exchange/signed-request.json).
  */
 
-/** One item an app declares, as `apps.declare()` sends it. */
+/**
+ * One feature an app declares, as `apps.declare()` and `apps.items.create()`
+ * send it. The code calls a feature an item. Its `kind` and `key` lock once
+ * Siren makes it: a record selects it by id and a file names it by kind and
+ * key.
+ */
 export interface AppItemDeclaration {
   kind: AppItemKind;
   /** Lowercase letters and digits joined by single dashes, at most 64. Unique within the app and kind. */
@@ -969,27 +975,47 @@ export interface AppItemDeclaration {
   name: string;
   /** At most 500 characters. */
   description?: string;
-  /** Required for a `fulfillmentMethod` and refused for any other kind: the currency codes it pays. */
+  /** Required for a `payoutMethod` and refused for any other kind: the currency codes it pays. */
   currencies?: string[];
   /** Minutes Siren waits for an answer to an ask, 1 to 43200. Siren's default is 1440, or 60 for a distribution resolver. */
   answerWindowMinutes?: number;
 }
 
-/** The whole app, as `PUT /apps/{key}` takes it every time. */
+/**
+ * The whole app, as `PUT /apps/{key}` takes it every time. A field left out
+ * reads as empty: no `url` removes the address and its delivery log, and no
+ * `scopes` empties the active key's scopes.
+ */
 export interface DeclareAppParams {
   name: string;
   description?: string;
-  /** The public https address Siren sends each request to. */
-  url: string;
-  /** API key scopes the app's own key holds. An app may hold none. */
+  /**
+   * The public https address Siren sends each request to. Optional: an app
+   * with no `url` is a key-only app. An app with features needs one.
+   */
+  url?: string | null;
+  /** API key scopes the app's own key holds. An app may hold none. They reach only an active key. */
   scopes?: string[];
-  /** Ordinary webhook events the app also receives at the same address with the same secret. */
+  /** Ordinary webhook events the app also receives at the same address with the same secret. They need a `url`. */
   events?: string[];
   items?: AppItemDeclaration[];
 }
 
-/** An app item as Siren answers it. A record selects it by `ref`. */
-export interface AppItem {
+/**
+ * Whether the organization's plan can use a feature, or the events Siren
+ * sends to an app's address, as Siren's AppPlanAccess answers it.
+ * `requiredCapability` and `requiredPlan` are null when `entitled` is true.
+ * When the plan lacks more than one capability, they name the one in the
+ * highest tier, such as `outbound-apps` and `pro`.
+ */
+export interface AppPlanAccess {
+  entitled: boolean;
+  requiredCapability: string | null;
+  requiredPlan: string | null;
+}
+
+/** An app item, a feature, as Siren answers it. A record selects it by `ref`. */
+export interface AppItem extends AppPlanAccess {
   id: number;
   /** `app:{id}`, the value a program, distributor or autofulfiller stores. */
   ref: string;
@@ -1005,21 +1031,90 @@ export interface AppItem {
   [field: string]: unknown;
 }
 
-/** An app as Siren's app routes answer it. No read ever carries its key or secret. */
+/** One record that selects a feature: a program or distributor by id, an autofulfiller by its currency code. */
+export interface AppItemUse {
+  record: 'program' | 'distributor' | 'autofulfiller' | (string & {});
+  id: number | string;
+}
+
+/** One feature as its own routes answer it: the item, how many records select it, and up to 100 of them. */
+export interface AppItemPage extends AppItem {
+  uses: number;
+  usedBy: AppItemUse[];
+}
+
+/** What `apps.items.delete()` answers: archived while a record selects it, with the item, or deleted, with `item` null. */
+export interface RemovedAppItem {
+  archived: boolean;
+  item: AppItemPage | null;
+}
+
+/** A new feature, as `apps.items.create()` takes it. */
+export type CreateAppItemParams = AppItemDeclaration;
+
+/** The fields `apps.items.update()` changes. A feature's kind and key never change. */
+export interface UpdateAppItemParams {
+  name?: string;
+  description?: string;
+  currencies?: string[];
+  answerWindowMinutes?: number | null;
+}
+
+/** An app's active API key as Siren shows it: never more than its prefix and its last four characters. */
+export interface AppApiKey {
+  id: number;
+  /** `sk_test_` or `sk_live_` and 8 more characters. */
+  prefix: string;
+  /** The raw key's last four characters, so a screen shows `***9f3c`. Null for a key made before Siren kept them. */
+  lastFour: string | null;
+  scopes: string[];
+  propertyId: number | null;
+  lastUsedAt: string | null;
+  dateCreated: string | null;
+}
+
+/** An app's address, the webhook subscription Siren sends its requests and events to. Never its signing secret. */
+export interface AppAddress {
+  id: number;
+  url: string;
+  events: string[];
+  /** `paused` while the app is off. */
+  status: 'active' | 'paused' | (string & {});
+  dateCreated: string | null;
+}
+
+/** An app as Siren's app routes answer it. No read ever carries its raw key or signing secret. */
 export interface App {
   id: number;
   key: string;
   name: string;
   description: string;
   status: AppStatus | (string & {});
-  webhookSubscriptionId: number | null;
-  apiKeyId: number | null;
+  /** Which door made the app: `code` (the app file), `dashboard` or `site`. It never changes. */
+  source: AppSource | (string & {});
+  /**
+   * @deprecated Siren no longer answers it. Read `address.id`. An app finds
+   * its parts by their `appId` now (apps-own-parts.md on Siren's
+   * int/preview-apps).
+   */
+  webhookSubscriptionId?: number | null;
+  /** @deprecated Siren no longer answers it. Read `apiKey.id`. */
+  apiKeyId?: number | null;
+  /** The address's url, or null when the app has no address. */
   url: string | null;
+  /** The events Siren sends to the address, `[]` with no address. */
   events: string[];
+  /** The active key's scopes, `[]` with no key. */
   scopes: string[];
-  /** The first 16 characters of the app's key, `sk_test_` or `sk_live_` and 8 more. */
+  /** The first 16 characters of the app's key, `sk_test_` or `sk_live_` and 8 more, or null with no key. */
   apiKeyPrefix: string | null;
+  /** The active key, or null when the app holds none. */
+  apiKey: AppApiKey | null;
+  /** The address, or null when the app holds none. */
+  address: AppAddress | null;
   items: AppItem[];
+  /** Whether the plan lets Siren send events to the app's address. Events go out of Siren and need Pro. */
+  eventsAccess: AppPlanAccess;
   /** How many of the app's requests need a person now, as Siren's AppAttention counts them. */
   needsAttention: number;
   dateCreated?: string | null;
@@ -1027,7 +1122,7 @@ export interface App {
   [field: string]: unknown;
 }
 
-/** The two secrets Siren shows once: on an app's first declaration and on each rotation. */
+/** The two secrets Siren shows once, each by the route that made it. */
 export interface AppSecrets {
   /** The app's API key, `sk_test_` in the sandbox and `sk_live_` on the live deployment. */
   rawKey: string;
@@ -1036,13 +1131,91 @@ export interface AppSecrets {
 }
 
 /**
- * What `apps.declare()` answers. `created` is true, and both secrets are
- * present, only when this call made the app.
+ * What `apps.declare()` answers. `created` is true, and `rawKey` present,
+ * only when this call made the app, since only the first declaration makes a
+ * key. `signingSecret` is present whenever this call made an address: on the
+ * first declaration with a `url`, and on a later one that adds a `url` the
+ * app had no address for.
  */
-export type DeclaredApp = App & { created: true } & AppSecrets | App & { created: false };
+export type DeclaredApp =
+  | (App & { created: true; rawKey: string; signingSecret?: string })
+  | (App & { created: false; signingSecret?: string });
 
-/** What `apps.rotate()` answers: the app, and its new key and secret, shown this once. */
+/**
+ * @deprecated `apps.rotate()` is gone, since Siren removed
+ * `POST /apps/{key}/rotate`. `apps.rotateKey()` answers {@link AppWithRawKey}
+ * and `apps.rotateSecret()` answers {@link AppWithSigningSecret}.
+ */
 export type RotatedApp = App & AppSecrets;
+
+/** An app with the raw key a key route made, shown this once. */
+export type AppWithRawKey = App & { rawKey: string };
+
+/** An app with the signing secret a route made, shown this once. */
+export type AppWithSigningSecret = App & { signingSecret: string };
+
+/** A new app from the dashboard's door, as `apps.create()` sends it to `POST /apps`. */
+export interface CreateAppParams {
+  name: string;
+  description?: string;
+  /** Makes an address. */
+  url?: string | null;
+  /** A list, even `[]`, makes a key with these scopes. Leave it out for an address-only app. */
+  scopes?: string[] | null;
+  /** The events Siren sends to the address. They need a `url`. */
+  events?: string[] | null;
+}
+
+/** What `apps.create()` answers: the app, `rawKey` when it made a key and `signingSecret` when it made an address. */
+export type CreatedApp = App & { rawKey?: string; signingSecret?: string };
+
+/**
+ * A change to an app, as `apps.update()` sends it to `PATCH /apps/{key}`.
+ * Only the fields sent change. `url: null` removes the address.
+ */
+export interface UpdateAppParams {
+  name?: string;
+  description?: string;
+  url?: string | null;
+  events?: string[];
+  scopes?: string[];
+}
+
+/** What `apps.update()` answers: the app, and `signingSecret` when the change made an address. */
+export type UpdatedApp = App & { signingSecret?: string };
+
+/** One settings field a feature's kind takes, as the kinds catalog describes it. */
+export interface AppItemKindSetting {
+  field: string;
+  label: string;
+  /** `integer`, or `currencies`, a list of currency codes Siren knows for the org. */
+  type: 'integer' | 'currencies' | (string & {});
+  required: boolean;
+  min?: number;
+  max?: number;
+  help?: string;
+  [field: string]: unknown;
+}
+
+/** One kind of feature an app may add, from `GET /apps/kinds` (AppItemKindCatalog::catalog() and AppPlanAccess). */
+export interface AppItemKindEntry extends AppPlanAccess {
+  kind: AppItemKind | (string & {});
+  /** The documentation's term, such as `payout method`. */
+  term: string;
+  /** The readable name, such as `Payout method`. */
+  name: string;
+  description: string;
+  /** `tell`: Siren waits for no answer. `ask`: Siren waits for the app's answer. */
+  mode: 'tell' | 'ask' | (string & {});
+  /** `out`: something goes out of Siren to the app, which needs Pro. `in`: the app's logic comes in. */
+  direction: 'out' | 'in' | (string & {});
+  /** Other names people use for it, such as `autofulfiller`. */
+  aliases: string[];
+  /** The documentation page that uses the term, or null. */
+  docs: string | null;
+  settings: AppItemKindSetting[];
+  [field: string]: unknown;
+}
 
 /** A request Siren sent an app, as `GET /apps/requests` lists it. The data and the answer stay out. */
 export interface AppRequestRecord {
@@ -1208,7 +1381,11 @@ export interface AppAllocationCompletedData {
 export interface ShownAmount {
   /** `value / 10^scale` as a number, for arithmetic: 15 for 1500 in dollars, 100 for 10000 in yen. */
   amount: number;
-  /** Plain text with the currency's decimal places, no symbol and no grouping: `15.00`, `100`. */
+  /**
+   * Plain text with the currency's decimal places, no symbol and no
+   * grouping: `15.00`, `100`. Its sign is `text`'s, so a negative that
+   * rounds to zero reads `-0.00`, as Siren's `format()` prints it.
+   */
   decimal: string;
   /** The text a person reads: `$15.00`, `¥100`, `10,000 pts`. */
   text: string;

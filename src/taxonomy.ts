@@ -331,18 +331,38 @@ export const CreditHoldStatus = {
 export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHoldStatus];
 
 /**
- * The registries an app item can join, as Siren names them
- * (lib/Apps/Core/Enums/AppItemKinds.php). A record selects an item by
- * `app:{id}`: a program for a post-conversion action, a distributor for a
- * post-allocation action or a distribution resolver, and an autofulfiller
- * for a fulfillment method.
+ * The registries an app item, a feature, can join, as Siren names them
+ * (lib/Apps/Core/Enums/AppItemKinds.php on Siren's int/preview-apps at
+ * a22547327). A record selects a feature by `app:{id}`: a program for a
+ * post-conversion action, a distributor for a post-allocation action or a
+ * distribution resolver, and an autofulfiller for a payout method.
+ *
+ * The payout kind's stored value is `payoutMethod`, the documentation's
+ * word. `FulfillmentMethod` stays as an alias of the same value, as Siren's
+ * `AppItemKinds::FulfillmentMethod` does, so code written against it sends
+ * the new word. Siren refuses the old value `fulfillmentMethod`.
  */
 export const AppItemKind = {
   PostConversionAction: 'postConversionAction',
   PostAllocationAction: 'postAllocationAction',
-  FulfillmentMethod: 'fulfillmentMethod',
+  PayoutMethod: 'payoutMethod',
+  /** @deprecated Read `AppItemKind.PayoutMethod`. The same value, `payoutMethod`. */
+  FulfillmentMethod: 'payoutMethod',
   DistributionResolver: 'distributionResolver',
 } as const;
+
+/** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */
+export const AppSource = {
+  /** The app file, through `PUT /apps/{key}`. */
+  Code: 'code',
+  /** The dashboard's "Create it here", through `POST /apps`. */
+  Dashboard: 'dashboard',
+  /** A connected site. */
+  Site: 'site',
+} as const;
+
+/** Union of the {@link AppSource} strings. */
+export type AppSource = (typeof AppSource)[keyof typeof AppSource];
 
 /** Union of the {@link AppItemKind} strings. */
 export type AppItemKind = (typeof AppItemKind)[keyof typeof AppItemKind];

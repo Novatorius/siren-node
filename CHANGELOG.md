@@ -181,12 +181,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `openapi.yaml` documents `GET /payouts/{id}`, `GET /fulfillments`, `GET /fulfillments/{id}`,
   `PUT /webhooks/{id}`, `GET /webhooks/{id}/deliveries` and the `WebhookDelivery` schema.
 - `siren.apps` (`AppsResource`) for Siren apps, each call taking a signed-in admin's session
-  token: `declare` (`PUT /apps/{key}`, sent once, answering `created: true` with `rawKey` and
-  `signingSecret` the first time), `list` (`GET /apps`), `retrieve` (`GET /apps/{key}`),
-  `setStatus` (`POST /apps/{key}/status`), `rotate` (`POST /apps/{key}/rotate`) and `delete`
+  token: `declare` (`PUT /apps/{key}`, sent once, answering `created: true` with `rawKey` the
+  first time, and `signingSecret` whenever it made an address), `list` (`GET /apps`), `retrieve`
+  (`GET /apps/{key}`), `setStatus` (`POST /apps/{key}/status`) and `delete`
   (`DELETE /apps/{key}`). Each throws `SirenError` before sending for an app key that is not
   lowercase letters and digits joined by single dashes, at most 64 characters, or that is
-  `requests`, and `declare` for a field or item field Siren does not take, whatever its value. The
+  `requests`, `events`, `scopes` or `kinds`, and `declare` for a field or item field Siren does not take, whatever its value. The
   reads retry, the writes are sent once, and a 2xx body that is not an app raises
   `UnexpectedResponseError`.
 - `siren.apps.verifyRequest(rawBody, headers, secret, options)` checks a request Siren sends an app:
@@ -264,8 +264,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `App.needsAttention`, how many of the app's requests need a person, which Siren now sends on
   every app, and in openapi's `App` schema. `siren apps list` and `siren apps show` print the count
   under an app when it is above 0, with `siren apps requests --app <key> --attention`.
+- An app holds its own key, address and features, as Siren's int/preview-apps answers it. The
+  apps resource gains a call for each part, every one Node-only for now:
+  - `apps.create` (`POST /apps`, sent once) makes an app from the dashboard's door, with a key when
+    `scopes` is a list and an address when `url` is given, answering each new secret once.
+  - `apps.update` (`PATCH /apps/{key}`, sent once) changes only the fields sent. `url: null`
+    removes the address.
+  - `apps.createKey`, `apps.rotateKey` and `apps.revokeKey` (`POST /apps/{key}/key`,
+    `POST /apps/{key}/key/rotate` and `DELETE /apps/{key}/key`) make, rotate and revoke the key.
+  - `apps.rotateSecret` (`POST /apps/{key}/secret/rotate`) gives the address a new signing secret.
+  - `apps.test` (`POST /apps/{key}/test`) sends the address one signed `webhook.test`, and
+    `apps.deliveries` (`GET /apps/{key}/deliveries`) reads its latest 50 deliveries.
+  - `apps.items.create`, `retrieve`, `update` and `delete` (`/apps/{app}/items` and
+    `/apps/{app}/items/{id}`) add, read, change and remove one feature. `update` refuses a change to
+    `kind` or `key` before sending, since a feature's kind and key never change.
+  - `apps.events`, `apps.scopes` and `apps.kinds` (`GET /apps/events`, `/apps/scopes` and
+    `/apps/kinds`) read the three catalogs.
+
+  Each write is sent once and each read retries. A key or secret route that answers without its
+  secret raises `UnexpectedResponseError`. `AppItemsResource` is exported for typing
+  `siren.apps.items`.
+- Types `AppApiKey`, `AppAddress`, `AppPlanAccess`, `AppItemPage`, `AppItemUse`,
+  `RemovedAppItem`, `CreateAppParams`, `CreatedApp`, `UpdateAppParams`, `UpdatedApp`,
+  `CreateAppItemParams`, `UpdateAppItemParams`, `AppWithRawKey`, `AppWithSigningSecret`,
+  `AppItemKindEntry`, `AppItemKindSetting` and the `AppSource` taxonomy. `App` gains `source`,
+  `apiKey`, `address` and `eventsAccess`, and each `AppItem` gains `entitled`,
+  `requiredCapability` and `requiredPlan`.
+- `AppItemKind.PayoutMethod`, `payoutMethod`, the payout kind's word in Siren and its documentation.
+  `AppErrorCode` gains `AppNeedsAPart`, `ItemsNeedKeyAndAddress`, `KeyExists`, `KeyMissing`,
+  `AddressMissing` and `AppCapReached`.
 
 ### Changed
+
+- `apps.rotate()` is gone with Siren's `POST /apps/{key}/rotate`. Call `apps.rotateKey()` and
+  `apps.rotateSecret()`. The `RotatedApp` type stays, deprecated.
+- `AppItemKind.FulfillmentMethod` is a deprecated alias whose value is now `payoutMethod`, as
+  Siren's `AppItemKinds::FulfillmentMethod` is. `apps.declare()` and `apps.items.create()` refuse
+  the old string `fulfillmentMethod` before sending, since Siren refuses it.
+- `apps.declare()` takes an app with no `url`, a key-only app, and refuses features with no `url`
+  before sending. `DeclaredApp` carries `rawKey` on the first declaration and `signingSecret`
+  whenever the call made an address, so a later declaration that adds a `url` answers the new
+  secret.
+- An `UnexpectedResponseError` for a malformed app answer keeps the body as `data` without
+  `rawKey` and `signingSecret`, so a caller that logs the error never logs a secret.
+- `App.webhookSubscriptionId` and `App.apiKeyId` are optional and deprecated, since Siren no longer
+  sends them. Read `address.id` and `apiKey.id`.
+- `siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, each method naming the app
+  call that replaces it, since an app holds its key and its address now. They stay until Siren
+  removes their routes. openapi.yaml marks each old `/webhooks` and `/api-keys` operation
+  `deprecated: true` and names the app route that replaces it. `AppErrorCode.AppOwnedSubscription` names Siren's 409
+  `app_owned_subscription` for a webhook call on an address an app owns. The README's apps section
+  describes an app's three parts and says "feature" where the code says item.
+- The app file's `url` is optional, so it can declare a key-only app. A file with features and no
+  `url` is refused before anything is sent. The file takes `payoutMethod` and refuses
+  `fulfillmentMethod` with a message that names the new word, refuses the app keys `events`,
+  `scopes` and `kinds` beside `requests`, and its messages say feature where they said item.
+  `siren apps apply` writes only the secrets Siren sent, so a key-only app gets no empty
+  `SIREN_SIGNING_SECRET` line, and a later apply that adds a `url` saves the new signing secret.
+- `siren apps apply` reads the app with `GET /apps/{key}` first and prints each change the file
+  would make, with how many records select a feature it
+  removes. It asks before it writes, says the last write wins, and takes `--yes` to skip the
+  question. With no terminal and no `--yes` it sends nothing, and with nothing to change it says so
+  and writes nothing. It compares the key's scopes in the form Siren stores them, so a file that
+  names `*` beside event scopes matches on the next run.
+- `siren apps rotate` splits in two, since an app's key and its signing secret change apart.
+  `siren apps rotate-key` and `siren apps rotate-secret` each ask first, take `--yes`, and write
+  only their own line to the env file, mode 0600, through a temporary file and a rename.
+  `siren apps rotate` sends nothing, names the two, and exits 1, with or without a key. Every
+  command that takes an app key refuses `requests`, `events`, `scopes` and `kinds` in its own
+  words. Every hint that named
+  `siren apps rotate`, `requests.answer()`'s 401 message included, names `rotate-key` when the app
+  holds a key and `add-key` when it holds none. Apply on an app with no key names `add-key`, and
+  `rotate-key`, `rotate-secret` and `add-key` turn Siren's 409 for a missing or existing part into
+  the one command that fits the app. Apply and the three key commands refuse, before they send, an
+  env file that holds `SIREN_BASE_URL`, `SIREN_API_KEY` or `SIREN_SIGNING_SECRET` on more than one
+  line, and name the lines, so a rotation never leaves the revoked key on a line a loader reads.
+- `siren apps show`, `list` and `apply` print `requires Pro`, or the plan Siren names in
+  `requiredPlan`, beside a feature or the events the plan cannot use, and print the app's events.
+  `apply` warns when the file names scopes and the app holds no key, and names
+  `siren apps add-key <key>`, a new command that makes the key with `POST /apps/{key}/key` and
+  writes it to the env file.
+- The tool's output and the README say feature where they said item. Technical terms such as
+  `items`, `AppItem` and `app:{id}` stay as they are.
+- The tool prints each feature kind's readable name beside its term, as Payout method
+  (payoutMethod), in `show`, `list`, apply's changes, the request lines and the app file's
+  messages. The README's feature table and prose do the same. The names are Siren's kinds catalog
+  names.
+- `apps.shownAmount()` gives `decimal` the sign `text` has, as Siren's `format()` prints it, so a
+  negative that rounds to zero reads `-0.00` beside `-$0.00`, where `decimal` read `0.00`.
+- The example app in examples/apps/acme declares its payout feature as `payoutMethod`, and its env
+  reader names `rotate-key`, `add-key` or `rotate-secret` for each missing line. Its README walks
+  through the question apply asks, the split rotation and the `requires Pro` mark. The signed
+  request fixture is Siren's int/preview-apps copy, which carries `payoutMethod`.
+- `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
+  refuses the webhook routes for a subscription an app owns.
+- `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,
+  `AppItemKindEntry`, `AppCreate`, `AppChange` and `AppWithSecrets` schemas, `payoutMethod`, and an
+  optional `url`, and drops `/apps/{key}/rotate` and `DeclaredApp`.
 
 - `siren apps delete` says to turn an app off only while it is on, and otherwise that the records
   selecting its items must change. `siren apps resend` names `siren apps on <key>` when Siren refuses

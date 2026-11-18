@@ -13,9 +13,10 @@ import { AppTells } from './apps-siren-answers';
  * Contract: docs/architecture/apps-cli.md, "Checking a request".
  *
  * The fixture is Siren's own, copied byte for byte from
- * tests/Fixtures/apps-exchange/signed-request.json on the apps-exchange
- * branch (086615e2a). Siren's AppsExchangeFlowTest checks that PHP still
- * makes these bytes, so a pass here means this SDK reads what Siren sends.
+ * tests/Fixtures/apps-exchange/signed-request.json on int/preview-apps
+ * (a22547327, where 0bb03b2c3 gave it the kind payoutMethod and new
+ * signatures). Siren's AppsExchangeFlowTest checks that PHP still makes
+ * these bytes, so a pass here means this SDK reads what Siren sends.
  */
 
 interface SignedFixture {
@@ -82,7 +83,7 @@ describe('apps-cli: apps.verifyRequest', () => {
         type: 'app.request',
         mode: 'ask',
         app: 'acme-payouts',
-        item: { kind: 'fulfillmentMethod', key: 'acme-ledger', id: 'app:12' },
+        item: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
         createdAt: '2026-11-17T09:14:03+00:00',
         answerBy: '2026-11-18T09:14:03+00:00',
         answerUrl: 'https://api.siren.test/siren/v1/apps/requests/apr_b79943ff8ca353ce5cf5312bb3fa66c7/answer',

@@ -197,6 +197,32 @@ export const AppErrorCode = {
   AppChangeInProgress: 'app_change_in_progress',
   /** 403 `data.reason`: a member limited to some stores may not change apps. */
   OrgAccessRequired: 'org_access_required',
+  /**
+   * An app holds a key, an address or both: 422 for a new app that names
+   * neither, 409 for a change that would leave it with neither
+   * (AppPartRefusedException on Siren's int/preview-apps).
+   */
+  AppNeedsAPart: 'app_needs_a_part',
+  /**
+   * An app with an active feature holds a key and an address: 422 on a
+   * declaration, 409 on a change or a first feature, with `data.missing`
+   * naming `key`, `address` or both.
+   */
+  ItemsNeedKeyAndAddress: 'app_items_need_key_and_address',
+  /** 409 from `POST /apps/{key}/key`: the app already holds an active key. Rotate it instead. */
+  KeyExists: 'app_key_exists',
+  /** 409: the app holds no active key to rotate or revoke, or a change sends `scopes` to an app with none. */
+  KeyMissing: 'app_key_missing',
+  /** 409: the app holds no address to rotate a secret for, test or send events to. */
+  AddressMissing: 'app_address_missing',
+  /** 400 with `data.limit`: the organization holds its cap of apps, 250, on or off. */
+  AppCapReached: 'app_cap_reached',
+  /**
+   * 409 from a deprecated `webhooks.subscriptions` call on an address an app
+   * owns (AppOwnedSubscriptionException). Use the app's own call, named in
+   * the deprecated method's doc comment.
+   */
+  AppOwnedSubscription: 'app_owned_subscription',
 } as const;
 
 /** Union of the {@link AppErrorCode} strings. */
