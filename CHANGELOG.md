@@ -309,7 +309,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sends them. Read `address.id` and `apiKey.id`.
 - `siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, each method naming the app
   call that replaces it, since an app holds its key and its address now. They stay until Siren
-  removes their routes. `AppErrorCode.AppOwnedSubscription` names Siren's 409
+  removes their routes. openapi.yaml marks each old `/webhooks` and `/api-keys` operation
+  `deprecated: true` and names the app route that replaces it. `AppErrorCode.AppOwnedSubscription` names Siren's 409
   `app_owned_subscription` for a webhook call on an address an app owns. The README's apps section
   describes an app's three parts and says "feature" where the code says item.
 - The app file's `url` is optional, so it can declare a key-only app. A file with features and no

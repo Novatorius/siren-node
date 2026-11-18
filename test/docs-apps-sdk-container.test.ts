@@ -44,3 +44,45 @@ describe('apps-sdk-container: the note and the mutation list', () => {
     }
   });
 });
+
+/** Each old key and webhook operation in openapi.yaml, and the app route that replaces it. */
+const REPLACED_ROUTES: Array<[string, string]> = [
+  ['listWebhookSubscriptions', 'GET /apps'],
+  ['createWebhookSubscription', 'POST /apps'],
+  ['listWebhookEventTypes', 'GET /apps/events'],
+  ['getWebhookSubscription', 'GET /apps/{key}'],
+  ['updateWebhookSubscription', 'PATCH /apps/{key}'],
+  ['deleteWebhookSubscription', 'PATCH /apps/{key}'],
+  ['sendWebhookTest', 'POST /apps/{key}/test'],
+  ['listWebhookDeliveries', 'GET /apps/{key}/deliveries'],
+  ['listApiKeys', 'GET /apps'],
+  ['createApiKey', 'POST /apps/{key}/key'],
+  ['listApiKeyScopes', 'GET /apps/scopes'],
+  ['revokeApiKey', 'DELETE /apps/{key}/key'],
+];
+
+/** The text of one operation: from its operationId line to the next operation's. */
+function operation(spec: string, id: string): string {
+  const start = spec.indexOf(`operationId: ${id}\n`);
+  expect(start, id).toBeGreaterThan(-1);
+  const next = spec.indexOf('operationId: ', start + 12);
+  return spec.slice(start, next === -1 ? undefined : next);
+}
+
+describe('apps-sdk-container review fix 7: openapi.yaml marks the old routes deprecated', () => {
+  it.each(REPLACED_ROUTES)('%s is deprecated and names %s', (id, route) => {
+    const text = operation(read('openapi.yaml'), id);
+    expect(text).toMatch(/\n {6}deprecated: true\n/);
+    expect(text.replace(/\s+/g, ' ')).toContain(`Deprecated: an app holds its ${id.includes('ApiKey') ? 'key' : 'address'} now. Use \`${route}\``);
+  });
+
+  it('marks no app route deprecated', () => {
+    const spec = read('openapi.yaml');
+    const apps = spec.slice(spec.indexOf('\n  /apps'));
+    const ids = [...apps.matchAll(/operationId: (\w+)/g)].map((match) => match[1]!);
+    expect(ids.length).toBeGreaterThan(10);
+    for (const id of ids.filter((name) => !REPLACED_ROUTES.some(([old]) => old === name))) {
+      expect(operation(spec, id), id).not.toContain('deprecated: true');
+    }
+  });
+});

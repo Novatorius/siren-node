@@ -327,8 +327,12 @@ paths:
     get:
       tags: [Webhooks]
       operationId: listWebhookSubscriptions
+      deprecated: true
       summary: List webhook subscriptions
       description: |
+        Deprecated: an app holds its address now. Use `GET /apps` to read each
+        app with its address. This route stays until Siren removes it.
+
         Oldest first. Pages with `number` (default 200, and a size above 200
         is lowered to 200) and `offset`.
         The `x-siren-estimated-count` header carries the total.
@@ -360,8 +364,12 @@ paths:
     post:
       tags: [Webhooks]
       operationId: createWebhookSubscription
+      deprecated: true
       summary: Create a webhook subscription
       description: |
+        Deprecated: an app holds its address now. Use `POST /apps` to make an
+        app with an address. This route stays until Siren removes it.
+
         Registers a URL to receive event callbacks. The response includes
         `signingSecret`, returned **once** — store it to verify future
         deliveries. Each delivery is a POST whose body is the event payload
@@ -403,8 +411,12 @@ paths:
     get:
       tags: [Webhooks]
       operationId: listWebhookEventTypes
+      deprecated: true
       summary: List the event types a subscription can receive
       description: |
+        Deprecated: an app holds its address now. Use `GET /apps/events` for the
+        events an address may receive. This route stays until Siren removes it.
+
         Exactly the events Siren sends, in the order the dashboard shows them.
 
         An API key needs `webhook-subscriptions:read` or
@@ -433,8 +445,12 @@ paths:
     get:
       tags: [Webhooks]
       operationId: getWebhookSubscription
+      deprecated: true
       summary: Get a webhook subscription
       description: |
+        Deprecated: an app holds its address now. Use `GET /apps/{key}` to read
+        an app with its address. This route stays until Siren removes it.
+
         An API key needs `webhook-subscriptions:read` or
         `webhook-subscriptions:manage`, and must be organization-wide. A key
         bound to one store is refused with 403 `store_key_not_allowed`.
@@ -456,8 +472,12 @@ paths:
     put:
       tags: [Webhooks]
       operationId: updateWebhookSubscription
+      deprecated: true
       summary: Update a webhook subscription
       description: |
+        Deprecated: an app holds its address now. Use `PATCH /apps/{key}` to
+        change its url or events. This route stays until Siren removes it.
+
         Changes the fields sent and leaves the rest as they are. Siren reads
         only `targetUrl`, `events`, `status` and `description`, and skips a
         `null` one. `status: paused` stops deliveries and `active` starts
@@ -501,8 +521,13 @@ paths:
     delete:
       tags: [Webhooks]
       operationId: deleteWebhookSubscription
+      deprecated: true
       summary: Delete a webhook subscription
       description: |
+        Deprecated: an app holds its address now. Use `PATCH /apps/{key}` with
+        `url: null` to remove the address. This route stays until Siren removes
+        it.
+
         An API key needs `webhook-subscriptions:manage`, and must be
         organization-wide. A key bound to one store is refused with 403
         `store_key_not_allowed`.
@@ -527,8 +552,12 @@ paths:
     post:
       tags: [Webhooks]
       operationId: sendWebhookTest
+      deprecated: true
       summary: Send a test delivery
       description: |
+        Deprecated: an app holds its address now. Use `POST /apps/{key}/test` to
+        send a test to the address. This route stays until Siren removes it.
+
         Sends the subscription one signed sample delivery now. Siren answers
         200 whatever the endpoint answered, with what came of it, and the
         test shows in the subscription's delivery history. Siren answers 404
@@ -574,8 +603,13 @@ paths:
     get:
       tags: [Webhooks]
       operationId: listWebhookDeliveries
+      deprecated: true
       summary: List a subscription's deliveries
       description: |
+        Deprecated: an app holds its address now. Use `GET
+        /apps/{key}/deliveries` for the address's delivery log. This route stays
+        until Siren removes it.
+
         The subscription's latest deliveries, at most 50, newest first, as a
         bare array, which is empty when there are none. Each holds the payload
         Siren sent, its status, how many tries it took and the first 200 bytes
@@ -606,8 +640,12 @@ paths:
     get:
       tags: [API Keys]
       operationId: listApiKeys
+      deprecated: true
       summary: List API keys
       description: |
+        Deprecated: an app holds its key now. Use `GET /apps` to read each app
+        with its key. This route stays until Siren removes it.
+
         Oldest first. Pages with `number` (default 200, and a size above 200
         is lowered to 200) and `offset`.
         The `x-siren-estimated-count` header carries the total.
@@ -635,8 +673,12 @@ paths:
     post:
       tags: [API Keys]
       operationId: createApiKey
+      deprecated: true
       summary: Create an API key
       description: |
+        Deprecated: an app holds its key now. Use `POST /apps/{key}/key` to give
+        an app a key. This route stays until Siren removes it.
+
         Creates a new API key. The plaintext `rawKey` (`sk_live_...`) is
         returned **once** and cannot be retrieved later. `scopes` takes event
         scopes (`event:*`, `event:{slug}`, or the older `*`), the ledger read
@@ -672,8 +714,12 @@ paths:
     get:
       tags: [API Keys]
       operationId: listApiKeyScopes
+      deprecated: true
       summary: List the scopes a new API key may be given
       description: |
+        Deprecated: an app holds its key now. Use `GET /apps/scopes` for the
+        scopes an app's key may hold. This route stays until Siren removes it.
+
         The scopes `createApiKey` takes, grouped by resource. Siren lists the
         event scopes under `events`, the ledger read scopes under `ledger`,
         the webhook scopes under `webhook-subscriptions`, and the record
@@ -705,8 +751,12 @@ paths:
     delete:
       tags: [API Keys]
       operationId: revokeApiKey
+      deprecated: true
       summary: Revoke an API key
       description: |
+        Deprecated: an app holds its key now. Use `DELETE /apps/{key}/key` to
+        revoke an app's key. This route stays until Siren removes it.
+
         Takes a signed-in dashboard session. No API key scope reaches this
         route, and Siren answers an API key with 401 `api_key_not_accepted`.
       security:
