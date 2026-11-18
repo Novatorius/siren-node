@@ -42,10 +42,10 @@ function hasProperty(block: string, name: string): boolean {
   return property(block, name) !== null;
 }
 
-/** The text of the `## [Unreleased]` section. */
+/** The text of the `## [0.4.0]` section, where this work was released. */
 function unreleased(): string {
   const changelog = read('CHANGELOG.md');
-  const start = changelog.indexOf('## [Unreleased]');
+  const start = changelog.indexOf('## [0.4.0]');
   const end = changelog.indexOf('\n## [', start + 1);
   return changelog.slice(start, end < 0 ? undefined : end);
 }
@@ -93,7 +93,7 @@ describe('P8: openapi.yaml', () => {
 });
 
 describe('P8: CHANGELOG and README', () => {
-  it('the Unreleased section names each new public method, class and field', () => {
+  it('the 0.4.0 section names each new public method, class and field', () => {
     const section = unreleased();
     for (const name of [
       'subscriptions.events()',
@@ -138,7 +138,7 @@ describe('P10: CHANGELOG and README', () => {
   it('say events.ingest and a sale with no externalId are sent once, and never that custom events retry', () => {
     for (const [name, text] of [
       ['README.md', read('README.md')],
-      ['CHANGELOG Unreleased', unreleased()],
+      ['CHANGELOG 0.4.0', unreleased()],
     ] as const) {
       const all = sentences(text);
       for (const sentence of all) {

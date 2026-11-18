@@ -132,8 +132,8 @@ describe('P11: README list rules', () => {
 });
 
 describe('P11: CHANGELOG', () => {
-  it('lists the record resources under Unreleased, Added', () => {
-    const added = section(section(read('CHANGELOG.md'), '## [Unreleased]'), '### Added');
+  it('lists the record resources under 0.4.0, Added', () => {
+    const added = section(section(read('CHANGELOG.md'), '## [0.4.0] - 2026-11-18'), '### Added');
 
     for (const name of [
       'CollaboratorsResource',
