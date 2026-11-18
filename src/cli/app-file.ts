@@ -1,5 +1,6 @@
 import type { AppItemDeclaration, DeclareAppParams } from '../record-types';
 import { AppItemKind } from '../taxonomy';
+import { kindLabel } from './app-kinds';
 
 /*
  * The app file, `siren.app.json`: a Siren recipe that holds one `apps`
@@ -558,7 +559,7 @@ class AppFileCheck {
         `${path}.kind fulfillmentMethod is the old name of this kind. Write payoutMethod, the word Siren and its documentation use.`,
       );
     } else if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {
-      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind must be one of ${KINDS.join(', ')}.`);
+      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind must be one of ${KINDS.map(kindLabel).join(', ')}.`);
     }
     if (typeof entry.name !== 'string' || entry.name === '') {
       this.problem(`${path}.name`, this.where(`${path}.name`), `${path}.name is required, as text.`);
@@ -569,10 +570,10 @@ class AppFileCheck {
     // The old word names the same kind, so its currencies are checked as a payout method's are.
     if (entry.kind === AppItemKind.PayoutMethod || entry.kind === OLD_PAYOUT_KIND) {
       if (!isTextList(entry.currencies) || entry.currencies.length === 0) {
-        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a payoutMethod: a list of the currency codes it pays.`);
+        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a ${kindLabel(AppItemKind.PayoutMethod)}: a list of the currency codes it pays.`);
       }
     } else if (entry.currencies !== undefined) {
-      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a payoutMethod.`);
+      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a ${kindLabel(AppItemKind.PayoutMethod)}.`);
     }
     const window = entry.answerWindowMinutes;
     if (window !== undefined && (!Number.isInteger(window) || (window as number) < 1 || (window as number) > MAX_ANSWER_WINDOW_MINUTES)) {

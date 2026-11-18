@@ -8,7 +8,7 @@ It checks every request with `siren.apps.verifyRequest()` and answers every ask 
 
 | File | What it holds |
 | --- | --- |
-| siren.app.json | The app and its three features, which `siren apps apply` declares. The payout feature's kind is `payoutMethod`. |
+| siren.app.json | The app and its three features, which `siren apps apply` declares. The payout feature is a Payout method (`payoutMethod`). |
 | handler.mjs | The request handling: check, answer 200, drop a repeat by its `id`, answer each ask. |
 | server.mjs | The HTTP server around handler.mjs, on `PORT`, 8787 by default. |
 | env.mjs | Finds the env file `siren apps apply` wrote. |

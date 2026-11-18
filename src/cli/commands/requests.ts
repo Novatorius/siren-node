@@ -4,6 +4,7 @@ import { AppErrorCode, ConflictError, ErrorCode, NotFoundError, SirenError, appE
 import type { AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument } from './apply';
+import { kindLabel } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
@@ -242,11 +243,11 @@ function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unkno
   return error;
 }
 
-/** One request as a line: its id, status, mode and kind, item, subject, sends, time and last error. */
+/** One request as a line: its id, status, mode and kind with the kind's readable name, item, subject, sends, time and last error. */
 function requestLine(row: AppRequestRecord): string {
   const subject = row.subject ? `${row.subject.type} ${row.subject.id}` : '';
   const sends = `${row.sendCount} ${row.sendCount === 1 ? 'send' : 'sends'}`;
-  return [row.id, row.status, `${row.mode} ${row.kind}`, row.item, subject, sends, row.createdAt, row.lastError ?? '']
+  return [row.id, row.status, `${row.mode} ${kindLabel(row.kind)}`, row.item, subject, sends, row.createdAt, row.lastError ?? '']
     .filter((part) => part !== '')
     .join('  ');
 }

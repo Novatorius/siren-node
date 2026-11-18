@@ -22,7 +22,7 @@ import { reply } from './http-fakes';
 const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
 const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
 const DROPPED = 'apps-declare-200-dropped-selected-item';
-const ARCHIVED_LINE = '  app:1  postConversionAction  notify-crm  Tell the CRM  archived, so Siren no longer calls it';
+const ARCHIVED_LINE = '  app:1  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM  archived, so Siren no longer calls it';
 
 describe('apps-sdk-followups-1: an archived item', () => {
   it('apply marks the archived item beside it, and says once what archiving means and how to bring it back', async () => {
@@ -84,7 +84,7 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
     const out = h.out();
     expect(out.split('\n')[0]).toBe(
-      `${ONE_ID}  needs_attention  tell postConversionAction  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
+      `${ONE_ID}  needs_attention  tell Action after a conversion (postConversionAction)  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
     );
     expect(out).toContain(`The data Siren sent:\n${JSON.stringify(capturedBody<{ data: unknown }>(ONE).data, null, 2)}\n`);
     expect(out).toContain('A tell takes no answer.');

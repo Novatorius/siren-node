@@ -1099,10 +1099,13 @@ chooses a built-in one:
 
 | Feature kind | Picked on | Siren sends |
 |---|---|---|
-| `postConversionAction` | a program | A tell after each approved conversion. |
-| `postAllocationAction` | a distributor | A tell after each completed allocation. |
-| `payoutMethod` | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
-| `distributionResolver` | a distributor | An ask to divide each pool. |
+| Action after a conversion (`postConversionAction`) | a program | A tell after each approved conversion. |
+| Action after an allocation (`postAllocationAction`) | a distributor | A tell after each completed allocation. |
+| Payout method (`payoutMethod`) | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
+| Distribution resolver (`distributionResolver`) | a distributor | An ask to divide each pool. |
+
+Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
+The tool prints it beside the kind, as Payout method (payoutMethod).
 
 The code calls a feature an item, so the routes are `/apps/{app}/items` and the types are
 `AppItem` and `AppItemKind`. `AppItemKind.FulfillmentMethod` is an old name for `payoutMethod`,
@@ -1223,9 +1226,9 @@ needing attention. The route passes anything else that throws to `next`, so Expr
 
 ### Read what a tell says
 
-A tell's `data` belongs to the feature's kind. A `postConversionAction` gets
+A tell's `data` belongs to the feature's kind. An Action after a conversion (`postConversionAction`) gets
 `AppConversionApprovedData`: the `conversion`, its `reward` as `{ value, units, currency }` or
-`null` when it has none, and the `program`. A `postAllocationAction` gets
+`null` when it has none, and the `program`. An Action after an allocation (`postAllocationAction`) gets
 `AppAllocationCompletedData`: the `allocation`, with `value`, `units` and `currency`, and the
 `distributor`.
 
@@ -1376,7 +1379,7 @@ siren.app.json is a Siren recipe that holds one app, keyed by its app key, with 
 from a variable whose name starts with `SIREN_APP_`, and only there. `url` is optional: a file with
 no `url` declares a key-only app, which holds no features. A file with features and no `url` is
 refused. A feature's kind and key lock once Siren makes it, so renaming a key makes a new feature
-and archives or deletes the old one. The payout kind is `payoutMethod`, and the old
+and archives or deletes the old one. The Payout method kind is `payoutMethod`, and the old
 `fulfillmentMethod` is refused with a message that names it. A mistake in the file is printed with
 its line and column, and nothing is sent.
 

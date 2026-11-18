@@ -1,4 +1,5 @@
 import type { App, AppItem, AppItemDeclaration, DeclareAppParams } from '../record-types';
+import { kindLabel } from './app-kinds';
 
 /*
  * What `siren apps apply` would change: the app file's declaration held
@@ -25,9 +26,9 @@ export interface AppChanges {
   dropped: DroppedFeature[];
 }
 
-/** A feature's name in a line: its kind and key, as the file names it. */
+/** A feature in a line: its key, then its kind's readable name beside the kind, as `acme-ledger, Payout method (payoutMethod)`. */
 function featureName(kind: string, key: string): string {
-  return `${kind} ${key}`;
+  return `${key}, ${kindLabel(kind)}`;
 }
 
 /** What is in `want` and not in `have`, and what is in `have` and not in `want`. */
@@ -65,7 +66,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
   if (have === undefined) {
     const parts = ['a key', ...(want.url != null ? ['an address'] : []), ...(features.length > 0 ? [`${features.length} ${features.length === 1 ? 'feature' : 'features'}`] : [])];
     const lines = [`makes the app with ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`}`];
-    for (const feature of features) lines.push(`adds feature ${featureName(feature.kind, feature.key)} (${feature.name.trim()})`);
+    for (const feature of features) lines.push(`adds feature ${featureName(feature.kind, feature.key)}, named ${feature.name.trim()}`);
     return { isNew: true, lines, dropped: [] };
   }
 
@@ -96,7 +97,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
     const held = have.items.find((item) => item.kind === feature.kind && item.key === feature.key);
     const name = featureName(feature.kind, feature.key);
     if (held === undefined) {
-      lines.push(`adds feature ${name} (${feature.name.trim()})`);
+      lines.push(`adds feature ${name}, named ${feature.name.trim()}`);
       continue;
     }
     const differences = featureDifferences(held, feature);

@@ -6,6 +6,7 @@ import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import type { App } from '../../record-types';
 import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
 import { appChanges, droppedLine } from '../app-changes';
+import { kindLabel } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
@@ -451,7 +452,7 @@ export function appLines(app: App, showUrl = true): string[] {
   const lines = [`${app.key}  ${app.name}  ${state}${showUrl && app.url ? `  ${app.url}` : ''}`];
   for (const item of app.items) {
     const archived = item.status === 'archived' ? '  archived, so Siren no longer calls it' : '';
-    lines.push(`  ${item.ref}  ${item.kind}  ${item.key}  ${item.name}${archived}${planMark(item)}`);
+    lines.push(`  ${item.ref}  ${kindLabel(item.kind)}  ${item.key}  ${item.name}${archived}${planMark(item)}`);
   }
   const events = Array.isArray(app.events) ? app.events : [];
   if (events.length > 0) lines.push(`  events  ${events.join(', ')}${planMark(app.eventsAccess, ', so Siren does not send them')}`);

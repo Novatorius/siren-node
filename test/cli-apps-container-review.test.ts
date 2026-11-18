@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AuthenticationError } from '../src/errors';
@@ -5,7 +6,9 @@ import { SANDBOX_BASE_URL } from '../src/http';
 import { Siren } from '../src/client';
 import { FakeHttpClient, reply } from './http-fakes';
 import { harness, session } from './cli-fakes';
-import { APP_KEY, PartAnswers, appRecord } from './apps-siren-answers';
+import { APP_KEY, PartAnswers, appRecord, payoutKind } from './apps-siren-answers';
+import { kindLabel } from '../src/cli/app-kinds';
+import { parseAppFile } from '../src/cli/app-file';
 import { capturedReply } from './cloud-captures';
 
 /*
@@ -153,5 +156,59 @@ describe('apps-sdk-container review fix 3: a name the env file holds twice', () 
     expect(h.http.requests).toHaveLength(0);
     expect(h.err()).toContain('holds SIREN_API_KEY on lines 2 and 4');
     expect(h.err()).toContain('Nothing was sent.');
+  });
+});
+
+/**
+ * Each kind's readable name as Siren's catalog gives it, `name` in
+ * AppItemKindCatalog::entries() (lib/Apps/Core/Enums/AppItemKindCatalog.php
+ * lines 189, 199, 209 and 228 on Siren's feat/apps at c8dbb1ab3).
+ */
+const SIREN_KIND_NAMES = {
+  postConversionAction: 'Action after a conversion',
+  postAllocationAction: 'Action after an allocation',
+  payoutMethod: 'Payout method',
+  distributionResolver: 'Distribution resolver',
+};
+
+describe('apps-sdk-container review fix 4: a kind shows its readable name beside its technical one', () => {
+  it("labels each kind with Siren's catalog name, and a kind the catalog lacks with its term alone", () => {
+    for (const [kind, name] of Object.entries(SIREN_KIND_NAMES)) expect(kindLabel(kind)).toBe(`${name} (${kind})`);
+    expect(kindLabel('payoutMethod')).toBe(`${payoutKind().name} (payoutMethod)`);
+    expect(kindLabel('futureKind')).toBe('futureKind');
+  });
+
+  it('show, list and apply print the readable name beside the kind', async () => {
+    const h = harness([reply(200, appRecord()), reply(200, [appRecord()]), reply(200, appRecord({ name: 'Old', items: [appRecord().items[0]] })), reply(200, appRecord())], {
+      env: URL_ENV,
+    });
+    h.signedIn();
+    h.write('siren.app.json', exampleFile());
+    expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
+    expect(await h.run(['apps', 'list']), h.err()).toBe(0);
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
+    const out = h.out();
+    expect(out).toContain('  app:11  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM\n');
+    expect(out).toContain('  app:12  Payout method (payoutMethod)  acme-ledger  Acme ledger\n');
+    expect(out).toContain('  adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n');
+  });
+
+  it("the app file's kind messages name each kind readably beside the word the file takes", () => {
+    const file = (item: Record<string, unknown>) =>
+      JSON.stringify({ version: 1, name: 'A', description: '', apps: { [KEY]: { name: 'A', url: 'https://acme.example', items: { pay: item } } } });
+    expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
+      `apps.${KEY}.items.pay.kind must be one of Action after a conversion (postConversionAction), Action after an allocation (postAllocationAction), ` +
+        'Payout method (payoutMethod), Distribution resolver (distributionResolver).',
+    );
+    expect(parseAppFile(file({ kind: 'payoutMethod', name: 'Pay' }), {}).problems[0]?.message).toBe(
+      `apps.${KEY}.items.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,
+    );
+  });
+
+  it("the README's feature table and prose name each kind readably beside its term", () => {
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+    for (const [kind, name] of Object.entries(SIREN_KIND_NAMES)) expect(readme, kind).toContain(`| ${name} (\`${kind}\`) |`);
+    expect(readme).toContain('An Action after a conversion (`postConversionAction`) gets');
+    expect(readme).toContain('The Payout method kind is `payoutMethod`');
   });
 });
