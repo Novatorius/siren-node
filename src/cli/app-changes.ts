@@ -1,4 +1,5 @@
 import type { App, AppItem, AppItemDeclaration, DeclareAppParams } from '../record-types';
+import { API_KEY_RECORD_SCOPES } from '../api-key-scopes';
 import { kindLabel } from './app-kinds';
 
 /*
@@ -7,7 +8,8 @@ import { kindLabel } from './app-kinds';
  * Contract: docs/architecture/apps-sdk-container.md, "Apply shows what it
  * will change". Siren compares the same way when it applies a declaration
  * (AppService on Siren's int/preview-apps at a22547327): names trimmed,
- * a description as it is with `''` for none, events and scopes as sets,
+ * a description as it is with `''` for none, events and scopes as sets, the
+ * scopes first reduced as Siren stores them ({@link storedScopes}),
  * currencies upper-cased in the declared order, and a feature matched by
  * its kind and key, which never change. A person may have changed the app
  * in the dashboard since the last apply, so a difference may be theirs.
@@ -29,6 +31,21 @@ export interface AppChanges {
 /** A feature in a line: its key, then its kind's readable name beside the kind, as `acme-ledger, Payout method (payoutMethod)`. */
 function featureName(kind: string, key: string): string {
   return `${key}, ${kindLabel(kind)}`;
+}
+
+/**
+ * A scope list as Siren stores it: each scope once, in the order given, and
+ * when `*` is in it, `*` first with only the record scopes beside it, since
+ * the wildcard already grants every event. ApiKeyService::normalizeScopes()
+ * (lib/ApiKeys/Service/Services/ApiKeyService.php line 51 on Siren's
+ * feat/apps at c8dbb1ab3), which AppService applies to an app key's scopes
+ * (lib/Apps/Service/Services/AppService.php line 1764). Without it a file
+ * that names `*` beside an event scope would show a change on every apply.
+ */
+export function storedScopes(scopes: readonly string[]): string[] {
+  const unique = [...new Set(scopes)];
+  if (!unique.includes('*')) return unique;
+  return ['*', ...unique.filter((scope) => (API_KEY_RECORD_SCOPES as readonly string[]).includes(scope))];
 }
 
 /** What is in `want` and not in `have`, and what is in `have` and not in `want`. */
@@ -87,7 +104,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
     if (events !== undefined) lines.push(events);
   }
   if (have.apiKey !== null && have.apiKey !== undefined) {
-    const scopes = setLine('key scopes', have.apiKey.scopes ?? have.scopes, want.scopes ?? []);
+    const scopes = setLine('key scopes', storedScopes(have.apiKey.scopes ?? have.scopes), storedScopes(want.scopes ?? []));
     if (scopes !== undefined) lines.push(scopes);
   }
 

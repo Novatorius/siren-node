@@ -322,7 +322,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   would make, with how many records select a feature it
   removes. It asks before it writes, says the last write wins, and takes `--yes` to skip the
   question. With no terminal and no `--yes` it sends nothing, and with nothing to change it says so
-  and writes nothing.
+  and writes nothing. It compares the key's scopes in the form Siren stores them, so a file that
+  names `*` beside event scopes matches on the next run.
 - `siren apps rotate` splits in two, since an app's key and its signing secret change apart.
   `siren apps rotate-key` and `siren apps rotate-secret` each ask first, take `--yes`, and write
   only their own line to the env file, mode 0600, through a temporary file and a rename.

@@ -212,3 +212,32 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(readme).toContain('The Payout method kind is `payoutMethod`');
   });
 });
+
+describe('apps-sdk-container review fix 5: scopes compared the way Siren stores them', () => {
+  /** The key as Siren stores a list with `*`: `*` first, then the record scopes beside it (ApiKeyService::normalizeScopes()). */
+  const stored = (scopes: string[]) => appRecord({ apiKey: { ...appRecord().apiKey, scopes } });
+
+  it('a file with * beside event scopes, record scopes and a repeat matches what Siren stored, and writes nothing', async () => {
+    for (const [file, held] of [
+      [['*', 'event:*'], ['*']],
+      [['event:sale', '*', 'records:programs:read', 'event:*'], ['*', 'records:programs:read']],
+      [['records:programs:read', 'records:programs:read'], ['records:programs:read']],
+    ]) {
+      const h = harness([reply(200, stored(held))], { env: URL_ENV });
+      h.signedIn();
+      h.write('siren.app.json', exampleFile(file));
+      expect(await h.run(['apps', 'apply']), `${file.join(',')}: ${h.err()}`).toBe(0);
+      expect(h.paths(), file.join(',')).toEqual([`GET /apps/${KEY}`]);
+      expect(h.out(), file.join(',')).toBe(`${KEY} on ${SANDBOX_BASE_URL} already matches siren.app.json, so nothing was sent.\n`);
+    }
+  });
+
+  it('still prints a real scope change, in the stored form', async () => {
+    const h = harness([reply(200, stored(['*'])), reply(200, stored(['*', 'records:programs:read']))], { env: URL_ENV });
+    h.signedIn();
+    h.write('siren.app.json', exampleFile(['event:sale', '*', 'records:programs:read']));
+    expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
+    expect(h.out()).toContain('  key scopes: adds records:programs:read\n');
+    expect(h.out()).not.toContain('event:sale');
+  });
+});
