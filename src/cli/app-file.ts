@@ -1,4 +1,4 @@
-import type { AppItemDeclaration, DeclareAppParams } from '../record-types';
+import type { AppItemDeclaration, CustomEventField, DeclareAppParams } from '../record-types';
 import { AppItemKind } from '../taxonomy';
 import { kindLabel } from './app-kinds';
 
@@ -18,7 +18,13 @@ import { kindLabel } from './app-kinds';
  *         "events": [],
  *         "items": {
  *           "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
- *           "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"] }
+ *           "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"] },
+ *           "signup": {
+ *             "kind": "customEvent",
+ *             "name": "Newsletter signup",
+ *             "fields": { "list": { "type": "string", "required": true } },
+ *             "domains": ["example.com", "*.example.com"]
+ *           }
  *         }
  *       }
  *     }
@@ -40,13 +46,21 @@ export interface AppFileItem {
   description?: string;
   currencies?: string[];
   answerWindowMinutes?: number;
+  /** A custom event's fields: each field name to `{type, required}`. */
+  fields?: Record<string, CustomEventField>;
+  /**
+   * A custom event's allowed domains, such as `example.com` or
+   * `*.example.com`: the websites whose pages may send it from a visitor's
+   * browser. Left out or empty, only the app's server may send it.
+   */
+  domains?: string[];
 }
 
 /** One app as the file declares it, keyed by its app key in `apps`. */
 export interface AppFileApp {
   name: string;
   description?: string;
-  /** The app's address. Left out, the app is key-only, and it may hold no features. */
+  /** The app's address. Left out, the app is key-only, and it may hold only custom events. */
   url?: string;
   scopes?: string[];
   events?: string[];
@@ -125,6 +139,8 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
       if (item.description !== undefined) declared.description = item.description;
       if (item.currencies !== undefined) declared.currencies = [...item.currencies];
       if (item.answerWindowMinutes !== undefined) declared.answerWindowMinutes = item.answerWindowMinutes;
+      if (item.fields !== undefined) declared.fields = { ...item.fields };
+      if (item.domains !== undefined) declared.domains = [...item.domains];
       return declared;
     });
   }
@@ -187,7 +203,14 @@ const RECIPE_KEYS = [
 const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'items'];
 
 /** The fields Siren stores for a feature (AppService, "Items"). */
-const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes'];
+const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'];
+
+/** The most allowed domains one custom event takes, `AllowedDomains::MAX_PATTERNS`. */
+const MAX_DOMAINS = 20;
+
+/** One label of a host, as Siren's `AllowedDomains` reads it. */
+const HOST_LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+const HOST = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})*$`);
 
 /**
  * Siren's feature kinds (lib/Apps/Core/Enums/AppItemKinds.php), each once:
@@ -228,6 +251,23 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isTextList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((member) => typeof member === 'string');
+}
+
+/**
+ * Why Siren would refuse this allowed domain, or null when it takes it.
+ * Mirrors `AllowedDomains::problemWith()` on Siren: a host, lowercased, or
+ * `*.` and a host of two labels or more.
+ */
+export function domainProblem(pattern: string): string | null {
+  const domain = pattern.trim().toLowerCase();
+  if (domain === '*') return 'a bare * would let every website send the event. Name a domain, such as example.com or *.example.com';
+  if (domain.includes('/') || domain.includes(':')) return 'write the domain alone, such as shop.example.com, with no scheme, port or path';
+  const wildcard = domain.startsWith('*.');
+  const host = wildcard ? domain.slice(2) : domain;
+  if (host.includes('*')) return 'a * may only lead a domain, as in *.example.com';
+  if (host.length > 253 || !HOST.test(host)) return 'write a host name of letters, digits, dots and dashes, such as shop.example.com';
+  if (wildcard && !host.includes('.')) return 'a * must lead a domain of two parts or more, such as *.example.com';
+  return null;
 }
 
 function isKey(value: string): boolean {
@@ -529,11 +569,12 @@ class AppFileCheck {
       this.problem(`${path}.items`, this.where(`${path}.items`), `${path}.items must be an object that holds each feature under its feature key.`);
       return;
     }
-    if (app.url === undefined && Object.keys(app.items).length > 0) {
+    const needAddress = Object.values(app.items).some((item) => !isObject(item) || item.kind !== AppItemKind.CustomEvent);
+    if (app.url === undefined && needAddress) {
       this.problem(
         `${path}.items`,
         this.where(`${path}.items`),
-        `${path} has features and no url. Siren sends a feature its requests at the app's address, so add a url, or remove the features for a key-only app.`,
+        `${path} has features and no url. Siren sends a feature its requests at the app's address, so add a url, or keep only custom events for a key-only app.`,
       );
     }
     for (const [itemKey, item] of Object.entries(app.items)) this.checkItem(`${path}.items.${itemKey}`, itemKey, item);
@@ -575,6 +616,7 @@ class AppFileCheck {
     } else if (entry.currencies !== undefined) {
       this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a ${kindLabel(AppItemKind.PayoutMethod)}.`);
     }
+    this.checkCustomEventSettings(path, entry);
     const window = entry.answerWindowMinutes;
     if (window !== undefined && (!Number.isInteger(window) || (window as number) < 1 || (window as number) > MAX_ANSWER_WINDOW_MINUTES)) {
       this.problem(
@@ -583,6 +625,48 @@ class AppFileCheck {
         `${path}.answerWindowMinutes must be a whole number of minutes from 1 to ${MAX_ANSWER_WINDOW_MINUTES}.`,
       );
     }
+  }
+
+  /**
+   * A custom event's `fields` and `domains`, which no other kind takes.
+   * `fields` is an object of field name to `{type, required}`, and Siren
+   * checks the types. Each domain passes {@link domainProblem}.
+   */
+  private checkCustomEventSettings(path: string, entry: Record<string, unknown>): void {
+    const custom = entry.kind === AppItemKind.CustomEvent;
+    for (const field of ['fields', 'domains']) {
+      if (!custom && entry[field] !== undefined) {
+        this.problem(`${path}.${field}`, this.where(`${path}.${field}`), `${path}.${field} is only for a ${kindLabel(AppItemKind.CustomEvent)}.`);
+      }
+    }
+    if (!custom) return;
+    const fields = entry.fields;
+    if (fields !== undefined) {
+      if (!isObject(fields)) {
+        this.problem(`${path}.fields`, this.where(`${path}.fields`), `${path}.fields must be an object of each field's name to {"type": ..., "required": ...}.`);
+      } else {
+        for (const [name, field] of Object.entries(fields)) {
+          const at = `${path}.fields.${name}`;
+          if (!isObject(field) || typeof field.type !== 'string' || (field.required !== undefined && typeof field.required !== 'boolean')) {
+            this.problem(at, this.where(at), `${at} must be {"type": ..., "required": true or false}, with type as text.`);
+          }
+        }
+      }
+    }
+    const domains = entry.domains;
+    if (domains === undefined) return;
+    if (!isTextList(domains)) {
+      this.problem(`${path}.domains`, this.where(`${path}.domains`), `${path}.domains must be a list of domains, such as ["example.com", "*.example.com"].`);
+      return;
+    }
+    if (domains.length > MAX_DOMAINS) {
+      this.problem(`${path}.domains`, this.where(`${path}.domains`), `${path}.domains holds ${domains.length} domains, and an event allows at most ${MAX_DOMAINS}.`);
+    }
+    domains.forEach((domain, index) => {
+      const problem = domainProblem(domain);
+      const at = `${path}.domains.${index}`;
+      if (problem !== null) this.problem(at, this.where(at), `${at}: ${problem}.`);
+    });
   }
 
   /** `value` with each `${NAME}` filled where the rules allow, and a problem where they do not. */

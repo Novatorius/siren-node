@@ -14,6 +14,7 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
   postAllocationAction: 'Action after an allocation',
   payoutMethod: 'Payout method',
   distributionResolver: 'Distribution resolver',
+  customEvent: 'Custom event',
 };
 
 /**

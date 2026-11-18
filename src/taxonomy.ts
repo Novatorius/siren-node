@@ -349,6 +349,12 @@ export const AppItemKind = {
   /** @deprecated Read `AppItemKind.PayoutMethod`. The same value, `payoutMethod`. */
   FulfillmentMethod: 'payoutMethod',
   DistributionResolver: 'distributionResolver',
+  /**
+   * An event of the app's own, which the app sends Siren at
+   * `/event/{key}` and programs and distributors credit. It needs only the
+   * app's key, never an address.
+   */
+  CustomEvent: 'customEvent',
 } as const;
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */

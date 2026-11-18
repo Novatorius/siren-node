@@ -33,7 +33,7 @@ describe('apps-sdk-container: the app file', () => {
     expect(parsed.problems).toHaveLength(1);
     expect(parsed.problems[0]?.path).toBe('apps.acme-reports.items');
     expect(parsed.problems[0]?.message).toBe(
-      'apps.acme-reports has features and no url. Siren sends a feature its requests at the app\'s address, so add a url, or remove the features for a key-only app.',
+      'apps.acme-reports has features and no url. Siren sends a feature its requests at the app\'s address, so add a url, or keep only custom events for a key-only app.',
     );
   });
 
@@ -57,7 +57,7 @@ describe('apps-sdk-container: the app file', () => {
     const parsed = parseAppFile(file({ name: 'Pay', url: 'https://acme.example', items: { pay: { kind: 'other', name: 'Pay' } } }), {});
     expect(parsed.problems[0]?.message).toBe(
       'apps.acme-reports.items.pay.kind must be one of Action after a conversion (postConversionAction), Action after an allocation (postAllocationAction), ' +
-        'Payout method (payoutMethod), Distribution resolver (distributionResolver).',
+        'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent).',
     );
   });
 

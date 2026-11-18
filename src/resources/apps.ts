@@ -27,6 +27,7 @@ import type {
   VerifyAppRequestOptions,
 } from '../record-types';
 import type { AppStatus } from '../taxonomy';
+import { AppItemKind } from '../taxonomy';
 import type { ApiKeyScopeGroups, WebhookCatalogEntry, WebhookDelivery, WebhookHeaders, WebhookTestResult } from '../types';
 import { SirenError, UnexpectedResponseError } from '../errors';
 import { pickFields } from './create-fields';
@@ -247,10 +248,10 @@ async function writeWithSecret<T extends App>(
  * feature's page names the records that select it.
  */
 export class AppItemsResource {
-  /** The fields `create()` sends, the six `POST /apps/{app}/items` reads (AddAppItem.php). */
-  static readonly CREATE_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes'] as const;
+  /** The fields `create()` sends, those `POST /apps/{app}/items` reads (AddAppItem.php). */
+  static readonly CREATE_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'] as const;
   /** The fields `update()` sends. `PATCH /apps/{app}/items/{id}` refuses a changed kind or key with 422. */
-  static readonly UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes'] as const;
+  static readonly UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'] as const;
 
   constructor(private readonly http: HttpTransport) {}
 
@@ -361,8 +362,8 @@ function checkedItem(body: Record<string, unknown>, route: string): AppItemPage 
 export class AppsResource {
   /** The fields `declare()` sends, the six `PUT /apps/{key}` reads (DeclareApp.php). */
   static readonly DECLARE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'items'] as const;
-  /** The fields `declare()` sends for each item, the six Siren stores (apps-records.md, "Item settings"). */
-  static readonly ITEM_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes'] as const;
+  /** The fields `declare()` sends for each item, those Siren stores (apps-records.md, "Item settings"), a custom event's `fields` and `domains` included. */
+  static readonly ITEM_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'] as const;
   /** The fields `create()` sends, those `POST /apps` reads but `items`, which it refuses (CreateApp.php). */
   static readonly CREATE_FIELDS = ['name', 'description', 'url', 'scopes', 'events'] as const;
   /** The fields `update()` sends, those `PATCH /apps/{key}` reads but `items`, which it refuses (EditApp.php). */
@@ -400,7 +401,7 @@ export class AppsResource {
    * a bad app key, any other field or item field whatever its value, no
    * `name`, `items` that is not an array, an item that is not an object or
    * lacks `kind`, `key` or `name`, the old kind `fulfillmentMethod`, and
-   * features with no `url`, which Siren refuses with 422
+   * features other than custom events with no `url`, which Siren refuses with 422
    * `app_items_need_key_and_address`, since it asks the app at its address.
    * Siren checks the rest and answers 400 or 422 with the field, raised as
    * `BadRequestError` or `ValidationError`, and 400 `app_cap_reached` when
@@ -428,9 +429,10 @@ export class AppsResource {
         checkKind(copy.kind, 'apps.declare()', ` on item ${index}`);
         return copy;
       });
-      if ((sent.items as unknown[]).length > 0 && sent.url == null) {
+      const needAddress = (sent.items as Record<string, unknown>[]).some((item) => item.kind !== AppItemKind.CustomEvent);
+      if (needAddress && sent.url == null) {
         throw new SirenError(
-          'Siren: apps.declare() needs a url for an app with features. Siren asks the app at its address, so it refuses features on an app with none.',
+          'Siren: apps.declare() needs a url for an app with features other than custom events. Siren asks the app at its address, so it refuses such features on an app with none.',
         );
       }
     }

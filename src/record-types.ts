@@ -979,6 +979,27 @@ export interface AppItemDeclaration {
   currencies?: string[];
   /** Minutes Siren waits for an answer to an ask, 1 to 43200. Siren's default is 1440, or 60 for a distribution resolver. */
   answerWindowMinutes?: number;
+  /**
+   * A `customEvent`'s fields, refused for any other kind: each field name
+   * to `{type, required}`, the fields a send carries besides the
+   * collaborator.
+   */
+  fields?: Record<string, CustomEventField>;
+  /**
+   * A `customEvent`'s allowed domains, refused for any other kind: the
+   * websites whose pages may send the event from a visitor's browser, such
+   * as `example.com` or `*.example.com`. Empty or left out, only the app's
+   * server may send it. Siren refuses a bare `*`, a scheme, a port and a path.
+   */
+  domains?: string[];
+}
+
+/** One field of a custom event's send, as an app declares it. */
+export interface CustomEventField {
+  /** The field's type, as Siren's custom event types read it, such as `string`, `number` or `boolean`. */
+  type: string;
+  /** Whether a send without it is refused. */
+  required?: boolean;
 }
 
 /**
@@ -1024,7 +1045,7 @@ export interface AppItem extends AppPlanAccess {
   key: string;
   name: string;
   description: string;
-  settings: { currencies?: string[]; answerWindowMinutes?: number };
+  settings: { currencies?: string[]; answerWindowMinutes?: number; fields?: Record<string, CustomEventField>; domains?: string[] };
   status: 'active' | 'archived' | (string & {});
   dateCreated?: string | null;
   dateModified?: string | null;
@@ -1058,6 +1079,10 @@ export interface UpdateAppItemParams {
   description?: string;
   currencies?: string[];
   answerWindowMinutes?: number | null;
+  /** A custom event's fields. */
+  fields?: Record<string, CustomEventField>;
+  /** A custom event's allowed domains. */
+  domains?: string[];
 }
 
 /** An app's active API key as Siren shows it: never more than its prefix and its last four characters. */

@@ -1,5 +1,6 @@
 import type { App, AppItem, AppItemDeclaration, DeclareAppParams } from '../record-types';
 import { API_KEY_RECORD_SCOPES } from '../api-key-scopes';
+import { AppItemKind } from '../taxonomy';
 import { kindLabel } from './app-kinds';
 
 /*
@@ -70,7 +71,35 @@ function featureDifferences(have: AppItem, want: AppItemDeclaration): string[] {
   const haveCurrencies = have.settings.currencies ?? [];
   if (wantCurrencies.join(',') !== haveCurrencies.join(',')) differences.push('currencies');
   if (want.answerWindowMinutes !== have.settings.answerWindowMinutes) differences.push('answer window');
+  if (want.kind === AppItemKind.CustomEvent) {
+    if (fieldsText(want.fields) !== fieldsText(have.settings.fields)) differences.push('fields');
+    const domains = setChange(storedDomains(have.settings.domains ?? []), storedDomains(want.domains ?? []));
+    if (domains.added.length > 0 || domains.removed.length > 0) {
+      const parts = [...(domains.added.length > 0 ? [`adds ${domains.added.join(', ')}`] : []), ...(domains.removed.length > 0 ? [`removes ${domains.removed.join(', ')}`] : [])];
+      differences.push(`allowed domains (${parts.join(', ')})`);
+    }
+  }
   return differences;
+}
+
+/** Allowed domains as Siren stores them: trimmed, lowercased, each once. */
+function storedDomains(domains: readonly string[]): string[] {
+  return [...new Set(domains.map((domain) => domain.trim().toLowerCase()))];
+}
+
+/** A custom event's fields in one comparable text, keys sorted, `required` false when left out. */
+function fieldsText(fields: Record<string, { type: string; required?: boolean }> | undefined): string {
+  const entries = Object.entries(fields ?? {})
+    .map(([name, field]) => `${name}:${field.type}:${field.required === true ? 1 : 0}`)
+    .sort();
+  return entries.join(',');
+}
+
+/** `, allowing a, b` for a new custom event that names domains, else nothing. */
+function allowing(feature: AppItemDeclaration): string {
+  if (feature.kind !== AppItemKind.CustomEvent) return '';
+  const domains = storedDomains(feature.domains ?? []);
+  return domains.length > 0 ? `, allowing ${domains.join(', ')}` : ', from the app\'s server only';
 }
 
 /**
@@ -83,7 +112,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
   if (have === undefined) {
     const parts = ['a key', ...(want.url != null ? ['an address'] : []), ...(features.length > 0 ? [`${features.length} ${features.length === 1 ? 'feature' : 'features'}`] : [])];
     const lines = [`makes the app with ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`}`];
-    for (const feature of features) lines.push(`adds feature ${featureName(feature.kind, feature.key)}, named ${feature.name.trim()}`);
+    for (const feature of features) lines.push(`adds feature ${featureName(feature.kind, feature.key)}, named ${feature.name.trim()}${allowing(feature)}`);
     return { isNew: true, lines, dropped: [] };
   }
 
@@ -114,7 +143,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
     const held = have.items.find((item) => item.kind === feature.kind && item.key === feature.key);
     const name = featureName(feature.kind, feature.key);
     if (held === undefined) {
-      lines.push(`adds feature ${name}, named ${feature.name.trim()}`);
+      lines.push(`adds feature ${name}, named ${feature.name.trim()}${allowing(feature)}`);
       continue;
     }
     const differences = featureDifferences(held, feature);

@@ -198,7 +198,7 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
       JSON.stringify({ version: 1, name: 'A', description: '', apps: { [KEY]: { name: 'A', url: 'https://acme.example', items: { pay: item } } } });
     expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.items.pay.kind must be one of Action after a conversion (postConversionAction), Action after an allocation (postAllocationAction), ` +
-        'Payout method (payoutMethod), Distribution resolver (distributionResolver).',
+        'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent).',
     );
     expect(parseAppFile(file({ kind: 'payoutMethod', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.items.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,
