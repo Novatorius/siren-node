@@ -118,8 +118,8 @@ describe('P11: README slice 4 section', () => {
 });
 
 describe('P11: CHANGELOG', () => {
-  it('lists the slice 4 resources and taxonomies under Unreleased, Added', () => {
-    const added = section(section(read('CHANGELOG.md'), '## [Unreleased]'), '### Added');
+  it('lists the slice 4 resources and taxonomies under 0.4.0, Added', () => {
+    const added = section(section(read('CHANGELOG.md'), '## [0.4.0] - 2026-11-18'), '### Added');
 
     for (const name of [
       'OpportunitiesResource',

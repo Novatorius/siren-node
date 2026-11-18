@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
 ### Breaking
 
 - `events.refund` requires `refundId`, the store's own id for the refund, such as WooCommerce
@@ -303,7 +305,8 @@ Initial public release of the Siren SDK for Node.js and TypeScript.
   `ApiError`, `ConnectionError`, and `SignatureVerificationError`.
 - Dual ESM and CJS builds with full TypeScript declarations. Zero runtime dependencies.
 
-[Unreleased]: https://github.com/Novatorius/siren-node/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Novatorius/siren-node/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Novatorius/siren-node/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Novatorius/siren-node/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Novatorius/siren-node/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Novatorius/siren-node/releases/tag/v0.1.0
