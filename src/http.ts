@@ -1,6 +1,8 @@
 import type { AccessTokenSource } from './auth/access-token-source';
+import { AppAccessTokens } from './auth/app-access-tokens';
+import type { GrantedToken } from './auth/app-access-tokens';
 import { usableBearerToken } from './auth/bearer-token';
-import { ConnectionError, SirenError, errorFromResponse } from './errors';
+import { ConnectionError, SirenError, UnexpectedResponseError, errorFromResponse } from './errors';
 
 export const DEFAULT_BASE_URL = 'https://api.sirenaffiliates.com/siren/v1';
 /**
@@ -224,6 +226,11 @@ export interface SirenRequest {
    * included, in place of the client's `timeout`. The resource checks it.
    */
   timeout?: number;
+  /**
+   * The token source for this request in place of the client's own, as
+   * `events.ingest` uses the app's short-lived tokens for a custom event.
+   */
+  tokens?: AccessTokenSource;
 }
 
 /** The headers the SDK sets itself, in lower case. A request's own headers never replace them. */
@@ -257,6 +264,12 @@ export interface HttpTransportOptions {
   /** Milliseconds, passed to the client as `HttpRequest.timeout`. */
   timeout: number;
   maxRetries: number;
+  /**
+   * The app's key, when the client was built with `apiKey`. The transport
+   * then keeps an {@link AppAccessTokens} that trades it for short-lived
+   * app tokens.
+   */
+  appKey?: string;
 }
 
 /**
@@ -273,6 +286,11 @@ export class HttpTransport {
   private readonly baseUrl: string;
   private readonly timeout: number;
   private readonly maxRetries: number;
+  /**
+   * The app's short-lived tokens, for a client built with `apiKey`, or null
+   * for one built with `accessToken`, which never asks for them.
+   */
+  readonly appTokens: AppAccessTokens | null;
 
   constructor(options: HttpTransportOptions) {
     this.tokens = options.tokens;
@@ -280,6 +298,63 @@ export class HttpTransport {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.timeout = options.timeout;
     this.maxRetries = options.maxRetries;
+    this.appTokens =
+      typeof options.appKey === 'string' && options.appKey !== ''
+        ? new AppAccessTokens(options.appKey, (fields) => this.grant(fields))
+        : null;
+  }
+
+  /** The absolute URL of an API path, such as `/event/signup`. */
+  urlFor(path: string): string {
+    return `${this.baseUrl}${path}`;
+  }
+
+  /**
+   * Sends one `client_credentials` grant to `POST /oauth/token`, with no
+   * `Authorization` header, since the key goes in the body as
+   * `client_secret`. It is sent once. An error reply raises the typed error
+   * for its status, with OAuth's `error` as `code` and `error_description`
+   * as the message. A reply with no usable token raises
+   * `UnexpectedResponseError`. A failed send raises `ConnectionError`, with
+   * the key scrubbed from its message.
+   */
+  async grant(fields: Readonly<Record<string, string>>): Promise<GrantedToken> {
+    const url = `${this.baseUrl}/oauth/token`;
+    const request: HttpRequest = {
+      method: 'POST',
+      url,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'siren-sdk-typescript/0.3.0',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(fields),
+      timeout: this.timeout,
+    };
+    let reply: HttpResponse;
+    try {
+      reply = await this.client.send(request);
+    } catch (error) {
+      if (!(error instanceof HttpClientError)) throw error;
+      const secrets = Object.values(fields).filter((value) => value !== '');
+      throw new ConnectionError(`Request to ${url} failed: ${scrubTokens(error.message, secrets)}`, {
+        cause: error.cause !== undefined ? error.cause : error,
+      });
+    }
+    const response = toApiResponse(reply);
+    const body = await parseJsonBody(response);
+    if (response.status < 200 || response.status >= 300) {
+      throw errorFromResponse(response.status, response.statusText, oauthErrorBody(body), response.headers.get('retry-after'));
+    }
+    const answer = (body ?? {}) as Record<string, unknown>;
+    const accessToken = usableBearerToken(answer.access_token);
+    const expiresIn = answer.expires_in;
+    if (accessToken === null || typeof expiresIn !== 'number' || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+      throw new UnexpectedResponseError('Siren answered the token request without an access token and its lifetime.', {
+        statusCode: response.status,
+      });
+    }
+    return { accessToken, expiresIn };
   }
 
   /**
@@ -333,7 +408,8 @@ export class HttpTransport {
     const url = this.buildUrl(req);
     const body = req.body !== undefined ? JSON.stringify(req.body) : undefined;
 
-    let token = usableBearerToken(await this.tokens.getAccessToken());
+    const tokens = req.tokens ?? this.tokens;
+    let token = usableBearerToken(await tokens.getAccessToken());
     if (token === null) {
       throw new SirenError(
         'Siren: getAccessToken did not answer a usable token. A token must be a non-empty string with no control character and no character above U+00FF.',
@@ -364,7 +440,7 @@ export class HttpTransport {
 
       if (response.status === 401 && !refreshed) {
         refreshed = true;
-        const answer: unknown = await this.tokens.refreshAccessToken(token);
+        const answer: unknown = await tokens.refreshAccessToken(token);
         const fresh = usableBearerToken(answer);
         if (fresh !== null) {
           token = fresh;
@@ -497,4 +573,18 @@ async function errorFromApiResponse(response: ApiResponse): Promise<SirenError> 
     await parseJsonBody(response),
     response.headers.get('retry-after'),
   );
+}
+
+/**
+ * Reshapes OAuth's error answer, `{error, error_description}`, into the
+ * `{error: {message, code}}` that `errorFromResponse` reads, so the
+ * description is the message and the OAuth error is the code. Any other
+ * body passes as it is.
+ */
+function oauthErrorBody(body: unknown): unknown {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+  const answer = body as Record<string, unknown>;
+  if (typeof answer.error !== 'string') return body;
+  const message = typeof answer.error_description === 'string' && answer.error_description !== '' ? answer.error_description : answer.error;
+  return { error: { message, code: answer.error } };
 }

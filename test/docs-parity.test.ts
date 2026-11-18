@@ -323,6 +323,8 @@ describe('P11: README parity table', () => {
 /** Node methods with no PHP counterpart, as the second table's Node cell writes them. */
 const NODE_ONLY = [
   'siren.events.forward()',
+  'siren.events.browserToken()',
+  'siren.events.browserTokenHandler()',
   'siren.conversions.recoverCreate()',
   'siren.transactions.recoverCreditCollaborator()',
   'siren.apps.declare()',
@@ -358,13 +360,15 @@ const NODE_ONLY = [
  * but are not public surface. `privateStaysPrivate` below fails the type
  * check if either becomes public, so this list cannot hide a public method.
  */
-const PRIVATE_METHODS = ['siren.events.send()', 'siren.mappings.deleteLinks()'];
+const PRIVATE_METHODS = ['siren.events.send()', 'siren.events.tokensFor()', 'siren.mappings.deleteLinks()'];
 
 // Never called. `npm run typecheck` reads it, and each `@ts-expect-error`
 // fails the check once its method stops being private.
 export function privateStaysPrivate(siren: sdk.Siren): void {
   // @ts-expect-error EventsResource.send is private.
   void siren.events.send;
+  // @ts-expect-error EventsResource.tokensFor is private.
+  void siren.events.tokensFor;
   // @ts-expect-error MappingsResource.deleteLinks is private.
   void siren.mappings.deleteLinks;
 }

@@ -120,6 +120,31 @@ export interface IngestOptions {
   timeout?: number;
 }
 
+/**
+ * A browser token for one custom event, as `events.browserToken` answers it
+ * and `events.browserTokenHandler` sends it to a page. A page sends the
+ * event to `url` with `?access_token=` and the token, from a website on the
+ * event's allowed domains.
+ */
+export interface BrowserToken {
+  /** The token. It works only for this one event, and only from a page. */
+  token: string;
+  /** The seconds it has left. */
+  expiresIn: number;
+  /** The event's full send address, `{baseUrl}/event/{eventKey}`. */
+  url: string;
+}
+
+/** Options for `events.browserTokenHandler`. */
+export interface BrowserTokenHandlerOptions {
+  /**
+   * The event keys a page may ask for. Leave it out to let Siren decide,
+   * since Siren gives a browser token only for the app's own events that
+   * allow a domain.
+   */
+  events?: readonly string[];
+}
+
 /** A sale line item. `amount` is the per-unit price in major currency units. */
 export interface LineItem {
   /** Your id for this line item. Siren stores a number as text. */

@@ -97,9 +97,9 @@ describe('apps-cli docs', () => {
     for (const line of keyLines) expect(line).toMatch(/\b(not|never)\b/);
   });
 
-  it('the parity section counts twenty-nine Node-only methods', () => {
+  it('the parity section counts thirty-one Node-only methods', () => {
     const parity = section(read('README.md'), '## Parity with the PHP SDK');
-    expect(parity.replace(/\s+/g, ' ')).toContain('It also has twenty-nine methods the PHP SDK does not have yet');
+    expect(parity.replace(/\s+/g, ' ')).toContain('It also has thirty-one methods the PHP SDK does not have yet');
   });
 
   it('the CHANGELOG names the apps calls, the siren command and the sandbox key rule', () => {

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "Signups",
+  "description": "The Signups example app: sends a newsletter signup to Siren from its server and from its pages.",
+  "apps": {
+    "signups": {
+      "name": "Signups",
+      "description": "Siren's custom event example.",
+      "items": {
+        "newsletter-signup": {
+          "kind": "customEvent",
+          "name": "Newsletter signup",
+          "fields": { "list": { "type": "string", "required": true } },
+          "domains": ["localhost", "example.com", "*.example.com"]
+        }
+      }
+    }
+  }
+}

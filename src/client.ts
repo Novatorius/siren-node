@@ -203,6 +203,7 @@ export function createHttpTransport(options: SirenOptions): HttpTransport {
     baseUrl: baseUrlForKey(apiKey, resolveBaseUrl(baseUrl), baseUrl === undefined),
     timeout: resolveTimeout(timeout),
     maxRetries: resolveMaxRetries(maxRetries),
+    ...(typeof apiKey === 'string' ? { appKey: apiKey } : {}),
   });
 }
 

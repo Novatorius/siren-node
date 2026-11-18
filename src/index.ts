@@ -59,6 +59,8 @@ export type {
   SirenAccessTokenOptions,
   EventResult,
   IngestOptions,
+  BrowserToken,
+  BrowserTokenHandlerOptions,
   LineItem,
   SaleFields,
   LiveSaleParams,
@@ -88,6 +90,7 @@ export type {
 export { ForwardedEventSlug, FORWARDED_EVENT_VERSION } from './connect/forwarded-events';
 export type * from './connect/forwarded-events';
 export { EventsResource } from './resources/events';
+export type { BrowserTokenHandler, NodeRequestLike, NodeResponseLike } from './resources/events';
 export { WebhooksResource, WebhookSubscriptionsResource } from './resources/webhooks';
 export { ApiKeysResource } from './resources/api-keys';
 export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';

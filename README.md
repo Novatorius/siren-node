@@ -510,7 +510,7 @@ for any other key, naming it.
 
 The first table compares this SDK with the Siren PHP SDK's next release, which adds seven calls and
 the record scope list to PHP 0.3.0. The Node SDK carries every public method of that release under
-the same name, with one left out. It also has twenty-nine methods the PHP SDK does not have yet, listed
+the same name, with one left out. It also has thirty-one methods the PHP SDK does not have yet, listed
 in the second table below.
 The first table lists each PHP method, its Node name, and how the two differ where they do.
 Across every record resource, Node throws `SirenError` before sending where PHP throws
@@ -664,6 +664,8 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | Node | Siren route | What it does |
 |---|---|---|
 | `siren.events.forward()` | `POST /event/{eventSlug}` | Sends a connected site's event in Siren's versioned envelope, once. |
+| `siren.events.browserToken()` | `POST /oauth/token` | Gets a browser token for one of the app's custom events, kept until fewer than 60 seconds are left, with the event's send address. |
+| `siren.events.browserTokenHandler()` | `POST /oauth/token` | Answers a page's request for a browser token, in Node's `(req, res)` or as a Web `Request` and `Response`. |
 | `siren.conversions.recoverCreate()` | `GET /conversions`, then `POST /conversions` | After `create` lost its answer, sends it again only when Siren holds no such conversion. |
 | `siren.transactions.recoverCreditCollaborator()` | `GET /conversions`, then `POST /transactions/credit-collaborator` | After `creditCollaborator` lost its answer, credits only the transactions that hold no conversion for the collaborator. |
 | `siren.apps.declare()` | `PUT /apps/{key}` | Declares an app from its whole description, once. The first call answers its key, and its signing secret when the file names a `url`. |
@@ -725,6 +727,9 @@ The module also exports the shapes of both requests and answers (`StorefrontVisi
 `MAX_ATTRIBUTION_WINDOW_DAYS`. `stripeSafeToken` spells a token with an underscore for Stripe,
 which drops a reference that holds a dot. Siren reads both spellings. `attributionWindowDays`
 turns the window Siren returns into a safe number of days.
+
+`track(eventKey, data)` sends one of an app's custom events from the page, with a browser token
+from the app's own server. "Send a custom event" under Siren apps shows both halves.
 
 The module only talks to Siren. Keeping the token in a cookie or localStorage, and writing it to a
 cart or a Stripe link, stay with your script.
@@ -1103,6 +1108,7 @@ chooses a built-in one:
 | Action after an allocation (`postAllocationAction`) | a distributor | A tell after each completed allocation. |
 | Payout method (`payoutMethod`) | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
 | Distribution resolver (`distributionResolver`) | a distributor | An ask to divide each pool. |
+| Custom event (`customEvent`) | a program or a distributor | Nothing. The app sends Siren the event. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1124,9 +1130,9 @@ keep them. Each later call updates the app in place and answers `created: false`
 never makes or revokes a key. It makes an address when the `url` is new, and answers its
 `signingSecret` once, and it removes the address and its delivery log when the `url` is gone.
 
-An app with no `url` is a key-only app, for a script that reads Siren. An app with features needs a
-`url`, since Siren asks the app at its address, so `declare` refuses features with no `url` before
-sending. A feature's kind and key lock once Siren makes it.
+An app with no `url` is a key-only app, for a script that reads Siren or sends custom events. An
+app with any other feature needs a `url`, since Siren asks the app at its address, so `declare`
+refuses those features with no `url` before sending. A feature's kind and key lock once Siren makes it.
 
 ```ts
 const siren = new Siren({ accessToken: adminSessionToken });
@@ -1272,6 +1278,88 @@ An ask carries `answerBy`. Siren sends an unanswered ask again when its window c
 in all, then marks it `needs_attention`. A feature's `answerWindowMinutes` sets the window, from 1
 to 43200 minutes. A payout method waits a day and a distribution resolver an hour when the feature
 sets none.
+
+### Send a custom event
+
+A custom event (`customEvent`) is an event of the app's own, such as a newsletter signup, that
+programs and distributors credit. It declares the fields each send carries and its allowed domains,
+the websites whose pages may send it from a visitor's browser:
+
+```json
+"newsletter-signup": {
+  "kind": "customEvent",
+  "name": "Newsletter signup",
+  "fields": { "list": { "type": "string", "required": true } },
+  "domains": ["example.com", "*.example.com"]
+}
+```
+
+A domain is a host, such as `shop.example.com`, or `*.example.com` for every host under it. Siren
+refuses a bare `*`, a scheme, a port and a path. With no domains, only the app's server can send the
+event.
+
+Siren takes only a short-lived token of the owning app at the event's address, never the key itself.
+The SDK hides that. On the app's server, build the client with the app's key and send:
+
+```js
+const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: process.env.SIREN_BASE_URL });
+
+// A send from the app's server. The SDK trades the key for a short-lived
+// token, keeps it and renews it, so this is all the code it takes.
+export function recordSignup(trackingId, list) {
+  return siren.events.ingest('newsletter-signup', { collaborator: { trackingId }, list });
+}
+
+// The route a page asks for a browser token. Mount it at /siren/token.
+export const browserTokens = siren.events.browserTokenHandler({ events: ['newsletter-signup'] });
+```
+
+`events.ingest` trades the key for a token that lasts 20 minutes at `POST /oauth/token`, keeps it,
+gets a new one when fewer than two minutes are left, and after a 401 gets a new one and sends once
+more. Sends at the same moment share one request. A key that belongs to no app sends with the key as
+before. Sales, refunds and site visits keep sending the key.
+
+A page sends the event with a browser token, which works for one event, lasts 10 minutes, and is
+taken only from a page on the event's allowed domains. `browserTokenHandler()` answers a page's
+request for one. It takes Node's `(req, res)` and a Web `Request`, so it mounts in one line:
+
+```ts
+app.post('/siren/token', browserTokens);       // Express
+export const POST = browserTokens;              // Next.js app route, app/siren/token/route.ts
+export default browserTokens;                   // Next.js pages route, pages/api/siren/token.ts
+```
+
+It reads the event from a JSON body `{"event": "newsletter-signup"}` or `?event=`, answers 200
+`{token, expiresIn, url}`, 400 `{error}` for an event it doesn't offer or Siren refuses, and 502
+when Siren can't be reached. `events.browserToken(eventKey)` answers the same object, for a server
+that builds its own route. It keeps one token per event until fewer than 60 seconds are left.
+
+On the page, `track` from the storefront module asks `/siren/token` for the token, keeps it until 30
+seconds before it ends, and sends:
+
+```js
+import { track } from '@novatorius/siren/storefront';
+
+export function wireSignupForm(form) {
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const trackingId = Number(form.dataset.trackingId);
+    // track asks /siren/token for a browser token, keeps it, and sends.
+    await track('newsletter-signup', { collaborator: { trackingId }, list: 'weekly' });
+  });
+}
+```
+
+`track(eventKey, data, { tokenUrl })` resolves to Siren's answer, or `null` when the server gave no
+token or Siren refused the send, and rejects on a network failure. `createTracker({ tokenUrl, fetch })`
+gives a `track` with its own settings. Each send goes to Siren with the token in the query
+(`?access_token=`) and no cookies.
+
+Allowed domains stop another website's pages from sending the event, and a browser token from
+sending any other event or reaching any other route. They don't stop a program outside a browser that
+asks your `/siren/token` for a token and claims an allowed `Origin`, or a visitor on an allowed page
+who sends made-up data, so credit only what the event's fields can't fake. The examples/apps/signups folder holds a
+whole app.
 
 ### See what Siren sent
 
