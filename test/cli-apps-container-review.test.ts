@@ -241,3 +241,32 @@ describe('apps-sdk-container review fix 5: scopes compared the way Siren stores 
     expect(h.out()).not.toContain('event:sale');
   });
 });
+
+describe('apps-sdk-container review fix 6: small command-line edges', () => {
+  it('siren apps rotate with no key prints the same split explanation, and sends nothing', async () => {
+    const h = harness([]);
+    h.signedIn();
+    expect(await h.run(['apps', 'rotate'])).toBe(1);
+    expect(h.http.requests).toHaveLength(0);
+    expect(h.err()).toContain(
+      `Rotating is now two commands, since an app's key and its signing secret change apart. Nothing was sent. ` +
+        'Run siren apps rotate-key <key> for a new key, or siren apps rotate-secret <key> for a new signing secret.',
+    );
+  });
+
+  it("each reserved word gets the tool's own refusal, never one that names an SDK method", async () => {
+    for (const word of ['requests', 'events', 'scopes', 'kinds']) {
+      for (const command of ['show', 'on', 'rotate-key']) {
+        const h = harness([reply(200, appRecord())]);
+        h.signedIn();
+        expect(await h.run(['apps', command, word, ...(command === 'rotate-key' ? ['--yes'] : [])]), `${command} ${word}`).toBe(2);
+        expect(h.http.requests, `${command} ${word}`).toHaveLength(0);
+        expect(h.err()).toContain('never requests, events, scopes or kinds');
+        expect(h.err()).not.toContain('apps.');
+      }
+      const init = harness([]);
+      expect(await init.run(['apps', 'init', '--key', word]), `init ${word}`).toBe(2);
+      expect(() => init.file('siren.app.json')).toThrow();
+    }
+  });
+});

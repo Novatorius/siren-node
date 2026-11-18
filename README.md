@@ -1365,7 +1365,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps rotate-key <key>` | Gives the app a new key, which revokes the old one at once, and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. It asks first, and `--yes` skips the question. |
 | `siren apps rotate-secret <key>` | Gives the app's address a new signing secret and writes it as `SIREN_SIGNING_SECRET` the same way. Siren signs with it at once. It asks first, and `--yes` skips the question. |
 | `siren apps add-key <key>` | Makes a key for an app that holds none and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. The key holds no scopes until the next `siren apps apply`. |
-| `siren apps rotate <key>` | Sends nothing, names `rotate-key` and `rotate-secret`, which replace it, and exits 1. |
+| `siren apps rotate [<key>]` | Sends nothing, names `rotate-key` and `rotate-secret`, which replace it, and exits 1, with or without a key. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
 

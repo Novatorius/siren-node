@@ -24,7 +24,7 @@ const CASES: Array<{ argv: string[]; says: string }> = [
   { argv: ['apps', 'answer', APP_REQUEST_ID, '--body', big], says: 'The answer is longer than 16384 bytes as JSON, which Siren refuses.' },
   { argv: ['apps', 'resend', 'apr_xyz'], says: 'A request id is apr_ and 32 lowercase hex characters, and "apr_xyz" is not one.' },
   { argv: ['apps', 'requests', 'apr_xyz'], says: 'A request id is apr_ and 32 lowercase hex characters, and "apr_xyz" is not one.' },
-  { argv: ['apps', 'show', 'Acme_Payouts'], says: 'An app key is lowercase letters and digits joined by single dashes, at most 64 characters and never requests, and "Acme_Payouts" is not one.' },
+  { argv: ['apps', 'show', 'Acme_Payouts'], says: 'An app key is lowercase letters and digits joined by single dashes, at most 64 characters and never requests, events, scopes or kinds, and "Acme_Payouts" is not one.' },
   { argv: ['apps', 'on', 'requests'], says: '"requests" is not one.' },
   { argv: ['apps', 'off', 'acme--payouts'], says: '"acme--payouts" is not one.' },
   { argv: ['apps', 'rotate', 'ACME'], says: '"ACME" is not one.' },

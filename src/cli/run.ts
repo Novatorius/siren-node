@@ -117,10 +117,10 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   'apps resend': { usage: 'apps resend <request id>', summary: 'Send a request again.', options: {}, positionals: [1, 1], run: requests.appsResend },
   'apps rotate': {
-    usage: 'apps rotate <key>',
+    usage: 'apps rotate [<key>]',
     summary: 'Gone: run apps rotate-key or apps rotate-secret, since the key and the secret change apart.',
     options: { 'app-file': { type: 'string' }, yes: { type: 'boolean' } },
-    positionals: [1, 1],
+    positionals: [0, 1],
     offline: true,
     run: apply.appsRotate,
   },

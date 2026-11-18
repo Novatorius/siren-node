@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { access, lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
+import { RESERVED_APP_KEYS } from '../../resources/apps';
 import type { App } from '../../record-types';
 import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
 import { appChanges, droppedLine } from '../app-changes';
@@ -37,12 +38,17 @@ const APP_KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  * the SDK's refusal, which names a method the person never typed.
  */
 export function appKeyArgument(key: string): string {
-  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {
+  if (!isAppKey(key)) {
     throw new CliUsageError(
-      `An app key is lowercase letters and digits joined by single dashes, at most 64 characters and never requests, and ${JSON.stringify(key)} is not one.`,
+      `An app key is lowercase letters and digits joined by single dashes, at most 64 characters and never requests, events, scopes or kinds, and ${JSON.stringify(key)} is not one.`,
     );
   }
   return key;
+}
+
+/** True for a key Siren can hold: the pattern, at most 64 characters, and none of the words Siren keeps for its own routes. */
+function isAppKey(key: string): boolean {
+  return key.length <= 64 && APP_KEY.test(key) && !(RESERVED_APP_KEYS as readonly string[]).includes(key);
 }
 
 /**
@@ -53,8 +59,10 @@ export function appKeyArgument(key: string): string {
 export async function appsInit(input: CommandInput): Promise<number> {
   const { io, values } = input;
   const key = typeof values.key === 'string' ? values.key : keyFromFolder(io.cwd);
-  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {
-    throw new CliUsageError('--key takes lowercase letters and digits joined by single dashes, at most 64 characters, such as acme-payouts.');
+  if (!isAppKey(key)) {
+    throw new CliUsageError(
+      '--key takes lowercase letters and digits joined by single dashes, at most 64 characters and never requests, events, scopes or kinds, such as acme-payouts.',
+    );
   }
   const name = typeof values.name === 'string' && values.name.trim() !== '' ? values.name.trim() : key;
 
@@ -272,13 +280,14 @@ export function appsOff(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren apps rotate <key>`: gone, since an app's key and its signing secret
+ * `siren apps rotate [<key>]`: gone, since an app's key and its signing secret
  * now change apart (`POST /apps/{key}/key/rotate` and
  * `POST /apps/{key}/secret/rotate` on Siren's int/preview-apps). Sends
  * nothing, names the two commands that replace it, and exits 1.
  */
 export async function appsRotate(input: CommandInput): Promise<number> {
-  const key = appKeyArgument(input.args[0] ?? '');
+  // With no key the explanation is the same, with a placeholder where the key goes.
+  const key = input.args[0] === undefined ? '<key>' : appKeyArgument(input.args[0]);
   throw new CliRefusal(
     `Rotating is now two commands, since an app's key and its signing secret change apart. Nothing was sent. ` +
       `Run ${input.command(`apps rotate-key ${key}`)} for a new key, or ${input.command(`apps rotate-secret ${key}`)} for a new signing secret.`,

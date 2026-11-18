@@ -327,7 +327,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `siren apps rotate` splits in two, since an app's key and its signing secret change apart.
   `siren apps rotate-key` and `siren apps rotate-secret` each ask first, take `--yes`, and write
   only their own line to the env file, mode 0600, through a temporary file and a rename.
-  `siren apps rotate` sends nothing, names the two, and exits 1. Every hint that named
+  `siren apps rotate` sends nothing, names the two, and exits 1, with or without a key. Every
+  command that takes an app key refuses `requests`, `events`, `scopes` and `kinds` in its own
+  words. Every hint that named
   `siren apps rotate`, `requests.answer()`'s 401 message included, names `rotate-key` when the app
   holds a key and `add-key` when it holds none. Apply on an app with no key names `add-key`, and
   `rotate-key`, `rotate-secret` and `add-key` turn Siren's 409 for a missing or existing part into

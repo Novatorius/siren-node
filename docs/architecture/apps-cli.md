@@ -153,7 +153,7 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend`, and on 409 `app_request_not_resendable` for a request not `applied`, `GET /apps/requests/{requestKey}` and `GET /apps` | The request as it now stands. On that 409, that its app is off, with `siren apps on <key>` and the resend to run after. An `applied` request is told there is nothing to send. |
 | `siren apps rotate-key <key> [--app-file <path>] [--yes]` | `POST /apps/{key}/key/rotate` | The new prefix and the absolute path of the env file. Asks first. Writes the new key where `apply` wrote the first, or beside the named app file (AP-A634), and leaves the signing secret's line alone (slice C6). |
 | `siren apps rotate-secret <key> [--app-file <path>] [--yes]` | `POST /apps/{key}/secret/rotate` | The absolute path of the env file. Asks first, and writes only `SIREN_SIGNING_SECRET` (slice C6). |
-| `siren apps rotate <key>` | nothing | Names `rotate-key` and `rotate-secret` and exits 1 (slice C6). |
+| `siren apps rotate [<key>]` | nothing | Names `rotate-key` and `rotate-secret` and exits 1, with or without a key (slice C6). |
 | `siren apps on <key>` and `siren apps off <key>` | `POST /apps/{key}/status` | The app's new state. |
 | `siren apps delete <key> --yes` | `DELETE /apps/{key}`, and `GET /apps/{key}` after a 409 that names records | That it is gone. On 409 `app_in_use`: the records in `uses` with the `siren apps off` command while the app is on, or, once it is off, that those records must change before a delete, and when `openRequests` is above 0, `siren apps requests --app <key>` and the advice to answer or wait for the open asks (AP-A641). |
 
