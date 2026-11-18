@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AuthenticationError } from '../src/errors';
+import { AuthenticationError, UnexpectedResponseError } from '../src/errors';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { Siren } from '../src/client';
 import { FakeHttpClient, reply } from './http-fakes';
@@ -218,11 +218,12 @@ describe('apps-sdk-container review fix 5: scopes compared the way Siren stores 
   const stored = (scopes: string[]) => appRecord({ apiKey: { ...appRecord().apiKey, scopes } });
 
   it('a file with * beside event scopes, record scopes and a repeat matches what Siren stored, and writes nothing', async () => {
-    for (const [file, held] of [
+    const cases: Array<[string[], string[]]> = [
       [['*', 'event:*'], ['*']],
       [['event:sale', '*', 'records:programs:read', 'event:*'], ['*', 'records:programs:read']],
       [['records:programs:read', 'records:programs:read'], ['records:programs:read']],
-    ]) {
+    ];
+    for (const [file, held] of cases) {
       const h = harness([reply(200, stored(held))], { env: URL_ENV });
       h.signedIn();
       h.write('siren.app.json', exampleFile(file));
@@ -268,5 +269,40 @@ describe('apps-sdk-container review fix 6: small command-line edges', () => {
       expect(await init.run(['apps', 'init', '--key', word]), `init ${word}`).toBe(2);
       expect(() => init.file('siren.app.json')).toThrow();
     }
+  });
+});
+
+describe('apps-sdk-container review fix 8: a malformed answer never carries a secret in error.data', () => {
+  function client(body: unknown, status = 200) {
+    return new Siren({ accessToken: 't', baseUrl: SANDBOX_BASE_URL, httpClient: new FakeHttpClient([reply(status, body)]), maxRetries: 0 });
+  }
+
+  it('drops rawKey and signingSecret from the body it keeps, and keeps the rest', async () => {
+    const malformed = { key: KEY, name: 'Acme', rawKey: RAW_KEY, signingSecret: SIGNING_SECRET };
+    const calls: Array<[string, (siren: Siren) => Promise<unknown>, number]> = [
+      ['rotateKey', (siren) => siren.apps.rotateKey(KEY), 200],
+      ['rotateSecret', (siren) => siren.apps.rotateSecret(KEY), 200],
+      ['createKey', (siren) => siren.apps.createKey(KEY), 201],
+      ['declare', (siren) => siren.apps.declare(KEY, { name: 'Acme' }), 201],
+      ['create', (siren) => siren.apps.create({ name: 'Acme' }), 201],
+    ];
+    for (const [name, call, status] of calls) {
+      const error = await call(client(malformed, status)).then(() => undefined, (caught: unknown) => caught);
+      expect(error, name).toBeInstanceOf(UnexpectedResponseError);
+      const data = (error as UnexpectedResponseError).data as Record<string, unknown>;
+      expect(data, name).toEqual({ key: KEY, name: 'Acme' });
+      expect(JSON.stringify(data), name).not.toContain(RAW_KEY);
+      expect(JSON.stringify(data), name).not.toContain(SIGNING_SECRET);
+    }
+  });
+
+  it('drops them too when the secret itself is the malformed part', async () => {
+    const error = await client({ ...appRecord(), rawKey: 42, signingSecret: SIGNING_SECRET })
+      .apps.rotateKey(KEY)
+      .then(() => undefined, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect((error as Error).message).toContain('without rawKey as text');
+    expect((error as UnexpectedResponseError).data).not.toHaveProperty('rawKey');
+    expect((error as UnexpectedResponseError).data).not.toHaveProperty('signingSecret');
   });
 });

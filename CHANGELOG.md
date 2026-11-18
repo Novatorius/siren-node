@@ -305,6 +305,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before sending. `DeclaredApp` carries `rawKey` on the first declaration and `signingSecret`
   whenever the call made an address, so a later declaration that adds a `url` answers the new
   secret.
+- An `UnexpectedResponseError` for a malformed app answer keeps the body as `data` without
+  `rawKey` and `signingSecret`, so a caller that logs the error never logs a secret.
 - `App.webhookSubscriptionId` and `App.apiKeyId` are optional and deprecated, since Siren no longer
   sends them. Read `address.id` and `apiKey.id`.
 - `siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, each method naming the app

@@ -182,10 +182,21 @@ function appProblem(body: unknown, route: string): string | undefined {
     `Siren answered ${route} with a body that is not an app.`;
 }
 
+/**
+ * The body an `UnexpectedResponseError` keeps as `data`, without the raw key
+ * and signing secret Siren shows once, so a caller that logs the error never
+ * logs a secret. The message never held them.
+ */
+function withoutSecrets(body: unknown): unknown {
+  if (!isJsonObject(body) || (!('rawKey' in body) && !('signingSecret' in body))) return body;
+  const { rawKey: _rawKey, signingSecret: _signingSecret, ...rest } = body;
+  return rest;
+}
+
 /** Throws `UnexpectedResponseError` when `body` is not an app. */
 function checkApp(body: unknown, route: string): void {
   const problem = appProblem(body, route);
-  if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: body });
+  if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: withoutSecrets(body) });
 }
 
 /**
@@ -196,7 +207,7 @@ function checkApp(body: unknown, route: string): void {
 function checkSecret(body: Record<string, unknown>, field: 'rawKey' | 'signingSecret', route: string, required: boolean, then: string): void {
   if (body[field] === undefined && !required) return;
   if (typeof body[field] !== 'string') {
-    throw new UnexpectedResponseError(`Siren answered ${route} without ${field} as text, so it is lost. ${then}`, { data: body });
+    throw new UnexpectedResponseError(`Siren answered ${route} without ${field} as text, so it is lost. ${then}`, { data: withoutSecrets(body) });
   }
 }
 
