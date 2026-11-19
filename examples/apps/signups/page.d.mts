@@ -1,6 +1,6 @@
 // Types for this repository's own type check.
 export interface SignupForm {
-  dataset: { trackingId?: string };
+  dataset: { collaboratorId?: string };
   addEventListener(type: 'submit', listener: (event: { preventDefault(): void }) => Promise<void>): void;
 }
 

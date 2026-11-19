@@ -14,6 +14,12 @@ const SERVER = readFileSync(new URL('../examples/apps/signups/server.mjs', impor
 const PAGE = readFileSync(new URL('../examples/apps/signups/page.mjs', import.meta.url), 'utf8');
 const KEY = `sk_live_${'c'.repeat(64)}`;
 const SEND_URL = 'https://api.sirenaffiliates.com/siren/v1/event/newsletter-signup';
+/**
+ * A body Siren takes: CustomEventIngestion::ingest() reads `collaboratorId`
+ * at the top level and answers 400 "collaboratorId is required" without it,
+ * then checks the event's fields, here `list`.
+ */
+const SIREN_BODY = { collaboratorId: 12, list: 'weekly' };
 
 /** The text between `// README: {name}` and `// README end` in an example file. */
 function marked(text: string, name: string): string {
@@ -51,8 +57,8 @@ describe('README: Send a custom event', () => {
     );
     const { recordSignup, browserTokens } = await import('../examples/apps/signups/server.mjs');
 
-    expect((await recordSignup(4021, 'weekly')).status).toBe('recorded');
-    expect(calls.at(-1)).toEqual({ url: SEND_URL, auth: 'Bearer server-jwt', body: { collaborator: { trackingId: 4021 }, list: 'weekly' } });
+    expect((await recordSignup(12, 'weekly')).status).toBe('recorded');
+    expect(calls.at(-1)).toEqual({ url: SEND_URL, auth: 'Bearer server-jwt', body: SIREN_BODY });
 
     const response = await browserTokens(new Request('https://example.com/siren/token', { method: 'POST', body: '{"event":"newsletter-signup"}' }));
     expect(await response.json()).toEqual({ token: 'browser-jwt', expiresIn: 600, url: SEND_URL });
@@ -62,22 +68,25 @@ describe('README: Send a custom event', () => {
 
   it('runs the page snippet: a submit asks /siren/token and sends with the browser token', async () => {
     const urls: string[] = [];
+    const bodies: unknown[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (url: string, init: RequestInit) => {
         urls.push(url);
+        bodies.push(JSON.parse(init.body as string));
         if (url === '/siren/token') return jsonResponse(200, { token: 'browser-jwt', expiresIn: 600, url: SEND_URL });
         return jsonResponse(200, { status: 'recorded' });
       }),
     );
     const { wireSignupForm } = await import('../examples/apps/signups/page.mjs');
     let submit: ((event: { preventDefault(): void }) => Promise<void>) | undefined;
-    const form = { dataset: { trackingId: '4021' }, addEventListener: (_type: string, listener: typeof submit) => (submit = listener) };
+    const form = { dataset: { collaboratorId: '12' }, addEventListener: (_type: string, listener: typeof submit) => (submit = listener) };
 
     wireSignupForm(form);
     await submit?.({ preventDefault: () => undefined });
 
     expect(urls).toEqual(['/siren/token', `${SEND_URL}?access_token=browser-jwt`]);
+    expect(bodies.at(-1)).toEqual(SIREN_BODY);
   });
 
   it("holds an app file the CLI reads, with the event's domains", () => {

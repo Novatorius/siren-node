@@ -103,7 +103,7 @@ per order:
 ```ts
 await siren.events.refund({ source: 'stripe', externalId: 'cs_test_a1b2c3', refundId: 're_3Nf8a2' });
 await siren.events.siteVisited({ collaboratorId: 88, userId: 12345 });
-await siren.events.ingest('loyalty-points-earned', { userId: 42, points: 100 });
+await siren.events.ingest('loyalty-points-earned', { collaboratorId: 88, userId: 42, points: 100 });
 ```
 
 A refund with neither `amount` nor `lines` refunds the whole order, and `kind` (`RefundKind`) says
@@ -1306,8 +1306,8 @@ const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: process.en
 
 // A send from the app's server. The SDK trades the key for a short-lived
 // token, keeps it and renews it, so this is all the code it takes.
-export function recordSignup(trackingId, list) {
-  return siren.events.ingest('newsletter-signup', { collaborator: { trackingId }, list });
+export function recordSignup(collaboratorId, list) {
+  return siren.events.ingest('newsletter-signup', { collaboratorId, list });
 }
 
 // The route a page asks for a browser token. Mount it at /siren/token.
@@ -1343,9 +1343,9 @@ import { track } from '@novatorius/siren/storefront';
 export function wireSignupForm(form) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const trackingId = Number(form.dataset.trackingId);
+    const collaboratorId = Number(form.dataset.collaboratorId);
     // track asks /siren/token for a browser token, keeps it, and sends.
-    await track('newsletter-signup', { collaborator: { trackingId }, list: 'weekly' });
+    await track('newsletter-signup', { collaboratorId, list: 'weekly' });
   });
 }
 ```
@@ -1356,7 +1356,7 @@ gives a `track` with its own settings. Each send goes to Siren with the token in
 (`?access_token=`) and no cookies.
 
 Allowed domains stop another website's pages from sending the event, and a browser token from
-sending any other event or reaching any other route. They don't stop a program outside a browser that
+sending any other event. They don't stop a program outside a browser that
 asks your `/siren/token` for a token and claims an allowed `Origin`, or a visitor on an allowed page
 who sends made-up data, so credit only what the event's fields can't fake. The examples/apps/signups folder holds a
 whole app.

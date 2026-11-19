@@ -9,8 +9,8 @@ const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: process.en
 
 // A send from the app's server. The SDK trades the key for a short-lived
 // token, keeps it and renews it, so this is all the code it takes.
-export function recordSignup(trackingId, list) {
-  return siren.events.ingest('newsletter-signup', { collaborator: { trackingId }, list });
+export function recordSignup(collaboratorId, list) {
+  return siren.events.ingest('newsletter-signup', { collaboratorId, list });
 }
 
 // The route a page asks for a browser token. Mount it at /siren/token.

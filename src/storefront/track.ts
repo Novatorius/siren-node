@@ -118,7 +118,7 @@ const trackers = new Map<string, Track>();
 /**
  * Sends one custom event from the visitor's browser, through the app's own
  * server for the token, as
- * `await track('newsletter-signup', { collaborator: { trackingId: 4021 } })`.
+ * `await track('newsletter-signup', { collaboratorId: 12, list: 'weekly' })`.
  *
  * The server mounts `siren.events.browserTokenHandler()` at `/siren/token`,
  * or wherever `tokenUrl` points. See {@link createTracker} for what it does

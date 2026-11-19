@@ -18,8 +18,8 @@ An app with one custom event, `newsletter-signup`, which it sends to Siren two w
 
 1. Run `npm ci && npm run build` at the repository root, then `npm install` in this folder.
 2. Run `siren apps apply` in this folder. It declares the app and writes its key to `.env.sandbox`.
-3. Run `npm start`, then `curl -X POST 'http://localhost:8787/signup?trackingId=4021'` with a
-   tracking id of one of your collaborators.
+3. Run `npm start`, then `curl -X POST 'http://localhost:8787/signup?collaboratorId=12'` with the
+   id of one of your collaborators.
 
 A page can send the event only from a domain the event allows. Edit `domains` in siren.app.json and
 apply again to change them, or change them on the event's feature page in Siren.

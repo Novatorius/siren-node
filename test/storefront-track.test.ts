@@ -31,7 +31,7 @@ describe('track', () => {
     const fake = fakeFetch();
     const track = createTracker({ fetch: fake.fetchMock });
 
-    const answer = await track('signup', { collaborator: { trackingId: 4021 } });
+    const answer = await track('signup', { collaboratorId: 12 });
 
     expect(answer).toEqual({ status: 'recorded' });
     expect(fake.urls()).toEqual([DEFAULT_TOKEN_URL, `${SEND_URL}?access_token=jwt-1`]);
@@ -39,7 +39,7 @@ describe('track', () => {
     expect(JSON.parse(tokenInit?.body as string)).toEqual({ event: 'signup' });
     expect(tokenInit?.credentials).toBe('same-origin');
     expect(sendInit?.credentials).toBe('omit');
-    expect(JSON.parse(sendInit?.body as string)).toEqual({ collaborator: { trackingId: 4021 } });
+    expect(JSON.parse(sendInit?.body as string)).toEqual({ collaboratorId: 12 });
   });
 
   it('keeps the token until 30 seconds before it ends, and shares one request', async () => {

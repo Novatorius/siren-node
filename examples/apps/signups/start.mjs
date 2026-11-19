@@ -3,7 +3,7 @@
 //   npm start
 //
 // It answers POST /siren/token with a browser token for newsletter-signup,
-// and POST /signup?trackingId=4021 by sending the event from the server.
+// and POST /signup?collaboratorId=12 by sending the event from the server.
 import { createServer } from 'node:http';
 import { browserTokens, recordSignup } from './server.mjs';
 
@@ -14,7 +14,7 @@ createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/siren/token') return browserTokens(req, res);
   if (req.method === 'POST' && url.pathname === '/signup') {
     try {
-      const result = await recordSignup(Number(url.searchParams.get('trackingId')), 'weekly');
+      const result = await recordSignup(Number(url.searchParams.get('collaboratorId')), 'weekly');
       res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(result));
     } catch (error) {
       res.writeHead(502, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: error.message }));

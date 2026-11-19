@@ -8,9 +8,9 @@ import { track } from '@novatorius/siren/storefront';
 export function wireSignupForm(form) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const trackingId = Number(form.dataset.trackingId);
+    const collaboratorId = Number(form.dataset.collaboratorId);
     // track asks /siren/token for a browser token, keeps it, and sends.
-    await track('newsletter-signup', { collaborator: { trackingId }, list: 'weekly' });
+    await track('newsletter-signup', { collaboratorId, list: 'weekly' });
   });
 }
 // README end
