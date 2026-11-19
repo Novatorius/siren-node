@@ -2,6 +2,7 @@ import type { App, AppItem, AppItemDeclaration, DeclareAppParams } from '../reco
 import { API_KEY_RECORD_SCOPES } from '../api-key-scopes';
 import { AppItemKind } from '../taxonomy';
 import { kindLabel } from './app-kinds';
+import { storedContacts } from './app-file';
 
 /*
  * What `siren apps apply` would change: the app file's declaration held
@@ -11,8 +12,9 @@ import { kindLabel } from './app-kinds';
  * (AppService on Siren's int/preview-apps at a22547327): names trimmed,
  * a description as it is with `''` for none, events and scopes as sets, the
  * scopes first reduced as Siren stores them ({@link storedScopes}),
- * currencies upper-cased in the declared order, and a feature matched by
- * its kind and key, which never change. A person may have changed the app
+ * currencies upper-cased in the declared order, problem contacts
+ * lowercased and as a set, compared only when the file names them, and a
+ * feature matched by its kind and key, which never change. A person may have changed the app
  * in the dashboard since the last apply, so a difference may be theirs.
  */
 
@@ -135,6 +137,11 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
   if (have.apiKey !== null && have.apiKey !== undefined) {
     const scopes = setLine('key scopes', storedScopes(have.apiKey.scopes ?? have.scopes), storedScopes(want.scopes ?? []));
     if (scopes !== undefined) lines.push(scopes);
+  }
+  // Only a file that names contacts changes them. One that names none keeps the app's own.
+  if (want.contacts !== undefined) {
+    const contacts = setLine('problem contacts', have.contacts ?? [], storedContacts(want.contacts));
+    if (contacts !== undefined) lines.push(contacts);
   }
 
   const dropped: DroppedFeature[] = [];
