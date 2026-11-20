@@ -58,7 +58,7 @@ describe('apps-sdk-container: the app file', () => {
     expect(parsed.problems[0]?.message).toBe(
       'apps.acme-reports.items.pay.kind must be one of Action after a conversion (postConversionAction), Action after an allocation (postAllocationAction), ' +
         'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Incentive resolver (incentiveResolver).',
+        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Incentive resolver (incentiveResolver).',
     );
   });
 

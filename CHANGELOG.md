@@ -47,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AppItemDeclaration` gains it.
 - `AppRequestStatus.Dropped` (`dropped`), the status of an ask Siren stopped waiting for, which
   `apps.requests.list()` can filter by. `openapi.yaml` lists it in both request status enums.
+- `AppItemKind.MetricCalculation` (`metricCalculation`) and `AppItemKind.MetricFilter`
+  (`metricFilter`), the feature kinds a distributor's metric type and a distributor select. The
+  types `AppMetricCalculationQuestion`, `AppMetricCalculationAnswer`, `AppMetricFilterQuestion` and
+  `AppMetricFilterAnswer` describe each ask's `data` and its answer, which `apps.requests.answer()`
+  sends to `POST /apps/requests/{id}/answer` as before. A feature takes `scoresMoney`, a boolean, on
+  `apps.declare()`, `apps.items.create()` and `apps.items.update()`. The app file refuses
+  `scoresMoney` that is not true or false, and refuses it on any kind but `metricCalculation`, and
+  `siren apps apply` shows a changed `scoresMoney` as "scores money". `openapi.yaml`'s
+  `AppItemDeclaration` gains `scoresMoney` and the kinds `customEvent`, `metricCalculation` and
+  `metricFilter`.
 - `events.ingest` takes an optional third argument, `IngestOptions`, with `headers` for the call
   and a `timeout` in milliseconds that replaces the client's for this call. A connected site uses it
   to send a referral visit with the tracking value the shopper already holds, as `X-Siren-Token` or

@@ -163,6 +163,7 @@ describe('apps-sdk-container review fix 3: a name the env file holds twice', () 
  * Each kind's readable name as Siren's catalog gives it, `name` in
  * AppItemKindCatalog::entries() (lib/Apps/Core/Enums/AppItemKindCatalog.php
  * lines 189, 199, 209 and 228 on Siren's feat/apps at c8dbb1ab3), and the
+ * two metric kinds' names from slice C16-1's catalog entries, and the
  * incentive resolver's name from slice C16-2's catalog entry.
  */
 const SIREN_KIND_NAMES = {
@@ -170,6 +171,8 @@ const SIREN_KIND_NAMES = {
   postAllocationAction: 'Action after an allocation',
   payoutMethod: 'Payout method',
   distributionResolver: 'Distribution resolver',
+  metricCalculation: 'Metric calculation',
+  metricFilter: 'Customer filter for distributors',
   incentiveResolver: 'Incentive resolver',
 };
 
@@ -201,7 +204,7 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.items.pay.kind must be one of Action after a conversion (postConversionAction), Action after an allocation (postAllocationAction), ` +
         'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Incentive resolver (incentiveResolver).',
+        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Incentive resolver (incentiveResolver).',
     );
     expect(parseAppFile(file({ kind: 'payoutMethod', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.items.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,
