@@ -63,6 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument, `Record<string, unknown>` by default. `on()` types each kind's request and answer, the metric
   calculation and metric filter kinds' included.
 
+- `AppItemKind.TransactionFilter` (`transactionFilter`), the feature kind a program or a
+  distributor selects to let the app say which of a sale's own lines count. Siren's catalog calls it
+  a transaction compiler. Siren asks it once per sale for each program or distributor that picks
+  it, and a refund reuses the stored answer. The types `AppTransactionFilterQuestion`,
+  `AppTransactionLine` and `AppTransactionFilterAnswer` describe the ask's `data` and its answer,
+  the ids of the lines to include, which `apps.requests.answer()` sends to
+  `POST /apps/requests/{id}/answer` as before. Siren refuses a line id the question lacks with 422
+  `app_answer_invalid`. `apps.requestHandler().on('transactionFilter', ...)` is typed by them,
+  `siren apps` names the kind Transaction filter, and `openapi.yaml`'s `AppItemDeclaration` gains
+  it.
 - `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
   the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to

@@ -336,8 +336,9 @@ export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHold
  * a22547327). A record selects a feature by `app:{id}`: a program for a
  * post-conversion action or an incentive resolver, a distributor for a
  * post-allocation action or a distribution resolver, an autofulfiller for a
- * payout method, a distributor's metric type for a metric calculation, and a
- * distributor for a metric filter.
+ * payout method, a distributor's metric type for a metric calculation, a
+ * distributor for a metric filter, and a program or a distributor for a
+ * transaction filter.
  *
  * The payout kind's stored value is `payoutMethod`, the documentation's
  * word. `FulfillmentMethod` stays as an alias of the same value, as Siren's
@@ -375,6 +376,13 @@ export const AppItemKind = {
    * converted, and the rewards wait for the answer, 24 hours at most.
    */
   IncentiveResolver: 'incentiveResolver',
+  /**
+   * A transaction filter a program or a distributor selects, which Siren's
+   * catalog calls a transaction compiler. Once per sale for each program or
+   * distributor that picks it, Siren asks the app which of the sale's own
+   * lines count, and the app answers the ids of the lines to include.
+   */
+  TransactionFilter: 'transactionFilter',
 } as const;
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */

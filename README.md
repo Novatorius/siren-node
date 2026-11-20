@@ -1114,6 +1114,7 @@ chooses a built-in one:
 | Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
 | Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
 | Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
+| Transaction filter (`transactionFilter`) | a program or a distributor | An ask for which of each sale's lines count, answered `{ outcome: 'filtered', include }`. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1265,7 +1266,9 @@ weight or a list of `[id, weight]` pairs.
 Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
 `AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The metric kinds are typed the same
 way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
-`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. The client must be built with
+`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`.
+`on('transactionFilter', ...)` gets `AppAsk<AppTransactionFilterQuestion>` and returns
+`AppTransactionFilterAnswer`, the lines to include. The client must be built with
 the app's own key, since the handler posts answers with it.
 
 What the handler replies, always JSON with `Cache-Control: no-store`:
@@ -1466,6 +1469,40 @@ if (request.mode === 'ask' && request.item.kind === 'metricFilter') {
     : { outcome: 'allow' };
   await appSiren.apps.requests.answer(request.id, answer);
 }
+```
+
+### Answer a transaction filter ask
+
+A Transaction filter (`transactionFilter`) gets `AppTransactionFilterQuestion` when a sale lands on
+a program or a distributor that picks it, once per sale for each. Siren's catalog calls it a
+transaction compiler. The question names what the filter is `for` (a program or a distributor), the
+`transaction` with its `units` and `currency`, and the sale's own `lines`. Each line has its `id`,
+its `type` (`lineItem`, `discount`, `fee`, `shipping` or `tax`), its `name`, a whole `quantity`, its
+unit `value` as a stored whole number in the transaction's units, and a `productId` or null.
+`distribution` is null for a program, and for a distributor the period the sale's value lands in.
+`refundDistribution` is null, or the later period a refund came in while the ask was open.
+
+```json
+{"for": {"type": "program", "id": 3, "name": "Partner program"},
+ "transaction": {"id": 3307, "units": "USD", "currency": {"id": "USD", "symbol": "$", "position": "before",
+                 "name": "US Dollar", "scale": 2, "decimalPlaces": 2, "type": "monetary"}},
+ "lines": [{"id": 5501, "type": "lineItem", "name": "Annual plan", "quantity": 1, "value": 12000, "productId": "prod_annual"},
+           {"id": 5502, "type": "shipping", "name": "Shipping", "quantity": 1, "value": 800, "productId": null}],
+ "distribution": null, "refundDistribution": null}
+```
+
+It answers `AppTransactionFilterAnswer`: `outcome` `filtered`, and in `include` the ids of the lines
+that count, each at most once. An empty list includes nothing. When a record picks more than one
+filter, a line counts when any of them includes it. Siren refuses an id the question lacks with 422
+`app_answer_invalid`. A refund reuses the stored answer, so Siren never sends refund lines.
+
+This filter counts only the sale's `lineItem` lines:
+
+```js
+answers.on('transactionFilter', 'plan-lines', ({ data }) => ({
+  outcome: 'filtered',
+  include: data.lines.filter((line) => line.type === 'lineItem').map((line) => line.id),
+}))
 ```
 
 ### Send a custom event

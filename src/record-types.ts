@@ -1550,6 +1550,9 @@ export interface AppFeatureFunctions {
     request: AppAsk<AppMetricCalculationQuestion>,
   ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
   metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
+  transactionFilter: (
+    request: AppAsk<AppTransactionFilterQuestion>,
+  ) => AppTransactionFilterAnswer | undefined | Promise<AppTransactionFilterAnswer | undefined>;
 }
 
 /**
@@ -1649,6 +1652,53 @@ export interface AppMetricFilterQuestion {
  * plain text of 1 to 200 characters.
  */
 export type AppMetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+
+/**
+ * One of a sale's own lines in a `transactionFilter` ask. `value` is the
+ * line's unit value, a stored whole number in the transaction's units, and
+ * `quantity` a whole number. `productId` is null when the line names no
+ * product.
+ */
+export interface AppTransactionLine {
+  id: number;
+  type: 'lineItem' | 'discount' | 'fee' | 'shipping' | 'tax';
+  name: string;
+  quantity: number;
+  value: number;
+  productId: string | null;
+}
+
+/**
+ * The data of a `transactionFilter` ask: Siren asks the app which of a
+ * sale's own lines count, once per sale for each program or distributor that
+ * picks the filter. `for` names that program or distributor. The subject id
+ * is `{opportunityId}:{programId}:t{transactionId}` for a program's lines
+ * and `{distributorId}:t{transactionId}` for a distributor's.
+ * `distribution` is null for a program, and for a distributor the period
+ * the sale's value lands in. `refundDistribution` is null, or the later
+ * period a refund came in while the ask was open. Refunds reuse the stored
+ * answer, so refund lines are never sent. Answer with an
+ * {@link AppTransactionFilterAnswer}.
+ */
+export interface AppTransactionFilterQuestion {
+  for: { type: 'program' | 'distributor'; id: number; name: string };
+  transaction: { id: number; units: string; currency: AppCurrency };
+  lines: AppTransactionLine[];
+  distribution: { id: number } | null;
+  refundDistribution: { id: number } | null;
+}
+
+/**
+ * The answer to a `transactionFilter` ask, such as
+ * `{ outcome: 'filtered', include: [5501, 5502] }`. `include` lists the ids
+ * of the question's lines that count, each at most once. An empty list
+ * includes nothing. A line counts when any filter the record picks includes
+ * it. Siren refuses an id the question lacks with 422 `app_answer_invalid`.
+ */
+export interface AppTransactionFilterAnswer extends AppAnswer {
+  outcome: 'filtered';
+  include: number[];
+}
 
 /**
  * A stored amount as a person reads it, from `apps.shownAmount()`, the three
