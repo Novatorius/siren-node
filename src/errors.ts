@@ -176,6 +176,12 @@ export const AppErrorCode = {
    * app's own key answers its own ask at any time before it is applied.
    */
   NotNeedingAttention: 'app_request_not_needing_attention',
+  /**
+   * 409 from the answer route: Siren stopped waiting for this ask. An
+   * incentive resolver's ask is dropped 24 hours after the first ask about
+   * its sale, and Siren then takes no answer to it.
+   */
+  Dropped: 'app_request_dropped',
   /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the item's kind refuses. */
   AnswerInvalid: 'app_answer_invalid',
   /**

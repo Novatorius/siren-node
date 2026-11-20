@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
+  the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
+  `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to
+  `POST /apps/requests/{id}/answer` as before. `AppErrorCode.Dropped` is
+  `app_request_dropped`, the 409 Siren answers once it stopped waiting for an ask, 24 hours after the
+  first ask about a sale. `siren apps` names the kind Incentive resolver, and `openapi.yaml`'s
+  `AppItemDeclaration` gains it.
 - `events.ingest` takes an optional third argument, `IngestOptions`, with `headers` for the call
   and a `timeout` in milliseconds that replaces the client's for this call. A connected site uses it
   to send a referral visit with the tracking value the shopper already holds, as `X-Siren-Token` or

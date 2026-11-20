@@ -1423,6 +1423,54 @@ export interface AppAllocationCompletedData {
 }
 
 /**
+ * One conversion in an `incentiveResolver` ask: a collaborator the sale,
+ * renewal or lead converted. `collaboratorStatus` is as it was at the sale,
+ * even when Siren asks again later. `engagementCreatedDate` is an ISO 8601
+ * time.
+ */
+export interface AppRewardConversion {
+  conversionId: number;
+  engagementId: number;
+  collaboratorId: number;
+  collaboratorStatus: string;
+  score: number;
+  engagementCreatedDate: string;
+}
+
+/**
+ * The data of an `incentiveResolver` ask (Siren's `AppRewardQuestion::build()`):
+ * Siren asks the app how to split a program's reward pool among the
+ * conversions one sale, renewal or lead made. `reason` is `sale` while the
+ * rewards are not made yet, and `refund` when a partial refund asks again
+ * about rewards already made. `transaction` is null for a lead. The
+ * program's `status` is as it was at the sale. Answer with an
+ * {@link AppRewardAnswer}.
+ */
+export interface AppRewardQuestion {
+  reason: 'sale' | 'refund' | (string & {});
+  program: { id: number; name: string; status: string };
+  conversionType: string;
+  transaction: { id: number; units: string; currency: AppCurrency } | null;
+  /** The reward pool, a stored integer. Read it with `apps.shownAmount(pool.value, pool.currency)`. */
+  pool: { value: number; units: string; currency: AppCurrency };
+  conversions: AppRewardConversion[];
+}
+
+/**
+ * The answer to an `incentiveResolver` ask, such as
+ * `{ outcome: 'rewards', units: 'USD', rewards: { '1042': 900, '1043': null } }`.
+ * `units` is the pool's. `rewards` holds every `conversionId` of the
+ * question as text and no other, each a whole number of 0 or more in the
+ * pool's stored units, or null for a collaborator who earns nothing. The
+ * rewards may add up to more than the pool.
+ */
+export interface AppRewardAnswer extends AppAnswer {
+  outcome: 'rewards';
+  units: string;
+  rewards: Record<string, number | null>;
+}
+
+/**
  * A stored amount as a person reads it, from `apps.shownAmount()`, the three
  * ways Siren's own `CurrencyAmountService` gives one.
  */

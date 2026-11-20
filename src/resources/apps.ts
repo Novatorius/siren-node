@@ -130,7 +130,8 @@ export class AppRequestsResource {
    * Answers `{ status: 'accepted', duplicate }`. Siren's refusals, each with
    * its code in `AppErrorCode` as the error's `code`: 409
    * `app_request_already_answered` as `ConflictError` (a different answer
-   * came first, and it stands), 404 `app_request_not_found` as
+   * came first, and it stands), 409 `app_request_dropped` as `ConflictError`
+   * (Siren stopped waiting for the ask), 404 `app_request_not_found` as
    * `NotFoundError`, 403 `app_inactive` or `app_answer_forbidden` as
    * `PermissionError`, 422 `app_answer_invalid` as `ValidationError`, and 401
    * `app_answer_unauthorized` as `AuthenticationError`. Siren's key check

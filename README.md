@@ -1108,6 +1108,7 @@ chooses a built-in one:
 | Action after an allocation (`postAllocationAction`) | a distributor | A tell after each completed allocation. |
 | Payout method (`payoutMethod`) | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
 | Distribution resolver (`distributionResolver`) | a distributor | An ask to divide each pool. |
+| Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
 | Custom event (`customEvent`) | a program or a distributor | Nothing. The app sends Siren the event. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
@@ -1279,6 +1280,41 @@ An ask carries `answerBy`. Siren sends an unanswered ask again when its window c
 in all, then marks it `needs_attention`. A feature's `answerWindowMinutes` sets the window, from 1
 to 43200 minutes. A payout method waits a day and a distribution resolver an hour when the feature
 sets none.
+
+### Answer a reward ask
+
+An Incentive resolver (`incentiveResolver`) gets `AppRewardQuestion` when a sale, renewal or lead
+converts in a program that picks it: the `program`, the `conversionType`, the `transaction` (null
+for a lead), the reward `pool` as a stored whole number, and the `conversions`, one per collaborator
+with their engagement `score`. `reason` is `sale` while the rewards are not made yet, and `refund`
+when a partial refund asks again about rewards already made. It answers `AppRewardAnswer`: the
+pool's `units`, and in `rewards` every `conversionId` of the question as text, each a whole number of
+0 or more or null for a collaborator who earns nothing. The rewards may add up to more than the
+pool. Siren refuses any other key, a missing one, or a negative or fractional reward with 422
+`app_answer_invalid`.
+
+The rewards wait for the answer, and an incentive resolver waits an hour per send when the feature
+sets no window. Siren waits 24 hours from the first ask about a sale at most. Then it stops waiting:
+a sale's collaborators get no reward, and a refund cuts the rewards already made by the share
+refunded. An answer after that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as
+`ConflictError`. While asks wait too long, the app's problem contacts, or the admins when it names
+none, get an email about twice a week.
+
+```ts
+import type { AppRewardAnswer, AppRewardQuestion } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'ask' && request.item.kind === 'incentiveResolver') {
+  const { pool, conversions } = request.data as unknown as AppRewardQuestion;
+  const total = conversions.reduce((sum, conversion) => sum + conversion.score, 0);
+  const rewards: AppRewardAnswer['rewards'] = {};
+  for (const conversion of conversions) {
+    rewards[String(conversion.conversionId)] = total > 0 ? Math.floor((pool.value * conversion.score) / total) : null;
+  }
+  const answer: AppRewardAnswer = { outcome: 'rewards', units: pool.units, rewards };
+  await appSiren.apps.requests.answer(request.id, answer);
+}
+```
 
 ### Send a custom event
 

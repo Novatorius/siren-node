@@ -334,8 +334,9 @@ export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHold
  * The registries an app item, a feature, can join, as Siren names them
  * (lib/Apps/Core/Enums/AppItemKinds.php on Siren's int/preview-apps at
  * a22547327). A record selects a feature by `app:{id}`: a program for a
- * post-conversion action, a distributor for a post-allocation action or a
- * distribution resolver, and an autofulfiller for a payout method.
+ * post-conversion action or an incentive resolver, a distributor for a
+ * post-allocation action or a distribution resolver, and an autofulfiller
+ * for a payout method.
  *
  * The payout kind's stored value is `payoutMethod`, the documentation's
  * word. `FulfillmentMethod` stays as an alias of the same value, as Siren's
@@ -355,6 +356,12 @@ export const AppItemKind = {
    * app's key, never an address.
    */
   CustomEvent: 'customEvent',
+  /**
+   * An incentive resolver a program selects. Siren asks the app how to split
+   * the program's reward among the collaborators a sale, renewal or lead
+   * converted, and the rewards wait for the answer, 24 hours at most.
+   */
+  IncentiveResolver: 'incentiveResolver',
 } as const;
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */
