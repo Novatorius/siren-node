@@ -1663,7 +1663,8 @@ export interface AppPayoutQuestion {
   payout: { id: number; fulfillmentId: number; attempt: number };
   /** What to pay, a stored integer. Read it with `apps.shownAmount(amount.value, amount.currency)`. */
   amount: { value: number; units: string; currency: AppCurrency };
-  collaborator: { id: number; name: string; email: string };
+  /** `email` is null when the collaborator has no email address. */
+  collaborator: { id: number; name: string; email: string | null };
 }
 
 /**
