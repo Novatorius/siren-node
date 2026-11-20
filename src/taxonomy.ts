@@ -392,7 +392,9 @@ export type AppStatus = (typeof AppStatus)[keyof typeof AppStatus];
 /**
  * The statuses of a request Siren sent an app (lib/Apps/Core/Models/AppRequest.php).
  * A tell ends at `delivered`. An ask ends at `applied`, once its answer has
- * done its work. `needs_attention` waits for a person or a late answer.
+ * done its work. `needs_attention` waits for a person or a late answer. An
+ * ask that holds a reward ends at `dropped` when the app didn't answer within
+ * 24 hours, and Siren went on without it.
  */
 export const AppRequestStatus = {
   Pending: 'pending',
@@ -401,6 +403,7 @@ export const AppRequestStatus = {
   Answered: 'answered',
   Applied: 'applied',
   NeedsAttention: 'needs_attention',
+  Dropped: 'dropped',
 } as const;
 
 /** Union of the {@link AppRequestStatus} strings. */

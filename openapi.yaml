@@ -3353,7 +3353,7 @@ paths:
         - name: status
           in: query
           description: Only the requests in this status.
-          schema: { type: string, enum: [pending, sent, delivered, answered, applied, needs_attention] }
+          schema: { type: string, enum: [pending, sent, delivered, answered, applied, needs_attention, dropped] }
       responses:
         '200':
           description: The requests.
@@ -4151,7 +4151,7 @@ components:
           properties:
             type: { type: string }
             id: { type: string }
-        status: { type: string, enum: [pending, sent, delivered, answered, applied, needs_attention] }
+        status: { type: string, enum: [pending, sent, delivered, answered, applied, needs_attention, dropped] }
         sendCount: { type: integer }
         answerBy: { type: [string, 'null'], format: date-time }
         answeredBy: { type: [string, 'null'], description: '`app:{appId}` or `user:{userId}`.' }
