@@ -63,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument, `Record<string, unknown>` by default. `on()` types each kind's request and answer, the metric
   calculation and metric filter kinds' included.
 
+- `AppItemKind.ProgramGroupSorter` (`programGroupSorter`), the feature kind a program group selects
+  as its structure, to let the app order the group's programs for each sale or lead. The types
+  `AppGroupOrderQuestion`, `AppGroupOrderProgram`, `AppGroupOrderEngagement` and
+  `AppGroupOrderAnswer` describe the ask's `data` and its answer, `{ outcome: 'sorted', programIds }`,
+  which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as before, and
+  `requestHandler().on('programGroupSorter', ...)` types both. `siren apps` names the kind Program
+  group structure, and `openapi.yaml`'s `AppItemDeclaration` gains it.
 - `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
   the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to

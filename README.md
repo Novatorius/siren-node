@@ -1114,6 +1114,7 @@ chooses a built-in one:
 | Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
 | Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
 | Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
+| Program group structure (`programGroupSorter`) | a program group | An ask for the order to try the group's programs in, answered `{ outcome: 'sorted', programIds }`. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1253,6 +1254,18 @@ answers.on('incentiveResolver', 'split-the-reward', ({ data }) => ({
 }))
 ```
 
+A Program group structure (`programGroupSorter`) is an ask too. The function returns every
+program id of the question once, in the order Siren tries them:
+
+```js
+answers.on('programGroupSorter', 'pick-the-program', ({ data }) => {
+  // Try the program whose best engagement scores highest first.
+  const best = (program) => Math.max(0, ...program.engagements.map((engagement) => engagement.score))
+  const programs = [...data.programs].sort((a, b) => best(b) - best(a))
+  return { outcome: 'sorted', programIds: programs.map((program) => program.id) }
+})
+```
+
 On Siren's sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
 `{ '41': 6000, '43': 4000 }`. Each share is a whole number of the currency's smallest shown unit,
 `10 ** (scale - decimalPlaces)` stored units, so a yen pool splits in multiples of 100. Every share
@@ -1265,7 +1278,8 @@ weight or a list of `[id, weight]` pairs.
 Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
 `AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The metric kinds are typed the same
 way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
-`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. The client must be built with
+`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. `on('programGroupSorter', ...)` gets
+`AppAsk<AppGroupOrderQuestion>` and returns `AppGroupOrderAnswer`. The client must be built with
 the app's own key, since the handler posts answers with it.
 
 What the handler replies, always JSON with `Cache-Control: no-store`:
@@ -1435,6 +1449,21 @@ if (request.mode === 'ask' && request.item.kind === 'incentiveResolver') {
   await appSiren.apps.requests.answer(request.id, answer);
 }
 ```
+
+### Answer a group order ask
+
+A Program group structure (`programGroupSorter`) gets `AppGroupOrderQuestion` when a sale, renewal or
+lead reaches a program group that picks it: the `group`, the `conversionType`, the `opportunity`, the
+`transaction` (null for a lead) with its `total` as a stored whole number, and the `programs` of the
+group that take the conversion, in the group's order, each with its active `engagements` on the
+opportunity, oldest first. It answers `AppGroupOrderAnswer`: `programIds`, every program id of the
+question exactly once, in the order Siren tries them. The first program that converts wins the
+group. Siren refuses a missing, repeated or unknown id with 422 `app_answer_invalid`.
+
+No program in the group is awarded until the answer, and later sales on the group wait behind it.
+Siren waits 24 hours from the first ask at most. Then it stops waiting, no program in the group is
+awarded for that sale, and an answer after that gets 409 `app_request_dropped`
+(`AppErrorCode.Dropped`) as `ConflictError`.
 
 ### Answer a metric ask
 

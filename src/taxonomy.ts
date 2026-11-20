@@ -375,6 +375,13 @@ export const AppItemKind = {
    * converted, and the rewards wait for the answer, 24 hours at most.
    */
   IncentiveResolver: 'incentiveResolver',
+  /**
+   * A program group structure a program group selects, which Siren names
+   * "Program group structure". Siren asks the app the order to try the
+   * group's programs in for one sale or lead, and the group's award waits
+   * for the answer, 24 hours at most.
+   */
+  ProgramGroupSorter: 'programGroupSorter',
 } as const;
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */
