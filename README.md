@@ -1114,6 +1114,7 @@ chooses a built-in one:
 | Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
 | Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
 | Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
+| Collaborator group structure (`collaboratorGroupStructure`) | a collaborator group | An ask for the group's shape on each cascade trigger, answered a chain or a tree. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1265,7 +1266,9 @@ weight or a list of `[id, weight]` pairs.
 Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
 `AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The metric kinds are typed the same
 way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
-`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. The client must be built with
+`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`.
+`on('collaboratorGroupStructure', ...)` gets `AppAsk<AppCollaboratorGroupStructureQuestion>` and returns
+`AppCollaboratorGroupStructureAnswer`, a chain or a tree. The client must be built with
 the app's own key, since the handler posts answers with it.
 
 What the handler replies, always JSON with `Cache-Control: no-store`:
@@ -1465,6 +1468,52 @@ if (request.mode === 'ask' && request.item.kind === 'metricFilter') {
     ? { outcome: 'suppress', reason: 'Customer already owned by a partner' }
     : { outcome: 'allow' };
   await appSiren.apps.requests.answer(request.id, answer);
+}
+```
+
+### Answer a group structure ask
+
+A Collaborator group structure (`collaboratorGroupStructure`) gets
+`AppCollaboratorGroupStructureQuestion` once per cascade trigger on a group that picks it. The
+question names the `group`, its `members` with each one's `collaboratorId`, `name` and `metadata`,
+what the cascade is `for` (a program for an engagement cascade, a distributor for a metric cascade),
+the `triggeringCollaborator` and the `cause`, whose `id` is the trigger's own random id of 16 hex
+characters. It also carries the fields of the trigger it interrupts. A distributor's ask carries a
+metric calculation's fields, typed as `AppCollaboratorGroupStructureDistributorQuestion`:
+
+```json
+{"group": {"id": 4, "name": "Northeast team"},
+ "members": [{"collaboratorId": 42, "name": "Riley Rep", "metadata": {"rank": 3}},
+             {"collaboratorId": 57, "name": "Sam Lead", "metadata": {"rank": 2}},
+             {"collaboratorId": 63, "name": "Jo Manager", "metadata": {"rank": 1}}],
+ "for": {"type": "distributor", "id": 2},
+ "triggeringCollaborator": {"id": 42, "name": "Riley Rep"},
+ "cause": {"id": "9f2c4e1a7b3d5c60", "type": null, "causeId": null},
+ "distributor": {"id": 2, "name": "Partner leaderboard"},
+ "distribution": {"id": 21, "periodEnd": "2026-12-01T00:00:00+00:00"},
+ "metricType": "referredSiteVisit", "distributorMetricTypeId": 55,
+ "opportunityId": 615, "points": null, "sale": null}
+```
+
+It answers `AppCollaboratorGroupStructureAnswer`, a chain or a tree. A chain's `order` lists every
+member's `collaboratorId` once, top of the chain first, and Siren reads it as its built-in linear
+chain. A tree's `parents` holds every member's `collaboratorId` as text once, each mapped to another
+member's id or to null for a top member, with no cycle, and Siren reads it as its parent and child
+structure. Siren refuses an answer that breaks these rules with 422 `app_answer_invalid`.
+
+```ts
+import type { AppCollaboratorGroupStructureAnswer } from '@novatorius/siren';
+
+const chain: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'chain', order: [63, 57, 42] };
+const tree: AppCollaboratorGroupStructureAnswer = {
+  outcome: 'structure',
+  shape: 'tree',
+  parents: { '42': 57, '57': 63, '63': null },
+};
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'ask' && request.item.kind === 'collaboratorGroupStructure') {
+  await appSiren.apps.requests.answer(request.id, useTree ? tree : chain);
 }
 ```
 

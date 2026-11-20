@@ -336,8 +336,9 @@ export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHold
  * a22547327). A record selects a feature by `app:{id}`: a program for a
  * post-conversion action or an incentive resolver, a distributor for a
  * post-allocation action or a distribution resolver, an autofulfiller for a
- * payout method, a distributor's metric type for a metric calculation, and a
- * distributor for a metric filter.
+ * payout method, a distributor's metric type for a metric calculation, a
+ * distributor for a metric filter, and a collaborator group for its
+ * structure.
  *
  * The payout kind's stored value is `payoutMethod`, the documentation's
  * word. `FulfillmentMethod` stays as an alias of the same value, as Siren's
@@ -375,6 +376,13 @@ export const AppItemKind = {
    * converted, and the rewards wait for the answer, 24 hours at most.
    */
   IncentiveResolver: 'incentiveResolver',
+  /**
+   * A collaborator group's structure, which a group selects. Once per
+   * cascade trigger on the group, for a program or a distributor, Siren asks
+   * the app for the group's shape among the members in the question, and
+   * the app answers a chain or a tree.
+   */
+  CollaboratorGroupStructure: 'collaboratorGroupStructure',
 } as const;
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */

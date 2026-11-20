@@ -1550,6 +1550,9 @@ export interface AppFeatureFunctions {
     request: AppAsk<AppMetricCalculationQuestion>,
   ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
   metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
+  collaboratorGroupStructure: (
+    request: AppAsk<AppCollaboratorGroupStructureQuestion>,
+  ) => AppCollaboratorGroupStructureAnswer | undefined | Promise<AppCollaboratorGroupStructureAnswer | undefined>;
 }
 
 /**
@@ -1649,6 +1652,86 @@ export interface AppMetricFilterQuestion {
  * plain text of 1 to 200 characters.
  */
 export type AppMetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+
+/** One member of a collaborator group in a `collaboratorGroupStructure` ask. */
+export interface AppCollaboratorGroupMember {
+  collaboratorId: number;
+  name: string;
+  /** The member's metadata as the group holds it. */
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * The data of a `collaboratorGroupStructure` ask: Siren asks the app for a
+ * collaborator group's shape among the `members` in the question, once per
+ * cascade trigger on the group. `for` names the program (an engagement
+ * cascade) or the distributor (a metric cascade). `cause.id` is 16 hex
+ * characters, the trigger's own random id. The ask also carries the fields
+ * of the trigger it interrupts, which differ by side, so they stay open
+ * here. {@link AppCollaboratorGroupStructureDistributorQuestion} types a
+ * distributor's. Answer with an {@link AppCollaboratorGroupStructureAnswer}.
+ */
+export interface AppCollaboratorGroupStructureQuestion {
+  group: { id: number; name: string };
+  members: AppCollaboratorGroupMember[];
+  for: { type: 'program' | 'distributor'; id: number };
+  /** The collaborator whose activity set off the cascade. */
+  triggeringCollaborator: { id: number; name: string };
+  cause: { id: string; [field: string]: unknown };
+  [field: string]: unknown;
+}
+
+/**
+ * A `collaboratorGroupStructure` ask for a distributor's metric cascade. It
+ * carries the fields of a metric calculation's question beside the group's,
+ * and its `cause` is a metric's.
+ */
+export interface AppCollaboratorGroupStructureDistributorQuestion extends AppCollaboratorGroupStructureQuestion {
+  for: { type: 'distributor'; id: number };
+  distributor: { id: number; name: string };
+  /** The period being scored. `periodEnd` is an ISO 8601 time. */
+  distribution: { id: number; periodEnd: string };
+  metricType: string;
+  distributorMetricTypeId: number;
+  opportunityId: number | null;
+  points: number | null;
+  cause: AppMetricCause & { [field: string]: unknown };
+  sale: AppMetricSale | null;
+}
+
+/**
+ * A chain answer to a `collaboratorGroupStructure` ask, such as
+ * `{ outcome: 'structure', shape: 'chain', order: [63, 57, 42] }`. `order`
+ * lists every member's `collaboratorId` of the question once, top of the
+ * chain first. Siren reads it as its built-in linear chain, where a lower
+ * position is higher up.
+ */
+export interface AppCollaboratorGroupChain extends AppAnswer {
+  outcome: 'structure';
+  shape: 'chain';
+  order: number[];
+}
+
+/**
+ * A tree answer to a `collaboratorGroupStructure` ask, such as
+ * `{ outcome: 'structure', shape: 'tree', parents: { '42': 57, '57': 63, '63': null } }`.
+ * `parents` holds every member's `collaboratorId` of the question as text
+ * once, each mapped to another member's `collaboratorId`, or null for a top
+ * member. The parents form no cycle. Siren reads it as its parent and child
+ * structure.
+ */
+export interface AppCollaboratorGroupTree extends AppAnswer {
+  outcome: 'structure';
+  shape: 'tree';
+  parents: Record<string, number | null>;
+}
+
+/**
+ * The answer to a `collaboratorGroupStructure` ask, a chain or a tree.
+ * Siren refuses one that breaks the rules above with 422
+ * `app_answer_invalid`.
+ */
+export type AppCollaboratorGroupStructureAnswer = AppCollaboratorGroupChain | AppCollaboratorGroupTree;
 
 /**
  * A stored amount as a person reads it, from `apps.shownAmount()`, the three

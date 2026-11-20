@@ -63,6 +63,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument, `Record<string, unknown>` by default. `on()` types each kind's request and answer, the metric
   calculation and metric filter kinds' included.
 
+- `AppItemKind.CollaboratorGroupStructure` (`collaboratorGroupStructure`), the feature kind a
+  collaborator group selects to let the app give the group's shape. Siren asks it once per cascade
+  trigger on the group, for a program or a distributor. The types
+  `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`,
+  `AppCollaboratorGroupMember`, `AppCollaboratorGroupChain`, `AppCollaboratorGroupTree` and
+  `AppCollaboratorGroupStructureAnswer` describe the ask's `data` and its answer, a chain or a tree,
+  which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as before. Siren refuses
+  an answer that leaves out or repeats a member, names one outside the group, or makes a cycle with
+  422 `app_answer_invalid`. `apps.requestHandler().on('collaboratorGroupStructure', ...)` is typed
+  by them, `siren apps` names the kind Collaborator group structure, and `openapi.yaml`'s
+  `AppItemDeclaration` gains it.
 - `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
   the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to
