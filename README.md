@@ -1452,8 +1452,8 @@ if (request.mode === 'ask' && request.item.kind === 'incentiveResolver') {
 
 ### Answer a group order ask
 
-A Program group structure (`programGroupSorter`) gets `AppGroupOrderQuestion` when a sale, renewal or
-lead reaches a program group that picks it: the `group`, the `conversionType`, the `opportunity`, the
+A Program group structure (`programGroupSorter`) gets `AppGroupOrderQuestion` when a sale or lead
+reaches a program group that picks it: the `group`, the `conversionType`, the `opportunity`, the
 `transaction` (null for a lead) with its `total` as a stored whole number, and the `programs` of the
 group that take the conversion, in the group's order, each with its active `engagements` on the
 opportunity, oldest first. It answers `AppGroupOrderAnswer`: `programIds`, every program id of the
@@ -1461,9 +1461,10 @@ question exactly once, in the order Siren tries them. The first program that con
 group. Siren refuses a missing, repeated or unknown id with 422 `app_answer_invalid`.
 
 No program in the group is awarded until the answer, and later sales on the group wait behind it.
-Siren waits 24 hours from the first ask at most. Then it stops waiting, no program in the group is
-awarded for that sale, and an answer after that gets 409 `app_request_dropped`
-(`AppErrorCode.Dropped`) as `ConflictError`.
+Siren asks about each sale when it happens, even one that waits behind another, and waits 24 hours
+from the sale at most. Then it stops waiting, no program in the group is awarded for that sale, and
+an answer after that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`. A
+renewal doesn't ask. It goes to the program in the group whose engagement is oldest.
 
 ### Answer a metric ask
 

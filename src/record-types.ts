@@ -1509,7 +1509,7 @@ export interface AppGroupOrderProgram {
 /**
  * The data of a `programGroupSorter` ask (Siren's
  * `AppGroupOrderQuestion::build()`): Siren asks the app the order to try a
- * program group's programs in for one sale, renewal or lead. `programs`
+ * program group's programs in for one sale or lead. `programs`
  * lists each program of the group that takes the conversion once, in the
  * order the group holds them. `transaction` is null for a lead, and its
  * `total` is a stored integer. Answer with an {@link AppGroupOrderAnswer}.
