@@ -1109,6 +1109,8 @@ chooses a built-in one:
 | Payout method (`payoutMethod`) | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
 | Distribution resolver (`distributionResolver`) | a distributor | An ask to divide each pool. |
 | Custom event (`customEvent`) | a program or a distributor | Nothing. The app sends Siren the event. |
+| Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
+| Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1279,6 +1281,38 @@ An ask carries `answerBy`. Siren sends an unanswered ask again when its window c
 in all, then marks it `needs_attention`. A feature's `answerWindowMinutes` sets the window, from 1
 to 43200 minutes. A payout method waits a day and a distribution resolver an hour when the feature
 sets none.
+
+### Answer a metric ask
+
+A Metric calculation (`metricCalculation`) gets `AppMetricCalculationQuestion`: the `distributor`,
+the `distribution` period with its `periodEnd`, the `metricType`, the `triggeringCollaborator`, the
+`opportunityId` and `points` (either may be null), the `cause` and the `sale`, which is null when no
+sale caused the metric. It answers `AppMetricCalculationAnswer`, a score for each collaborator. Siren
+takes at most 50 results, each collaborator once and each in the organization and not in the trash,
+and each score a whole number of 0 or more. An empty list scores nobody. Set `scoresMoney: true` on
+the feature when the score is an amount of money in the distributor's currency. Only a metric
+calculation takes `scoresMoney`, and the app file refuses it on any other kind.
+
+A Customer filter for distributors (`metricFilter`) gets `AppMetricFilterQuestion`, which names the
+`collaborator` whose metric Siren is about to count. It answers `AppMetricFilterAnswer`: allow the
+metric, or suppress it with a plain text reason of 1 to 200 characters.
+
+```ts
+import type { AppMetricCalculationAnswer, AppMetricFilterAnswer, AppMetricFilterQuestion } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'ask' && request.item.kind === 'metricCalculation') {
+  const answer: AppMetricCalculationAnswer = { outcome: 'scores', results: [{ collaboratorId: 7, score: 10 }] };
+  await appSiren.apps.requests.answer(request.id, answer);
+}
+if (request.mode === 'ask' && request.item.kind === 'metricFilter') {
+  const { collaborator } = request.data as unknown as AppMetricFilterQuestion;
+  const answer: AppMetricFilterAnswer = crm.ownsCustomer(collaborator.id)
+    ? { outcome: 'suppress', reason: 'Customer already owned by a partner' }
+    : { outcome: 'allow' };
+  await appSiren.apps.requests.answer(request.id, answer);
+}
+```
 
 ### Send a custom event
 

@@ -249,9 +249,9 @@ async function writeWithSecret<T extends App>(
  */
 export class AppItemsResource {
   /** The fields `create()` sends, those `POST /apps/{app}/items` reads (AddAppItem.php). */
-  static readonly CREATE_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'] as const;
+  static readonly CREATE_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'fields', 'domains'] as const;
   /** The fields `update()` sends. `PATCH /apps/{app}/items/{id}` refuses a changed kind or key with 422. */
-  static readonly UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'] as const;
+  static readonly UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'fields', 'domains'] as const;
 
   constructor(private readonly http: HttpTransport) {}
 
@@ -364,7 +364,7 @@ export class AppsResource {
   /** The fields `declare()` sends, the seven `PUT /apps/{key}` reads (DeclareApp.php). */
   static readonly DECLARE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'items'] as const;
   /** The fields `declare()` sends for each item, those Siren stores (apps-records.md, "Item settings"), a custom event's `fields` and `domains` included. */
-  static readonly ITEM_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'] as const;
+  static readonly ITEM_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'fields', 'domains'] as const;
   /** The fields `create()` sends, those `POST /apps` reads but `items`, which it refuses (CreateApp.php). */
   static readonly CREATE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts'] as const;
   /** The fields `update()` sends, those `PATCH /apps/{key}` reads but `items`, which it refuses (EditApp.php). */
