@@ -335,7 +335,9 @@ export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHold
  * (lib/Apps/Core/Enums/AppItemKinds.php on Siren's int/preview-apps at
  * a22547327). A record selects a feature by `app:{id}`: a program for a
  * post-conversion action, a distributor for a post-allocation action or a
- * distribution resolver, and an autofulfiller for a payout method.
+ * distribution resolver, an autofulfiller for a payout method, a
+ * distributor's metric type for a metric calculation, and a distributor for
+ * a metric filter.
  *
  * The payout kind's stored value is `payoutMethod`, the documentation's
  * word. `FulfillmentMethod` stays as an alias of the same value, as Siren's
@@ -355,6 +357,18 @@ export const AppItemKind = {
    * app's key, never an address.
    */
   CustomEvent: 'customEvent',
+  /**
+   * A calculation strategy a distributor's metric type selects. Siren asks
+   * the app to score a metric, and the app answers a score for each
+   * collaborator. Its `scoresMoney` setting says the score is money.
+   */
+  MetricCalculation: 'metricCalculation',
+  /**
+   * A metric filter a distributor selects, which Siren names "Customer
+   * filter for distributors". Siren asks the app whether one collaborator's
+   * metric counts, and the app answers allow or suppress.
+   */
+  MetricFilter: 'metricFilter',
 } as const;
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */
