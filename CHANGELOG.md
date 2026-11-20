@@ -82,6 +82,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `siren apps apply` shows a changed `scoresMoney` as "scores money". `openapi.yaml`'s
   `AppItemDeclaration` gains `scoresMoney` and the kinds `customEvent`, `metricCalculation` and
   `metricFilter`.
+- `AppPayoutQuestion`, `AppPayoutPaid`, `AppPayoutFailed` and `AppPayoutAnswer` describe the
+  `payoutMethod` ask's `data` and its answer, which `apps.requests.answer()` sends as before. The
+  request handler's `payoutMethod` function now takes `AppAsk<AppPayoutQuestion>` and returns an
+  `AppPayoutAnswer`. The app pays each payout id at most once.
 - `events.ingest` takes an optional third argument, `IngestOptions`, with `headers` for the call
   and a `timeout` in milliseconds that replaces the client's for this call. A connected site uses it
   to send a referral visit with the tracking value the shopper already holds, as `X-Siren-Token` or

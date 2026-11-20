@@ -347,6 +347,11 @@ export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHold
 export const AppItemKind = {
   PostConversionAction: 'postConversionAction',
   PostAllocationAction: 'postAllocationAction',
+  /**
+   * A payout method an autofulfiller names. Siren asks the app to pay one
+   * payout, and the app answers paid with a reference or failed with a reason.
+   * Siren drops the ask after 24 hours with no answer.
+   */
   PayoutMethod: 'payoutMethod',
   /** @deprecated Read `AppItemKind.PayoutMethod`. The same value, `payoutMethod`. */
   FulfillmentMethod: 'payoutMethod',
