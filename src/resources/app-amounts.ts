@@ -1,5 +1,5 @@
 import { SirenError } from '../errors';
-import type { AppCurrency, ShownAmount } from '../record-types';
+import type { AppCurrency, AppSplitPool, AppSplitWeights, ShownAmount } from '../record-types';
 
 /*
  * Reading a stored amount the way Siren does. Siren stores an amount as an
@@ -73,4 +73,112 @@ export function shownAmount(value: number, currency: AppCurrency, method: string
       : `${sign}${grouped} ${symbol !== '' ? symbol : String(currency.id)}`;
 
   return { amount: value / 10 ** scale, decimal, text };
+}
+
+/**
+ * Splits a pool among ids by weight, for a resolver's answer: each id gets
+ * `floor(steps * weight / total)` whole steps of the currency, where a step
+ * is `10^(scale - decimalPlaces)` stored units (1 for dollars, 100 for yen
+ * at scale 2) and `steps` is how many whole steps `pool.value` holds. Every
+ * share is rounded down, so the shares never add up to more than the pool,
+ * and what rounding leaves stays unpaid, which both resolvers' answers allow
+ * (AppDistributionQuestion::unfitness() rule 9, AppRewardQuestion::validate()
+ * on Siren's pkt/apps-c16-2 at f97b42820). When every weight is 0, each id
+ * gets the same whole number of steps.
+ *
+ * `weights` is an object of id to weight or a list of `[id, weight]` pairs.
+ * Answers an object of the ids, as text, to their shares in stored units.
+ *
+ * Throws `SirenError` naming `method` and the field for a pool `value` that
+ * is not a safe integer of 0 or more, a currency with a `scale` outside 0 to
+ * 8 or `decimalPlaces` outside 0 to the scale, weights that are neither an
+ * object nor a list of pairs, an id given twice, and a weight that is not a
+ * finite number of 0 or more.
+ *
+ * @internal
+ */
+export function splitPool(pool: AppSplitPool, weights: AppSplitWeights, method: string): Record<string, number> {
+  if (typeof pool !== 'object' || pool === null) {
+    throw new SirenError(`Siren: ${method} needs the pool as { value, currency }, as a resolver's question carries it.`);
+  }
+  const { value, currency } = pool;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new SirenError(`Siren: ${method} needs pool.value as the stored whole number of 0 or more Siren sent, and got ${String(value)}.`);
+  }
+  if (typeof currency !== 'object' || currency === null) {
+    throw new SirenError(`Siren: ${method} needs pool.currency, the currency Siren sent beside the pool, as an object.`);
+  }
+  const { scale, decimalPlaces } = currency;
+  if (typeof scale !== 'number' || !Number.isInteger(scale) || scale < 0 || scale > MAX_SCALE) {
+    throw new SirenError(`Siren: ${method} needs pool.currency.scale as a whole number from 0 to ${MAX_SCALE}.`);
+  }
+  if (typeof decimalPlaces !== 'number' || !Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > scale) {
+    throw new SirenError(`Siren: ${method} needs pool.currency.decimalPlaces as a whole number from 0 to the scale, ${scale}.`);
+  }
+
+  const entries = weightEntries(weights, method);
+  const shares: Record<string, number> = {};
+  if (entries.length === 0) return shares;
+
+  const step = 10 ** (scale - decimalPlaces);
+  const steps = Math.floor(value / step);
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+
+  if (total === 0) {
+    const each = Math.floor(steps / entries.length) * step;
+    for (const [id] of entries) shares[id] = each;
+    return shares;
+  }
+
+  const whole = entries.every(([, weight]) => Number.isSafeInteger(weight)) && Number.isSafeInteger(total);
+  // Fractional weights are scaled to at most 1 first, so a huge weight cannot overflow the sum.
+  const largest = Math.max(...entries.map(([, weight]) => weight));
+  const scaledTotal = entries.reduce((sum, [, weight]) => sum + weight / largest, 0);
+  let given = 0;
+  for (const [id, weight] of entries) {
+    // Whole weights split in exact integers. Fractional ones split in floats, checked below.
+    const count = whole
+      ? Number((BigInt(steps) * BigInt(weight)) / BigInt(total))
+      : Math.floor((steps * (weight / largest)) / scaledTotal);
+    shares[id] = count * step;
+    given += count;
+  }
+  // A float can round a share up past its exact value. Take back one step at a time, from the largest share, until the sum fits.
+  while (given > steps) {
+    const [top] = Object.entries(shares).sort((a, b) => b[1] - a[1])[0]!;
+    shares[top] = (shares[top] ?? 0) - step;
+    given -= 1;
+  }
+  return shares;
+}
+
+/** The weights as `[id, weight]` pairs, refusing anything `splitPool` cannot split. */
+function weightEntries(weights: AppSplitWeights, method: string): Array<[string, number]> {
+  let given: Array<[unknown, unknown]>;
+  if (Array.isArray(weights)) {
+    given = weights.map((pair: unknown) => {
+      if (!Array.isArray(pair) || pair.length !== 2) {
+        throw new SirenError(`Siren: ${method} takes weights as an object of id to weight, or a list of [id, weight] pairs.`);
+      }
+      return [pair[0], pair[1]];
+    });
+  } else if (typeof weights === 'object' && weights !== null) {
+    given = Object.entries(weights);
+  } else {
+    throw new SirenError(`Siren: ${method} takes weights as an object of id to weight, or a list of [id, weight] pairs.`);
+  }
+
+  const seen = new Set<string>();
+  return given.map(([id, weight]) => {
+    if ((typeof id !== 'string' || id === '') && !(typeof id === 'number' && Number.isSafeInteger(id))) {
+      throw new SirenError(`Siren: ${method} takes each id as text or a whole number, such as a metricId or a conversionId.`);
+    }
+    const key = String(id);
+    if (seen.has(key)) throw new SirenError(`Siren: ${method} was given id ${key} twice.`);
+    seen.add(key);
+    if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0) {
+      throw new SirenError(`Siren: ${method} takes each weight as a finite number of 0 or more, and the weight for ${key} is ${String(weight)}.`);
+    }
+    return [key, weight];
+  });
 }

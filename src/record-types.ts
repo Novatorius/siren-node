@@ -15,7 +15,7 @@ import type {
   ProgramGroupSorter,
   ProgramStatus,
 } from './taxonomy';
-import type { ListParams } from './types';
+import type { ListParams, WebhookEvent } from './types';
 
 /*
  * Wire types for the record resources: collaborators, their
@@ -1335,8 +1335,11 @@ export interface AppAnswerReceipt {
   duplicate: boolean;
 }
 
-/** The fields every request Siren sends an app carries, from its signed body. */
-interface AppRequestBase {
+/**
+ * The fields every request Siren sends an app carries, from its signed body.
+ * `D` is the kind's payload, such as {@link AppDistributionQuestion}.
+ */
+interface AppRequestBase<D = Record<string, unknown>> {
   version: 1;
   /** The request key. Drop a repeat by this id, which the signature covers. */
   id: string;
@@ -1346,20 +1349,20 @@ interface AppRequestBase {
   item: { kind: AppItemKind | (string & {}); key: string; id: string };
   createdAt: string;
   /** The kind's payload. Its fields belong to the item's kind. */
-  data: Record<string, unknown>;
+  data: D;
   /** The signed `t` of `X-Siren-Signature-V2`, in Unix seconds. */
   timestamp: number;
   /** The `X-Siren-Delivery` header, `{id}.{send number}`, when the request carried one. */
   deliveryId?: string;
 }
 
-/** A request that needs no answer. */
-export interface AppTell extends AppRequestBase {
+/** A request that needs no answer. `D` is the kind's payload. */
+export interface AppTell<D = Record<string, unknown>> extends AppRequestBase<D> {
   mode: 'tell';
 }
 
-/** A request that waits for the app's answer. */
-export interface AppAsk extends AppRequestBase {
+/** A request that waits for the app's answer. `D` is the kind's question. */
+export interface AppAsk<D = Record<string, unknown>> extends AppRequestBase<D> {
   mode: 'ask';
   /** When Siren sends the request again, or marks it as needing attention. */
   answerBy: string;
@@ -1483,6 +1486,93 @@ export interface AppRewardAnswer extends AppAnswer {
   units: string;
   rewards: Record<string, number | null>;
 }
+
+/**
+ * One collaborator's metric in a `distributionResolver` ask: what the
+ * collaborator scored in the distribution's period, and how many times a
+ * trigger counted.
+ */
+export interface AppDistributionMetric {
+  metricId: number;
+  collaboratorId: number;
+  score: number;
+  triggerCount: number;
+}
+
+/**
+ * The data of a `distributionResolver` ask (Siren's
+ * `AppDistributionQuestion::build()`): Siren asks the app how to divide a
+ * distributor's pool among the collaborators who scored in the period.
+ * `pool.value` is what this ask offers, a stored integer, and the shares may
+ * add up to it and never past it. `pool.total` is the whole pool and
+ * `pool.paid` what collaborators already hold from it, so a first ask has
+ * `paid` 0 and `value` equal to `total`, and a continued ask leaves out each
+ * collaborator who already holds a share. Answer with an
+ * {@link AppDistributionAnswer}, which `apps.splitPool()` helps build.
+ */
+export interface AppDistributionQuestion {
+  distribution: { id: number; distributorId: number; periodStart: string; periodEnd: string };
+  distributor: { id: number; name: string };
+  pool: { value: number; total: number; paid: number; units: string; currency: AppCurrency };
+  metrics: AppDistributionMetric[];
+}
+
+/**
+ * The answer to a `distributionResolver` ask, such as
+ * `{ outcome: 'allocated', units: 'USD', shares: { '41': 6000, '43': 4000 } }`.
+ * `units` is the pool's. `shares` holds every `metricId` of the question as
+ * text and no other, each a whole number of 0 or more in the pool's stored
+ * units and a whole step of the currency, 100 for yen. They add up to the
+ * pool's `value` at most.
+ */
+export interface AppDistributionAnswer extends AppAnswer {
+  outcome: 'allocated';
+  units: string;
+  shares: Record<string, number>;
+}
+
+/**
+ * The function `apps.requestHandler().on(kind, ...)` takes for each kind of
+ * feature, so the request and the answer are typed by the kind. A tell's
+ * function returns nothing. An ask's function returns the answer, which the
+ * handler posts, or `undefined` when the app answers later with
+ * `apps.requests.answer()`.
+ */
+export interface AppFeatureFunctions {
+  postConversionAction: (request: AppTell<AppConversionApprovedData>) => void | Promise<void>;
+  postAllocationAction: (request: AppTell<AppAllocationCompletedData>) => void | Promise<void>;
+  distributionResolver: (
+    request: AppAsk<AppDistributionQuestion>,
+  ) => AppDistributionAnswer | undefined | Promise<AppDistributionAnswer | undefined>;
+  incentiveResolver: (request: AppAsk<AppRewardQuestion>) => AppRewardAnswer | undefined | Promise<AppRewardAnswer | undefined>;
+  payoutMethod: (request: AppAsk) => AppAnswer | undefined | Promise<AppAnswer | undefined>;
+  metricCalculation: (
+    request: AppAsk<AppMetricCalculationQuestion>,
+  ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
+  metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
+}
+
+/**
+ * The function `apps.requestHandler().on(kind, ...)` takes for a kind
+ * {@link AppFeatureFunctions} does not name. It gets the request as
+ * `apps.verifyRequest()` answers it.
+ */
+export type AppRequestFunction = (request: AppRequest) => AppAnswer | void | undefined | Promise<AppAnswer | void | undefined>;
+
+/** The function `apps.requestHandler().onEvent(type, fn)` takes. Siren gets 200 when it returns, and 500 when it throws. */
+export type AppEventFunction = (event: WebhookEvent) => void | Promise<void>;
+
+/**
+ * A pool as `apps.splitPool()` reads it: the stored integer `value` and its
+ * `currency`, as a resolver's question carries them.
+ */
+export interface AppSplitPool {
+  value: number;
+  currency: Pick<AppCurrency, 'scale' | 'decimalPlaces'> & Partial<AppCurrency>;
+}
+
+/** The weights `apps.splitPool()` takes: an object of id to weight, or a list of `[id, weight]` pairs. */
+export type AppSplitWeights = Readonly<Record<string, number>> | ReadonlyArray<readonly [string | number, number] | ReadonlyArray<string | number>>;
 
 /**
  * What caused a metric, in a metric ask. `id` is the metric event's key.

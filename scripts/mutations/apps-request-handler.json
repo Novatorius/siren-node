@@ -1,0 +1,318 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "return reply(404, { error: `No function handles ${kind} ${key}.` });",
+    "replace": "return reply(404, { error: `No function for ${kind} ${key}.` });",
+    "expect": "caught",
+    "failing": [
+      "row 7"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "/** A body the handler cannot check. */",
+    "replace": "/** A body that the handler cannot check. */",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed-absent",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "'Cache-Control': 'no-store',",
+    "replace": "'Cache-Control': 'max-age=60',",
+    "expect": "wrong-reason",
+    "failing": [
+      "splits evenly when every weight is 0"
+    ]
+  },
+  {
+    "id": "post-only",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "if ((verb ?? 'POST').toUpperCase() !== 'POST') {",
+    "replace": "if ((verb ?? 'POST').toUpperCase() === 'TRACE') {",
+    "expect": "caught",
+    "failing": [
+      "row 1"
+    ]
+  },
+  {
+    "id": "parsed-body-read-as-empty",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      return respond(input.method, input.headers, async () => (typeof raw === 'string' || raw instanceof Uint8Array ? raw : UNREADABLE));",
+    "replace": "      return respond(input.method, input.headers, async () => (typeof raw === 'string' || raw instanceof Uint8Array ? raw : ''));",
+    "expect": "caught",
+    "failing": [
+      "row 2"
+    ]
+  },
+  {
+    "id": "express-json-read-as-empty",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "  if (!unread) return UNREADABLE;",
+    "replace": "  if (!unread) return new Uint8Array(0);",
+    "expect": "caught",
+    "failing": [
+      "already ate the body"
+    ]
+  },
+  {
+    "id": "parsed-body-not-reported",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      report(new SirenError(PARSED_BODY));\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "row 2"
+    ]
+  },
+  {
+    "id": "signature-401-as-400",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      if (error instanceof SignatureVerificationError) return reply(401, { error: error.message });",
+    "replace": "      if (error instanceof SignatureVerificationError) return reply(400, { error: error.message });",
+    "expect": "caught",
+    "failing": [
+      "row 3"
+    ]
+  },
+  {
+    "id": "tolerance-ignored",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "checkSignedDelivery(raw, headers, settings.secret, settings.tolerance, Date.now() / 1000);",
+    "replace": "checkSignedDelivery(raw, headers, settings.secret, 300, Date.now() / 1000);",
+    "expect": "caught",
+    "failing": [
+      "toleranceSeconds"
+    ]
+  },
+  {
+    "id": "envelope-400-as-401",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      if (error instanceof SignatureVerificationError) return reply(400, { error: error.message });",
+    "replace": "      if (error instanceof SignatureVerificationError) return reply(401, { error: error.message });",
+    "expect": "caught",
+    "failing": [
+      "row 4"
+    ]
+  },
+  {
+    "id": "tell-not-awaited",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "        await fn(request);",
+    "replace": "        void fn(request);",
+    "expect": "caught",
+    "failing": [
+      "row 5"
+    ]
+  },
+  {
+    "id": "tell-throw-200",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "        return reply(500, { error: `The function for ${kind} ${key} failed, so Siren will send this request again.` });",
+    "replace": "        return reply(200, {});",
+    "expect": "caught",
+    "failing": [
+      "row 5"
+    ]
+  },
+  {
+    "id": "ask-answered-before-reply",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "    return { ...reply(200, {}), after };",
+    "replace": "    await after();\n    return reply(200, {});",
+    "expect": "caught",
+    "failing": [
+      "row 6"
+    ]
+  },
+  {
+    "id": "ask-undefined-posted",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "        if (answer === undefined) return;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "returns nothing posts nothing"
+    ]
+  },
+  {
+    "id": "no-function-200",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "    if (fn === undefined) return reply(404, ",
+    "replace": "    if (fn === undefined) return reply(200, ",
+    "expect": "caught",
+    "failing": [
+      "row 7"
+    ]
+  },
+  {
+    "id": "kind-wide-wins",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "features.get(featureKey(kind, key)) ?? kinds.get(kind)",
+    "replace": "kinds.get(kind) ?? features.get(featureKey(kind, key))",
+    "expect": "caught",
+    "failing": [
+      "wins for its own key"
+    ]
+  },
+  {
+    "id": "event-throw-200",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      return reply(500, { error: `The function for ${event.type} failed, so Siren will send this event again.` });",
+    "replace": "      return reply(200, {});",
+    "expect": "caught",
+    "failing": [
+      "row 8"
+    ]
+  },
+  {
+    "id": "event-unhandled-404",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "    if (fn === undefined) return reply(200, {});",
+    "replace": "    if (fn === undefined) return reply(404, {});",
+    "expect": "caught",
+    "failing": [
+      "row 9"
+    ]
+  },
+  {
+    "id": "answer-sent-once",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "settings.maxAnswerBytes, true);",
+    "replace": "settings.maxAnswerBytes, false);",
+    "expect": "caught",
+    "failing": [
+      "step 3"
+    ]
+  },
+  {
+    "id": "requests-answer-retried",
+    "file": "src/resources/app-requests.ts",
+    "find": "  retriable = false,\n",
+    "replace": "  retriable = true,\n",
+    "expect": "caught",
+    "failing": [
+      "requests.answer() itself stays sent once"
+    ]
+  },
+  {
+    "id": "onError-unguarded",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "    try {\n      settings.onError(error, request);\n    } catch {\n      // An onError that throws must not take the reply or the process with it.\n    }",
+    "replace": "    settings.onError(error, request);",
+    "expect": "caught",
+    "failing": [
+      "never rejects"
+    ]
+  },
+  {
+    "id": "waitUntil-skipped",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      else if (waitUntil !== undefined) waitUntil(after());",
+    "replace": "      else if (waitUntil !== undefined) void after();",
+    "expect": "caught",
+    "failing": [
+      "Workers"
+    ]
+  },
+  {
+    "id": "runLater-skipped",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      if (settings.runLater !== undefined) settings.runLater(after);",
+    "replace": "      if (settings.runLater !== undefined) void after();",
+    "expect": "caught",
+    "failing": [
+      "runLater"
+    ]
+  },
+  {
+    "id": "fastify-json-parser-kept",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "      instance.removeAllContentTypeParsers();\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "Fastify"
+    ]
+  },
+  {
+    "id": "no-body-limit",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "  return size > APP_REQUEST_BODY_LIMIT ? TOO_LARGE : Buffer.concat(chunks);",
+    "replace": "  return Buffer.concat(chunks);",
+    "expect": "caught",
+    "failing": [
+      "413"
+    ]
+  },
+  {
+    "id": "split-step-ignored",
+    "file": "src/resources/app-amounts.ts",
+    "find": "  const step = 10 ** (scale - decimalPlaces);",
+    "replace": "  const step = 1;",
+    "expect": "caught",
+    "failing": [
+      "yen pool"
+    ]
+  },
+  {
+    "id": "split-zero-gives-nothing",
+    "file": "src/resources/app-amounts.ts",
+    "find": "    const each = Math.floor(steps / entries.length) * step;",
+    "replace": "    const each = 0;",
+    "expect": "caught",
+    "failing": [
+      "every weight is 0"
+    ]
+  },
+  {
+    "id": "split-negative-allowed",
+    "file": "src/resources/app-amounts.ts",
+    "find": "!Number.isFinite(weight) || weight < 0)",
+    "replace": "!Number.isFinite(weight))",
+    "expect": "caught",
+    "failing": [
+      "negative or non-finite"
+    ]
+  },
+  {
+    "id": "split-rounds-up",
+    "file": "src/resources/app-amounts.ts",
+    "find": "      : Math.floor((steps * (weight / largest)) / scaledTotal);",
+    "replace": "      : Math.ceil((steps * (weight / largest)) / scaledTotal);",
+    "expect": "caught",
+    "failing": [
+      "fractional weights"
+    ]
+  },
+  {
+    "id": "next-route-node-signature-last",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "  (req: AppNodeRequest, res: NodeResponseLike, next?: unknown): Promise<void>;\n  // The Web signature stays last: Next.js 13 to 15 type-check a route's\n  // `POST` against the last call signature (test/types/next-route.ts).\n  (request: Request, env?: unknown, ctx?: AppWaitUntil): Promise<Response>;",
+    "replace": "  (request: Request, env?: unknown, ctx?: AppWaitUntil): Promise<Response>;\n  (req: AppNodeRequest, res: NodeResponseLike, next?: unknown): Promise<void>;",
+    "expect": "caught",
+    "failing": [
+      "test/types/next-route.ts"
+    ]
+  },
+  {
+    "id": "default-onError-logs-request",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "  console.error(`Siren request handler${describeRequest(request)}:`, error);",
+    "replace": "  console.error(`Siren request handler${describeRequest(request)}:`, error, request);",
+    "expect": "caught",
+    "failing": [
+      "never the data or headers"
+    ]
+  }
+]

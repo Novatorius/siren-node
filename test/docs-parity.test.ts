@@ -345,6 +345,8 @@ const NODE_ONLY = [
   'siren.apps.delete()',
   'siren.apps.verifyRequest()',
   'siren.apps.shownAmount()',
+  'siren.apps.requestHandler()',
+  'siren.apps.splitPool()',
   'siren.apps.requests.retrieve()',
   'siren.apps.requests.list()',
   'siren.apps.requests.resend()',

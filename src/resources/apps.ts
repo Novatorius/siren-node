@@ -1,5 +1,7 @@
 import type { HttpTransport } from '../http';
-import { shownAmount } from './app-amounts';
+import { shownAmount, splitPool } from './app-amounts';
+import { createAppRequestHandler } from './app-request-handler';
+import type { AppRequestHandler, AppRequestHandlerOptions } from './app-request-handler';
 import { answerAppRequest, listAppRequests, resendAppRequest, retrieveAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
@@ -24,6 +26,8 @@ import type {
   DeclareAppParams,
   DeclaredApp,
   ShownAmount,
+  AppSplitPool,
+  AppSplitWeights,
   VerifyAppRequestOptions,
 } from '../record-types';
 import type { AppStatus } from '../taxonomy';
@@ -767,5 +771,66 @@ export class AppsResource {
    */
   shownAmount(value: number, currency: AppCurrency): ShownAmount {
     return shownAmount(value, currency, 'apps.shownAmount()');
+  }
+
+  /**
+   * A handler that answers Siren for the app: it checks each request as
+   * {@link verifyRequest} does, hands it to the function `on(kind, key, fn)`
+   * names, and sends the reply Siren expects. Build the client with the
+   * app's own key, since the handler posts an ask's answer with it.
+   *
+   * ```ts
+   * const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+   * answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => { ... })
+   * express().post('/siren', express.raw({ type: 'application/json' }), answers).listen(3000)
+   * ```
+   *
+   * It replies, always JSON with `Cache-Control: no-store`:
+   *
+   * - 405 to a method other than POST.
+   * - 500 when a body parser already read the body, and tells `onError`
+   *   to mount the handler before the JSON parser.
+   * - 401 when the signature or its time fails `verifyRequest`'s checks.
+   * - 400 when the signed body is not JSON, or an app request is not an
+   *   envelope of version 1.
+   * - For a tell, 200 once the function returns, and 500 when it throws, so
+   *   Siren sends it again.
+   * - For an ask, 200 at once. The function runs after the reply, and the
+   *   answer it returns is posted to `POST /apps/requests/{id}/answer` with
+   *   the client's key, resent on a lost connection, 429 or 5xx within
+   *   `maxRetries`, which is safe because Siren takes the same answer again
+   *   as `duplicate: true`. A refusal (422, 409, 403, 404) goes to
+   *   `onError` and is not resent. A function that returns `undefined`
+   *   leaves the answer to `apps.requests.answer()`.
+   * - 404 `No function handles <kind> <key>.` for a feature with no
+   *   function, so Siren shows the request under Needs attention.
+   * - For any other `X-Siren-Event`, 200 once the `onEvent` function
+   *   returns, 500 when it throws, and 200 when there is none.
+   *
+   * Refuses with `SirenError`, when it is made, a missing signing secret and
+   * a `toleranceSeconds` outside 1 to 3600. It keeps no state.
+   */
+  requestHandler(options: AppRequestHandlerOptions): AppRequestHandler {
+    return createAppRequestHandler(this.http, options, {
+      toleranceSeconds: DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,
+      maxAnswerBytes: MAX_APP_ANSWER_BYTES,
+    });
+  }
+
+  /**
+   * Splits a resolver's pool by weight, for a `distributionResolver` or
+   * `incentiveResolver` answer. Each id gets a whole number of the
+   * currency's steps, `10^(scale - decimalPlaces)` stored units (1 for
+   * dollars, 100 for yen), rounded down so the shares never add up to more
+   * than `pool.value`. When every weight is 0, each id gets the same.
+   * `weights` is an object of id to weight, or a list of `[id, weight]`
+   * pairs. Answers `{ [id]: amount }` with the ids as text. Sends nothing.
+   *
+   * On pool 10000 in dollars with weights 30 and 20 it answers 6000 and
+   * 4000. Throws `SirenError` for a negative or non-finite weight, an id
+   * given twice, and a pool `value` or currency `shownAmount` would refuse.
+   */
+  splitPool(pool: AppSplitPool, weights: AppSplitWeights): Record<string, number> {
+    return splitPool(pool, weights, 'apps.splitPool()');
   }
 }
