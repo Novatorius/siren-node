@@ -294,5 +294,25 @@
     "failing": [
       "fractional weights"
     ]
+  },
+  {
+    "id": "next-route-node-signature-last",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "  (req: AppNodeRequest, res: NodeResponseLike, next?: unknown): Promise<void>;\n  // The Web signature stays last: Next.js 13 to 15 type-check a route's\n  // `POST` against the last call signature (test/types/next-route.ts).\n  (request: Request, env?: unknown, ctx?: AppWaitUntil): Promise<Response>;",
+    "replace": "  (request: Request, env?: unknown, ctx?: AppWaitUntil): Promise<Response>;\n  (req: AppNodeRequest, res: NodeResponseLike, next?: unknown): Promise<void>;",
+    "expect": "caught",
+    "failing": [
+      "test/types/next-route.ts"
+    ]
+  },
+  {
+    "id": "default-onError-logs-request",
+    "file": "src/resources/app-request-handler.ts",
+    "find": "  console.error(`Siren request handler${describeRequest(request)}:`, error);",
+    "replace": "  console.error(`Siren request handler${describeRequest(request)}:`, error, request);",
+    "expect": "caught",
+    "failing": [
+      "never the data or headers"
+    ]
   }
 ]

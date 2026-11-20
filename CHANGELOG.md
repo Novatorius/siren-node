@@ -50,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and are not resent. It mounts on `node:http`, Express, Fastify (`answers.fastify`), a Web
   `Request` (Next.js app routes, Workers with `ctx.waitUntil`, Bun, Deno) and `answers.handle()`.
   No web framework is a dependency.
+  The default `onError` writes one `console.error` line with the kind, key and request id and
+  the error, never the request's data or headers. The handler's Web `Request` call signature is its
+  last, so `export const POST = answers` passes the route check of `next build` on Next.js 13 to 15.
 - `apps.splitPool(pool, weights)` splits a resolver's pool by weight in whole steps of the
   currency, rounded down so the shares never pass `pool.value`, and evenly when every weight is 0.
   It refuses a negative or non-finite weight and an id given twice with `SirenError`.

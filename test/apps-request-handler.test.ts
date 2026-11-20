@@ -493,19 +493,46 @@ describe('apps-answer-handler: section 3.2, posting an ask\'s answer', () => {
     await expect(result.after!()).resolves.toBeUndefined();
   });
 
-  it('logs with console.error when no onError is given', async () => {
+  it("logs with console.error when no onError is given, naming only the kind, key and request id, never the data or headers", async () => {
     const http = new FakeHttpClient([ACCEPTED()]);
     const siren = new Siren({ apiKey: TEST_API_KEY, baseUrl: BASE, httpClient: http });
     const answers = siren.apps.requestHandler({ signingSecret: SECRET });
-    const failure = new Error('no');
+    const failure = new Error('the CRM is down');
     answers.on('postConversionAction', () => {
+      throw failure;
+    });
+    answers.onEvent('conversion.approved', () => {
       throw failure;
     });
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       const raw = body('postConversionAction');
       expect((await answers.handle({ method: 'POST', headers: signed(raw), rawBody: raw })).status).toBe(500);
-      expect(log).toHaveBeenCalledWith(failure, expect.objectContaining({ id: ID }));
+      const event = JSON.stringify({ conversionId: 1042, email: 'flo@example.com' });
+      const eventHeaders = signed(event, 'conversion.approved', now(), { 'X-Siren-Delivery': 'evt_7' });
+      expect((await answers.handle({ method: 'POST', headers: eventHeaders, rawBody: event })).status).toBe(500);
+      expect(log.mock.calls).toEqual([
+        [`Siren request handler (postConversionAction tell-the-crm ${ID}):`, failure],
+        ['Siren request handler (conversion.approved evt_7):', failure],
+      ]);
+      const written = JSON.stringify(log.mock.calls.map((call) => call.map(String)));
+      for (const secret of ['1042', 'flo@example.com', 'Partner program', SECRET, 'X-Siren-Signature']) {
+        expect(written, secret).not.toContain(secret);
+      }
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('logs the 500 for a parsed body with no request to name', async () => {
+    const http = new FakeHttpClient([ACCEPTED()]);
+    const siren = new Siren({ apiKey: TEST_API_KEY, baseUrl: BASE, httpClient: http });
+    const answers = siren.apps.requestHandler({ signingSecret: SECRET });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const raw = body('postConversionAction');
+      await answers.handle({ method: 'POST', headers: signed(raw), rawBody: JSON.parse(raw) as unknown });
+      expect(log.mock.calls).toEqual([['Siren request handler:', expect.any(SirenError)]]);
     } finally {
       log.mockRestore();
     }

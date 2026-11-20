@@ -1302,8 +1302,10 @@ stream itself, up to 1 MiB. With a Web `Request` it answers a `Response`. An ask
 process after the reply on a Node server, goes to `ctx.waitUntil` when a Worker passes it as the
 third argument, and otherwise runs as a promise nothing awaits. A function host such as Vercel may
 stop that promise, so pass `runLater: after` from `next/server` there, or any function that takes
-the work, such as a queue's. From `handle()`, send the reply and then run `after()`. `onError`
-defaults to `console.error`.
+the work, such as a queue's. From `handle()`, send the reply and then run `after()`. By default
+`onError` writes one `console.error` line with the kind, key and request id, or an event's type and
+delivery id, and the error. It never writes the request's data or headers. In TypeScript, the Web
+`Request` signature is the handler's last, so Next.js 13 to 15 accept `export const POST = answers`.
 
 ### Check and answer by hand
 

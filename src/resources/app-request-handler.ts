@@ -53,7 +53,9 @@ export interface AppRequestHandlerOptions {
    * Gets every error the handler does not show Siren: a function that threw,
    * an answer that broke the rules, Siren's refusal of an answer, and a body
    * a parser already read. `request` is the checked request or event, when
-   * there is one. Default `console.error`.
+   * there is one. The default writes one `console.error` line with the
+   * kind, key and request id (or the event's type and delivery id) and the
+   * error, never the request's data or headers.
    */
   onError?: (error: unknown, request?: AppRequest | WebhookEvent) => void;
 }
@@ -148,8 +150,10 @@ export type AppFunctionFor<K extends string> = K extends keyof AppFeatureFunctio
  * third argument.
  */
 export interface AppRequestHandler {
-  (request: Request, env?: unknown, ctx?: AppWaitUntil): Promise<Response>;
   (req: AppNodeRequest, res: NodeResponseLike, next?: unknown): Promise<void>;
+  // The Web signature stays last: Next.js 13 to 15 type-check a route's
+  // `POST` against the last call signature (test/types/next-route.ts).
+  (request: Request, env?: unknown, ctx?: AppWaitUntil): Promise<Response>;
   /**
    * Hands the requests for one feature, by kind and key, to `fn`. A tell's
    * `fn` returns nothing, and the reply waits for it. An ask's `fn` returns
@@ -414,9 +418,21 @@ export function createAppRequestHandler(
   return self;
 }
 
+/**
+ * Writes one console line naming what failed, as the PHP SDK's default
+ * does: the kind, key and request id of an app request, or the type and
+ * delivery id of an event, then the error. Never the request's data or
+ * headers, which hold the app's business data.
+ */
 function defaultOnError(error: unknown, request?: AppRequest | WebhookEvent): void {
-  if (request === undefined) console.error(error);
-  else console.error(error, request);
+  console.error(`Siren request handler${describeRequest(request)}:`, error);
+}
+
+/** ` (<kind> <key> <id>)` for an app request, ` (<type> <delivery id>)` for an event, and nothing without one. */
+function describeRequest(request: AppRequest | WebhookEvent | undefined): string {
+  if (request === undefined) return '';
+  if ('item' in request) return ` (${request.item.kind} ${request.item.key} ${request.id})`;
+  return ` (${[request.type, request.deliveryId].filter((part) => part !== undefined).join(' ')})`;
 }
 
 function featureKey(kind: string, key: string): string {

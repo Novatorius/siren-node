@@ -86,6 +86,10 @@ does not silently drop a function. The handler routes by the envelope's
 The work after the reply never rejects, and an `onError` that throws is
 caught.
 
+The default `onError` writes one `console.error` line, `Siren request handler
+(<kind> <key> <id>):` or `(<type> <delivery id>):`, and the error, as the
+PHP SDK's default does. It never writes the request's data or headers.
+
 ## Mounting it
 
 | Host | Call | Body | The ask's work |
@@ -96,6 +100,11 @@ caught.
 | Next.js app route, Bun, Deno, Hono | `export const POST = answers` | `request.arrayBuffer()`, or 500 when `bodyUsed` | A promise nothing awaits |
 | Cloudflare Workers | `export default { fetch: answers }` | The same | `ctx.waitUntil()` from the third argument |
 | Anything else | `await answers.handle({ method, headers, rawBody })` | `rawBody` as given | The caller runs `after()` |
+
+Node's `(req, res)` call signature comes first and the Web `Request` one
+last, because Next.js 13 to 15 check a route's `POST` against the last
+signature. test/types/next-route.ts runs that check, copied from Next.js
+15.1.0's types plugin, under `npm run typecheck`.
 
 `runLater`, when given, takes the work on every host instead, so Vercel
 passes Next.js's `after`. No web framework is a dependency. Express and
