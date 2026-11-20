@@ -1070,8 +1070,15 @@ export interface RemovedAppItem {
   item: AppItemPage | null;
 }
 
-/** A new feature, as `apps.items.create()` takes it. */
-export type CreateAppItemParams = AppItemDeclaration;
+/**
+ * A new feature, as `apps.items.create()` takes it: a declaration whose
+ * `key` may be left out. Siren then makes the key from the name, adding
+ * `-2`, `-3` when the app already holds it.
+ */
+export type CreateAppItemParams = Omit<AppItemDeclaration, 'key'> & {
+  /** Lowercase letters and digits joined by single dashes, at most 64. Left out, Siren makes it from `name`. */
+  key?: string;
+};
 
 /** The fields `apps.items.update()` changes. A feature's kind and key never change. */
 export interface UpdateAppItemParams {

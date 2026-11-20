@@ -263,8 +263,9 @@ export class AppItemsResource {
    * meets.
    *
    * Refuses with `SirenError` before sending: a bad app key, params that are
-   * not an object, any field but {@link CREATE_FIELDS}, no `kind`, `key` or
-   * `name`, and the old kind `fulfillmentMethod`. Siren answers 422 with the
+   * not an object, any field but {@link CREATE_FIELDS}, no `kind` or `name`,
+   * and the old kind `fulfillmentMethod`. With no `key`, the body carries
+   * none and Siren makes it from the name, unique within the app. Siren answers 422 with the
    * field for the rest, 409 `app_items_need_key_and_address` with
    * `data.missing` when the app lacks a key or an address, and 404 for an
    * app the organization lacks. Throws `UnexpectedResponseError` when the
@@ -274,7 +275,7 @@ export class AppItemsResource {
     const path = `${appPath(appKey, 'apps.items.create()')}/items`;
     if (!isJsonObject(params)) throw new SirenError('Siren: apps.items.create() needs the feature as an object.');
     const sent = pickFields(params, AppItemsResource.CREATE_FIELDS, (field) => `Siren: apps.items.create() does not take ${field}.`);
-    for (const field of ['kind', 'key', 'name']) {
+    for (const field of ['kind', 'name']) {
       if (sent[field] == null) throw new SirenError(`Siren: apps.items.create() needs a ${field}.`);
     }
     checkKind(sent.kind, 'apps.items.create()', '');

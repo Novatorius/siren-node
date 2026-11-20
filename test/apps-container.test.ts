@@ -217,12 +217,26 @@ describe('apps-sdk-container: one feature', () => {
     await expectSentOnce((transport) => new AppsResource(transport).items.delete(KEY, 12), reply(200, { archived: false, item: null }));
   });
 
+  it('creates a feature with no key, sending no key field, so Siren makes it from the name (AP-R76)', async () => {
+    for (const params of [
+      { kind: 'postConversionAction' as const, name: 'Tell the CRM' },
+      { kind: 'postConversionAction' as const, key: undefined, name: 'Tell the CRM' },
+    ]) {
+      const { http, apps: resource } = apps([reply(201, itemPage({ kind: 'postConversionAction', key: 'tell-the-crm-2', name: 'Tell the CRM' }))]);
+      const made = await resource.items.create(KEY, params);
+      expect(made.key).toBe('tell-the-crm-2');
+      expect(http.requests.map((request) => `${request.method} ${pathOf(request)}`)).toEqual([`POST /apps/${KEY}/items`]);
+      expect(bodyOf(http.requests[0])).toEqual({ kind: 'postConversionAction', name: 'Tell the CRM' });
+      expect(Object.keys(bodyOf(http.requests[0]) as object)).not.toContain('key');
+    }
+  });
+
   it("refuses a change to a feature's kind or key, the old payout kind, and a bad id, before sending", async () => {
     const runs: Array<[(resource: AppsResource) => Promise<unknown>, RegExp]> = [
       [(resource) => resource.items.update(KEY, 12, { kind: 'postConversionAction' } as never), /never change/],
       [(resource) => resource.items.update(KEY, 12, { key: 'other' } as never), /never change/],
       [(resource) => resource.items.create(KEY, { kind: 'fulfillmentMethod' as never, key: 'l', name: 'L' }), /payoutMethod/],
-      [(resource) => resource.items.create(KEY, { kind: 'payoutMethod', name: 'L' } as never), /needs a key/],
+      [(resource) => resource.items.create(KEY, { kind: 'payoutMethod', key: 'l' } as never), /needs a name/],
       [(resource) => resource.items.retrieve(KEY, 0), /id/],
       [(resource) => resource.items.delete('kinds', 12), /never requests/],
     ];

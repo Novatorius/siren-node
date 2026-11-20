@@ -1176,8 +1176,9 @@ The dashboard changes an app one part at a time, and so can you:
   `apps.deliveries(key)` reads the address's latest 50 deliveries.
 - `apps.items.create(key, feature)`, `apps.items.retrieve(key, id)`, `apps.items.update(key, id,
   change)` and `apps.items.delete(key, id)` add, read, change and remove one feature. `retrieve`
-  answers how many records select it in `uses`, and which in `usedBy`. `update` refuses a change to
-  its `kind` or `key`.
+  answers how many records select it in `uses`, and which in `usedBy`. `create` may leave out `key`,
+  and Siren then makes it from the name, adding `-2` when the app already holds it. `update` refuses
+  a change to its `kind` or `key`.
 - `apps.events()`, `apps.scopes()` and `apps.kinds()` read the events an address may receive, the
   scopes a key may hold, and the kinds of feature with their settings.
 
