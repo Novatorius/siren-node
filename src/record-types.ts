@@ -1019,6 +1019,12 @@ export interface DeclareAppParams {
   scopes?: string[];
   /** Ordinary webhook events the app also receives at the same address with the same secret. They need a `url`. */
   events?: string[];
+  /**
+   * The problem contacts: email addresses Siren tells when something is
+   * wrong with the app, at most ten. Unlike the other fields, left out it
+   * keeps the app's own, and `[]` leaves none.
+   */
+  contacts?: string[];
   items?: AppItemDeclaration[];
 }
 
@@ -1138,6 +1144,12 @@ export interface App {
   events: string[];
   /** The active key's scopes, `[]` with no key. */
   scopes: string[];
+  /**
+   * The problem contacts, lowercased email addresses, `[]` when the app
+   * names none and the org's admins hear instead. A Siren older than the
+   * field leaves it out.
+   */
+  contacts?: string[];
   /** The first 16 characters of the app's key, `sk_test_` or `sk_live_` and 8 more, or null with no key. */
   apiKeyPrefix: string | null;
   /** The active key, or null when the app holds none. */
@@ -1196,6 +1208,8 @@ export interface CreateAppParams {
   scopes?: string[] | null;
   /** The events Siren sends to the address. They need a `url`. */
   events?: string[] | null;
+  /** The problem contacts, email addresses Siren tells when something is wrong with the app. */
+  contacts?: string[] | null;
 }
 
 /** What `apps.create()` answers: the app, `rawKey` when it made a key and `signingSecret` when it made an address. */
@@ -1211,6 +1225,8 @@ export interface UpdateAppParams {
   url?: string | null;
   events?: string[];
   scopes?: string[];
+  /** Replaces the problem contacts. `[]` leaves none, and the org's admins hear instead. */
+  contacts?: string[];
 }
 
 /** What `apps.update()` answers: the app, and `signingSecret` when the change made an address. */

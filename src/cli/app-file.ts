@@ -16,6 +16,7 @@ import { kindLabel } from './app-kinds';
  *         "url": "${SIREN_APP_URL}",
  *         "scopes": [],
  *         "events": [],
+ *         "contacts": ["ops@example.com"],
  *         "items": {
  *           "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
  *           "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"] },
@@ -64,6 +65,13 @@ export interface AppFileApp {
   url?: string;
   scopes?: string[];
   events?: string[];
+  /**
+   * The problem contacts: email addresses Siren tells when something is
+   * wrong with the app, at most ten. Left out, the app keeps the contacts it
+   * has, such as ones a person added in the dashboard. With none, the org's
+   * admins hear instead.
+   */
+  contacts?: string[];
   items?: Record<string, AppFileItem>;
 }
 
@@ -133,6 +141,7 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
   if (app.url !== undefined) params.url = app.url;
   if (app.scopes !== undefined) params.scopes = [...app.scopes];
   if (app.events !== undefined) params.events = [...app.events];
+  if (app.contacts !== undefined) params.contacts = storedContacts(app.contacts);
   if (app.items !== undefined) {
     params.items = Object.entries(app.items).map(([itemKey, item]) => {
       const declared: AppItemDeclaration = { kind: item.kind, key: itemKey, name: item.name };
@@ -200,7 +209,26 @@ const RECIPE_KEYS = [
 ];
 
 /** The fields `PUT /apps/{key}` reads (DeclareApp.php). */
-const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'items'];
+const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'items'];
+
+/** The most problem contacts an app may hold, `AppService::MAX_CONTACTS`. */
+export const MAX_CONTACTS = 10;
+
+/** An email address in its plainest shape. Siren checks each one fully when the file is applied. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Problem contacts as Siren stores them: trimmed, lowercased, blanks left
+ * out, each once, in the order given (`AppService::validatedContacts()`).
+ */
+export function storedContacts(contacts: readonly string[]): string[] {
+  const clean: string[] = [];
+  for (const contact of contacts) {
+    const address = contact.trim().toLowerCase();
+    if (address !== '' && !clean.includes(address)) clean.push(address);
+  }
+  return clean;
+}
 
 /** The fields Siren stores for a feature (AppService, "Items"). */
 const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'];
@@ -564,6 +592,7 @@ class AppFileCheck {
         this.problem(`${path}.${list}`, this.where(`${path}.${list}`), `${path}.${list} must be a list of text.`);
       }
     }
+    if (app.contacts !== undefined) this.checkContacts(`${path}.contacts`, app.contacts);
     if (app.items === undefined) return;
     if (!isObject(app.items)) {
       this.problem(`${path}.items`, this.where(`${path}.items`), `${path}.items must be an object that holds each feature under its feature key.`);
@@ -578,6 +607,21 @@ class AppFileCheck {
       );
     }
     for (const [itemKey, item] of Object.entries(app.items)) this.checkItem(`${path}.items.${itemKey}`, itemKey, item);
+  }
+
+  /** The problem contacts: a list of at most {@link MAX_CONTACTS} email addresses, counted once each. */
+  private checkContacts(path: string, contacts: unknown): void {
+    if (!isTextList(contacts)) {
+      this.problem(path, this.where(path), `${path} must be a list of email addresses.`);
+      return;
+    }
+    contacts.forEach((contact, index) => {
+      const at = `${path}.${index}`;
+      if (contact.trim() !== '' && !EMAIL.test(contact.trim())) this.problem(at, this.where(at), `${at} is not an email address.`);
+    });
+    if (storedContacts(contacts).length > MAX_CONTACTS) {
+      this.problem(path, this.where(path), `${path} holds more than ${MAX_CONTACTS} addresses, and an app may have at most ${MAX_CONTACTS} problem contacts.`);
+    }
   }
 
   private checkItem(path: string, itemKey: string, entry: unknown): void {

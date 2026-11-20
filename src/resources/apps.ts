@@ -361,14 +361,14 @@ function checkedItem(body: Record<string, unknown>, route: string): AppItemPage 
  * other with `SirenError` before sending.
  */
 export class AppsResource {
-  /** The fields `declare()` sends, the six `PUT /apps/{key}` reads (DeclareApp.php). */
-  static readonly DECLARE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'items'] as const;
+  /** The fields `declare()` sends, the seven `PUT /apps/{key}` reads (DeclareApp.php). */
+  static readonly DECLARE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'items'] as const;
   /** The fields `declare()` sends for each item, those Siren stores (apps-records.md, "Item settings"), a custom event's `fields` and `domains` included. */
   static readonly ITEM_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'] as const;
   /** The fields `create()` sends, those `POST /apps` reads but `items`, which it refuses (CreateApp.php). */
-  static readonly CREATE_FIELDS = ['name', 'description', 'url', 'scopes', 'events'] as const;
+  static readonly CREATE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts'] as const;
   /** The fields `update()` sends, those `PATCH /apps/{key}` reads but `items`, which it refuses (EditApp.php). */
-  static readonly UPDATE_FIELDS = ['name', 'description', 'url', 'events', 'scopes'] as const;
+  static readonly UPDATE_FIELDS = ['name', 'description', 'url', 'events', 'scopes', 'contacts'] as const;
 
   /** The requests Siren sent the org's apps. */
   readonly requests: AppRequestsResource;
