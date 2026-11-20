@@ -342,6 +342,33 @@ export async function writeRecord<T>(
 }
 
 /**
+ * Sends a write as {@link writeRecord} does, but marked retriable, so the
+ * transport sends it again on a lost connection, 429 or 5xx within the
+ * client's `maxRetries`. Only for a write Siren takes again as the same
+ * one, such as an app's answer, which the answer route takes a second time
+ * as `duplicate: true`. Throws `UnexpectedResponseError` when a 2xx body is
+ * not a JSON object.
+ *
+ * @internal
+ */
+export async function writeRecordResent<T>(
+  http: Transport,
+  method: RecordWriteMethod,
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const response = await http.request({ method, path, body, retriable: true });
+  const answer = await parseJsonBody(response);
+  if (!isJsonObject(answer)) {
+    throw new UnexpectedResponseError(`Siren answered ${method} ${path} with a body that is not a JSON object.`, {
+      statusCode: response.status,
+      data: answer,
+    });
+  }
+  return answer as T;
+}
+
+/**
  * Sends a write once, as {@link writeRecord} does, for a route that answers a
  * bare JSON array, such as the member writes on
  * `/collaborator-groups/{id}/members`. Throws `UnexpectedResponseError` when

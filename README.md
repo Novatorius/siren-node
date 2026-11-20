@@ -24,7 +24,7 @@ This SDK is the Node.js and TypeScript integration point for Siren. In a few lin
 - **Verify signed webhooks** (`webhooks.constructEvent`) so you can trust inbound deliveries.
 - **Read the ledger** (`conversions`, `transactions`, `obligations`, `payouts`, `fulfillments`) and
   **manage webhook subscriptions** with an API key that holds the ledger and webhook scopes.
-- **Build a Siren app** (`apps`, `apps.verifyRequest`, `apps.requests.answer`) that acts as part of
+- **Build a Siren app** (`apps`, `apps.requestHandler`, `apps.verifyRequest`, `apps.requests.answer`) that acts as part of
   Siren's engine, and declare it with the `siren` command-line tool.
 
 It runs on Node 18.3+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
@@ -657,7 +657,7 @@ as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the eleven sc
 ### Node methods the PHP SDK does not have yet
 
 Each method below calls a route Siren serves today, or, for `siren.apps`, a route the Siren apps
-work adds. `siren.apps.verifyRequest()` and `siren.apps.shownAmount()` read what Siren sends an app
+work adds. `siren.apps.verifyRequest()`, `siren.apps.shownAmount()` and `siren.apps.splitPool()` read what Siren sends an app
 and send nothing. Neither PHP 0.3.0 nor the PHP SDK's next release has a method for it. The PHP SDK is to
 gain each one under the same name. The `siren` command-line tool ships with this package only.
 
@@ -686,6 +686,8 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
 | `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
 | `siren.apps.shownAmount()` | None. It reads the value and currency of a tell, which Siren sends as `POST /` to the app's own address | Reads a stored amount and its currency as a person reads them, such as `$15.00` for 1500 in dollars and `¥100` for 10000 in yen. |
+| `siren.apps.requestHandler()` | `POST /` at the app's own address, sent by Siren, then `POST /apps/requests/{id}/answer` | Checks each request, hands it to the app's function for its kind and key, replies, and posts an ask's answer. |
+| `siren.apps.splitPool()` | None. It splits the pool of a resolver's ask, which Siren sends as `POST /` to the app's own address | Splits a pool by weight in whole currency steps, never past the pool, evenly when every weight is 0. |
 | `siren.apps.requests.list()` | `GET /apps/requests` | Lists the latest requests Siren sent the organization's apps. |
 | `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` | Reads one request, however old, with the data Siren sent, the answer it took and the person who answered by hand. |
 | `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
@@ -1196,6 +1198,118 @@ for a key, `apps.update()` for an address's url and events, `apps.deliveries()` 
 and `apps.test()` for a test. Siren already refuses the webhook routes for an address an app owns.
 These calls go when Siren removes their routes. `siren.webhooks.constructEvent()` and
 `verifySignature()` stay, since an app's address receives events signed the same way.
+
+### Answer Siren in a few lines
+
+`apps.requestHandler()` answers Siren for you. Register a function for each feature by its kind and
+key, and mount the handler at the app's address. It checks each request's signature, hands the
+request to the function, and sends the reply Siren expects. For an ask, it replies 200 at once and
+posts the answer the function returns.
+
+```js
+import express from 'express'
+import { Siren } from '@novatorius/siren'
+
+const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: 'https://cloud.example.com/siren/v1' })
+const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+
+answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
+  // Siren may send it twice, so add it once, keyed by id.
+  await addToCrm(id, data.conversion, data.reward)
+})
+
+express().post('/siren', express.raw({ type: 'application/json' }), answers).listen(3000)
+```
+
+Only the function changes for the other kinds. An Action after an allocation (`postAllocationAction`)
+is a tell too:
+
+```js
+answers.on('postAllocationAction', 'note-the-share', async ({ id, data }) => {
+  // Siren may send it twice, so note it once, keyed by id.
+  await noteShare(id, data.allocation)
+})
+```
+
+A Distribution resolver (`distributionResolver`) and an Incentive resolver (`incentiveResolver`) are
+asks. The function returns the answer, and `apps.splitPool()` works out each share:
+
+```js
+answers.on('distributionResolver', 'split-by-score', ({ data }) => ({
+  outcome: 'allocated',
+  units: data.pool.units,
+  // Whole currency steps, never more than the pool, split evenly when every score is 0.
+  shares: siren.apps.splitPool(data.pool, data.metrics.map((metric) => [metric.metricId, metric.score])),
+}))
+```
+
+```js
+answers.on('incentiveResolver', 'split-the-reward', ({ data }) => ({
+  outcome: 'rewards',
+  units: data.pool.units,
+  rewards: siren.apps.splitPool(data.pool, data.conversions.map((conversion) => [conversion.conversionId, conversion.score])),
+}))
+```
+
+On Siren's sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
+`{ '41': 6000, '43': 4000 }`. Each share is a whole number of the currency's smallest shown unit,
+`10 ** (scale - decimalPlaces)` stored units, so a yen pool splits in multiples of 100. Every share
+is rounded down, so the shares never add up to more than the pool. When every weight is 0, each id
+gets the same. A negative or non-finite weight throws `SirenError`. `weights` is an object of id to
+weight or a list of `[id, weight]` pairs.
+
+`on(kind, fn)` takes every feature of a kind that no `on(kind, key, fn)` names, and
+`onEvent(type, fn)` takes a webhook event sent to the same address, such as `conversion.approved`.
+Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
+`AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The client must be built with
+the app's own key, since the handler posts answers with it.
+
+What the handler replies, always JSON with `Cache-Control: no-store`:
+
+| Request | Reply | What happens next |
+|---|---|---|
+| A method other than POST | 405 | Nothing. |
+| A body a parser already turned into an object | 500 | `onError` gets a `SirenError` that says to mount the handler before the JSON parser, or to give the route a raw body. |
+| A missing or wrong `X-Siren-Signature-V2`, another `X-Siren-Timestamp`, or a time more than `toleranceSeconds` (default 300) from the clock | 401 | The checks are `verifyRequest`'s own. |
+| A signed body that is not JSON, or an app request that is not an envelope of version 1 | 400 | Nothing. |
+| A tell with a function | 200 once the function returns, 500 when it throws | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. The function has Siren's 8 seconds. |
+| An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `undefined`, answer later with `apps.requests.answer()`. |
+| An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
+| Another event with an `onEvent` function | 200 once it returns, 500 when it throws | Nothing more. |
+| Another event with no function | 200 | Nothing. |
+
+The answer goes to `POST /apps/requests/{id}/answer`, checked first as `apps.requests.answer()`
+checks it. A lost connection, 429 or 5xx sends the same answer again within the client's
+`maxRetries`, which is safe because Siren takes the same answer again as `duplicate: true`. Siren's
+refusals go to `onError` as the SDK's typed errors and are not sent again: 422
+`app_answer_invalid`, 409 `app_request_already_answered` and `app_request_dropped`, 403 and 404.
+When the function throws or no answer lands, Siren asks again after `answerBy`. The handler keeps
+no state, and Siren may deliver one request twice, so a tell's function writes once by `id`.
+
+Mount it on any server. None is a dependency of this package.
+
+```ts
+http.createServer(answers)                                              // node:http
+app.post('/siren', express.raw({ type: 'application/json' }), answers)  // Express, Connect
+fastify.register(answers.fastify, { path: '/siren' })                   // Fastify, with its own raw body parser
+export const POST = answers                                             // Next.js app route
+export default { fetch: answers }                                       // Workers, Bun, Deno, Hono
+const reply = await answers.handle({ method, headers, rawBody })        // anything else: { status, headers, body, after }
+```
+
+With Node's `(req, res)` it reads a Buffer or string a raw parser left in `req.body`, or reads the
+stream itself, up to 1 MiB. With a Web `Request` it answers a `Response`. An ask's work runs in the
+process after the reply on a Node server, goes to `ctx.waitUntil` when a Worker passes it as the
+third argument, and otherwise runs as a promise nothing awaits. A function host such as Vercel may
+stop that promise, so pass `runLater: after` from `next/server` there, or any function that takes
+the work, such as a queue's. From `handle()`, send the reply and then run `after()`. `onError`
+defaults to `console.error`.
+
+### Check and answer by hand
+
+The handler above runs the same checks and the same answer post as `apps.verifyRequest()` and
+`apps.requests.answer()` below. Call them yourself when the app queues the work or answers after a
+person decides. An ask's function that returns `undefined` leaves its answer to this path.
 
 ### Check a request
 

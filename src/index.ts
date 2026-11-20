@@ -138,6 +138,19 @@ export { FulfillmentsResource } from './resources/fulfillments';
 export { AppItemKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
 export { AppSource } from './taxonomy';
 export { AppErrorCode, appErrorCode } from './errors';
+export type {
+  AppRequestHandler,
+  AppRequestHandlerOptions,
+  AppRequestInput,
+  AppRequestReply,
+  AppNodeRequest,
+  AppWaitUntil,
+  AppFastifyPlugin,
+  AppFastifyInstance,
+  AppFastifyRequest,
+  AppFastifyReply,
+  AppFunctionFor,
+} from './resources/app-request-handler';
 export {
   AppsResource,
   AppItemsResource,

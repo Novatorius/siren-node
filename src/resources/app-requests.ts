@@ -12,7 +12,7 @@ import type {
 } from '../record-types';
 import { AppRequestStatus } from '../taxonomy';
 import type { WebhookHeaders } from '../types';
-import { isJsonObject, readObject, writeRecord } from './record-requests';
+import { isJsonObject, readObject, writeRecord, writeRecordResent } from './record-requests';
 import { readHeader } from './webhooks';
 
 /*
@@ -31,8 +31,8 @@ const REQUEST_ID = /^apr_[0-9a-f]{32}$/;
 /** The statuses `GET /apps/requests?status=` reads. */
 const REQUEST_STATUSES: readonly string[] = Object.values(AppRequestStatus);
 
-/** The longest tolerance `verifyRequest` takes, an hour. */
-const MAX_TOLERANCE_SECONDS = 3600;
+/** The longest tolerance `verifyRequest` and `requestHandler` take, an hour. @internal */
+export const MAX_TOLERANCE_SECONDS = 3600;
 
 /**
  * Returns `id` when it is a request key. Otherwise throws `SirenError`
@@ -132,6 +132,11 @@ export async function resendAppRequest(http: Pick<HttpTransport, 'request'>, id:
  * JSON. Throws `UnexpectedResponseError` when a 2xx body is not
  * `{ status: 'accepted' }` with an optional boolean `duplicate`.
  *
+ * `retriable` is true only from `apps.requestHandler()`, which resends the
+ * very same answer on a lost connection, 429 or 5xx within the client's
+ * `maxRetries`. Siren takes the same answer again as `duplicate: true`, so
+ * the resend is safe there. `apps.requests.answer()` sends once.
+ *
  * @internal
  */
 export async function answerAppRequest(
@@ -139,6 +144,7 @@ export async function answerAppRequest(
   id: string,
   answer: AppAnswer,
   maxBytes: number,
+  retriable = false,
 ): Promise<AppAnswerReceipt> {
   const method = 'apps.requests.answer()';
   const key = appRequestId(id, method);
@@ -171,7 +177,9 @@ export async function answerAppRequest(
   };
   let reply: Record<string, unknown>;
   try {
-    reply = await writeRecord<Record<string, unknown>>(sending, 'POST', path, copy);
+    reply = retriable
+      ? await writeRecordResent<Record<string, unknown>>(sending, 'POST', path, copy)
+      : await writeRecord<Record<string, unknown>>(sending, 'POST', path, copy);
   } catch (error) {
     throw unauthorizedAnswer(error);
   }
@@ -264,6 +272,27 @@ export function verifyAppRequest(
     );
   }
 
+  const { t, bytes } = checkSignedDelivery(rawBody, headers, secret, tolerance, now);
+  return appRequestFrom(bytes, t, headers);
+}
+
+/**
+ * The checks every delivery Siren signs gets, in `verifyRequest`'s order
+ * after `X-Siren-Event`: the V2 header, `X-Siren-Timestamp`, the signature,
+ * then the time window. Answers the signed time and the body's bytes.
+ * Throws `SignatureVerificationError` at the first check that fails.
+ * `apps.requestHandler()` runs the same checks on an app request and on
+ * any other event.
+ *
+ * @internal
+ */
+export function checkSignedDelivery(
+  rawBody: string | Uint8Array,
+  headers: WebhookHeaders,
+  secret: string,
+  tolerance: number,
+  now: number,
+): { t: number; bytes: Buffer } {
   const v2 = readHeader(headers, 'X-Siren-Signature-V2');
   if (v2 === undefined) throw new SignatureVerificationError('The request has no X-Siren-Signature-V2 header.');
   const { t, signatures } = readSignatureHeader(v2);
@@ -289,7 +318,18 @@ export function verifyAppRequest(
       `The request's signed timestamp is more than ${tolerance} seconds from this machine's clock, so it may be a replay. Check the clock if every request fails.`,
     );
   }
+  return { t, bytes };
+}
 
+/**
+ * Reads a checked body as an app request: JSON, and an envelope of version
+ * 1, with the signed `t` as `timestamp` and `X-Siren-Delivery` as
+ * `deliveryId`. Throws `SignatureVerificationError` for a body that is
+ * not JSON or not such an envelope.
+ *
+ * @internal
+ */
+export function appRequestFrom(bytes: Buffer, t: number, headers: WebhookHeaders): AppRequest {
   let parsed: unknown;
   try {
     parsed = JSON.parse(bytes.toString('utf8')) as unknown;

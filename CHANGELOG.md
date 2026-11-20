@@ -38,6 +38,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError })` answers Siren for an
+  app in a few lines. `on(kind, key, fn)` and `on(kind, fn)` register a function per feature, and
+  `onEvent(type, fn)` one per webhook event at the same address. It checks each request as
+  `apps.verifyRequest()` does and replies 405 to a method other than POST, 500 to a body a parser
+  already read, 401 to a failed signature or time check, 400 to a body that is not JSON or not an
+  envelope of version 1, and 404 `No function handles <kind> <key>.` to a feature with no function.
+  A tell gets 200 once its function returns and 500 when it throws. An ask gets 200 at once, and
+  the answer its function returns is posted to `POST /apps/requests/{id}/answer`, resent on a lost
+  connection, 429 or 5xx within `maxRetries`. Siren's refusals (422, 409, 403, 404) go to `onError`
+  and are not resent. It mounts on `node:http`, Express, Fastify (`answers.fastify`), a Web
+  `Request` (Next.js app routes, Workers with `ctx.waitUntil`, Bun, Deno) and `answers.handle()`.
+  No web framework is a dependency.
+- `apps.splitPool(pool, weights)` splits a resolver's pool by weight in whole steps of the
+  currency, rounded down so the shares never pass `pool.value`, and evenly when every weight is 0.
+  It refuses a negative or non-finite weight and an id given twice with `SirenError`.
+- Types `AppDistributionQuestion`, `AppDistributionMetric`, `AppDistributionAnswer`,
+  `AppFeatureFunctions`, `AppRequestFunction`, `AppEventFunction`, `AppSplitPool`,
+  `AppSplitWeights`, `AppRequestHandler`, `AppRequestHandlerOptions`, `AppRequestInput`,
+  `AppRequestReply` and the mount types. `AppTell` and `AppAsk` take the kind's data as a type
+  argument, `Record<string, unknown>` by default.
+
 - `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
   the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to
