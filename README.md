@@ -1114,6 +1114,8 @@ chooses a built-in one:
 | Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
 | Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
 | Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
+| Engagement calculation (`engagementCalculation`) | a program's engagement type | An ask who earns each engagement, answered `{ outcome: 'engagements', results }`. |
+| Customer filter for programs (`engagementFilter`) | a program | An ask whether each engagement may be made, answered `allow` or `suppress`. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1265,7 +1267,8 @@ weight or a list of `[id, weight]` pairs.
 Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
 `AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The metric kinds are typed the same
 way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
-`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. The client must be built with
+`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. `on('engagementCalculation', ...)`
+returns `AppEngagementCalculationAnswer` and `on('engagementFilter', ...)` returns `AppEngagementFilterAnswer`. The client must be built with
 the app's own key, since the handler posts answers with it.
 
 What the handler replies, always JSON with `Cache-Control: no-store`:
@@ -1466,6 +1469,39 @@ if (request.mode === 'ask' && request.item.kind === 'metricFilter') {
     : { outcome: 'allow' };
   await appSiren.apps.requests.answer(request.id, answer);
 }
+```
+
+### Answer an engagement ask
+
+An Engagement calculation (`engagementCalculation`) gets `AppEngagementCalculationQuestion` each time
+an engagement triggers for a program whose engagement type picks it: the `program`, the
+`engagementType`, the `programEngagementTypeId`, the `args` a person gave that engagement type, the
+`opportunity` with the `customerId` Siren matched it to (or null), the `triggeringCollaborator` and
+the `cause`. The cause's `id` is the trigger's own random id, its `event` the engagement type that
+fired, and its `occurredAt` the time the engagements the answer makes are dated. It answers
+`AppEngagementCalculationAnswer`, `{ outcome: 'engagements', results }`, with at most 50 results,
+each collaborator once and each in the organization and not in the trash, and each score a whole
+number of 0 or more. An empty list makes no engagement.
+
+A Customer filter for programs (`engagementFilter`) gets `AppEngagementFilterQuestion`, which names
+the `collaborator` the engagement would credit. It answers `AppEngagementFilterAnswer`: allow the
+engagement, or suppress it with a plain text reason of 1 to 200 characters, which Siren notes on the
+opportunity.
+
+Siren makes no engagement until the answer, and a sale on that program and opportunity waits for it
+before it earns a reward. Siren waits 24 hours from the first ask at most. Then it stops waiting, the
+trigger makes no engagement, the sales that waited award without it, and an answer after that gets
+409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
+
+```ts
+const answers = appSiren.apps.requestHandler({ signingSecret });
+answers.on('engagementCalculation', 'visit-weight', ({ data }) => ({
+  outcome: 'engagements',
+  results: [{ collaboratorId: data.triggeringCollaborator.id, score: data.opportunity.customerId ? 10 : 1 }],
+}));
+answers.on('engagementFilter', 'staff-check', ({ data }) =>
+  crm.isStaff(data.collaborator.id) ? { outcome: 'suppress', reason: 'The visitor works for the partner.' } : { outcome: 'allow' },
+);
 ```
 
 ### Send a custom event
