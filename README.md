@@ -1114,6 +1114,7 @@ chooses a built-in one:
 | Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
 | Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
 | Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
+| Incentive structure (`incentiveType`) | a program, as its incentive type | An ask which engagements each sale, lead or renewal converts and the pool, answered `{ outcome: 'award', units, pool, engagementIds }` or `{ outcome: 'none' }`. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1253,6 +1254,18 @@ answers.on('incentiveResolver', 'split-the-reward', ({ data }) => ({
 }))
 ```
 
+An Incentive structure (`incentiveType`) is an ask too. The function chooses the engagements that
+convert and the pool the program's resolver divides among them, or returns `{ outcome: 'none' }`:
+
+```js
+answers.on('incentiveType', 'pay-on-closed-deals', ({ data }) => {
+  // A tenth of the sale, shared by every engagement. A lead earns nothing here.
+  const sale = data.transaction
+  if (!sale || sale.units !== data.program.units) return { outcome: 'none' }
+  return { outcome: 'award', units: sale.units, pool: Math.floor(sale.total / 10), engagementIds: data.engagements.map((e) => e.engagementId) }
+})
+```
+
 On Siren's sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
 `{ '41': 6000, '43': 4000 }`. Each share is a whole number of the currency's smallest shown unit,
 `10 ** (scale - decimalPlaces)` stored units, so a yen pool splits in multiples of 100. Every share
@@ -1265,7 +1278,8 @@ weight or a list of `[id, weight]` pairs.
 Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
 `AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The metric kinds are typed the same
 way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
-`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. The client must be built with
+`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. `on('incentiveType', ...)` gets
+`AppAsk<AppIncentiveTypeQuestion>` and returns `AppIncentiveTypeAnswer`. The client must be built with
 the app's own key, since the handler posts answers with it.
 
 What the handler replies, always JSON with `Cache-Control: no-store`:
@@ -1435,6 +1449,33 @@ if (request.mode === 'ask' && request.item.kind === 'incentiveResolver') {
   await appSiren.apps.requests.answer(request.id, answer);
 }
 ```
+
+### Answer an award ask
+
+An Incentive structure (`incentiveType`) gets `AppIncentiveTypeQuestion` when a sale, renewal or
+lead reaches a program whose incentive type picks it, for a conversion its `conversionTypes`
+setting lists: the `program` with its `units`, the `conversionType`, the `opportunity`, the
+`transaction` (null for a lead, which names its `binding` instead) with its `total` and `lines` as
+stored whole numbers, and the `engagements` the program holds on the opportunity, each with its
+`score`. It answers `AppIncentiveTypeAnswer`: `{ outcome: 'award', units, pool, engagementIds }`,
+where `units` is the program's, `pool` a whole number of 0 or more, and `engagementIds` a list of
+the question's engagements, each once. Those engagements convert, and the program's resolver
+divides the pool among them. `{ outcome: 'none' }` awards nothing on the program. Siren refuses
+any other shape, an engagement the question lacks, or one named twice with 422
+`app_answer_invalid`.
+
+`reason` is `sale` until the award is made. A partial refund of a sale the app already awarded
+asks again with `reason` `refund`, the transaction as it stands now and the award's `conversions`.
+The rewards stay as they are until that answer, which keeps the same conversions and changes only
+the pool. The program awards nothing until the answer. Siren waits 24 hours from the first ask at
+most. Then it stops waiting: a sale awards nothing on the program, and a refund cuts the rewards
+already made by the share refunded. An answer after that gets 409 `app_request_dropped`
+(`AppErrorCode.Dropped`) as `ConflictError`.
+
+A feature of this kind needs `conversionTypes`, the conversions it pays, each once, from `sale`,
+`lead` and `renewal`. A program offers it only for those. The app file refuses it with none, or
+with a repeated or unknown one, and refuses `conversionTypes` on any other kind. `siren apps apply`
+shows a change to it as "conversions it pays".
 
 ### Answer a metric ask
 
