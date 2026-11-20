@@ -3979,7 +3979,7 @@ components:
       required: [kind, key, name]
       additionalProperties: false
       properties:
-        kind: { type: string, enum: [postConversionAction, postAllocationAction, payoutMethod, distributionResolver, incentiveResolver], description: 'Locks once Siren makes the feature, as `key` does. Siren refuses the old `fulfillmentMethod`.' }
+        kind: { type: string, enum: [postConversionAction, postAllocationAction, payoutMethod, distributionResolver, customEvent, metricCalculation, metricFilter, incentiveResolver], description: 'Locks once Siren makes the feature, as `key` does. Siren refuses the old `fulfillmentMethod`.' }
         key: { type: string, description: Unique within the app for its kind. }
         name: { type: string, minLength: 1 }
         description: { type: string }
@@ -3992,6 +3992,9 @@ components:
           minimum: 1
           maximum: 43200
           description: How long Siren waits for an answer to each send of an ask. A payout method waits 1440 minutes and a distribution resolver 60 when it is left out.
+        scoresMoney:
+          type: boolean
+          description: Whether a metric calculation's score is an amount of money in the distributor's currency. Only a metric calculation takes it.
     AppDeclaration:
       type: object
       required: [name]

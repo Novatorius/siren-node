@@ -47,6 +47,8 @@ export interface AppFileItem {
   description?: string;
   currencies?: string[];
   answerWindowMinutes?: number;
+  /** A metric calculation's setting: whether its score is an amount of money in the distributor's currency. */
+  scoresMoney?: boolean;
   /** A custom event's fields: each field name to `{type, required}`. */
   fields?: Record<string, CustomEventField>;
   /**
@@ -148,6 +150,7 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
       if (item.description !== undefined) declared.description = item.description;
       if (item.currencies !== undefined) declared.currencies = [...item.currencies];
       if (item.answerWindowMinutes !== undefined) declared.answerWindowMinutes = item.answerWindowMinutes;
+      if (item.scoresMoney !== undefined) declared.scoresMoney = item.scoresMoney;
       if (item.fields !== undefined) declared.fields = { ...item.fields };
       if (item.domains !== undefined) declared.domains = [...item.domains];
       return declared;
@@ -231,7 +234,7 @@ export function storedContacts(contacts: readonly string[]): string[] {
 }
 
 /** The fields Siren stores for a feature (AppService, "Items"). */
-const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'fields', 'domains'];
+const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'fields', 'domains'];
 
 /** The most allowed domains one custom event takes, `AllowedDomains::MAX_PATTERNS`. */
 const MAX_DOMAINS = 20;
@@ -659,6 +662,13 @@ class AppFileCheck {
       }
     } else if (entry.currencies !== undefined) {
       this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a ${kindLabel(AppItemKind.PayoutMethod)}.`);
+    }
+    if (entry.kind === AppItemKind.MetricCalculation) {
+      if (entry.scoresMoney !== undefined && typeof entry.scoresMoney !== 'boolean') {
+        this.problem(`${path}.scoresMoney`, this.where(`${path}.scoresMoney`), `${path}.scoresMoney must be true or false.`);
+      }
+    } else if (entry.scoresMoney !== undefined) {
+      this.problem(`${path}.scoresMoney`, this.where(`${path}.scoresMoney`), `${path}.scoresMoney is only for a ${kindLabel(AppItemKind.MetricCalculation)}.`);
     }
     this.checkCustomEventSettings(path, entry);
     const window = entry.answerWindowMinutes;

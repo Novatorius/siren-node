@@ -980,6 +980,12 @@ export interface AppItemDeclaration {
   /** Minutes Siren waits for an answer to an ask, 1 to 43200. Siren's default is 1440, or 60 for a distribution resolver. */
   answerWindowMinutes?: number;
   /**
+   * A `metricCalculation`'s setting, refused for any other kind: whether the
+   * score is an amount of money in the distributor's currency. Left out, the
+   * score counts points.
+   */
+  scoresMoney?: boolean;
+  /**
    * A `customEvent`'s fields, refused for any other kind: each field name
    * to `{type, required}`, the fields a send carries besides the
    * collaborator.
@@ -1051,7 +1057,13 @@ export interface AppItem extends AppPlanAccess {
   key: string;
   name: string;
   description: string;
-  settings: { currencies?: string[]; answerWindowMinutes?: number; fields?: Record<string, CustomEventField>; domains?: string[] };
+  settings: {
+    currencies?: string[];
+    answerWindowMinutes?: number;
+    scoresMoney?: boolean;
+    fields?: Record<string, CustomEventField>;
+    domains?: string[];
+  };
   status: 'active' | 'archived' | (string & {});
   dateCreated?: string | null;
   dateModified?: string | null;
@@ -1092,6 +1104,8 @@ export interface UpdateAppItemParams {
   description?: string;
   currencies?: string[];
   answerWindowMinutes?: number | null;
+  /** A metric calculation's setting: whether its score is money. */
+  scoresMoney?: boolean;
   /** A custom event's fields. */
   fields?: Record<string, CustomEventField>;
   /** A custom event's allowed domains. */
@@ -1236,8 +1250,8 @@ export type UpdatedApp = App & { signingSecret?: string };
 export interface AppItemKindSetting {
   field: string;
   label: string;
-  /** `integer`, or `currencies`, a list of currency codes Siren knows for the org. */
-  type: 'integer' | 'currencies' | (string & {});
+  /** `integer`, `boolean`, or `currencies`, a list of currency codes Siren knows for the org. */
+  type: 'integer' | 'boolean' | 'currencies' | (string & {});
   required: boolean;
   min?: number;
   max?: number;
@@ -1532,6 +1546,10 @@ export interface AppFeatureFunctions {
   ) => AppDistributionAnswer | undefined | Promise<AppDistributionAnswer | undefined>;
   incentiveResolver: (request: AppAsk<AppRewardQuestion>) => AppRewardAnswer | undefined | Promise<AppRewardAnswer | undefined>;
   payoutMethod: (request: AppAsk) => AppAnswer | undefined | Promise<AppAnswer | undefined>;
+  metricCalculation: (
+    request: AppAsk<AppMetricCalculationQuestion>,
+  ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
+  metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
 }
 
 /**
@@ -1555,6 +1573,82 @@ export interface AppSplitPool {
 
 /** The weights `apps.splitPool()` takes: an object of id to weight, or a list of `[id, weight]` pairs. */
 export type AppSplitWeights = Readonly<Record<string, number>> | ReadonlyArray<readonly [string | number, number] | ReadonlyArray<string | number>>;
+
+/**
+ * What caused a metric, in a metric ask. `id` is the metric event's key.
+ * For a sale, `type` is `transaction` and `causeId` is the transaction id
+ * as text. Both are null when the cause has no record.
+ */
+export interface AppMetricCause {
+  id: string;
+  type: string | null;
+  causeId: string | null;
+}
+
+/**
+ * The sale behind a metric, in a metric ask, or null when no sale caused
+ * it. `excludedLineIds` lists the sale's lines the metric leaves out.
+ */
+export interface AppMetricSale {
+  transactionId: number;
+  conversionId: number | null;
+  excludedLineIds: number[];
+}
+
+/**
+ * The data of a `metricCalculation` ask: Siren asks the app to score one
+ * metric for a distributor's period. `opportunityId` and `points` may be
+ * null. Answer with an {@link AppMetricCalculationAnswer}.
+ */
+export interface AppMetricCalculationQuestion {
+  distributor: { id: number; name: string };
+  /** The period being scored. `periodEnd` is an ISO 8601 time. */
+  distribution: { id: number; periodEnd: string };
+  metricType: string;
+  /** The distributor's metric type row that selects this calculation. */
+  distributorMetricTypeId: number;
+  /** The collaborator whose activity caused the metric. */
+  triggeringCollaborator: { id: number; name: string };
+  opportunityId: number | null;
+  points: number | null;
+  cause: AppMetricCause;
+  sale: AppMetricSale | null;
+}
+
+/**
+ * The answer to a `metricCalculation` ask, such as
+ * `{ outcome: 'scores', results: [{ collaboratorId: 7, score: 10 }] }`.
+ * Siren takes at most 50 results, each collaborator once, each in the
+ * organization and not in the trash, and each score a whole number of 0 or
+ * more. An empty list scores nobody.
+ */
+export interface AppMetricCalculationAnswer extends AppAnswer {
+  outcome: 'scores';
+  results: Array<{ collaboratorId: number; score: number }>;
+}
+
+/**
+ * The data of a `metricFilter` ask: Siren asks the app whether one
+ * collaborator's metric counts for a distributor. `opportunityId` and
+ * `points` may be null. Answer with an {@link AppMetricFilterAnswer}.
+ */
+export interface AppMetricFilterQuestion {
+  distributor: { id: number; name: string };
+  distribution: { id: number };
+  collaborator: { id: number; name: string };
+  metricType: string;
+  opportunityId: number | null;
+  points: number | null;
+  cause: AppMetricCause;
+  sale: AppMetricSale | null;
+}
+
+/**
+ * The answer to a `metricFilter` ask: `{ outcome: 'allow' }` counts the
+ * metric, and `{ outcome: 'suppress', reason }` drops it. The reason is
+ * plain text of 1 to 200 characters.
+ */
+export type AppMetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
 
 /**
  * A stored amount as a person reads it, from `apps.shownAmount()`, the three

@@ -60,7 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AppFeatureFunctions`, `AppRequestFunction`, `AppEventFunction`, `AppSplitPool`,
   `AppSplitWeights`, `AppRequestHandler`, `AppRequestHandlerOptions`, `AppRequestInput`,
   `AppRequestReply` and the mount types. `AppTell` and `AppAsk` take the kind's data as a type
-  argument, `Record<string, unknown>` by default.
+  argument, `Record<string, unknown>` by default. `on()` types each kind's request and answer, the metric
+  calculation and metric filter kinds' included.
 
 - `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
   the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
@@ -69,6 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `app_request_dropped`, the 409 Siren answers once it stopped waiting for an ask, 24 hours after the
   first ask about a sale. `siren apps` names the kind Incentive resolver, and `openapi.yaml`'s
   `AppItemDeclaration` gains it.
+- `AppItemKind.MetricCalculation` (`metricCalculation`) and `AppItemKind.MetricFilter`
+  (`metricFilter`), the feature kinds a distributor's metric type and a distributor select. The
+  types `AppMetricCalculationQuestion`, `AppMetricCalculationAnswer`, `AppMetricFilterQuestion` and
+  `AppMetricFilterAnswer` describe each ask's `data` and its answer, which `apps.requests.answer()`
+  sends to `POST /apps/requests/{id}/answer` as before. A feature takes `scoresMoney`, a boolean, on
+  `apps.declare()`, `apps.items.create()` and `apps.items.update()`. The app file refuses
+  `scoresMoney` that is not true or false, and refuses it on any kind but `metricCalculation`, and
+  `siren apps apply` shows a changed `scoresMoney` as "scores money". `openapi.yaml`'s
+  `AppItemDeclaration` gains `scoresMoney` and the kinds `customEvent`, `metricCalculation` and
+  `metricFilter`.
 - `events.ingest` takes an optional third argument, `IngestOptions`, with `headers` for the call
   and a `timeout` in milliseconds that replaces the client's for this call. A connected site uses it
   to send a referral visit with the tracking value the shopper already holds, as `X-Siren-Token` or

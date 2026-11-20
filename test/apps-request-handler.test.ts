@@ -539,6 +539,60 @@ describe('apps-answer-handler: section 3.2, posting an ask\'s answer', () => {
   });
 });
 
+describe('apps-answer-handler: the metric kinds of slice C16-1', () => {
+  const metricAsk = (kind: string, key: string, data: Record<string, unknown>) =>
+    JSON.stringify({
+      ...features.kinds.distributionResolver!.request,
+      item: { kind, key, id: 'app:11' },
+      data,
+    });
+  const cause = { id: 'evt-1', type: 'transaction', causeId: '3307' };
+
+  it("types on('metricCalculation') and on('metricFilter') by their questions and answers, and posts what they return", async () => {
+    const { answers, http } = setup([ACCEPTED()]);
+    answers.on('metricCalculation', 'score-it', ({ data }) => ({
+      outcome: 'scores',
+      results: [{ collaboratorId: data.triggeringCollaborator.id, score: data.points ?? 0 }],
+    }));
+    answers.on('metricFilter', 'owned-customers', ({ data }) =>
+      data.collaborator.id === 42 ? { outcome: 'suppress', reason: 'Customer already owned by a partner' } : { outcome: 'allow' },
+    );
+    // @ts-expect-error A metric filter answers allow or suppress, never scores.
+    answers.on('metricFilter', 'wrong', () => ({ outcome: 'scores', results: [] }));
+
+    const calculation = metricAsk('metricCalculation', 'score-it', {
+      distributor: { id: 2, name: 'Partner pool' },
+      distribution: { id: 21, periodEnd: '2026-11-01T00:00:00+00:00' },
+      metricType: 'sale',
+      distributorMetricTypeId: 5,
+      triggeringCollaborator: { id: 42, name: 'Flo' },
+      opportunityId: 615,
+      points: 12,
+      cause,
+      sale: null,
+    });
+    const filter = metricAsk('metricFilter', 'owned-customers', {
+      distributor: { id: 2, name: 'Partner pool' },
+      distribution: { id: 21 },
+      collaborator: { id: 42, name: 'Flo' },
+      metricType: 'sale',
+      opportunityId: null,
+      points: null,
+      cause,
+      sale: { transactionId: 3307, conversionId: 1042, excludedLineIds: [] },
+    });
+    for (const raw of [calculation, filter]) {
+      const result = await answers.handle({ method: 'POST', headers: signed(raw), rawBody: raw });
+      expect(result.status).toBe(200);
+      await result.after!();
+    }
+    expect(http.requests.map(bodyOf)).toEqual([
+      { outcome: 'scores', results: [{ collaboratorId: 42, score: 12 }] },
+      { outcome: 'suppress', reason: 'Customer already owned by a partner' },
+    ]);
+  });
+});
+
 describe('apps-answer-handler: verifyRequest stays the low-level path', () => {
   it('still refuses an ordinary webhook, which the handler serves', () => {
     const { siren } = setup();

@@ -5,8 +5,9 @@
  * name, and the names match the docs. The names are `name` in Siren's
  * AppItemKindCatalog::entries() (lib/Apps/Core/Enums/AppItemKindCatalog.php
  * lines 189, 199, 209 and 228 on Siren's feat/apps at c8dbb1ab3), the same
- * catalog `GET /apps/kinds` serves. The incentive resolver's name is the one
- * Siren's catalog gains in slice C16-2. The tool reads no catalog in `show`,
+ * catalog `GET /apps/kinds` serves. The two metric kinds' names are the ones
+ * Siren's catalog gains in slice C16-1, and the incentive resolver's the one
+ * it gains in slice C16-2. The tool reads no catalog in `show`,
  * `list` or `apply`, so it holds this copy, and a test pins it to Siren's.
  */
 
@@ -16,6 +17,8 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
   payoutMethod: 'Payout method',
   distributionResolver: 'Distribution resolver',
   customEvent: 'Custom event',
+  metricCalculation: 'Metric calculation',
+  metricFilter: 'Customer filter for distributors',
   incentiveResolver: 'Incentive resolver',
 };
 
