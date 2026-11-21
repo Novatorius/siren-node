@@ -1418,8 +1418,8 @@ if (request.mode === 'tell' && request.item.kind === 'postConversionAction') {
 `Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand,
 but only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses
 a person's answer to any other ask with 409 `app_request_not_needing_attention`, since the app may
-still answer it. The app's own key answers its own ask at any time before it is applied. The
-answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
+still answer it. The app's own key answers its own ask at any time before it is applied and before
+Siren stops waiting for it. The answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
 `{ status: 'accepted', duplicate }`.
 
 The answer is sent once. When it is lost to a dropped connection or a 5xx, send the same answer
@@ -1559,9 +1559,11 @@ engagement, or suppress it with a plain text reason of 1 to 200 characters, whic
 opportunity.
 
 Siren makes no engagement until the answer, and a sale on that program and opportunity waits for it
-before it earns a reward. Siren waits at most 24 hours from the trigger, or from the sale that waits
-on the answer when that sale came first. Then it stops waiting, the trigger makes no engagement, the sales that waited award without it, and an answer after that gets
-409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
+before it earns a reward. Siren waits at most 24 hours from when it asked. When a sale waits on the
+answer, the ask ends with that sale's wait, 24 hours after the sale reached Siren, which can be
+sooner, even for a calculation a filter's allow asked later. Then it stops waiting, the trigger makes
+no engagement, the sales that waited award without it, and an answer after that gets 409
+`app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
 
 ```ts
 const answers = appSiren.apps.requestHandler({ signingSecret });

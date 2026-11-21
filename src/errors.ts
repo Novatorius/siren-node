@@ -173,7 +173,8 @@ export const AppErrorCode = {
    * 409 from the answer route: a person answered an ask that does not need
    * attention, such as one `pending` or `sent`, which the app may still
    * answer. A person may answer only a request in `needs_attention`. The
-   * app's own key answers its own ask at any time before it is applied.
+   * app's own key answers its own ask at any time before it is applied and
+   * before Siren stops waiting for it.
    */
   NotNeedingAttention: 'app_request_not_needing_attention',
   /**
