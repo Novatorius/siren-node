@@ -1544,6 +1544,39 @@ if (request.mode === 'ask' && request.item.kind === 'metricFilter') {
 }
 ```
 
+### Answer a payout ask
+
+A Payout method (`payoutMethod`) gets `AppPayoutQuestion` when Siren pays one payout through an
+autofulfiller that names the app's payout method: the `payout` (`id`, `fulfillmentId` and
+`attempt`), the `amount` to pay as a stored whole number in the currency's smallest unit, and the
+`collaborator` (`id`, `name` and `email`). `attempt` starts at 1 and rises when Siren asks again
+about the same payout, such as after a failed answer and a retry. The answer is `AppPayoutAnswer`,
+one of two shapes. `{ outcome: 'paid', reference }` has a `reference` of 1 to 191 characters, the
+payment's id in the app's own system. `{ outcome: 'failed', reason }` has a `reason` of 1 to 500
+characters.
+
+This moves money, so the app pays each payout id at most once. When Siren asks again about a
+payout the app already paid, the app answers `paid` with the first reference and pays nothing
+more. Siren drops an ask after 24 hours with no answer and marks the payout failed. An answer after
+that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
+
+```ts
+import type { AppPayoutAnswer, AppPayoutQuestion } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'ask' && request.item.kind === 'payoutMethod') {
+  const { payout, amount, collaborator } = request.data as unknown as AppPayoutQuestion;
+  const reference = await ledger.payOnce(String(payout.id), amount.value, collaborator.email);
+  const answer: AppPayoutAnswer = reference
+    ? { outcome: 'paid', reference }
+    : { outcome: 'failed', reason: 'The account is closed.' };
+  await appSiren.apps.requests.answer(request.id, answer);
+}
+```
+
+With the request handler, the `payoutMethod` function gets the question typed and returns the
+`AppPayoutAnswer`, which the handler posts.
+
 ### Answer an engagement ask
 
 An Engagement calculation (`engagementCalculation`) gets `AppEngagementCalculationQuestion` each time
