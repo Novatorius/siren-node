@@ -75,6 +75,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   each once and known, refuses it on any other kind, and `siren apps apply` shows a change to it as
   "conversions it pays". `siren apps` names the kind Incentive structure, and `openapi.yaml`'s
   `AppItemDeclaration` gains the kind and `conversionTypes`.
+- `AppItemKind.EngagementCalculation` (`engagementCalculation`) and `AppItemKind.EngagementFilter`
+  (`engagementFilter`), the feature kinds a program's engagement type and a program select to let the
+  app decide who earns each engagement and whether it is made. The types
+  `AppEngagementCalculationQuestion`, `AppEngagementCalculationAnswer`, `AppEngagementFilterQuestion`,
+  `AppEngagementFilterAnswer`, `AppEngagementCause` and `AppEngagementOpportunity` describe the asks'
+  `data` and their answers, which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer`
+  as before, and `requestHandler().on(...)` types both. `siren apps` names them Engagement
+  calculation and Customer filter for programs, and `openapi.yaml`'s `AppItemDeclaration` gains them.
 - `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
   the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to
