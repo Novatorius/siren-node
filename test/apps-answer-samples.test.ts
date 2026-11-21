@@ -162,4 +162,26 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
       body: features.kinds.incentiveResolver!.answer,
     });
   });
+
+  it('5.5 programGroupSorter: the ask gets its 200 at once, and Siren receives the fixture answer', async () => {
+    const url = await load('program-group-sorter');
+    expect(await sirenSends(url, 'programGroupSorter')).toEqual({ status: 200, body: {} });
+    await eventually(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      url: `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`,
+      authorization: `Bearer ${TEST_API_KEY}`,
+      body: features.kinds.programGroupSorter!.answer,
+    });
+  });
+
+  it('5.6 incentiveType: the ask gets its 200 at once, and Siren receives the fixture answer', async () => {
+    const url = await load('incentive-type');
+    expect(await sirenSends(url, 'incentiveType')).toEqual({ status: 200, body: {} });
+    await eventually(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      url: `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`,
+      authorization: `Bearer ${TEST_API_KEY}`,
+      body: features.kinds.incentiveType!.answer,
+    });
+  });
 });

@@ -377,6 +377,33 @@ export const AppItemKind = {
    */
   IncentiveResolver: 'incentiveResolver',
   /**
+   * An incentive type a program selects, which Siren names "Incentive
+   * structure". Siren asks the app which engagements one sale, lead or
+   * renewal converts and the pool the program's resolver divides. The
+   * program's award waits for the answer, 24 hours at most.
+   */
+  IncentiveType: 'incentiveType',
+  /**
+   * A calculation strategy a program's engagement type selects, which Siren
+   * names "Engagement calculation". Siren asks the app who earns an
+   * engagement, and its score, each time one triggers, and makes no
+   * engagement until the answer, 24 hours at most.
+   */
+  EngagementCalculation: 'engagementCalculation',
+  /**
+   * An engagement filter a program selects, which Siren names "Customer
+   * filter for programs". Siren asks the app whether an engagement may be
+   * made each time one triggers, and the app answers allow or suppress.
+   */
+  EngagementFilter: 'engagementFilter',
+  /**
+   * A program group structure a program group selects, which Siren names
+   * "Program group structure". Siren asks the app the order to try the
+   * group's programs in for one sale or lead, and the group's award waits
+   * for the answer, 24 hours at most.
+   */
+  ProgramGroupSorter: 'programGroupSorter',
+  /**
    * A transaction filter a program or a distributor selects, which Siren's
    * catalog calls a transaction compiler. Once per sale for each program or
    * distributor that picks it, Siren asks the app which of the sale's own
