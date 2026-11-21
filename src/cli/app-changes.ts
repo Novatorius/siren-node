@@ -74,6 +74,9 @@ function featureDifferences(have: AppItem, want: AppItemDeclaration): string[] {
   if (wantCurrencies.join(',') !== haveCurrencies.join(',')) differences.push('currencies');
   if (want.answerWindowMinutes !== have.settings.answerWindowMinutes) differences.push('answer window');
   if (want.kind === AppItemKind.MetricCalculation && (want.scoresMoney === true) !== (have.settings.scoresMoney === true)) differences.push('scores money');
+  if (want.kind === AppItemKind.IncentiveType && [...(want.conversionTypes ?? [])].sort().join(',') !== [...(have.settings.conversionTypes ?? [])].sort().join(',')) {
+    differences.push('conversions it pays');
+  }
   if (want.kind === AppItemKind.CustomEvent) {
     if (fieldsText(want.fields) !== fieldsText(have.settings.fields)) differences.push('fields');
     const domains = setChange(storedDomains(have.settings.domains ?? []), storedDomains(want.domains ?? []));

@@ -27,12 +27,12 @@ describe('apps-answer-handler: the records', () => {
     const readme = raw('README.md');
     const section = readme.slice(readme.indexOf('### Answer Siren in a few lines'), readme.indexOf('### Check and answer by hand'));
     expect(section).toContain('```js\n' + raw('test/answer-samples/post-conversion-action.js').trimEnd() + '\n```');
-    for (const sample of ['post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'program-group-sorter']) {
+    for (const sample of ['post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'incentive-type', 'program-group-sorter']) {
       expect(section, sample).toContain('```js\n' + fn(sample) + '\n```');
     }
     // Every sample shares 5.1's first lines and server line.
     const head = raw('test/answer-samples/post-conversion-action.js');
-    for (const sample of ['post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'program-group-sorter']) {
+    for (const sample of ['post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'incentive-type', 'program-group-sorter']) {
       const text = raw(`test/answer-samples/${sample}.js`);
       expect(text.slice(0, text.indexOf('answers.on('))).toBe(head.slice(0, head.indexOf('answers.on(')));
       expect(text.slice(text.indexOf('\nexpress().post'))).toBe(head.slice(head.indexOf('\nexpress().post')));
@@ -40,7 +40,7 @@ describe('apps-answer-handler: the records', () => {
   });
 
   it('keep each sample at 16 lines or fewer, as AP-R80 asks', () => {
-    for (const sample of ['post-conversion-action', 'post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'program-group-sorter']) {
+    for (const sample of ['post-conversion-action', 'post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'incentive-type', 'program-group-sorter']) {
       expect(raw(`test/answer-samples/${sample}.js`).trimEnd().split('\n').length, sample).toBeLessThanOrEqual(16);
     }
   });

@@ -1,4 +1,4 @@
-import type { AppItemDeclaration, CustomEventField, DeclareAppParams } from '../record-types';
+import type { AppConversionType, AppItemDeclaration, CustomEventField, DeclareAppParams } from '../record-types';
 import { AppItemKind } from '../taxonomy';
 import { kindLabel } from './app-kinds';
 
@@ -49,6 +49,8 @@ export interface AppFileItem {
   answerWindowMinutes?: number;
   /** A metric calculation's setting: whether its score is an amount of money in the distributor's currency. */
   scoresMoney?: boolean;
+  /** An incentive type's setting: the conversions it pays, each once, from sale, lead and renewal. */
+  conversionTypes?: AppConversionType[];
   /** A custom event's fields: each field name to `{type, required}`. */
   fields?: Record<string, CustomEventField>;
   /**
@@ -151,6 +153,7 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
       if (item.currencies !== undefined) declared.currencies = [...item.currencies];
       if (item.answerWindowMinutes !== undefined) declared.answerWindowMinutes = item.answerWindowMinutes;
       if (item.scoresMoney !== undefined) declared.scoresMoney = item.scoresMoney;
+      if (item.conversionTypes !== undefined) declared.conversionTypes = CONVERSION_TYPES.filter((type) => item.conversionTypes!.includes(type));
       if (item.fields !== undefined) declared.fields = { ...item.fields };
       if (item.domains !== undefined) declared.domains = [...item.domains];
       return declared;
@@ -234,7 +237,14 @@ export function storedContacts(contacts: readonly string[]): string[] {
 }
 
 /** The fields Siren stores for a feature (AppService, "Items"). */
-const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'fields', 'domains'];
+const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains'];
+
+/**
+ * The conversions an incentive type may pay, in the order Siren's kinds
+ * catalog lists them (AppItemKindCatalog.php, the `conversionTypes` choices),
+ * the order a declaration sends them in.
+ */
+export const CONVERSION_TYPES: readonly AppConversionType[] = ['sale', 'lead', 'renewal'];
 
 /** The most allowed domains one custom event takes, `AllowedDomains::MAX_PATTERNS`. */
 const MAX_DOMAINS = 20;
@@ -669,6 +679,23 @@ class AppFileCheck {
       }
     } else if (entry.scoresMoney !== undefined) {
       this.problem(`${path}.scoresMoney`, this.where(`${path}.scoresMoney`), `${path}.scoresMoney is only for a ${kindLabel(AppItemKind.MetricCalculation)}.`);
+    }
+    if (entry.kind === AppItemKind.IncentiveType) {
+      const types = entry.conversionTypes;
+      if (
+        !isTextList(types) ||
+        types.length === 0 ||
+        new Set(types).size !== types.length ||
+        types.some((type) => !(CONVERSION_TYPES as readonly string[]).includes(type))
+      ) {
+        this.problem(
+          `${path}.conversionTypes`,
+          this.where(`${path}.conversionTypes`),
+          `${path}.conversionTypes is required for an ${kindLabel(AppItemKind.IncentiveType)}: a list of the conversions it pays, each once, from ${CONVERSION_TYPES.join(', ')}.`,
+        );
+      }
+    } else if (entry.conversionTypes !== undefined) {
+      this.problem(`${path}.conversionTypes`, this.where(`${path}.conversionTypes`), `${path}.conversionTypes is only for an ${kindLabel(AppItemKind.IncentiveType)}.`);
     }
     this.checkCustomEventSettings(path, entry);
     const window = entry.answerWindowMinutes;
