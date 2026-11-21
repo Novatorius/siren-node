@@ -1117,6 +1117,7 @@ chooses a built-in one:
 | Incentive structure (`incentiveType`) | a program, as its incentive type | An ask which engagements each sale, lead or renewal converts and the pool, answered `{ outcome: 'award', units, pool, engagementIds }` or `{ outcome: 'none' }`. |
 | Engagement calculation (`engagementCalculation`) | a program's engagement type | An ask who earns each engagement, answered `{ outcome: 'engagements', results }`. |
 | Customer filter for programs (`engagementFilter`) | a program | An ask whether each engagement may be made, answered `allow` or `suppress`. |
+| Program group structure (`programGroupSorter`) | a program group | An ask for the order to try the group's programs in, answered `{ outcome: 'sorted', programIds }`. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
 The tool prints it beside the kind, as Payout method (payoutMethod).
@@ -1268,6 +1269,18 @@ answers.on('incentiveType', 'pay-on-closed-deals', ({ data }) => {
 })
 ```
 
+A Program group structure (`programGroupSorter`) is an ask too. The function returns every
+program id of the question once, in the order Siren tries them:
+
+```js
+answers.on('programGroupSorter', 'pick-the-program', ({ data }) => {
+  // Try the program whose best engagement scores highest first.
+  const best = (program) => Math.max(0, ...program.engagements.map((engagement) => engagement.score))
+  const programs = [...data.programs].sort((a, b) => best(b) - best(a))
+  return { outcome: 'sorted', programIds: programs.map((program) => program.id) }
+})
+```
+
 On Siren's sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
 `{ '41': 6000, '43': 4000 }`. Each share is a whole number of the currency's smallest shown unit,
 `10 ** (scale - decimalPlaces)` stored units, so a yen pool splits in multiples of 100. Every share
@@ -1282,7 +1295,8 @@ Each function's request is typed by its kind: `on('distributionResolver', ...)` 
 way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
 `AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. `on('incentiveType', ...)` gets
 `AppAsk<AppIncentiveTypeQuestion>` and returns `AppIncentiveTypeAnswer`. `on('engagementCalculation', ...)`
-returns `AppEngagementCalculationAnswer` and `on('engagementFilter', ...)` returns `AppEngagementFilterAnswer`. The client must be built with
+returns `AppEngagementCalculationAnswer` and `on('engagementFilter', ...)` returns `AppEngagementFilterAnswer`.
+`on('programGroupSorter', ...)` gets `AppAsk<AppGroupOrderQuestion>` and returns `AppGroupOrderAnswer`. The client must be built with
 the app's own key, since the handler posts answers with it.
 
 What the handler replies, always JSON with `Cache-Control: no-store`:
@@ -1480,6 +1494,21 @@ A feature of this kind needs `conversionTypes`, the conversions it pays, each on
 with a repeated or unknown one, and refuses `conversionTypes` on any other kind. `siren apps apply`
 shows a change to it as "conversions it pays".
 
+### Answer a group order ask
+
+A Program group structure (`programGroupSorter`) gets `AppGroupOrderQuestion` when a sale or lead
+reaches a program group that picks it: the `group`, the `conversionType`, the `opportunity`, the
+`transaction` (null for a lead) with its `total` as a stored whole number, and the `programs` of the
+group that take the conversion, in the group's order, each with its active `engagements` on the
+opportunity, oldest first. It answers `AppGroupOrderAnswer`: `programIds`, every program id of the
+question exactly once, in the order Siren tries them. The first program that converts wins the
+group. Siren refuses a missing, repeated or unknown id with 422 `app_answer_invalid`.
+
+No program in the group is awarded until the answer, and later sales on the group wait behind it.
+Siren asks about each sale when it happens, even one that waits behind another, and waits 24 hours
+from the sale at most. Then it stops waiting, no program in the group is awarded for that sale, and
+an answer after that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`. A
+renewal doesn't ask. It goes to the program in the group whose engagement is oldest.
 ### Answer a metric ask
 
 A Metric calculation (`metricCalculation`) gets `AppMetricCalculationQuestion`: the `distributor`,
