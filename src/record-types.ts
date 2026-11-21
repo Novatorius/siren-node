@@ -961,6 +961,9 @@ export interface FulfillmentListParams extends RecordListParams {
  * (AppRequestEnvelope, tests/Fixtures/apps-exchange/signed-request.json).
  */
 
+/** A conversion an `incentiveType` pays, as its `conversionTypes` setting lists it. */
+export type AppConversionType = 'sale' | 'lead' | 'renewal';
+
 /**
  * One feature an app declares, as `apps.declare()` and `apps.items.create()`
  * send it. The code calls a feature an item. Its `kind` and `key` lock once
@@ -985,6 +988,12 @@ export interface AppItemDeclaration {
    * score counts points.
    */
   scoresMoney?: boolean;
+  /**
+   * Required for an `incentiveType` and refused for any other kind: the
+   * conversions it pays, each once, from `sale`, `lead` and `renewal`. A
+   * program offers the type only for these.
+   */
+  conversionTypes?: AppConversionType[];
   /**
    * A `customEvent`'s fields, refused for any other kind: each field name
    * to `{type, required}`, the fields a send carries besides the
@@ -1061,6 +1070,7 @@ export interface AppItem extends AppPlanAccess {
     currencies?: string[];
     answerWindowMinutes?: number;
     scoresMoney?: boolean;
+    conversionTypes?: AppConversionType[];
     fields?: Record<string, CustomEventField>;
     domains?: string[];
   };
@@ -1106,6 +1116,8 @@ export interface UpdateAppItemParams {
   answerWindowMinutes?: number | null;
   /** A metric calculation's setting: whether its score is money. */
   scoresMoney?: boolean;
+  /** An incentive type's setting: the conversions it pays. */
+  conversionTypes?: AppConversionType[];
   /** A custom event's fields. */
   fields?: Record<string, CustomEventField>;
   /** A custom event's allowed domains. */
@@ -1488,6 +1500,114 @@ export interface AppRewardAnswer extends AppAnswer {
 }
 
 /**
+ * One engagement in an `incentiveType` ask: an active engagement the program
+ * holds on the opportunity at the sale, or one of a renewal's or refunded
+ * award's engagements. `createdDate` is an ISO 8601 time.
+ */
+export interface AppIncentiveTypeEngagement {
+  engagementId: number;
+  collaboratorId: number;
+  score: number;
+  createdDate: string;
+}
+
+/** One line of the transaction in an `incentiveType` ask, refund lines included. `value` is a stored integer. */
+export interface AppIncentiveTypeLine {
+  id: number;
+  type: string;
+  name: string;
+  quantity: number;
+  value: number;
+}
+
+/**
+ * The data of an `incentiveType` ask (Siren's `AppIncentiveTypeQuestion::build()`):
+ * Siren asks the app which engagements one sale, lead or renewal converts on
+ * a program and the pool the program's resolver divides among them.
+ * `reason` is `sale` until the award is made, and `refund` when a partial
+ * refund asks again about an award already made, which then lists the
+ * award's `conversions`. `transaction` is null for a lead, which names its
+ * `binding` instead. `total` is the sum of the lines in the transaction's
+ * units, in the stored integer form. Answer with an {@link AppIncentiveTypeAnswer}.
+ */
+export interface AppIncentiveTypeQuestion {
+  reason: 'sale' | 'refund';
+  program: { id: number; name: string; units: string };
+  conversionType: AppConversionType;
+  opportunity: { id: number };
+  transaction: {
+    id: number;
+    status: string;
+    units: string;
+    currency: AppCurrency | null;
+    total: number;
+    lines: AppIncentiveTypeLine[];
+  } | null;
+  binding: { type: string; id: string } | null;
+  engagements: AppIncentiveTypeEngagement[];
+  conversions?: Array<{ conversionId: number; engagementId: number }>;
+}
+
+/**
+ * The answer to an `incentiveType` ask. `{ outcome: 'award', units, pool,
+ * engagementIds }` converts the engagements chosen, each once and each from
+ * the question, and the program's resolver divides `pool`, a whole number at
+ * or above 0 in the stored integer form of the program's `units`.
+ * `{ outcome: 'none' }` awards nothing on the program. A refund's answer
+ * changes only the pool. Siren refuses any other shape with 422
+ * `app_answer_invalid`.
+ */
+export type AppIncentiveTypeAnswer =
+  | (AppAnswer & { outcome: 'award'; units: string; pool: number; engagementIds: number[] })
+  | (AppAnswer & { outcome: 'none' });
+
+/**
+ * One engagement in a `programGroupSorter` ask: an active engagement a
+ * program holds on the opportunity at the sale. `createdDate` is an ISO 8601
+ * time.
+ */
+export interface AppGroupOrderEngagement {
+  engagementId: number;
+  collaboratorId: number;
+  score: number;
+  createdDate: string;
+}
+
+/** One program in a `programGroupSorter` ask, with its engagements oldest first. */
+export interface AppGroupOrderProgram {
+  id: number;
+  name: string;
+  engagements: AppGroupOrderEngagement[];
+}
+
+/**
+ * The data of a `programGroupSorter` ask (Siren's
+ * `AppGroupOrderQuestion::build()`): Siren asks the app the order to try a
+ * program group's programs in for one sale or lead. `programs`
+ * lists each program of the group that takes the conversion once, in the
+ * order the group holds them. `transaction` is null for a lead, and its
+ * `total` is a stored integer. Answer with an {@link AppGroupOrderAnswer}.
+ */
+export interface AppGroupOrderQuestion {
+  group: { id: number; name: string };
+  conversionType: string;
+  opportunity: { id: number };
+  transaction: { id: number; units: string; total: number } | null;
+  programs: AppGroupOrderProgram[];
+}
+
+/**
+ * The answer to a `programGroupSorter` ask, such as
+ * `{ outcome: 'sorted', programIds: [9, 12] }`. `programIds` holds every
+ * program id of the question exactly once, in the order Siren tries them.
+ * The first program that converts wins the group.
+ */
+export interface AppGroupOrderAnswer extends AppAnswer {
+  outcome: 'sorted';
+  programIds: number[];
+}
+
+/**
  * One collaborator's metric in a `distributionResolver` ask: what the
  * collaborator scored in the distribution's period, and how many times a
  * trigger counted.
@@ -1550,12 +1670,18 @@ export interface AppFeatureFunctions {
     request: AppAsk<AppMetricCalculationQuestion>,
   ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
   metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
+  incentiveType: (
+    request: AppAsk<AppIncentiveTypeQuestion>,
+  ) => AppIncentiveTypeAnswer | undefined | Promise<AppIncentiveTypeAnswer | undefined>;
   engagementCalculation: (
     request: AppAsk<AppEngagementCalculationQuestion>,
   ) => AppEngagementCalculationAnswer | undefined | Promise<AppEngagementCalculationAnswer | undefined>;
   engagementFilter: (
     request: AppAsk<AppEngagementFilterQuestion>,
   ) => AppEngagementFilterAnswer | undefined | Promise<AppEngagementFilterAnswer | undefined>;
+  programGroupSorter: (
+    request: AppAsk<AppGroupOrderQuestion>,
+  ) => AppGroupOrderAnswer | undefined | Promise<AppGroupOrderAnswer | undefined>;
 }
 
 /**
