@@ -898,6 +898,13 @@ export interface FulfillmentPayout {
   dateFailed?: string | null;
   waitingReason?: string | null;
   dateWaiting?: string | null;
+  /**
+   * The app a `processing` payout waits on to answer whether it paid, and
+   * the key of Siren's request to it. `null` when the payout waits on no
+   * app. A person can't mark such a payout paid or unpaid until the request
+   * is answered.
+   */
+  waitingOnApp?: { name: string; requestKey: string } | null;
   dateCreated?: string | null;
   dateModified?: string | null;
   [field: string]: unknown;
@@ -1665,7 +1672,7 @@ export interface AppFeatureFunctions {
     request: AppAsk<AppDistributionQuestion>,
   ) => AppDistributionAnswer | undefined | Promise<AppDistributionAnswer | undefined>;
   incentiveResolver: (request: AppAsk<AppRewardQuestion>) => AppRewardAnswer | undefined | Promise<AppRewardAnswer | undefined>;
-  payoutMethod: (request: AppAsk) => AppAnswer | undefined | Promise<AppAnswer | undefined>;
+  payoutMethod: (request: AppAsk<AppPayoutQuestion>) => AppPayoutAnswer | undefined | Promise<AppPayoutAnswer | undefined>;
   metricCalculation: (
     request: AppAsk<AppMetricCalculationQuestion>,
   ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
@@ -1781,6 +1788,45 @@ export interface AppMetricFilterQuestion {
  * plain text of 1 to 200 characters.
  */
 export type AppMetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+
+/**
+ * The data of a `payoutMethod` ask: Siren asks the app to pay one payout.
+ * `payout.attempt` starts at 1 and rises when Siren asks again about the
+ * same payout, such as after a failed answer and a retry. `amount.value` is
+ * a whole number in the currency's smallest unit. Pay each `payout.id` at
+ * most once, and when Siren asks again about a payout the app already paid,
+ * answer `paid` with the first reference. Answer with an
+ * {@link AppPayoutAnswer}.
+ */
+export interface AppPayoutQuestion {
+  payout: { id: number; fulfillmentId: number; attempt: number };
+  /** What to pay, a stored integer. Read it with `apps.shownAmount(amount.value, amount.currency)`. */
+  amount: { value: number; units: string; currency: AppCurrency };
+  /** `email` is null when the collaborator has no email address. */
+  collaborator: { id: number; name: string; email: string | null };
+}
+
+/**
+ * The answer to a `payoutMethod` ask: `{ outcome: 'paid', reference }` where
+ * `reference` is the payment's id in the app's own system, 1 to 191
+ * characters.
+ */
+export interface AppPayoutPaid extends AppAnswer {
+  outcome: 'paid';
+  reference: string;
+}
+
+/**
+ * The answer to a `payoutMethod` ask when the app could not pay:
+ * `{ outcome: 'failed', reason }`, where `reason` is 1 to 500 characters.
+ */
+export interface AppPayoutFailed extends AppAnswer {
+  outcome: 'failed';
+  reason: string;
+}
+
+/** The answer to a `payoutMethod` ask: paid with a reference, or failed with a reason. */
+export type AppPayoutAnswer = AppPayoutPaid | AppPayoutFailed;
 
 /**
  * The trigger behind an engagement ask. `id` is the trigger's own random id,
