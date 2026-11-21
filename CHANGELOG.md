@@ -63,6 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument, `Record<string, unknown>` by default. `on()` types each kind's request and answer, the metric
   calculation and metric filter kinds' included.
 
+- `AppItemKind.EngagementCalculation` (`engagementCalculation`) and `AppItemKind.EngagementFilter`
+  (`engagementFilter`), the feature kinds a program's engagement type and a program select to let the
+  app decide who earns each engagement and whether it is made. The types
+  `AppEngagementCalculationQuestion`, `AppEngagementCalculationAnswer`, `AppEngagementFilterQuestion`,
+  `AppEngagementFilterAnswer`, `AppEngagementCause` and `AppEngagementOpportunity` describe the asks'
+  `data` and their answers, which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer`
+  as before, and `requestHandler().on(...)` types both. `siren apps` names them Engagement
+  calculation and Customer filter for programs, and `openapi.yaml`'s `AppItemDeclaration` gains them.
 - `AppItemKind.CollaboratorGroupStructure` (`collaboratorGroupStructure`), the feature kind a
   collaborator group selects to let the app give the group's shape. Siren asks it once per cascade
   trigger on the group, for a program or a distributor. The types

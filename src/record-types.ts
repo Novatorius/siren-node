@@ -1550,6 +1550,12 @@ export interface AppFeatureFunctions {
     request: AppAsk<AppMetricCalculationQuestion>,
   ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
   metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
+  engagementCalculation: (
+    request: AppAsk<AppEngagementCalculationQuestion>,
+  ) => AppEngagementCalculationAnswer | undefined | Promise<AppEngagementCalculationAnswer | undefined>;
+  engagementFilter: (
+    request: AppAsk<AppEngagementFilterQuestion>,
+  ) => AppEngagementFilterAnswer | undefined | Promise<AppEngagementFilterAnswer | undefined>;
   collaboratorGroupStructure: (
     request: AppAsk<AppCollaboratorGroupStructureQuestion>,
   ) => AppCollaboratorGroupStructureAnswer | undefined | Promise<AppCollaboratorGroupStructureAnswer | undefined>;
@@ -1732,6 +1738,81 @@ export interface AppCollaboratorGroupTree extends AppAnswer {
  * `app_answer_invalid`.
  */
 export type AppCollaboratorGroupStructureAnswer = AppCollaboratorGroupChain | AppCollaboratorGroupTree;
+
+/**
+ * The trigger behind an engagement ask. `id` is the trigger's own random id,
+ * so two visits make two asks. `event` is the engagement type that fired.
+ * `occurredAt` is an ISO 8601 time, and the engagements the answer makes are
+ * dated then.
+ */
+export interface AppEngagementCause {
+  id: string;
+  event: string;
+  occurredAt: string;
+}
+
+/**
+ * The opportunity in an engagement ask, with the customer Siren matched it
+ * to, or null when it matched none.
+ */
+export interface AppEngagementOpportunity {
+  id: number;
+  customerId: number | null;
+}
+
+/**
+ * The data of an `engagementCalculation` ask (Siren's
+ * `AppEngagementQuestion::forCalculation()`): Siren asks the app who earns
+ * an engagement, and its score, when an engagement type a program picks
+ * this calculation for triggers. `args` holds the settings a person gave
+ * that engagement type, as text by name. Answer with an
+ * {@link AppEngagementCalculationAnswer}.
+ */
+export interface AppEngagementCalculationQuestion {
+  program: { id: number; name: string };
+  engagementType: string;
+  /** The program's engagement type row that selects this calculation. */
+  programEngagementTypeId: number;
+  args: Record<string, string>;
+  opportunity: AppEngagementOpportunity;
+  /** The collaborator whose action triggered the engagement. */
+  triggeringCollaborator: { id: number; name: string };
+  cause: AppEngagementCause;
+}
+
+/**
+ * The answer to an `engagementCalculation` ask, such as
+ * `{ outcome: 'engagements', results: [{ collaboratorId: 7, score: 10 }] }`.
+ * Siren takes at most 50 results, each collaborator once, each in the
+ * organization and not in the trash, and each score a whole number of 0 or
+ * more. An empty list makes no engagement.
+ */
+export interface AppEngagementCalculationAnswer extends AppAnswer {
+  outcome: 'engagements';
+  results: Array<{ collaboratorId: number; score: number }>;
+}
+
+/**
+ * The data of an `engagementFilter` ask (Siren's
+ * `AppEngagementQuestion::forFilter()`): Siren asks the app whether an
+ * engagement may be made for one collaborator on a program. Answer with an
+ * {@link AppEngagementFilterAnswer}.
+ */
+export interface AppEngagementFilterQuestion {
+  program: { id: number; name: string };
+  /** The collaborator the engagement would credit. */
+  collaborator: { id: number; name: string };
+  opportunity: AppEngagementOpportunity;
+  engagementType: string;
+  cause: AppEngagementCause;
+}
+
+/**
+ * The answer to an `engagementFilter` ask: `{ outcome: 'allow' }` makes the
+ * engagement, and `{ outcome: 'suppress', reason }` stops it. The reason is
+ * plain text of 1 to 200 characters, which Siren notes on the opportunity.
+ */
+export type AppEngagementFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
 
 /**
  * A stored amount as a person reads it, from `apps.shownAmount()`, the three

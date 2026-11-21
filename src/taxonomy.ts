@@ -377,6 +377,19 @@ export const AppItemKind = {
    */
   IncentiveResolver: 'incentiveResolver',
   /**
+   * A calculation strategy a program's engagement type selects, which Siren
+   * names "Engagement calculation". Siren asks the app who earns an
+   * engagement, and its score, each time one triggers, and makes no
+   * engagement until the answer, 24 hours at most.
+   */
+  EngagementCalculation: 'engagementCalculation',
+  /**
+   * An engagement filter a program selects, which Siren names "Customer
+   * filter for programs". Siren asks the app whether an engagement may be
+   * made each time one triggers, and the app answers allow or suppress.
+   */
+  EngagementFilter: 'engagementFilter',
+  /**
    * A collaborator group's structure, which a group selects. Once per
    * cascade trigger on the group, for a program or a distributor, Siren asks
    * the app for the group's shape among the members in the question, and
