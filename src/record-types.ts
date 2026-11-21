@@ -898,6 +898,13 @@ export interface FulfillmentPayout {
   dateFailed?: string | null;
   waitingReason?: string | null;
   dateWaiting?: string | null;
+  /**
+   * The app a `processing` payout waits on to answer whether it paid, and
+   * the key of Siren's request to it. `null` when the payout waits on no
+   * app. A person can't mark such a payout paid or unpaid until the request
+   * is answered.
+   */
+  waitingOnApp?: { name: string; requestKey: string } | null;
   dateCreated?: string | null;
   dateModified?: string | null;
   [field: string]: unknown;
