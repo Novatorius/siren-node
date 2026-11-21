@@ -173,13 +173,14 @@ export const AppErrorCode = {
    * 409 from the answer route: a person answered an ask that does not need
    * attention, such as one `pending` or `sent`, which the app may still
    * answer. A person may answer only a request in `needs_attention`. The
-   * app's own key answers its own ask at any time before it is applied.
+   * app's own key answers its own ask at any time before it is applied and
+   * before Siren stops waiting for it.
    */
   NotNeedingAttention: 'app_request_not_needing_attention',
   /**
    * 409 from the answer route: Siren stopped waiting for this ask. An
-   * incentive resolver's ask is dropped 24 hours after the first ask about
-   * its sale, and Siren then takes no answer to it.
+   * incentive resolver's ask is dropped 24 hours after its sale's reward
+   * began to wait, and Siren then takes no answer to it.
    */
   Dropped: 'app_request_dropped',
   /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the item's kind refuses. */

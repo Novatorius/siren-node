@@ -105,7 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to
   `POST /apps/requests/{id}/answer` as before. `AppErrorCode.Dropped` is
   `app_request_dropped`, the 409 Siren answers once it stopped waiting for an ask, 24 hours after the
-  first ask about a sale. `siren apps` names the kind Incentive resolver, and `openapi.yaml`'s
+  sale's reward began to wait. `siren apps` names the kind Incentive resolver, and `openapi.yaml`'s
   `AppItemDeclaration` gains it.
 - `AppRequestStatus.Dropped` (`dropped`), the status of an ask Siren stopped waiting for, which
   `apps.requests.list()` can filter by. `openapi.yaml` lists it in both request status enums.
