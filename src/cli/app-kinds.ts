@@ -6,8 +6,10 @@
  * AppItemKindCatalog::entries() (lib/Apps/Core/Enums/AppItemKindCatalog.php
  * lines 189, 199, 209 and 228 on Siren's feat/apps at c8dbb1ab3), the same
  * catalog `GET /apps/kinds` serves. The two metric kinds' names are the ones
- * Siren's catalog gains in slice C16-1, and the incentive resolver's name the
- * one it gains in slice C16-2. The tool reads no catalog in `show`,
+ * Siren's catalog gains in slice C16-1, the incentive resolver's name the
+ * one it gains in slice C16-2, the two engagement kinds' the ones it gains in
+ * slice C16-4, and the incentive type's the one it gains in slice C16-6. The
+ * tool reads no catalog in `show`,
  * `list` or `apply`, so it holds this copy, and a test pins it to Siren's.
  */
 
@@ -20,6 +22,9 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
   metricCalculation: 'Metric calculation',
   metricFilter: 'Customer filter for distributors',
   incentiveResolver: 'Incentive resolver',
+  incentiveType: 'Incentive structure',
+  engagementCalculation: 'Engagement calculation',
+  engagementFilter: 'Customer filter for programs',
 };
 
 /**

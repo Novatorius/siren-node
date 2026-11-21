@@ -380,6 +380,26 @@ export const AppItemKind = {
    * converted, and the rewards wait for the answer, 24 hours at most.
    */
   IncentiveResolver: 'incentiveResolver',
+  /**
+   * An incentive type a program selects, which Siren names "Incentive
+   * structure". Siren asks the app which engagements one sale, lead or
+   * renewal converts and the pool the program's resolver divides. The
+   * program's award waits for the answer, 24 hours at most.
+   */
+  IncentiveType: 'incentiveType',
+  /**
+   * A calculation strategy a program's engagement type selects, which Siren
+   * names "Engagement calculation". Siren asks the app who earns an
+   * engagement, and its score, each time one triggers, and makes no
+   * engagement until the answer, 24 hours at most.
+   */
+  EngagementCalculation: 'engagementCalculation',
+  /**
+   * An engagement filter a program selects, which Siren names "Customer
+   * filter for programs". Siren asks the app whether an engagement may be
+   * made each time one triggers, and the app answers allow or suppress.
+   */
+  EngagementFilter: 'engagementFilter',
 } as const;
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */
