@@ -1799,6 +1799,11 @@ export type AppMetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAns
 export interface AppCollaboratorGroupMember {
   collaboratorId: number;
   name: string;
+  /**
+   * The collaborator's status at the trigger, such as `active` or `inactive`.
+   * Siren credits the member by it, as the trigger would have inline.
+   */
+  status: string;
   /** The member's metadata as the group holds it. */
   metadata: Record<string, unknown>;
 }

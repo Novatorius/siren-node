@@ -106,8 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`,
   `AppCollaboratorGroupStructureProgramQuestion`,
   `AppCollaboratorGroupMember`, `AppCollaboratorGroupChain`, `AppCollaboratorGroupTree` and
-  `AppCollaboratorGroupStructureAnswer` describe the ask's `data` and its answer, a chain or a tree,
-  which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as before. Siren refuses
+  `AppCollaboratorGroupStructureAnswer` describe the ask's `data` and its answer, a chain or a tree.
+  Each `AppCollaboratorGroupMember` carries its `status` at the trigger, which Siren credits it by.
+  `apps.requests.answer()` sends the answer to `POST /apps/requests/{id}/answer` as before. Siren refuses
   an answer that leaves out or repeats a member, names one outside the group, or makes a cycle with
   422 `app_answer_invalid`. `apps.requestHandler().on('collaboratorGroupStructure', ...)` is typed
   by them, `siren apps` names the kind Collaborator group structure, and `openapi.yaml`'s

@@ -1653,7 +1653,7 @@ answers.on('transactionFilter', 'plan-lines', ({ data }) => ({
 
 A Collaborator group structure (`collaboratorGroupStructure`) gets
 `AppCollaboratorGroupStructureQuestion` once per cascade trigger on a group that picks it. The
-question names the `group`, its `members` with each one's `collaboratorId`, `name` and `metadata`,
+question names the `group`, its `members` with each one's `collaboratorId`, `name`, `status` at the trigger and `metadata`,
 what the cascade is `for` (a program for an engagement cascade, a distributor for a metric cascade),
 the `triggeringCollaborator` and the `cause`, whose `id` is the trigger's own random id of 16 hex
 characters. It also carries the fields of the trigger it interrupts. A distributor's ask carries a
@@ -1664,9 +1664,9 @@ distributor's looks like this:
 
 ```json
 {"group": {"id": 4, "name": "Northeast team"},
- "members": [{"collaboratorId": 42, "name": "Riley Rep", "metadata": {"rank": 3}},
-             {"collaboratorId": 57, "name": "Sam Lead", "metadata": {"rank": 2}},
-             {"collaboratorId": 63, "name": "Jo Manager", "metadata": {"rank": 1}}],
+ "members": [{"collaboratorId": 42, "name": "Riley Rep", "status": "active", "metadata": {"rank": 3}},
+             {"collaboratorId": 57, "name": "Sam Lead", "status": "active", "metadata": {"rank": 2}},
+             {"collaboratorId": 63, "name": "Jo Manager", "status": "active", "metadata": {"rank": 1}}],
  "for": {"type": "distributor", "id": 2},
  "triggeringCollaborator": {"id": 42, "name": "Riley Rep"},
  "cause": {"id": "9f2c4e1a7b3d5c60", "type": null, "causeId": null},

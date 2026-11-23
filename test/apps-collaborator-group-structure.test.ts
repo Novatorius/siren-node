@@ -41,9 +41,9 @@ const SITE = 'https://acme.example/siren';
 const QUESTION: AppCollaboratorGroupStructureDistributorQuestion = {
   group: { id: 4, name: 'Northeast team' },
   members: [
-    { collaboratorId: 42, name: 'Riley Rep', metadata: { rank: 3 } },
-    { collaboratorId: 57, name: 'Sam Lead', metadata: { rank: 2 } },
-    { collaboratorId: 63, name: 'Jo Manager', metadata: { rank: 1 } },
+    { collaboratorId: 42, name: 'Riley Rep', status: 'active', metadata: { rank: 3 } },
+    { collaboratorId: 57, name: 'Sam Lead', status: 'active', metadata: { rank: 2 } },
+    { collaboratorId: 63, name: 'Jo Manager', status: 'active', metadata: { rank: 1 } },
   ],
   for: { type: 'distributor', id: 2 },
   triggeringCollaborator: { id: 42, name: 'Riley Rep' },
