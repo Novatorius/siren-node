@@ -8,6 +8,7 @@ import { AppsResource } from '../src/resources/apps';
 import type {
   AppCollaboratorGroupStructureAnswer,
   AppCollaboratorGroupStructureDistributorQuestion,
+  AppCollaboratorGroupStructureProgramQuestion,
   AppCollaboratorGroupStructureQuestion,
 } from '../src/record-types';
 import { AppItemKind } from '../src/taxonomy';
@@ -56,14 +57,18 @@ const QUESTION: AppCollaboratorGroupStructureDistributorQuestion = {
   sale: null,
 };
 
-/** A program-side ask: the common fields, and the trigger's own beside them. */
-const PROGRAM_QUESTION: AppCollaboratorGroupStructureQuestion = {
+/** A program-side ask: the group's fields, and the engagement trigger's beside them. */
+const PROGRAM_QUESTION: AppCollaboratorGroupStructureProgramQuestion = {
   group: { id: 4, name: 'Northeast team' },
   members: QUESTION.members,
   for: { type: 'program', id: 3 },
-  triggeringCollaborator: { id: 42, name: 'Riley Rep' },
-  cause: { id: '0a1b2c3d4e5f6071', engagementId: 880 },
   program: { id: 3, name: 'Partner program' },
+  engagementType: 'referredSiteVisit',
+  programEngagementTypeId: 55,
+  args: { pointsAtLayer1: '10' },
+  opportunity: { id: 615, customerId: null },
+  triggeringCollaborator: { id: 42, name: 'Riley Rep' },
+  cause: { id: '9f2c4e1a7b3d5c60', event: 'referredSiteVisit', occurredAt: '2026-11-17T12:20:00+00:00' },
 };
 
 const CHAIN: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'chain', order: [63, 57, 42] };

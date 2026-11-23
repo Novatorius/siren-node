@@ -19,7 +19,7 @@ their own pkt/apps-c16-7 branches.
 |---|---|---|
 | `AppItemKind.CollaboratorGroupStructure` | src/taxonomy.ts | The value `collaboratorGroupStructure`. |
 | Readable name | src/cli/app-kinds.ts | Collaborator group structure. |
-| Question types | src/record-types.ts | `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`, `AppCollaboratorGroupMember`. |
+| Question types | src/record-types.ts | `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`, `AppCollaboratorGroupStructureProgramQuestion`, `AppCollaboratorGroupMember`. |
 | Answer types | src/record-types.ts | `AppCollaboratorGroupChain`, `AppCollaboratorGroupTree` and their union `AppCollaboratorGroupStructureAnswer`. |
 | `AppFeatureFunctions` | src/record-types.ts | `on('collaboratorGroupStructure', ...)` gets `AppAsk<AppCollaboratorGroupStructureQuestion>` and returns the answer. |
 | `AppItemDeclaration` | openapi.yaml | The kind `collaboratorGroupStructure`. |
@@ -35,8 +35,9 @@ signature. A distributor's ask carries a metric calculation's fields
 (`distributor`, `distribution`, `metricType`, `distributorMetricTypeId`,
 `opportunityId`, `points`, `sale`) and a metric's `cause`, which
 `AppCollaboratorGroupStructureDistributorQuestion` types. A program's ask
-carries the program and the engagement trigger's fields, which another lane
-is still defining, so the SDK types only the common fields for it.
+carries an engagement calculation's fields (`program`, `engagementType`,
+`programEngagementTypeId`, `args`, `opportunity`) and an engagement's `cause`,
+which `AppCollaboratorGroupStructureProgramQuestion` types.
 
 ## Rules
 
@@ -62,5 +63,4 @@ test/cli-apps-container-review.test.ts name the kind.
 ## Left open
 
 Siren's catalog fixtures for `GET /apps/kinds` are not generated, so the
-name here is pinned by hand until the server half lands. The program side's
-trigger fields stay untyped until the engagement cascade's lane defines them.
+name here is pinned by hand until the server half lands.

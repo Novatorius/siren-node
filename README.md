@@ -1515,7 +1515,10 @@ question names the `group`, its `members` with each one's `collaboratorId`, `nam
 what the cascade is `for` (a program for an engagement cascade, a distributor for a metric cascade),
 the `triggeringCollaborator` and the `cause`, whose `id` is the trigger's own random id of 16 hex
 characters. It also carries the fields of the trigger it interrupts. A distributor's ask carries a
-metric calculation's fields, typed as `AppCollaboratorGroupStructureDistributorQuestion`:
+metric calculation's fields, typed as `AppCollaboratorGroupStructureDistributorQuestion`. A program's
+ask carries an engagement calculation's fields (`program`, `engagementType`, `programEngagementTypeId`, `args`,
+`opportunity`) and an engagement's `cause`, typed as `AppCollaboratorGroupStructureProgramQuestion`. A
+distributor's looks like this:
 
 ```json
 {"group": {"id": 4, "name": "Northeast team"},

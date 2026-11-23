@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collaborator group selects to let the app give the group's shape. Siren asks it once per cascade
   trigger on the group, for a program or a distributor. The types
   `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`,
+  `AppCollaboratorGroupStructureProgramQuestion`,
   `AppCollaboratorGroupMember`, `AppCollaboratorGroupChain`, `AppCollaboratorGroupTree` and
   `AppCollaboratorGroupStructureAnswer` describe the ask's `data` and its answer, a chain or a tree,
   which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as before. Siren refuses

@@ -1675,7 +1675,8 @@ export interface AppCollaboratorGroupMember {
  * characters, the trigger's own random id. The ask also carries the fields
  * of the trigger it interrupts, which differ by side, so they stay open
  * here. {@link AppCollaboratorGroupStructureDistributorQuestion} types a
- * distributor's. Answer with an {@link AppCollaboratorGroupStructureAnswer}.
+ * distributor's and {@link AppCollaboratorGroupStructureProgramQuestion} a
+ * program's. Answer with an {@link AppCollaboratorGroupStructureAnswer}.
  */
 export interface AppCollaboratorGroupStructureQuestion {
   group: { id: number; name: string };
@@ -1703,6 +1704,23 @@ export interface AppCollaboratorGroupStructureDistributorQuestion extends AppCol
   points: number | null;
   cause: AppMetricCause & { [field: string]: unknown };
   sale: AppMetricSale | null;
+}
+
+/**
+ * A `collaboratorGroupStructure` ask for a program's engagement cascade. It
+ * carries the fields of an engagement calculation's question beside the
+ * group's (Siren's `AppGroupStructureQuestion::forEngagement()`), and its
+ * `cause` is an engagement's. `args` holds the settings a person gave the
+ * engagement type, as text by name, or an empty object.
+ */
+export interface AppCollaboratorGroupStructureProgramQuestion extends AppCollaboratorGroupStructureQuestion {
+  for: { type: 'program'; id: number };
+  program: { id: number; name: string };
+  engagementType: string;
+  programEngagementTypeId: number;
+  args: Record<string, string>;
+  opportunity: AppEngagementOpportunity;
+  cause: AppEngagementCause & { [field: string]: unknown };
 }
 
 /**
