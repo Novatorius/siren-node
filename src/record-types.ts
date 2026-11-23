@@ -898,6 +898,13 @@ export interface FulfillmentPayout {
   dateFailed?: string | null;
   waitingReason?: string | null;
   dateWaiting?: string | null;
+  /**
+   * The app a `processing` payout waits on to answer whether it paid, and
+   * the key of Siren's request to it. `null` when the payout waits on no
+   * app. A person can't mark such a payout paid or unpaid until the request
+   * is answered.
+   */
+  waitingOnApp?: { name: string; requestKey: string } | null;
   dateCreated?: string | null;
   dateModified?: string | null;
   [field: string]: unknown;
@@ -961,6 +968,9 @@ export interface FulfillmentListParams extends RecordListParams {
  * (AppRequestEnvelope, tests/Fixtures/apps-exchange/signed-request.json).
  */
 
+/** A conversion an `incentiveType` pays, as its `conversionTypes` setting lists it. */
+export type AppConversionType = 'sale' | 'lead' | 'renewal';
+
 /**
  * One feature an app declares, as `apps.declare()` and `apps.items.create()`
  * send it. The code calls a feature an item. Its `kind` and `key` lock once
@@ -985,6 +995,12 @@ export interface AppItemDeclaration {
    * score counts points.
    */
   scoresMoney?: boolean;
+  /**
+   * Required for an `incentiveType` and refused for any other kind: the
+   * conversions it pays, each once, from `sale`, `lead` and `renewal`. A
+   * program offers the type only for these.
+   */
+  conversionTypes?: AppConversionType[];
   /**
    * A `customEvent`'s fields, refused for any other kind: each field name
    * to `{type, required}`, the fields a send carries besides the
@@ -1061,6 +1077,7 @@ export interface AppItem extends AppPlanAccess {
     currencies?: string[];
     answerWindowMinutes?: number;
     scoresMoney?: boolean;
+    conversionTypes?: AppConversionType[];
     fields?: Record<string, CustomEventField>;
     domains?: string[];
   };
@@ -1106,6 +1123,8 @@ export interface UpdateAppItemParams {
   answerWindowMinutes?: number | null;
   /** A metric calculation's setting: whether its score is money. */
   scoresMoney?: boolean;
+  /** An incentive type's setting: the conversions it pays. */
+  conversionTypes?: AppConversionType[];
   /** A custom event's fields. */
   fields?: Record<string, CustomEventField>;
   /** A custom event's allowed domains. */
@@ -1488,6 +1507,114 @@ export interface AppRewardAnswer extends AppAnswer {
 }
 
 /**
+ * One engagement in an `incentiveType` ask: an active engagement the program
+ * holds on the opportunity at the sale, or one of a renewal's or refunded
+ * award's engagements. `createdDate` is an ISO 8601 time.
+ */
+export interface AppIncentiveTypeEngagement {
+  engagementId: number;
+  collaboratorId: number;
+  score: number;
+  createdDate: string;
+}
+
+/** One line of the transaction in an `incentiveType` ask, refund lines included. `value` is a stored integer. */
+export interface AppIncentiveTypeLine {
+  id: number;
+  type: string;
+  name: string;
+  quantity: number;
+  value: number;
+}
+
+/**
+ * The data of an `incentiveType` ask (Siren's `AppIncentiveTypeQuestion::build()`):
+ * Siren asks the app which engagements one sale, lead or renewal converts on
+ * a program and the pool the program's resolver divides among them.
+ * `reason` is `sale` until the award is made, and `refund` when a partial
+ * refund asks again about an award already made, which then lists the
+ * award's `conversions`. `transaction` is null for a lead, which names its
+ * `binding` instead. `total` is the sum of the lines in the transaction's
+ * units, in the stored integer form. Answer with an {@link AppIncentiveTypeAnswer}.
+ */
+export interface AppIncentiveTypeQuestion {
+  reason: 'sale' | 'refund';
+  program: { id: number; name: string; units: string };
+  conversionType: AppConversionType;
+  opportunity: { id: number };
+  transaction: {
+    id: number;
+    status: string;
+    units: string;
+    currency: AppCurrency | null;
+    total: number;
+    lines: AppIncentiveTypeLine[];
+  } | null;
+  binding: { type: string; id: string } | null;
+  engagements: AppIncentiveTypeEngagement[];
+  conversions?: Array<{ conversionId: number; engagementId: number }>;
+}
+
+/**
+ * The answer to an `incentiveType` ask. `{ outcome: 'award', units, pool,
+ * engagementIds }` converts the engagements chosen, each once and each from
+ * the question, and the program's resolver divides `pool`, a whole number at
+ * or above 0 in the stored integer form of the program's `units`.
+ * `{ outcome: 'none' }` awards nothing on the program. A refund's answer
+ * changes only the pool. Siren refuses any other shape with 422
+ * `app_answer_invalid`.
+ */
+export type AppIncentiveTypeAnswer =
+  | (AppAnswer & { outcome: 'award'; units: string; pool: number; engagementIds: number[] })
+  | (AppAnswer & { outcome: 'none' });
+
+/**
+ * One engagement in a `programGroupSorter` ask: an active engagement a
+ * program holds on the opportunity at the sale. `createdDate` is an ISO 8601
+ * time.
+ */
+export interface AppGroupOrderEngagement {
+  engagementId: number;
+  collaboratorId: number;
+  score: number;
+  createdDate: string;
+}
+
+/** One program in a `programGroupSorter` ask, with its engagements oldest first. */
+export interface AppGroupOrderProgram {
+  id: number;
+  name: string;
+  engagements: AppGroupOrderEngagement[];
+}
+
+/**
+ * The data of a `programGroupSorter` ask (Siren's
+ * `AppGroupOrderQuestion::build()`): Siren asks the app the order to try a
+ * program group's programs in for one sale or lead. `programs`
+ * lists each program of the group that takes the conversion once, in the
+ * order the group holds them. `transaction` is null for a lead, and its
+ * `total` is a stored integer. Answer with an {@link AppGroupOrderAnswer}.
+ */
+export interface AppGroupOrderQuestion {
+  group: { id: number; name: string };
+  conversionType: string;
+  opportunity: { id: number };
+  transaction: { id: number; units: string; total: number } | null;
+  programs: AppGroupOrderProgram[];
+}
+
+/**
+ * The answer to a `programGroupSorter` ask, such as
+ * `{ outcome: 'sorted', programIds: [9, 12] }`. `programIds` holds every
+ * program id of the question exactly once, in the order Siren tries them.
+ * The first program that converts wins the group.
+ */
+export interface AppGroupOrderAnswer extends AppAnswer {
+  outcome: 'sorted';
+  programIds: number[];
+}
+
+/**
  * One collaborator's metric in a `distributionResolver` ask: what the
  * collaborator scored in the distribution's period, and how many times a
  * trigger counted.
@@ -1545,17 +1672,26 @@ export interface AppFeatureFunctions {
     request: AppAsk<AppDistributionQuestion>,
   ) => AppDistributionAnswer | undefined | Promise<AppDistributionAnswer | undefined>;
   incentiveResolver: (request: AppAsk<AppRewardQuestion>) => AppRewardAnswer | undefined | Promise<AppRewardAnswer | undefined>;
-  payoutMethod: (request: AppAsk) => AppAnswer | undefined | Promise<AppAnswer | undefined>;
+  payoutMethod: (request: AppAsk<AppPayoutQuestion>) => AppPayoutAnswer | undefined | Promise<AppPayoutAnswer | undefined>;
   metricCalculation: (
     request: AppAsk<AppMetricCalculationQuestion>,
   ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
   metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
+  incentiveType: (
+    request: AppAsk<AppIncentiveTypeQuestion>,
+  ) => AppIncentiveTypeAnswer | undefined | Promise<AppIncentiveTypeAnswer | undefined>;
   engagementCalculation: (
     request: AppAsk<AppEngagementCalculationQuestion>,
   ) => AppEngagementCalculationAnswer | undefined | Promise<AppEngagementCalculationAnswer | undefined>;
   engagementFilter: (
     request: AppAsk<AppEngagementFilterQuestion>,
   ) => AppEngagementFilterAnswer | undefined | Promise<AppEngagementFilterAnswer | undefined>;
+  programGroupSorter: (
+    request: AppAsk<AppGroupOrderQuestion>,
+  ) => AppGroupOrderAnswer | undefined | Promise<AppGroupOrderAnswer | undefined>;
+  transactionFilter: (
+    request: AppAsk<AppTransactionFilterQuestion>,
+  ) => AppTransactionFilterAnswer | undefined | Promise<AppTransactionFilterAnswer | undefined>;
   collaboratorGroupStructure: (
     request: AppAsk<AppCollaboratorGroupStructureQuestion>,
   ) => AppCollaboratorGroupStructureAnswer | undefined | Promise<AppCollaboratorGroupStructureAnswer | undefined>;
@@ -1758,6 +1894,45 @@ export interface AppCollaboratorGroupTree extends AppAnswer {
 export type AppCollaboratorGroupStructureAnswer = AppCollaboratorGroupChain | AppCollaboratorGroupTree;
 
 /**
+ * The data of a `payoutMethod` ask: Siren asks the app to pay one payout.
+ * `payout.attempt` starts at 1 and rises when Siren asks again about the
+ * same payout, such as after a failed answer and a retry. `amount.value` is
+ * a whole number in the currency's smallest unit. Pay each `payout.id` at
+ * most once, and when Siren asks again about a payout the app already paid,
+ * answer `paid` with the first reference. Answer with an
+ * {@link AppPayoutAnswer}.
+ */
+export interface AppPayoutQuestion {
+  payout: { id: number; fulfillmentId: number; attempt: number };
+  /** What to pay, a stored integer. Read it with `apps.shownAmount(amount.value, amount.currency)`. */
+  amount: { value: number; units: string; currency: AppCurrency };
+  /** `email` is null when the collaborator has no email address. */
+  collaborator: { id: number; name: string; email: string | null };
+}
+
+/**
+ * The answer to a `payoutMethod` ask: `{ outcome: 'paid', reference }` where
+ * `reference` is the payment's id in the app's own system, 1 to 191
+ * characters.
+ */
+export interface AppPayoutPaid extends AppAnswer {
+  outcome: 'paid';
+  reference: string;
+}
+
+/**
+ * The answer to a `payoutMethod` ask when the app could not pay:
+ * `{ outcome: 'failed', reason }`, where `reason` is 1 to 500 characters.
+ */
+export interface AppPayoutFailed extends AppAnswer {
+  outcome: 'failed';
+  reason: string;
+}
+
+/** The answer to a `payoutMethod` ask: paid with a reference, or failed with a reason. */
+export type AppPayoutAnswer = AppPayoutPaid | AppPayoutFailed;
+
+/**
  * The trigger behind an engagement ask. `id` is the trigger's own random id,
  * so two visits make two asks. `event` is the engagement type that fired.
  * `occurredAt` is an ISO 8601 time, and the engagements the answer makes are
@@ -1831,6 +2006,53 @@ export interface AppEngagementFilterQuestion {
  * plain text of 1 to 200 characters, which Siren notes on the opportunity.
  */
 export type AppEngagementFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+
+/**
+ * One of a sale's own lines in a `transactionFilter` ask. `value` is the
+ * line's unit value, a stored whole number in the transaction's units, and
+ * `quantity` a whole number. `productId` is null when the line names no
+ * product.
+ */
+export interface AppTransactionLine {
+  id: number;
+  type: 'lineItem' | 'discount' | 'fee' | 'shipping' | 'tax';
+  name: string;
+  quantity: number;
+  value: number;
+  productId: string | null;
+}
+
+/**
+ * The data of a `transactionFilter` ask: Siren asks the app which of a
+ * sale's own lines count, once per sale for each program or distributor that
+ * picks the filter. `for` names that program or distributor. The subject id
+ * is `{opportunityId}:{programId}:t{transactionId}` for a program's lines
+ * and `{distributorId}:t{transactionId}` for a distributor's.
+ * `distribution` is null for a program, and for a distributor the period
+ * the sale's value lands in. `refundDistribution` is null, or the later
+ * period a refund came in while the ask was open. Refunds reuse the stored
+ * answer, so refund lines are never sent. Answer with an
+ * {@link AppTransactionFilterAnswer}.
+ */
+export interface AppTransactionFilterQuestion {
+  for: { type: 'program' | 'distributor'; id: number; name: string };
+  transaction: { id: number; units: string; currency: AppCurrency };
+  lines: AppTransactionLine[];
+  distribution: { id: number } | null;
+  refundDistribution: { id: number } | null;
+}
+
+/**
+ * The answer to a `transactionFilter` ask, such as
+ * `{ outcome: 'filtered', include: [5501, 5502] }`. `include` lists the ids
+ * of the question's lines that count, each at most once. An empty list
+ * includes nothing. A line counts when any filter the record picks includes
+ * it. Siren refuses an id the question lacks with 422 `app_answer_invalid`.
+ */
+export interface AppTransactionFilterAnswer extends AppAnswer {
+  outcome: 'filtered';
+  include: number[];
+}
 
 /**
  * A stored amount as a person reads it, from `apps.shownAmount()`, the three

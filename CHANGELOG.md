@@ -63,6 +63,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument, `Record<string, unknown>` by default. `on()` types each kind's request and answer, the metric
   calculation and metric filter kinds' included.
 
+- `AppItemKind.IncentiveType` (`incentiveType`), the feature kind a program selects as its
+  incentive type, to let the app decide which engagements each sale, lead or renewal converts and
+  the pool the program's resolver divides. The types `AppIncentiveTypeQuestion`,
+  `AppIncentiveTypeEngagement`, `AppIncentiveTypeLine` and `AppIncentiveTypeAnswer` describe the
+  ask's `data` and its answer, `{ outcome: 'award', units, pool, engagementIds }` or
+  `{ outcome: 'none' }`, which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as
+  before, and `requestHandler().on('incentiveType', ...)` types both. A feature takes
+  `conversionTypes` (`AppConversionType`: `sale`, `lead`, `renewal`) in `apps.declare()`,
+  `apps.items.create()` and `apps.items.update()`. The app file requires it for an incentive type,
+  each once and known, refuses it on any other kind, and `siren apps apply` shows a change to it as
+  "conversions it pays". `siren apps` names the kind Incentive structure, and `openapi.yaml`'s
+  `AppItemDeclaration` gains the kind and `conversionTypes`.
 - `AppItemKind.EngagementCalculation` (`engagementCalculation`) and `AppItemKind.EngagementFilter`
   (`engagementFilter`), the feature kinds a program's engagement type and a program select to let the
   app decide who earns each engagement and whether it is made. The types
@@ -71,6 +83,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `data` and their answers, which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer`
   as before, and `requestHandler().on(...)` types both. `siren apps` names them Engagement
   calculation and Customer filter for programs, and `openapi.yaml`'s `AppItemDeclaration` gains them.
+- `AppItemKind.ProgramGroupSorter` (`programGroupSorter`), the feature kind a program group selects
+  as its structure, to let the app order the group's programs for each sale or lead. The types
+  `AppGroupOrderQuestion`, `AppGroupOrderProgram`, `AppGroupOrderEngagement` and
+  `AppGroupOrderAnswer` describe the ask's `data` and its answer, `{ outcome: 'sorted', programIds }`,
+  which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as before, and
+  `requestHandler().on('programGroupSorter', ...)` types both. `siren apps` names the kind Program
+  group structure, and `openapi.yaml`'s `AppItemDeclaration` gains it.
+- `AppItemKind.TransactionFilter` (`transactionFilter`), the feature kind a program or a
+  distributor selects to let the app say which of a sale's own lines count. Siren's catalog calls it
+  a transaction compiler. Siren asks it once per sale for each program or distributor that picks
+  it, and a refund reuses the stored answer. The types `AppTransactionFilterQuestion`,
+  `AppTransactionLine` and `AppTransactionFilterAnswer` describe the ask's `data` and its answer,
+  the ids of the lines to include, which `apps.requests.answer()` sends to
+  `POST /apps/requests/{id}/answer` as before. Siren refuses a line id the question lacks with 422
+  `app_answer_invalid`. `apps.requestHandler().on('transactionFilter', ...)` is typed by them,
+  `siren apps` names the kind Transaction filter, and `openapi.yaml`'s `AppItemDeclaration` gains
+  it.
 - `AppItemKind.CollaboratorGroupStructure` (`collaboratorGroupStructure`), the feature kind a
   collaborator group selects to let the app give the group's shape. Siren asks it once per cascade
   trigger on the group, for a program or a distributor. The types
@@ -88,7 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to
   `POST /apps/requests/{id}/answer` as before. `AppErrorCode.Dropped` is
   `app_request_dropped`, the 409 Siren answers once it stopped waiting for an ask, 24 hours after the
-  first ask about a sale. `siren apps` names the kind Incentive resolver, and `openapi.yaml`'s
+  sale's reward began to wait. `siren apps` names the kind Incentive resolver, and `openapi.yaml`'s
   `AppItemDeclaration` gains it.
 - `AppRequestStatus.Dropped` (`dropped`), the status of an ask Siren stopped waiting for, which
   `apps.requests.list()` can filter by. `openapi.yaml` lists it in both request status enums.
@@ -102,6 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `siren apps apply` shows a changed `scoresMoney` as "scores money". `openapi.yaml`'s
   `AppItemDeclaration` gains `scoresMoney` and the kinds `customEvent`, `metricCalculation` and
   `metricFilter`.
+- `AppPayoutQuestion`, `AppPayoutPaid`, `AppPayoutFailed` and `AppPayoutAnswer` describe the
+  `payoutMethod` ask's `data` and its answer, which `apps.requests.answer()` sends as before. The
+  request handler's `payoutMethod` function now takes `AppAsk<AppPayoutQuestion>` and returns an
+  `AppPayoutAnswer`. The app pays each payout id at most once.
 - `events.ingest` takes an optional third argument, `IngestOptions`, with `headers` for the call
   and a `timeout` in milliseconds that replaces the client's for this call. A connected site uses it
   to send a referral visit with the tracking value the shopper already holds, as `X-Siren-Token` or

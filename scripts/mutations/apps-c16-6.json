@@ -1,0 +1,88 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (entry.kind === AppItemKind.IncentiveType) {",
+    "replace": "    if (entry.kind === AppItemKind.MetricFilter) {",
+    "expect": "caught",
+    "failing": [
+      "apps-c16-6: the incentive type kind > reads an incentive type with its conversions"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/cli/app-file.ts",
+    "find": "        new Set(types).size !== types.length ||",
+    "replace": "        types.length !== new Set(types).size ||",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/cli/app-file.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (entry.kind === AppItemKind.IncentiveType) {",
+    "replace": "    if (entry.kind === AppItemKind.MetricFilter) {",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-c16-6: the incentive type kind > sends both answers through the one answer route"
+    ]
+  },
+  {
+    "id": "guard-repeated",
+    "file": "src/cli/app-file.ts",
+    "find": "        new Set(types).size !== types.length ||\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-c16-6: the incentive type kind > refuses an incentive type with no conversions"
+    ]
+  },
+  {
+    "id": "guard-unknown",
+    "file": "src/cli/app-file.ts",
+    "find": "        types.length === 0 ||\n        new Set(types).size !== types.length ||\n        types.some((type) => !(CONVERSION_TYPES as readonly string[]).includes(type))",
+    "replace": "        types.length === 0 ||\n        new Set(types).size !== types.length",
+    "expect": "caught",
+    "failing": [
+      "apps-c16-6: the incentive type kind > refuses an incentive type with no conversions"
+    ]
+  },
+  {
+    "id": "guard-order",
+    "file": "src/cli/app-file.ts",
+    "find": "CONVERSION_TYPES.filter((type) => item.conversionTypes!.includes(type))",
+    "replace": "[...item.conversionTypes]",
+    "expect": "caught",
+    "failing": [
+      "apps-c16-6: the incentive type kind > reads an incentive type with its conversions"
+    ]
+  },
+  {
+    "id": "guard-difference",
+    "file": "src/cli/app-changes.ts",
+    "find": "    differences.push('conversions it pays');",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-c16-6: the incentive type kind > declare and the item routes send conversionTypes"
+    ]
+  },
+  {
+    "id": "guard-update-field",
+    "file": "src/resources/apps.ts",
+    "find": "UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains']",
+    "replace": "UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'fields', 'domains']",
+    "expect": "caught",
+    "failing": [
+      "apps-c16-6: the incentive type kind > declare and the item routes send conversionTypes"
+    ]
+  }
+]

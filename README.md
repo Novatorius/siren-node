@@ -1114,8 +1114,11 @@ chooses a built-in one:
 | Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
 | Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
 | Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
+| Incentive structure (`incentiveType`) | a program, as its incentive type | An ask which engagements each sale, lead or renewal converts and the pool, answered `{ outcome: 'award', units, pool, engagementIds }` or `{ outcome: 'none' }`. |
 | Engagement calculation (`engagementCalculation`) | a program's engagement type | An ask who earns each engagement, answered `{ outcome: 'engagements', results }`. |
 | Customer filter for programs (`engagementFilter`) | a program | An ask whether each engagement may be made, answered `allow` or `suppress`. |
+| Program group structure (`programGroupSorter`) | a program group | An ask for the order to try the group's programs in, answered `{ outcome: 'sorted', programIds }`. |
+| Transaction filter (`transactionFilter`) | a program or a distributor | An ask for which of each sale's lines count, answered `{ outcome: 'filtered', include }`. |
 | Collaborator group structure (`collaboratorGroupStructure`) | a collaborator group | An ask for the group's shape on each cascade trigger, answered a chain or a tree. |
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
@@ -1256,6 +1259,30 @@ answers.on('incentiveResolver', 'split-the-reward', ({ data }) => ({
 }))
 ```
 
+An Incentive structure (`incentiveType`) is an ask too. The function chooses the engagements that
+convert and the pool the program's resolver divides among them, or returns `{ outcome: 'none' }`:
+
+```js
+answers.on('incentiveType', 'pay-on-closed-deals', ({ data }) => {
+  // A tenth of the sale, shared by every engagement. A lead earns nothing here.
+  const sale = data.transaction
+  if (!sale || sale.units !== data.program.units) return { outcome: 'none' }
+  return { outcome: 'award', units: sale.units, pool: Math.floor(sale.total / 10), engagementIds: data.engagements.map((e) => e.engagementId) }
+})
+```
+
+A Program group structure (`programGroupSorter`) is an ask too. The function returns every
+program id of the question once, in the order Siren tries them:
+
+```js
+answers.on('programGroupSorter', 'pick-the-program', ({ data }) => {
+  // Try the program whose best engagement scores highest first.
+  const best = (program) => Math.max(0, ...program.engagements.map((engagement) => engagement.score))
+  const programs = [...data.programs].sort((a, b) => best(b) - best(a))
+  return { outcome: 'sorted', programIds: programs.map((program) => program.id) }
+})
+```
+
 On Siren's sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
 `{ '41': 6000, '43': 4000 }`. Each share is a whole number of the currency's smallest shown unit,
 `10 ** (scale - decimalPlaces)` stored units, so a yen pool splits in multiples of 100. Every share
@@ -1268,10 +1295,14 @@ weight or a list of `[id, weight]` pairs.
 Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
 `AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The metric kinds are typed the same
 way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
-`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. `on('engagementCalculation', ...)`
+`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. `on('incentiveType', ...)` gets
+`AppAsk<AppIncentiveTypeQuestion>` and returns `AppIncentiveTypeAnswer`. `on('engagementCalculation', ...)`
 returns `AppEngagementCalculationAnswer` and `on('engagementFilter', ...)` returns `AppEngagementFilterAnswer`.
-`on('collaboratorGroupStructure', ...)` gets `AppAsk<AppCollaboratorGroupStructureQuestion>` and returns
-`AppCollaboratorGroupStructureAnswer`, a chain or a tree. The client must be built with
+`on('programGroupSorter', ...)` gets `AppAsk<AppGroupOrderQuestion>` and returns `AppGroupOrderAnswer`.
+`on('transactionFilter', ...)` gets `AppAsk<AppTransactionFilterQuestion>` and returns
+`AppTransactionFilterAnswer`, the lines to include. `on('collaboratorGroupStructure', ...)` gets
+`AppAsk<AppCollaboratorGroupStructureQuestion>` and returns `AppCollaboratorGroupStructureAnswer`, a chain or a
+tree. The client must be built with
 the app's own key, since the handler posts answers with it.
 
 What the handler replies, always JSON with `Cache-Control: no-store`:
@@ -1393,8 +1424,8 @@ if (request.mode === 'tell' && request.item.kind === 'postConversionAction') {
 `Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand,
 but only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses
 a person's answer to any other ask with 409 `app_request_not_needing_attention`, since the app may
-still answer it. The app's own key answers its own ask at any time before it is applied. The
-answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
+still answer it. The app's own key answers its own ask at any time before it is applied and before
+Siren stops waiting for it. The answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
 `{ status: 'accepted', duplicate }`.
 
 The answer is sent once. When it is lost to a dropped connection or a 5xx, send the same answer
@@ -1420,8 +1451,8 @@ pool. Siren refuses any other key, a missing one, or a negative or fractional re
 `app_answer_invalid`.
 
 The rewards wait for the answer, and an incentive resolver waits an hour per send when the feature
-sets no window. Siren waits 24 hours from the first ask about a sale at most. Then it stops waiting:
-a sale's collaborators get no reward, and a refund cuts the rewards already made by the share
+sets no window. Siren waits at most 24 hours from when the sale's reward began to wait, or from the
+refund for a refund's ask. Then it stops waiting: a sale's collaborators get no reward, and a refund cuts the rewards already made by the share
 refunded. An answer after that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as
 `ConflictError`. While asks wait too long, the app's problem contacts, or the admins when it names
 none, get an email about twice a week.
@@ -1442,6 +1473,48 @@ if (request.mode === 'ask' && request.item.kind === 'incentiveResolver') {
 }
 ```
 
+### Answer an award ask
+
+An Incentive structure (`incentiveType`) gets `AppIncentiveTypeQuestion` when a sale, renewal or
+lead reaches a program whose incentive type picks it, for a conversion its `conversionTypes`
+setting lists: the `program` with its `units`, the `conversionType`, the `opportunity`, the
+`transaction` (null for a lead, which names its `binding` instead) with its `total` and `lines` as
+stored whole numbers, and the `engagements` the program holds on the opportunity, each with its
+`score`. It answers `AppIncentiveTypeAnswer`: `{ outcome: 'award', units, pool, engagementIds }`,
+where `units` is the program's, `pool` a whole number of 0 or more, and `engagementIds` a list of
+the question's engagements, each once. Those engagements convert, and the program's resolver
+divides the pool among them. `{ outcome: 'none' }` awards nothing on the program. Siren refuses
+any other shape, an engagement the question lacks, or one named twice with 422
+`app_answer_invalid`.
+
+`reason` is `sale` until the award is made. A partial refund of a sale the app already awarded
+asks again with `reason` `refund`, the transaction as it stands now and the award's `conversions`.
+The rewards stay as they are until that answer, which keeps the same conversions and changes only
+the pool. The program awards nothing until the answer. Siren waits 24 hours from the first ask at
+most. Then it stops waiting: a sale awards nothing on the program, and a refund cuts the rewards
+already made by the share refunded. An answer after that gets 409 `app_request_dropped`
+(`AppErrorCode.Dropped`) as `ConflictError`.
+
+A feature of this kind needs `conversionTypes`, the conversions it pays, each once, from `sale`,
+`lead` and `renewal`. A program offers it only for those. The app file refuses it with none, or
+with a repeated or unknown one, and refuses `conversionTypes` on any other kind. `siren apps apply`
+shows a change to it as "conversions it pays".
+
+### Answer a group order ask
+
+A Program group structure (`programGroupSorter`) gets `AppGroupOrderQuestion` when a sale or lead
+reaches a program group that picks it: the `group`, the `conversionType`, the `opportunity`, the
+`transaction` (null for a lead) with its `total` as a stored whole number, and the `programs` of the
+group that take the conversion, in the group's order, each with its active `engagements` on the
+opportunity, oldest first. It answers `AppGroupOrderAnswer`: `programIds`, every program id of the
+question exactly once, in the order Siren tries them. The first program that converts wins the
+group. Siren refuses a missing, repeated or unknown id with 422 `app_answer_invalid`.
+
+No program in the group is awarded until the answer, and later sales on the group wait behind it.
+Siren asks about each sale when it happens, even one that waits behind another, and waits 24 hours
+from the sale at most. Then it stops waiting, no program in the group is awarded for that sale, and
+an answer after that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`. A
+renewal doesn't ask. It goes to the program in the group whose engagement is oldest.
 ### Answer a metric ask
 
 A Metric calculation (`metricCalculation`) gets `AppMetricCalculationQuestion`: the `distributor`,
@@ -1474,6 +1547,39 @@ if (request.mode === 'ask' && request.item.kind === 'metricFilter') {
 }
 ```
 
+### Answer a payout ask
+
+A Payout method (`payoutMethod`) gets `AppPayoutQuestion` when Siren pays one payout through an
+autofulfiller that names the app's payout method: the `payout` (`id`, `fulfillmentId` and
+`attempt`), the `amount` to pay as a stored whole number in the currency's smallest unit, and the
+`collaborator` (`id`, `name` and `email`). `attempt` starts at 1 and rises when Siren asks again
+about the same payout, such as after a failed answer and a retry. The answer is `AppPayoutAnswer`,
+one of two shapes. `{ outcome: 'paid', reference }` has a `reference` of 1 to 191 characters, the
+payment's id in the app's own system. `{ outcome: 'failed', reason }` has a `reason` of 1 to 500
+characters.
+
+This moves money, so the app pays each payout id at most once. When Siren asks again about a
+payout the app already paid, the app answers `paid` with the first reference and pays nothing
+more. Siren drops an ask after 24 hours with no answer and marks the payout failed. An answer after
+that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
+
+```ts
+import type { AppPayoutAnswer, AppPayoutQuestion } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'ask' && request.item.kind === 'payoutMethod') {
+  const { payout, amount, collaborator } = request.data as unknown as AppPayoutQuestion;
+  const reference = await ledger.payOnce(String(payout.id), amount.value, collaborator.email);
+  const answer: AppPayoutAnswer = reference
+    ? { outcome: 'paid', reference }
+    : { outcome: 'failed', reason: 'The account is closed.' };
+  await appSiren.apps.requests.answer(request.id, answer);
+}
+```
+
+With the request handler, the `payoutMethod` function gets the question typed and returns the
+`AppPayoutAnswer`, which the handler posts.
+
 ### Answer an engagement ask
 
 An Engagement calculation (`engagementCalculation`) gets `AppEngagementCalculationQuestion` each time
@@ -1492,9 +1598,11 @@ engagement, or suppress it with a plain text reason of 1 to 200 characters, whic
 opportunity.
 
 Siren makes no engagement until the answer, and a sale on that program and opportunity waits for it
-before it earns a reward. Siren waits 24 hours from the first ask at most. Then it stops waiting, the
-trigger makes no engagement, the sales that waited award without it, and an answer after that gets
-409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
+before it earns a reward. Siren waits at most 24 hours from when it asked. When a sale waits on the
+answer, the ask ends with that sale's wait, 24 hours after the sale reached Siren, which can be
+sooner, even for a calculation a filter's allow asked later. Then it stops waiting, the trigger makes
+no engagement, the sales that waited award without it, and an answer after that gets 409
+`app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
 
 ```ts
 const answers = appSiren.apps.requestHandler({ signingSecret });
@@ -1505,6 +1613,40 @@ answers.on('engagementCalculation', 'visit-weight', ({ data }) => ({
 answers.on('engagementFilter', 'staff-check', ({ data }) =>
   crm.isStaff(data.collaborator.id) ? { outcome: 'suppress', reason: 'The visitor works for the partner.' } : { outcome: 'allow' },
 );
+```
+
+### Answer a transaction filter ask
+
+A Transaction filter (`transactionFilter`) gets `AppTransactionFilterQuestion` when a sale lands on
+a program or a distributor that picks it, once per sale for each. Siren's catalog calls it a
+transaction compiler. The question names what the filter is `for` (a program or a distributor), the
+`transaction` with its `units` and `currency`, and the sale's own `lines`. Each line has its `id`,
+its `type` (`lineItem`, `discount`, `fee`, `shipping` or `tax`), its `name`, a whole `quantity`, its
+unit `value` as a stored whole number in the transaction's units, and a `productId` or null.
+`distribution` is null for a program, and for a distributor the period the sale's value lands in.
+`refundDistribution` is null, or the later period a refund came in while the ask was open.
+
+```json
+{"for": {"type": "program", "id": 3, "name": "Partner program"},
+ "transaction": {"id": 3307, "units": "USD", "currency": {"id": "USD", "symbol": "$", "position": "before",
+                 "name": "US Dollar", "scale": 2, "decimalPlaces": 2, "type": "monetary"}},
+ "lines": [{"id": 5501, "type": "lineItem", "name": "Annual plan", "quantity": 1, "value": 12000, "productId": "prod_annual"},
+           {"id": 5502, "type": "shipping", "name": "Shipping", "quantity": 1, "value": 800, "productId": null}],
+ "distribution": null, "refundDistribution": null}
+```
+
+It answers `AppTransactionFilterAnswer`: `outcome` `filtered`, and in `include` the ids of the lines
+that count, each at most once. An empty list includes nothing. When a record picks more than one
+filter, a line counts when any of them includes it. Siren refuses an id the question lacks with 422
+`app_answer_invalid`. A refund reuses the stored answer, so Siren never sends refund lines.
+
+This filter counts only the sale's `lineItem` lines:
+
+```js
+answers.on('transactionFilter', 'plan-lines', ({ data }) => ({
+  outcome: 'filtered',
+  include: data.lines.filter((line) => line.type === 'lineItem').map((line) => line.id),
+}))
 ```
 
 ### Answer a group structure ask

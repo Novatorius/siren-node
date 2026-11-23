@@ -7,9 +7,12 @@
  * lines 189, 199, 209 and 228 on Siren's feat/apps at c8dbb1ab3), the same
  * catalog `GET /apps/kinds` serves. The two metric kinds' names are the ones
  * Siren's catalog gains in slice C16-1, the incentive resolver's name the
- * one it gains in slice C16-2, the two engagement kinds' names the ones it
- * gains in slice C16-4, and the collaborator group structure's name the one
- * it gains in slice C16-7. The tool reads no catalog in `show`,
+ * one it gains in slice C16-2, the two engagement kinds' the ones it gains in
+ * slice C16-4, the program group structure's the one it gains in slice
+ * C16-5, the incentive type's the one it gains in slice C16-6, the
+ * transaction filter's the one it gains in slice C16-3, and the
+ * collaborator group structure's the one it gains in slice C16-7. The tool
+ * reads no catalog in `show`,
  * `list` or `apply`, so it holds this copy, and a test pins it to Siren's.
  */
 
@@ -22,8 +25,11 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
   metricCalculation: 'Metric calculation',
   metricFilter: 'Customer filter for distributors',
   incentiveResolver: 'Incentive resolver',
+  incentiveType: 'Incentive structure',
   engagementCalculation: 'Engagement calculation',
   engagementFilter: 'Customer filter for programs',
+  programGroupSorter: 'Program group structure',
+  transactionFilter: 'Transaction filter',
   collaboratorGroupStructure: 'Collaborator group structure',
 };
 
