@@ -111,6 +111,7 @@ const GUIDE_URL = 'https://github.com/Novatorius/siren-node#command-line-tool';
 const APP_FILE_FLAG = ['--app-file <path>', 'The app file beside the env file, if apply saved none'] as const;
 const YES_FLAG = ['--yes', 'Skip the question. Needed with no terminal'] as const;
 const JSON_FLAG = ['--json', 'Print JSON for a script, and nothing else'] as const;
+const ORG_FLAG = ['--org <slug>', 'The organization, if not SIREN_ORG or your only one'] as const;
 
 const SPECS: Record<Command, CommandSpec> = {
   signup: {
@@ -351,7 +352,7 @@ const SPECS: Record<Command, CommandSpec> = {
   'sandbox create': {
     usage: 'sandbox create --from <live org> [flags]',
     summary:
-      "Copy a live organization's setup into a new sandbox organization, and use it: apps and their features, programs, groups and settings. Collaborators, keys and secrets stay on the live Siren.",
+      "Copy a live organization's setup into a new sandbox organization: apps and their features, programs, groups and settings. Collaborators, keys and secrets stay on the live Siren.",
     group: 'Sandbox',
     short: 'Copy a live setup into a sandbox',
     options: { from: { type: 'string' }, 'live-url': { type: 'string' }, name: { type: 'string' }, json: { type: 'boolean' } },
@@ -367,7 +368,7 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   'sandbox list': {
     usage: 'sandbox list [flags]',
-    summary: 'List your sandbox organizations, * on the one in use, and the live organization each was copied from.',
+    summary: 'List your sandbox organizations, and the live organization each was copied from.',
     group: 'Sandbox',
     short: 'List your sandbox organizations',
     options: { json: { type: 'boolean' } },
@@ -382,9 +383,9 @@ const SPECS: Record<Command, CommandSpec> = {
       'Clear the sandbox organization\'s activity: conversions, obligations, transactions, payouts, requests and deliveries. Its setup stays. You type the slug to confirm.',
     group: 'Sandbox',
     short: 'Clear activity, keep setup',
-    options: { confirm: { type: 'string' }, json: { type: 'boolean' } },
-    flags: { confirm: ['--confirm <slug>', 'The slug, for when no terminal can ask'], json: JSON_FLAG },
-    examples: ['siren sandbox reset', 'siren sandbox reset --confirm acme-sandbox'],
+    options: { org: { type: 'string' }, confirm: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { org: ORG_FLAG, confirm: ['--confirm <slug>', 'The slug, for when no terminal can ask'], json: JSON_FLAG },
+    examples: ['siren sandbox reset --org acme-sandbox', 'siren sandbox reset --org acme-sandbox --confirm acme-sandbox'],
     positionals: [0, 0],
     run: sandbox.reset,
   },
@@ -393,9 +394,9 @@ const SPECS: Record<Command, CommandSpec> = {
     summary: 'List the emails the sandbox caught for the organization, or show one.',
     group: 'Sandbox',
     short: "Read the sandbox's caught emails",
-    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
-    flags: { limit: ['--limit <n>', 'How many to list, 1 to 100 (20)'], json: JSON_FLAG },
-    examples: ['siren sandbox inbox', 'siren sandbox inbox 31'],
+    options: { org: { type: 'string' }, limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { org: ORG_FLAG, limit: ['--limit <n>', 'How many to list, 1 to 100 (20)'], json: JSON_FLAG },
+    examples: ['siren sandbox inbox --org acme-sandbox', 'siren sandbox inbox 31'],
     positionals: [0, 1],
     run: sandbox.inbox,
   },
@@ -405,6 +406,7 @@ const SPECS: Record<Command, CommandSpec> = {
     group: 'Sandbox',
     short: 'Fill a sandbox with sample sales',
     options: {
+      org: { type: 'string' },
       sales: { type: 'string' },
       collaborators: { type: 'string' },
       months: { type: 'string' },
@@ -413,6 +415,7 @@ const SPECS: Record<Command, CommandSpec> = {
       json: { type: 'boolean' },
     },
     flags: {
+      org: ORG_FLAG,
       sales: ['--sales <n>', 'Sales to send, 1 to 200 (50)'],
       collaborators: ['--collaborators <n>', 'Collaborators to credit, 1 to 25 (10)'],
       months: ['--months <n>', 'Months back to spread them, 1 to 6 (3)'],
@@ -420,7 +423,7 @@ const SPECS: Record<Command, CommandSpec> = {
       'no-wait': ['--no-wait', 'Queue the job and stop'],
       json: JSON_FLAG,
     },
-    examples: ['siren seed', 'siren seed --sales 120 --months 6'],
+    examples: ['siren seed --org acme-sandbox', 'siren seed --sales 120 --months 6'],
     positionals: [0, 0],
     run: seed.seed,
   },

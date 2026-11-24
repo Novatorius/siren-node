@@ -6,7 +6,7 @@ import { rewriteFeatureRefs, withoutPaths } from '../src/cli/commands/sandbox';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
-import { ACCESS_2, AuthAnswers, REFRESH_2, harness, membershipAcme, session } from './cli-fakes';
+import { ACCESS_1, ACCESS_2, AuthAnswers, REFRESH_2, harness, membershipAcme, session } from './cli-fakes';
 import { APP_KEY, appRecord } from './apps-siren-answers';
 
 /*
@@ -122,8 +122,9 @@ describe('sandbox: siren sandbox create', () => {
     expect(JSON.stringify(applied.programs)).toContain('"app:112"');
     expect(JSON.stringify(applied)).not.toMatch(/"app:1[12]"/);
 
-    // The session moved to the new organization, and the copy is on record.
-    expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 42, orgSlug: 'acme-sandbox', accessToken: ACCESS_2 });
+    // The new organization's token served this run only. Both sessions keep their organization, and the copy is on record.
+    expect(h.http.bearers().slice(4)).toEqual([`Bearer ${ACCESS_2}`, `Bearer ${ACCESS_2}`, `Bearer ${ACCESS_2}`]);
+    expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 3, accessToken: ACCESS_1 });
     expect(h.credentials().sessions[LIVE]).toMatchObject({ orgId: 9 });
     const recordPath = join(h.configDir, 'sandboxes.json');
     const record = JSON.parse(readFileSync(recordPath, 'utf8')) as { copies: Array<Record<string, unknown>> };
@@ -142,7 +143,10 @@ describe('sandbox: siren sandbox create', () => {
     expect(out).toContain('1 copied (2 features)');
     expect(out).toContain('collaborators');
     expect(out).toContain('1 programs, the export leaves them out');
-    expect(out).toContain('siren seed --sales 50');
+    expect(out).toContain('siren seed --org acme-sandbox --sales 50');
+    expect(out).toContain('siren sandbox inbox --org acme-sandbox');
+    expect(out).toContain('Set SIREN_ORG=acme-sandbox to leave out --org.');
+    expect(out).not.toContain('using');
     for (const line of out.split('\n')) expect([...line].length).toBeLessThanOrEqual(80);
   });
 
@@ -167,12 +171,25 @@ describe('sandbox: siren sandbox create', () => {
     expect(answer.notCopied.map((item) => item.what)).toContain('app choice at programs.1.sorter');
   });
 
-  it('refuses a live session in another organization before anything is made', async () => {
-    const h = harness([], { edition: sandboxFirst });
+  it('reads another of the person\'s live organizations on a token for this run only', async () => {
+    const globex = { orgId: 10, orgName: 'Globex', orgSlug: 'globex', role: 'admin' };
+    const h = harness([reply(200, { memberships: [{ ...membershipAcme, orgId: 9 }, globex] }), AuthAnswers.tokens(ACCESS_2, REFRESH_2), ...copyReplies()], { edition: sandboxFirst });
+    signedInBoth(h);
+    expect(await h.run(['sandbox', 'create', '--from', 'globex', '--json']), h.err()).toBe(0);
+    expect(h.paths().slice(0, 4)).toEqual(['GET /auth/memberships', 'POST /auth/switch-org', 'GET /recipes/export', 'GET /apps']);
+    expect(bodyOf(h.http.requests[1])).toEqual({ orgId: 10 });
+    expect(h.http.bearers().slice(2, 4)).toEqual([`Bearer ${ACCESS_2}`, `Bearer ${ACCESS_2}`]);
+    expect(h.credentials().sessions[LIVE]).toMatchObject({ orgId: 9 });
+    expect(JSON.parse(h.out())).toMatchObject({ from: { orgId: 10, orgSlug: 'globex' } });
+  });
+
+  it('refuses a live organization the person is not in before anything is made', async () => {
+    const h = harness([reply(200, { memberships: [{ ...membershipAcme, orgId: 9 }] })], { edition: sandboxFirst });
     signedInBoth(h);
     expect(await h.run(['sandbox', 'create', '--from', 'globex'])).toBe(1);
-    expect(h.paths()).toEqual([]);
-    expect(h.err()).toContain('siren use globex --base-url https://siren.acme.example/siren/v1 --live');
+    expect(h.paths()).toEqual(['GET /auth/memberships']);
+    expect(h.err()).toContain('You are not in an organization called globex on siren.acme.example.');
+    expect(h.err()).toContain('siren orgs --base-url https://siren.acme.example/siren/v1 --live');
   });
 
   it('refuses a live Siren with no session here, naming the login that makes one', async () => {
@@ -232,7 +249,7 @@ describe('sandbox: every command runs only on a sandbox', () => {
 });
 
 describe('sandbox: siren sandbox list', () => {
-  it('lists the organizations, marks the one in use, and names where a copy came from', async () => {
+  it('lists the organizations and names where a copy came from', async () => {
     const copied = JSON.stringify({
       version: 1,
       copies: [{ ...sandboxOrg, baseUrl: SANDBOX_BASE_URL, from: { baseUrl: LIVE, orgId: 9, orgSlug: 'acme', orgName: 'Acme' }, copiedAt: '2026-11-24T17:00:00.000Z' }],
@@ -250,40 +267,48 @@ describe('sandbox: siren sandbox list', () => {
     expect(h.paths()).toEqual(['GET /auth/memberships']);
     const answer = JSON.parse(h.out()) as { orgs: Array<Record<string, unknown>> };
     expect(answer.orgs).toEqual([
-      expect.objectContaining({ orgSlug: 'acme', current: false, copiedFrom: null }),
-      expect.objectContaining({ orgSlug: 'acme-sandbox', current: true, copiedFrom: { baseUrl: LIVE, orgId: 9, orgSlug: 'acme', orgName: 'Acme' } }),
+      expect.objectContaining({ orgSlug: 'acme', copiedFrom: null }),
+      expect.objectContaining({ orgSlug: 'acme-sandbox', copiedFrom: { baseUrl: LIVE, orgId: 9, orgSlug: 'acme', orgName: 'Acme' } }),
     ]);
+    expect(answer.orgs[0]).not.toHaveProperty('current');
 
     const plain = listing();
     expect(await plain.run(['sandbox', 'list'])).toBe(0);
     expect(plain.out()).toContain('2 sandbox organizations on sandbox.sirenaffiliates.com');
-    expect(plain.out()).toMatch(/\* +acme-sandbox +Acme \(sandbox\) +acme on siren\.acme\.example/);
+    expect(plain.out()).toMatch(/^ {2}acme-sandbox +Acme \(sandbox\) +acme on siren\.acme\.example/m);
+    expect(plain.out()).not.toContain('*');
+    expect(plain.out()).not.toContain('siren use');
+    expect(plain.out()).toContain('Pass --org <slug>, or set SIREN_ORG, to pick one.');
   });
 });
 
 describe('sandbox: siren sandbox reset', () => {
-  const cleared = reply(200, { org: { orgId: 3, orgSlug: 'acme' }, cleared: { conversions: 5, obligations: 4, transactions: 3, webhook_deliveries: 2 }, total: 14 });
+  const cleared = reply(200, { org: { orgId: 3, orgSlug: 'acme' }, cleared: { conversions: 5, obligations: 4, transactions: 3, webhook_deliveries: 2 }, total: 20 });
 
   it('sends the slug the person typed, and shows what it cleared', async () => {
     const h = harness([cleared], { interactive: true, typed: ['acme'] });
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
-    expect(await h.run(['sandbox', 'reset']), h.err()).toBe(0);
+    expect(await h.run(['sandbox', 'reset', '--org', 'acme']), h.err()).toBe(0);
     expect(h.prompts).toEqual(['Type acme to confirm: ']);
     expect(h.paths()).toEqual(['POST /sandbox/reset']);
     expect(bodyOf(h.http.requests[0])).toEqual({ confirm: 'acme' });
     expect(h.out()).toMatch(/Conversions +5/);
     expect(h.out()).toMatch(/Deliveries +2/);
+    // The six rows shown add up to 14. The other 6 of the 20 are named apart, not as a total.
+    expect(h.out()).toMatch(/Also +6 rows of balances, opportunities, holds, mappings/);
+    expect(h.out()).not.toContain('20');
     expect(h.out()).toContain('Kept');
+    expect(h.out()).toContain('siren seed --org acme --sales 50');
   });
 
   it('sends nothing when the slug typed is wrong, or with no terminal and no --confirm', async () => {
-    const wrong = harness([cleared], { interactive: true, typed: ['acme-live'] });
+    const wrong = harness([cleared], { interactive: true, typed: ['acme-live'], env: { SIREN_ORG: 'acme' } });
     wrong.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await wrong.run(['sandbox', 'reset'])).toBe(1);
     expect(wrong.paths()).toEqual([]);
     expect(wrong.err()).toContain('nothing was cleared');
 
-    const piped = harness([cleared]);
+    const piped = harness([cleared], { env: { SIREN_ORG: 'acme' } });
     piped.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await piped.run(['sandbox', 'reset'])).toBe(1);
     expect(piped.paths()).toEqual([]);
@@ -291,14 +316,14 @@ describe('sandbox: siren sandbox reset', () => {
 
     const flagged = harness([cleared]);
     flagged.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
-    expect(await flagged.run(['sandbox', 'reset', '--confirm', 'acme', '--json'])).toBe(0);
-    expect(JSON.parse(flagged.out())).toMatchObject({ total: 14 });
+    expect(await flagged.run(['sandbox', 'reset', '--org', 'acme', '--confirm', 'acme', '--json'])).toBe(0);
+    expect(JSON.parse(flagged.out())).toMatchObject({ total: 20 });
   });
 
   it("passes on Siren's refusal of the slug", async () => {
     const h = harness([reply(422, { error: { message: 'Type acme to confirm. Nothing was cleared.', context: { type: 'sandbox_reset_unconfirmed', orgSlug: 'acme' } } })]);
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
-    expect(await h.run(['sandbox', 'reset', '--confirm', 'acme'])).toBe(1);
+    expect(await h.run(['sandbox', 'reset', '--org', 'acme', '--confirm', 'acme'])).toBe(1);
     expect(h.err()).toContain('Nothing was cleared');
   });
 });
@@ -312,14 +337,14 @@ describe('sandbox: siren seed', () => {
     progress: { phase: 'sales', months: 2, collaboratorsMade: 2, collaboratorsUsed: 3, salesSent: 12, salesRefused: 0, conversions: 14, firstAt: '2026-09-30T10:00:00+00:00', lastAt: '2026-11-23T18:00:00+00:00' },
   });
 
-  it('queues the seed with the counts asked for, waits on its job, and reports it', async () => {
-    const h = harness([queued, running, done]);
+  it('queues the seed with the counts asked for in the person\'s only organization, waits on its job, and reports it', async () => {
+    const h = harness([reply(200, { memberships: [membershipAcme] }), queued, running, done]);
     h.signedIn();
     expect(await h.run(['seed', '--sales', '12', '--collaborators', '3', '--months', '2', '--seed', '7']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /sandbox/seed', 'GET /jobs/seed1', 'GET /jobs/seed1']);
-    expect(bodyOf(h.http.requests[0])).toEqual({ sales: 12, collaborators: 3, months: 2, seed: 7 });
+    expect(h.paths()).toEqual(['GET /auth/memberships', 'POST /sandbox/seed', 'GET /jobs/seed1', 'GET /jobs/seed1']);
+    expect(bodyOf(h.http.requests[1])).toEqual({ sales: 12, collaborators: 3, months: 2, seed: 7 });
     const out = h.out();
-    expect(out).toContain('with 2 months of sales');
+    expect(out).toContain('Seeded acme with 2 months of sales');
     expect(out).toMatch(/Sales +12 sent, 0 refused/);
     expect(out).toMatch(/Collaborators +3 \(2 made, 1 already here\)/);
     expect(out).toContain('2026-09-30 to 2026-11-23');
@@ -328,7 +353,7 @@ describe('sandbox: siren seed', () => {
   it('sends the defaults, and stops at the job id with --no-wait', async () => {
     const h = harness([queued]);
     h.signedIn();
-    expect(await h.run(['seed', '--no-wait', '--json'])).toBe(0);
+    expect(await h.run(['seed', '--org', '3', '--no-wait', '--json'])).toBe(0);
     expect(bodyOf(h.http.requests[0])).toEqual({ sales: 50, collaborators: 10, months: 3 });
     expect(h.paths()).toEqual(['POST /sandbox/seed']);
     expect(JSON.parse(h.out())).toMatchObject({ jobId: 'seed1' });
@@ -346,7 +371,7 @@ describe('sandbox: siren seed', () => {
   it('exits 1 with the job error when the seed fails', async () => {
     const h = harness([queued, reply(200, { jobId: 'seed1', status: 'failed', errorMessage: 'No collaborator could be made.', progress: {} })]);
     h.signedIn();
-    expect(await h.run(['seed'])).toBe(1);
+    expect(await h.run(['seed', '--org', '3'])).toBe(1);
     expect(h.err()).toContain('No collaborator could be made.');
   });
 });
@@ -357,14 +382,14 @@ describe('sandbox: siren sandbox inbox', () => {
   it('lists the caught emails, newest first, and shows one with its text', async () => {
     const h = harness([reply(200, { emails: [email], total: 1 })]);
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
-    expect(await h.run(['sandbox', 'inbox', '--limit', '5']), h.err()).toBe(0);
+    expect(await h.run(['sandbox', 'inbox', '--org', 'acme', '--limit', '5']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['GET /sandbox/inbox']);
     expect(new URL(h.http.requests[0]!.url).searchParams.get('number')).toBe('5');
     expect(h.out()).toContain("1 email in acme's sandbox inbox");
     expect(h.out()).toMatch(/#31 +2026-11-24 17:40 +ana@example\.com +Your commission was approved/);
-    expect(h.out()).toContain('siren sandbox inbox 31');
+    expect(h.out()).toContain('siren sandbox inbox --org acme 31');
 
-    const one = harness([reply(200, { ...email, text: 'Your commission of $12.00 was approved.', html: '<p>…</p>', headers: {} })]);
+    const one = harness([reply(200, { ...email, text: 'Your commission of $12.00 was approved.', html: '<p>…</p>', headers: {} })], { env: { SIREN_ORG: '3' } });
     one.signedIn();
     expect(await one.run(['sandbox', 'inbox', '31'])).toBe(0);
     expect(one.paths()).toEqual(['GET /sandbox/inbox/31']);
@@ -378,6 +403,52 @@ describe('sandbox: siren sandbox inbox', () => {
       expect(await h.run(['sandbox', 'inbox', ...argv])).toBe(2);
       expect(h.paths()).toEqual([]);
     }
+  });
+});
+
+describe('sandbox: which organization a command acts on', () => {
+  const both = () => reply(200, { memberships: [membershipAcme, sandboxOrg] });
+
+  it('acts on another organization named with --org, on a token for this run only', async () => {
+    const h = harness([both(), AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, { emails: [], total: 0 })]);
+    h.signedIn();
+    expect(await h.run(['sandbox', 'inbox', '--org', 'acme-sandbox']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['GET /auth/memberships', 'POST /auth/switch-org', 'GET /sandbox/inbox']);
+    expect(bodyOf(h.http.requests[1])).toEqual({ orgId: 42 });
+    expect(h.http.bearers()[2]).toBe(`Bearer ${ACCESS_2}`);
+    expect(h.out()).toContain("0 emails in acme-sandbox's sandbox inbox");
+    expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 3, accessToken: ACCESS_1 });
+  });
+
+  it('takes SIREN_ORG when no --org is given, and --org over it', async () => {
+    const env = harness([both(), AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, { emails: [], total: 0 })], { env: { SIREN_ORG: 'acme-sandbox' } });
+    env.signedIn();
+    expect(await env.run(['sandbox', 'inbox']), env.err()).toBe(0);
+    expect(env.out()).toContain('acme-sandbox');
+
+    const flag = harness([reply(200, { emails: [], total: 0 })], { env: { SIREN_ORG: 'acme-sandbox' } });
+    flag.signedIn();
+    expect(await flag.run(['sandbox', 'inbox', '--org', '3']), flag.err()).toBe(0);
+    expect(flag.paths()).toEqual(['GET /sandbox/inbox']);
+  });
+
+  it('asks for --org when the person is in several and named none, before anything else is sent', async () => {
+    const h = harness([both()]);
+    h.signedIn();
+    expect(await h.run(['seed'])).toBe(1);
+    expect(h.paths()).toEqual(['GET /auth/memberships']);
+    expect(h.err()).toContain('You are in 2 organizations on sandbox.sirenaffiliates.com, so siren seed needs one named.');
+    expect(h.err()).toContain('SIREN_ORG');
+    expect(h.err()).toContain('siren sandbox list');
+  });
+
+  it('refuses an organization the person is not in', async () => {
+    const h = harness([both()], { env: { SIREN_ORG: 'globex' } });
+    h.signedIn();
+    expect(await h.run(['sandbox', 'reset', '--confirm', 'globex'])).toBe(1);
+    expect(h.paths()).toEqual(['GET /auth/memberships']);
+    expect(h.err()).toContain('You are not in an organization called globex');
+    expect(h.err()).toContain('SIREN_ORG names it');
   });
 });
 

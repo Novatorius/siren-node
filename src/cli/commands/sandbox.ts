@@ -4,11 +4,12 @@ import type { App, AppFeature } from '../../record-types';
 import { CommandContext, contextOf } from '../context';
 import type { CommandInput } from '../context';
 import type { Membership } from '../session-auth';
+import { borrowOrg, orgScope } from '../org';
 import { SandboxRecords, counted, hostOf, onSandbox, transportOf } from '../sandboxes';
 import type { SandboxCopy } from '../sandboxes';
 import { styleFor } from '../style';
 import type { Report } from '../style';
-import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, resolveTarget } from '../targets';
+import { CliRefusal, CliUsageError, LIVE_BASE_URL, resolveTarget } from '../targets';
 
 /*
  * `siren sandbox create`, `list`, `reset` and `inbox`. Contract:
@@ -168,14 +169,15 @@ function appFeaturePaths(error: unknown): string[] {
 
 /**
  * `siren sandbox create --from <live org>`: copies a live organization's
- * setup into a new organization on the sandbox, and switches to it.
+ * setup into a new organization on the sandbox. The stored session keeps
+ * its organization, so the next steps name the new one with `--org`.
  */
 export async function create(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const json = input.values.json === true;
   const from = text(input.values.from);
   if (from === undefined) throw new CliUsageError('siren sandbox create needs --from with the slug or id of the live organization to copy.');
-  const before = await onSandbox(run, 'sandbox create');
+  await onSandbox(run, 'sandbox create');
 
   const live = await liveContext(run, input);
   if (live.target.baseUrl === run.target.baseUrl) {
@@ -190,34 +192,29 @@ export async function create(input: CommandInput): Promise<number> {
       fix: `siren sandbox create --from ${from} --live-url <live address>`,
     });
   }
-  const liveSession = await live.signedIn();
-  if (from !== liveSession.orgSlug && from !== String(liveSession.orgId)) {
-    throw new CliRefusal(`Your session on ${hostOf(live.target.baseUrl)} is in ${liveSession.orgSlug ?? liveSession.orgName}, not ${from}.`, {
-      why: 'The tool keeps one organization per Siren and reads the live setup with it. Nothing was made.',
-      fix: commandLine(live.target, `use ${from}`),
-      fixWords: 'then run this again',
-    });
-  }
+  // --from names the live organization the way --org names one anywhere else.
+  const liveSession = await orgScope(live, input, await live.signedIn(), 'sandbox create', { name: from, list: 'orgs' });
 
   // Read everything from the live Siren before anything is made on the sandbox.
-  const liveHttp = transportOf(live);
+  const liveHttp = liveSession.http;
   const exported = await readObject<{ recipe?: unknown; skipped?: unknown }>(liveHttp, '/recipes/export', { include: COPIED_STANZAS.join(',') }, (body) =>
     isJsonObject(body.recipe) ? undefined : `Siren answered GET /recipes/export on ${live.target.baseUrl} with no recipe.`,
   );
   const recipe = exported.recipe as Record<string, unknown>;
-  const apps = await live.siren().apps.list();
+  const apps = await liveSession.siren().apps.list();
 
   const style = styleFor(input.io, 'stdout', { json });
   const progress = json ? null : style.spinner(`Making a sandbox organization for ${liveSession.orgName}`, (chunk) => input.io.stdout(chunk));
 
   const name = text(input.values.name) ?? `${liveSession.orgName} (sandbox)`;
   let org: Membership;
+  let scope: Awaited<ReturnType<typeof borrowOrg>>;
   try {
     const made = await writeRecord<{ org?: Membership }>(transportOf(run), 'POST', '/sandbox/orgs', { name });
     if (!isJsonObject(made.org) || typeof made.org.orgId !== 'number') throw new CliRefusal('Siren made the organization but did not say which it is.', { fix: input.command('sandbox list') });
     org = made.org;
-    const tokens = await run.withAccessToken((token) => run.auth.switchOrg(token, org.orgId));
-    await run.keep(tokens, org, 'sandbox', before.email);
+    // A token for the new organization, for this run only.
+    scope = await borrowOrg(run, org);
   } catch (error) {
     progress?.stop(false, 'No sandbox organization was made.');
     throw error;
@@ -225,7 +222,7 @@ export async function create(input: CommandInput): Promise<number> {
 
   // Apps first, so the recipe's feature references can name the sandbox's own features.
   progress?.update(`Copying ${counted(apps.length, 'app', 'apps')} into ${org.orgSlug}`);
-  const sandboxSiren = run.siren();
+  const sandboxSiren = scope.siren();
   const refs = new Map<string, string>();
   const copiedApps: Array<{ key: string; features: number }> = [];
   const notCopied: NotCopied[] = [];
@@ -252,7 +249,7 @@ export async function create(input: CommandInput): Promise<number> {
   const rewritten = rewriteFeatureRefs(recipe, refs);
   let sent = rewritten.recipe as Record<string, unknown>;
   for (const ref of rewritten.unknown) notCopied.push({ what: `feature ${ref}`, why: 'names a feature that was not copied' });
-  const http = transportOf(run);
+  const http = scope.http;
   const applyRecipe = (body: Record<string, unknown>) =>
     writeRecord<ImportDetail>(http, 'POST', '/recipes/apply', { ...body, configurationOnly: true, name: `Copy of ${liveSession.orgName}` });
   let started: ImportDetail;
@@ -283,7 +280,7 @@ export async function create(input: CommandInput): Promise<number> {
     orgId: org.orgId,
     orgSlug: org.orgSlug,
     orgName: org.orgName,
-    from: { baseUrl: live.target.baseUrl, orgId: liveSession.orgId, orgSlug: liveSession.orgSlug ?? String(liveSession.orgId), orgName: liveSession.orgName },
+    from: { baseUrl: live.target.baseUrl, orgId: liveSession.orgId, orgSlug: liveSession.orgSlug, orgName: liveSession.orgName },
     copiedAt: new Date(input.io.now()).toISOString(),
   };
   await new SandboxRecords(input.io.configDir).add(copy);
@@ -321,7 +318,7 @@ export async function create(input: CommandInput): Promise<number> {
     progress?.stop(false, `Made ${org.orgSlug}, but its setup did not finish importing.`);
     throw new CliRefusal(`The import into ${org.orgSlug} ${detail.status === 'failed' ? 'failed' : 'did not finish in three minutes'}.`, {
       why: detail.errorMessage ?? `Import ${detail.jobId} is ${detail.status}.`,
-      note: `You are using ${org.orgSlug} now. Its apps were copied.`,
+      note: `Its apps were copied. Pass --org ${org.orgSlug} to use it.`,
     });
   }
   progress?.stop(true, `Copied ${style.bold(liveSession.orgName)} into a sandbox organization`);
@@ -348,11 +345,14 @@ export async function create(input: CommandInput): Promise<number> {
   const report: Report = {
     headline: '',
     rows,
-    next: [{ text: style.command(input.command('seed --sales 50')), aside: 'sample sales' }, { text: style.command(input.command('sandbox inbox')) }],
+    next: [
+      { text: style.command(input.command(`seed --org ${org.orgSlug} --sales 50`)), aside: 'sample sales' },
+      { text: style.command(input.command(`sandbox inbox --org ${org.orgSlug}`)) },
+    ],
     tips: [
       'Collaborators stay live. siren seed makes sample ones.',
       'The sandbox made its own keys and secrets. None left the live Siren.',
-      `You are now using ${org.orgSlug} on this sandbox.`,
+      `Set SIREN_ORG=${org.orgSlug} to leave out --org.`,
     ],
   };
   // The spinner printed the headline, so the report starts at its block.
@@ -365,23 +365,23 @@ export async function create(input: CommandInput): Promise<number> {
 export async function list(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const json = input.values.json === true;
-  const session = await onSandbox(run, 'sandbox list');
+  await onSandbox(run, 'sandbox list');
   const memberships = await run.withAccessToken((token) => run.auth.memberships(token));
   const copies = await new SandboxRecords(input.io.configDir).all();
   const fromOf = (orgId: number) => copies.find((copy) => copy.baseUrl === run.target.baseUrl && copy.orgId === orgId)?.from ?? null;
   if (json) {
     printJson(input, {
       baseUrl: run.target.baseUrl,
-      orgs: memberships.map((org) => ({ orgId: org.orgId, orgSlug: org.orgSlug, orgName: org.orgName, role: org.role, current: org.orgId === session.orgId, copiedFrom: fromOf(org.orgId) })),
+      orgs: memberships.map((org) => ({ orgId: org.orgId, orgSlug: org.orgSlug, orgName: org.orgName, role: org.role, copiedFrom: fromOf(org.orgId) })),
     });
     return 0;
   }
   const style = styleFor(input.io, 'stdout', {});
   const lines = style.table(
-    ['', 'ORG', 'NAME', 'COPIED FROM'],
+    ['ORG', 'NAME', 'COPIED FROM'],
     memberships.map((org) => {
       const source = fromOf(org.orgId);
-      return [org.orgId === session.orgId ? '*' : ' ', org.orgSlug, org.orgName, source === null ? '' : `${source.orgSlug} on ${hostOf(source.baseUrl)}`];
+      return [org.orgSlug, org.orgName, source === null ? '' : `${source.orgSlug} on ${hostOf(source.baseUrl)}`];
     }),
     76,
   );
@@ -391,12 +391,15 @@ export async function list(input: CommandInput): Promise<number> {
       '',
       ...lines.map((line) => `  ${line}`),
       '',
-      style.rich ? style.dim(`› ${input.command('use <slug>')} switches to another.`) : `${input.command('use <slug>')} switches to another.`,
+      style.rich ? style.dim(`› ${LIST_TIP}`) : LIST_TIP,
       '',
     ].join('\n'),
   );
   return 0;
 }
+
+/** The tip under `sandbox list`. */
+const LIST_TIP = 'Pass --org <slug>, or set SIREN_ORG, to pick one.';
 
 /** What `POST /sandbox/reset` answers. */
 interface ResetAnswer {
@@ -422,39 +425,42 @@ const CLEARED_ROWS: ReadonlyArray<readonly [string, readonly string[]]> = [
 export async function reset(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const json = input.values.json === true;
-  const session = await onSandbox(run, 'sandbox reset');
-  const slug = session.orgSlug ?? String(session.orgId);
+  const org = await orgScope(run, input, await onSandbox(run, 'sandbox reset'), 'sandbox reset');
+  const slug = org.orgSlug;
   let typed = text(input.values.confirm);
   if (typed === undefined) {
     if (!input.io.interactive) {
       throw new CliRefusal(`siren sandbox reset needs the organization's slug typed to confirm.`, {
         why: 'With no terminal, nothing can ask. Nothing was cleared.',
-        fix: input.command(`sandbox reset --confirm ${slug}`),
+        fix: input.command(`sandbox reset${org.flag} --confirm ${slug}`),
       });
     }
-    input.io.stderr(`This clears every conversion, obligation, transaction, payout, request and delivery in ${session.orgName} (${slug}). Its setup stays.\n`);
+    input.io.stderr(`This clears every conversion, obligation, transaction, payout, request and delivery in ${org.orgName} (${slug}). Its setup stays.\n`);
     typed = (await input.io.prompt(`Type ${slug} to confirm: `)).trim();
   }
   if (typed !== slug) {
-    throw new CliRefusal(`${typed === '' ? 'Nothing' : typed} is not ${slug}, so nothing was cleared.`, { fix: input.command(`sandbox reset --confirm ${slug}`) });
+    throw new CliRefusal(`${typed === '' ? 'Nothing' : typed} is not ${slug}, so nothing was cleared.`, { fix: input.command(`sandbox reset${org.flag} --confirm ${slug}`) });
   }
 
-  const answer = await writeRecord<ResetAnswer>(transportOf(run), 'POST', '/sandbox/reset', { confirm: typed });
+  const answer = await writeRecord<ResetAnswer>(org.http, 'POST', '/sandbox/reset', { confirm: typed });
   if (json) {
     printJson(input, answer);
     return 0;
   }
   const cleared = isJsonObject(answer.cleared) ? answer.cleared : {};
   const style = styleFor(input.io, 'stdout', {});
+  const shown = CLEARED_ROWS.map(([label, tables]) => [label, tables.reduce((sum, table) => sum + (cleared[table] ?? 0), 0)] as const);
+  // The total also counts what hangs off these rows, such as balances, opportunities, holds and mappings.
+  const rest = (typeof answer.total === 'number' ? answer.total : 0) - shown.reduce((sum, [, count]) => sum + count, 0);
   input.io.stdout(
     style.report({
       headline: `Cleared ${style.bold(slug)}'s activity`,
       rows: [
-        ...CLEARED_ROWS.map(([label, tables]) => [label, String(tables.reduce((sum, table) => sum + (cleared[table] ?? 0), 0))] as const),
-        ['Everything', `${answer.total} rows`],
+        ...shown.map(([label, count]) => [label, String(count)] as const),
+        ...(rest > 0 ? [['Also', `${counted(rest, 'row', 'rows')} ${style.dim('of balances, opportunities, holds, mappings')}`] as const] : []),
         ['Kept', 'programs, apps, collaborators, groups, settings'],
       ],
-      next: [{ text: style.command(input.command('seed --sales 50')), aside: 'sample sales' }],
+      next: [{ text: style.command(input.command(`seed${org.flag} --sales 50`)), aside: 'sample sales' }],
     }),
   );
   return 0;
@@ -490,14 +496,18 @@ function shortTime(iso: string): string {
 export async function inbox(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const json = input.values.json === true;
-  const session = await onSandbox(run, 'sandbox inbox');
-  const http = transportOf(run);
-  const style = styleFor(input.io, 'stdout', { json });
-  const slug = session.orgSlug ?? String(session.orgId);
-
   const id = input.args[0];
+  if (id !== undefined && !/^\d+$/.test(id)) throw new CliUsageError(`siren sandbox inbox takes an email's number, such as 31, and got ${id}.`);
+  const raw = text(input.values.limit);
+  const limit = raw === undefined ? INBOX_DEFAULT : Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > INBOX_MAX) throw new CliUsageError(`--limit takes a whole number from 1 to ${INBOX_MAX}.`);
+
+  const org = await orgScope(run, input, await onSandbox(run, 'sandbox inbox'), 'sandbox inbox');
+  const http = org.http;
+  const style = styleFor(input.io, 'stdout', { json });
+  const slug = org.orgSlug;
+
   if (id !== undefined) {
-    if (!/^\d+$/.test(id)) throw new CliUsageError(`siren sandbox inbox takes an email's number, such as 31, and got ${id}.`);
     const email = await readObject<InboxEmail>(http, `/sandbox/inbox/${id}`);
     if (json) {
       printJson(input, email);
@@ -517,9 +527,6 @@ export async function inbox(input: CommandInput): Promise<number> {
     return 0;
   }
 
-  const raw = text(input.values.limit);
-  const limit = raw === undefined ? INBOX_DEFAULT : Number(raw);
-  if (!Number.isInteger(limit) || limit < 1 || limit > INBOX_MAX) throw new CliUsageError(`--limit takes a whole number from 1 to ${INBOX_MAX}.`);
   const page = await readObject<{ emails?: InboxEmail[]; total?: number }>(http, '/sandbox/inbox', { number: limit, offset: 0 });
   const emails = Array.isArray(page.emails) ? page.emails : [];
   if (json) {
@@ -531,7 +538,7 @@ export async function inbox(input: CommandInput): Promise<number> {
     emails.map((email) => [`#${email.id}`, shortTime(email.createdAt), recipientsOf(email.recipients), email.subject]),
     76,
   );
-  const tip = emails.length === 0 ? 'The sandbox keeps each email it sends here. Seeded test sales send none.' : `${input.command(`sandbox inbox ${emails[0]!.id}`)} shows one.`;
+  const tip = emails.length === 0 ? 'The sandbox keeps each email it sends here. Seeded test sales send none.' : `${input.command(`sandbox inbox${org.flag} ${emails[0]!.id}`)} shows one.`;
   input.io.stdout(
     [
       style.success(`${counted(page.total ?? emails.length, 'email', 'emails')} in ${style.bold(slug)}'s sandbox inbox`),

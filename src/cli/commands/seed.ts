@@ -1,7 +1,8 @@
 import { readObject, writeRecord } from '../../resources/record-requests';
 import { contextOf } from '../context';
 import type { CommandInput } from '../context';
-import { onSandbox, transportOf } from '../sandboxes';
+import { orgScope } from '../org';
+import { onSandbox } from '../sandboxes';
 import { styleFor } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 
@@ -67,9 +68,9 @@ export async function seed(input: CommandInput): Promise<number> {
     body.seed = Number(raw);
   }
   const run = contextOf(input);
-  const session = await onSandbox(run, 'seed');
-  const slug = session.orgSlug ?? String(session.orgId);
-  const http = transportOf(run);
+  const org = await orgScope(run, input, await onSandbox(run, 'seed'), 'seed');
+  const slug = org.orgSlug;
+  const http = org.http;
 
   const queued = await writeRecord<{ jobId: string; status: string; sales: number; collaborators: number; months: number }>(http, 'POST', '/sandbox/seed', body);
   const style = styleFor(input.io, 'stdout', { json });
@@ -128,7 +129,7 @@ export async function seed(input: CommandInput): Promise<number> {
       ...(counts.firstAt && counts.lastAt ? [['From', `${counts.firstAt.slice(0, 10)} to ${counts.lastAt.slice(0, 10)}`] as const] : []),
       ...(counts.lastRefusal ? [['Last refusal', counts.lastRefusal] as const] : []),
     ],
-    next: [{ text: style.command(input.command('sandbox inbox')) }, { text: style.command(input.command('sandbox reset')), aside: 'clears it again' }],
+    next: [{ text: style.command(input.command(`sandbox inbox${org.flag}`)) }, { text: style.command(input.command(`sandbox reset${org.flag}`)), aside: 'clears it again' }],
     tips: ['Seeded sales are test sales. Siren never pays them or reports them.'],
   });
   // The spinner printed the headline, so the report starts at its block.
