@@ -1,4 +1,4 @@
-"""Runs `siren login` in a pseudo-terminal and types at its prompts with no pause.
+"""Runs `siren login --password` in a pseudo-terminal and types at its prompts with no pause.
 
 Usage: python3 type-at-prompt.py <node> <cli.js> <base url> <email> <password> <enter|ctrl-c>
 
@@ -38,7 +38,7 @@ def read_until(fd, wanted, seen, limit=15.0):
 
 def main():
     node, cli, base, email, password, mode = sys.argv[1:7]
-    script = '"$0" "$1" login --base-url "$2"; echo "EXIT=$?"; stty -a'
+    script = '"$0" "$1" login --password --base-url "$2"; echo "EXIT=$?"; stty -a'
     pid, fd = pty.fork()
     if pid == 0:
         os.execv("/bin/sh", ["/bin/sh", "-c", script, node, cli, base])

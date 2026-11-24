@@ -24,7 +24,6 @@ const app = appRecord();
 /** Each command that sends something with a stored session, with what it would send first. */
 const SESSION_COMMANDS: string[][] = [
   ['orgs'],
-  ['use', 'acme-two'],
   ['apps', 'list'],
   ['apps', 'show', APP_KEY],
   ['apps', 'requests'],

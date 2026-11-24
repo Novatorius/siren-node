@@ -1,9 +1,14 @@
 import { SirenError } from '../../errors';
-import { contextOf, jwtClaim, notSignedIn, planLine } from '../context';
+import { contextOf, jwtClaim, notSignedIn, planLine, tokenFrom, tokenRefusal } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
-import { PasswordSignIn, askLine, readPassword } from '../session-auth';
-import type { EmailConfirmationWindow, LoginResult, Membership, SessionTokens } from '../session-auth';
+import { findOrg, orgList } from '../org';
+import { styleFor } from '../style';
+import { loginView } from '../login-view';
+import type { LoginView } from '../login-view';
+import type { Style } from '../style';
+import { DeviceSignIn, PasswordSignIn, askLine, readPassword } from '../session-auth';
+import type { Edition, EmailConfirmationWindow, LoginResult, Membership, PersonalToken, SessionTokens } from '../session-auth';
 import { CliRefusal, CliUsageError, assertEditionAllowed, assertSessionMatches } from '../targets';
 
 /*
@@ -76,63 +81,113 @@ export async function signup(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren login`: reads credentials.json first, as `signup` does, then reads
- * the edition, checks it against `--live`, signs in
- * with the password, and picks the organization by `--org` when the person
- * belongs to several. Keeps the session and never the verification token.
+ * True when `siren login` with these flags logs in by a code approved in
+ * the browser: neither `--password` nor `--password-stdin`.
+ */
+export function usesBrowserSignIn(values: Readonly<Record<string, unknown>>): boolean {
+  return values.password !== true && values['password-stdin'] !== true;
+}
+
+/** True when CI names a build machine: set, and not empty, `false` or `0`. */
+function inCi(env: Readonly<Record<string, string | undefined>>): boolean {
+  return env.CI !== undefined && env.CI !== '' && env.CI !== 'false' && env.CI !== '0';
+}
+
+/**
+ * `siren login`: logs in the person, not one organization. Reads
+ * credentials.json first, as `signup` does, then reads the edition and
+ * checks it against `--live`. With no password flag it logs in by a code
+ * the person approves in the browser ({@link DeviceSignIn}). With
+ * `--password` or `--password-stdin` it asks for or reads the email and
+ * password. Either way it keeps every organization the person belongs to,
+ * and each later command picks one (CommandContext `pickOrg`). With no
+ * terminal, or in CI, the browser login is refused before anything is
+ * sent, naming SIREN_TOKEN. Keeps the session and never the verification
+ * token or the device code.
  */
 export async function login(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
   const passwordFromStdin = values['password-stdin'] === true;
-  needsFlags(io, [
-    [values.email, '--email <address>'],
-    [passwordFromStdin || undefined, '--password-stdin'],
-  ]);
+  const browser = usesBrowserSignIn(values);
+  if (browser && values.email !== undefined) {
+    throw new CliUsageError('--email goes with --password or --password-stdin. With neither, you log in in the browser.');
+  }
+  if (browser && (!io.interactive || inCi(io.env))) {
+    throw new CliUsageError(
+      'There is no terminal here to approve a login from. Set SIREN_TOKEN to a personal access token from the Siren dashboard, or pass --password-stdin and --email.',
+    );
+  }
+  if (!browser) {
+    needsFlags(io, [
+      [values.email, '--email <address>'],
+      [passwordFromStdin || undefined, '--password-stdin'],
+    ]);
+  }
   // A credentials file the tool would refuse stops the command here, before the password leaves the machine.
   await run.store.get(run.target.baseUrl);
 
   const edition = await run.targetEdition();
-  assertEditionAllowed(run.target, edition, 'sign in to a live organization');
+  assertEditionAllowed(run.target, edition, 'log in to a live organization');
 
+  const style = styleFor(io, 'stdout', {});
+  const view = browser ? loginView(io, values) : undefined;
   let result: LoginResult;
   try {
-    result = await new PasswordSignIn().signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
+    result = view !== undefined
+      ? await new DeviceSignIn(run.command('login'), view).signIn(run.auth, io)
+      : await new PasswordSignIn().signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
   } catch (error) {
     throw signInRefusal(error, run.command('login'));
   }
+  try {
+    return await keepLogin(input, result, edition, style, view);
+  } catch (error) {
+    // The approval landed, but keeping the session failed: the halves drift away before the ✗ line.
+    await view?.failed();
+    throw error;
+  }
+}
 
-  const wanted = text(values.org);
+/** Keeps the session a login gave, says who is logged in, and grips the logo when the login was in the browser. */
+async function keepLogin(input: CommandInput, result: LoginResult, edition: Edition, style: Style, view: LoginView | undefined): Promise<number> {
+  const run = contextOf(input);
+  const { io } = input;
+
+  const memberships = result.memberships;
   let tokens: SessionTokens;
   let org: Membership | undefined;
+  const wanted = typeof input.values.org === 'string' ? input.values.org : undefined;
+  if (wanted !== undefined && findOrg(memberships, wanted) === undefined) {
+    throw new CliRefusal(`You are not in an organization named ${wanted}. Yours are ${orgList(memberships)}.`, { fix: run.command('login'), fixWords: 'without --org' });
+  }
   if (result.kind === 'session') {
     tokens = result.tokens;
     const orgId = jwtClaim(tokens.accessToken, 'orgId');
-    org = result.memberships.find((membership) => membership.orgId === orgId) ?? result.memberships[0];
-    if (org === undefined) throw new CliRefusal('Siren signed you in but named no organization. Sign in to the dashboard to check your membership.');
-    if (wanted !== undefined && findOrg([org], wanted) === undefined) {
-      throw new CliRefusal(`You belong only to ${org.orgName} (${org.orgSlug}). Run ${run.command('login')} without --org.`);
-    }
+    org = memberships.find((membership) => membership.orgId === orgId) ?? memberships[0];
   } else {
-    const memberships = result.memberships;
-    const choice = wanted ?? (io.interactive ? await askOrg(run, memberships) : undefined);
-    org = choice === undefined ? undefined : findOrg(memberships, choice);
-    if (org === undefined) {
-      throw new CliRefusal(
-        `You belong to several organizations. Run ${run.command('login --org <slug>')} with one of: ${memberships.map((membership) => membership.orgSlug).join(', ')}.`,
-      );
-    }
-    try {
-      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);
-    } catch (error) {
-      throw signInRefusal(error, run.command('login'));
+    // A person in several organizations: --org, else the first, starts the session, and each command switches to the one it needs.
+    org = wanted === undefined ? memberships[0] : findOrg(memberships, wanted);
+    if (org !== undefined) {
+      try {
+        tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);
+      } catch (error) {
+        throw signInRefusal(error, run.command('login'));
+      }
     }
   }
+  if (org === undefined) throw new CliRefusal('Siren logged you in but named no organization.', { why: 'Log in to the Siren dashboard to check your membership.' });
 
-  const session = await run.keep(tokens, org, edition, tokens.user.email);
-  run.print(`Signed in to ${org.orgName} (${org.orgSlug}) on ${run.target.baseUrl} as ${session.email}.`);
-  const pending = confirmationLine(tokens.emailConfirmation, io.now());
+  const session = await run.keep(tokens!, org, edition, tokens!.user.email, memberships);
+  const count = `${memberships.length} ${memberships.length === 1 ? 'organization' : 'organizations'}`;
+  const line = `Logged in as ${style.bold(session.email)} · ${count}`;
+  if (view !== undefined) await view.approved(line);
+  else io.stdout(`${style.success(line)}\n`);
+  const pending = confirmationLine(tokens!.emailConfirmation, io.now());
   if (pending !== null) run.print(pending);
+  if (io.env.SIREN_TOKEN !== undefined && io.env.SIREN_TOKEN !== '') {
+    run.warn('SIREN_TOKEN is set, so the other commands use it rather than this session. Unset SIREN_TOKEN to use the session.');
+  }
   return 0;
 }
 
@@ -176,14 +231,18 @@ export async function logout(input: CommandInput): Promise<number> {
 }
 
 /**
- * `siren whoami [--json]`: who is signed in to the Siren this command line
- * names, in which organization and role, whether that Siren is a sandbox or
- * live, and where the session is kept. Reads credentials.json only and sends
- * nothing. Exits 1 when no session is kept for that Siren. Never prints a
- * token.
+ * `siren whoami [--json]`: which credential the commands use, who it acts
+ * as, in which organization and role, and whether that Siren is a sandbox
+ * or live. With SIREN_TOKEN set, that is the token, which wins over
+ * credentials.json: it reads the edition and `GET /personal-tokens/current`
+ * and names the token by its name and last four characters. Otherwise it
+ * reads credentials.json only, sends nothing, and exits 1 when no session is
+ * kept for that Siren. Never prints a token.
  */
 export async function whoami(input: CommandInput): Promise<number> {
   const run = contextOf(input);
+  const token = tokenFrom(input.io.env);
+  if (token !== undefined) return whoamiToken(run, token, input.values.json === true);
   const session = await run.store.get(run.target.baseUrl);
   if (session === null) throw await notSignedIn(run.store, run.target, run.command('login'));
   const edition = session.edition === 'production' ? 'live' : 'sandbox';
@@ -191,6 +250,7 @@ export async function whoami(input: CommandInput): Promise<number> {
     run.print(
       JSON.stringify(
         {
+          source: 'session',
           email: session.email,
           org: { id: session.orgId, name: session.orgName, slug: session.orgSlug ?? null },
           role: session.role,
@@ -210,35 +270,54 @@ export async function whoami(input: CommandInput): Promise<number> {
   return 0;
 }
 
-/** `siren orgs`: one line per organization, `*` on the one in use. */
-export async function orgs(input: CommandInput): Promise<number> {
-  const run = contextOf(input);
-  const session = await run.signedIn();
-  const memberships = await run.withAccessToken((token) => run.auth.memberships(token));
-  for (const membership of memberships) {
-    run.print(`${membership.orgId === session.orgId ? '*' : ' '} ${membership.orgSlug}  ${membership.orgName}  (id ${membership.orgId}, ${membership.role})`);
+/** `whoami` with SIREN_TOKEN set: what Siren says about the token, which no command line flag hides. */
+async function whoamiToken(run: CommandContext, token: string, json: boolean): Promise<number> {
+  const edition = (await run.targetEdition()) === 'production' ? 'live' : 'sandbox';
+  let about: PersonalToken;
+  try {
+    about = await run.auth.personalToken(token);
+  } catch (error) {
+    throw tokenRefusal(error, run.command('login')) ?? error;
   }
+  const expires = about.expiresAt === null ? null : about.expiresAt.slice(0, 10);
+  if (json) {
+    run.print(
+      JSON.stringify(
+        {
+          source: 'SIREN_TOKEN',
+          email: about.user.email,
+          org: { id: about.org.orgId, name: about.org.orgName, slug: about.org.orgSlug || null },
+          role: about.user.role,
+          baseUrl: run.target.baseUrl,
+          edition,
+          token: { id: about.id, name: about.name, lastFour: about.lastFour, expiresAt: about.expiresAt },
+        },
+        null,
+        2,
+      ),
+    );
+    return 0;
+  }
+  const slug = about.org.orgSlug ? ` (${about.org.orgSlug})` : '';
+  run.print(`Using SIREN_TOKEN "${plain(about.name)}", ending ${plain(about.lastFour)}, as ${about.user.email} in ${about.org.orgName}${slug}, as ${about.user.role}.`);
+  run.print(`Siren: ${run.target.baseUrl}, ${edition === 'live' ? 'live' : 'a sandbox'}.`);
+  if (expires !== null) run.print(`It expires ${expires}. SIREN_TOKEN wins over the session file while it is set.`);
   return 0;
 }
 
-/** `siren use <slug or id>`: switches the session to another of the person's organizations. */
-export async function use(input: CommandInput): Promise<number> {
+/** Text from Siren with every control character taken out, so a name cannot move the cursor or recolor the terminal. */
+function plain(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+}
+
+/** `siren orgs`: the organizations the person belongs to, as an aligned table. Each command picks one with --org, SIREN_ORG or the app file. */
+export async function orgs(input: CommandInput): Promise<number> {
   const run = contextOf(input);
-  const session = await run.signedIn();
-  const wanted = input.args[0] ?? '';
+  await run.signedIn({ org: false });
   const memberships = await run.withAccessToken((token) => run.auth.memberships(token));
-  const org = findOrg(memberships, wanted);
-  if (org === undefined) {
-    throw new CliRefusal(`No organization of yours is ${wanted}. Choose one of: ${memberships.map((membership) => membership.orgSlug).join(', ')}.`);
-  }
-  let tokens: SessionTokens;
-  try {
-    tokens = await run.withAccessToken((token) => run.auth.switchOrg(token, org.orgId));
-  } catch (error) {
-    throw signInRefusal(error, run.command('login'));
-  }
-  await run.keep(tokens, org, session.edition, session.email);
-  run.print(`Now using ${org.orgName} (${org.orgSlug}) on ${run.target.baseUrl}.`);
+  const style = styleFor(input.io, 'stdout', {});
+  const rows = memberships.map((membership) => [membership.orgSlug, membership.orgName, membership.role] as const);
+  for (const line of style.table(['SLUG', 'NAME', 'ROLE'], rows, 80)) run.print(line);
   return 0;
 }
 
@@ -266,18 +345,6 @@ function signInRefusal(error: unknown, login: string): unknown {
   }
   const plan = planLine(code, login);
   return plan === undefined ? error : new CliRefusal(plan);
-}
-
-/** The membership whose slug or id is `wanted`. */
-function findOrg(memberships: readonly Membership[], wanted: string): Membership | undefined {
-  return memberships.find((membership) => membership.orgSlug === wanted || String(membership.orgId) === wanted);
-}
-
-/** Lists the organizations on standard error and answers the slug or id typed. */
-async function askOrg(run: CommandContext, memberships: readonly Membership[]): Promise<string> {
-  run.warn('You belong to several organizations:');
-  for (const membership of memberships) run.warn(`  ${membership.orgSlug}  ${membership.orgName}  (id ${membership.orgId})`);
-  return (await run.io.prompt('Organization (slug or id): ')).trim();
 }
 
 /**

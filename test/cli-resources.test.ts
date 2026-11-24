@@ -3,7 +3,7 @@ import { SANDBOX_BASE_URL } from '../src/http';
 import { RESOURCE_COMMANDS } from '../src/cli/resources.generated';
 import { apiPath, fieldValue, setNested } from '../src/cli/commands/resources';
 import { runCli } from '../src/cli/run';
-import { harness, session } from './cli-fakes';
+import { ACCESS_2, AuthAnswers, REFRESH_2, harness, membershipAcme, membershipTwo, session } from './cli-fakes';
 import { reply } from './http-fakes';
 
 /*
@@ -93,7 +93,7 @@ describe('the generated resource commands', () => {
     expect(await h.run(['programs', 'create', '-d', 'name=New', '-d', 'units=usd', '-d', 'limit=5', '-d', 'live=true'])).toBe(0);
     expect(h.paths()).toEqual(['POST /programs']);
     expect(JSON.parse(h.http.requests[0]!.body!)).toEqual({ name: 'New', units: 'usd', limit: 5, live: true });
-    expect(h.out()).toContain('program 9 saved\n');
+    expect(h.out()).toContain('program 9 saved in Acme (3), sandbox\n');
   });
 
   it('updates with the method the spec names for the route', async () => {
@@ -233,7 +233,7 @@ describe('the live guard', () => {
   it('asks for the id to be typed before a live delete, and sends nothing when it is wrong', async () => {
     const h = signedInLive([reply(200, {})], { env: { SIREN_BASE_URL: LIVE }, interactive: true, typed: ['12'] });
     expect(await h.run(['programs', 'delete', '7', '--live'])).toBe(1);
-    expect(h.prompts[0]).toContain('Type 7 to delete it');
+    expect(h.prompts[0]).toBe('This deletes 7 from Acme (3), live. Type 7 to delete it: ');
     expect(h.err()).toContain('Nothing was deleted. You typed "12", not "7".');
     expect(h.paths()).toEqual([]);
   });
@@ -260,6 +260,34 @@ describe('the live guard', () => {
     expect(await h.run(['programs', 'delete', '7'])).toBe(0);
     expect(h.prompts).toEqual([]);
     expect(h.paths()).toEqual(['DELETE /programs/7']);
+  });
+});
+
+describe('the organization a record command acts in', () => {
+  const twoOrgs = () => session({ orgSlug: 'acme', memberships: [membershipAcme, membershipTwo] });
+
+  it('acts in the organization --org names, on tokens switched for this run', async () => {
+    const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, envelope(programs))]);
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    expect(await h.run(['programs', 'list', '--org', 'acme-two']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /programs']);
+    expect(h.http.requests[1]!.headers.Authorization).toBe(`Bearer ${ACCESS_2}`);
+  });
+
+  it('takes SIREN_ORG for a raw request too', async () => {
+    const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(201, { id: 3 })], { env: { SIREN_ORG: 'acme-two' } });
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    expect(await h.run(['post', '/programs', '-d', 'name=X']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /auth/switch-org', 'POST /programs']);
+    expect(h.out()).toContain(`saved in ${membershipTwo.orgName} (acme-two), sandbox`);
+  });
+
+  it('refuses with the list when the person has several and nothing names one, sending nothing', async () => {
+    const h = harness([]);
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    expect(await h.run(['programs', 'list'])).toBe(1);
+    expect(h.paths()).toEqual([]);
+    expect(h.err()).toContain('acme-two');
   });
 });
 

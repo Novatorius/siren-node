@@ -111,18 +111,19 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
       features: [
         { ...appRecord().features[0], name: 'Tell the CRM, renamed' },
         { ...appRecord().features[1], status: 'archived' },
-        { ...appRecord().features[0], id: 13, ref: 'app:13', key: 'added-in-dashboard', name: 'Added' },
-        { ...appRecord().features[0], id: 14, ref: 'app:14', key: 'unused', name: 'Unused' },
+        // GET /apps/{key} gives each feature its uses for a person who may change the app (GetApp.php).
+        { ...appRecord().features[0], id: 13, ref: 'app:13', key: 'added-in-dashboard', name: 'Added', uses: 2, openRequests: 0, usedBy: [] },
+        { ...appRecord().features[0], id: 14, ref: 'app:14', key: 'unused', name: 'Unused', uses: 0, openRequests: 0, usedBy: [] },
       ],
     });
     const h = harness(
-      [reply(200, changed), reply(200, itemPage({ id: 13, uses: 2 })), reply(200, itemPage({ id: 14, uses: 0, usedBy: [] })), reply(200, appRecord())],
+      [reply(200, changed), reply(200, appRecord())],
       { env: URL_ENV, interactive: true, typed: ['yes'] },
     );
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `GET /apps/${KEY}/features/13`, `GET /apps/${KEY}/features/14`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     const out = h.out();
     for (const line of [
       `Applying siren.app.json changes ${KEY} on ${SANDBOX_BASE_URL}:`,
@@ -141,7 +142,7 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     expect(h.printed()).not.toContain('elsewhere.example');
     expect(h.printed()).not.toContain(URL_ENV.SIREN_APP_URL);
     expect(h.prompts).toEqual([
-      `Apply these changes to ${KEY} on Acme, a sandbox organization? The last write wins, so this replaces anything changed in the dashboard since. Type yes to apply: `,
+      'Apply to Acme (3), sandbox? [y/N] ',
     ]);
   });
 
@@ -193,7 +194,8 @@ describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
   it('rotate-key asks first, then writes only the new key, mode 0600', async () => {
     const h = rotating([reply(200, { ...appRecord(), rawKey: NEW_KEY })], { interactive: true, typed: ['yes'] });
     expect(await h.run(['apps', 'rotate-key', KEY]), h.err()).toBe(0);
-    expect(h.prompts).toEqual([`Rotating ${KEY}'s key revokes the old key at once, so anything still using it stops working. Type yes to rotate it: `]);
+    expect(h.out()).toContain(`Rotating ${KEY}'s key revokes the old key at once, so anything still using it stops working.\n`);
+    expect(h.prompts).toEqual(['Rotate it in Acme (3), sandbox? [y/N] ']);
     expect(h.paths()).toEqual([`POST /apps/${KEY}/key/rotate`]);
     expect(h.file('.env.sandbox')).toBe(OLD.replace(RAW_KEY, NEW_KEY));
     if (process.platform !== 'win32') expect(h.modeOf(join(h.cwd, '.env.sandbox'))).toBe(0o600);
@@ -204,9 +206,8 @@ describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
   it('rotate-secret asks first, then writes only the new signing secret', async () => {
     const h = rotating([reply(200, { ...appRecord(), signingSecret: NEW_SECRET })], { interactive: true, typed: ['y'] });
     expect(await h.run(['apps', 'rotate-secret', KEY]), h.err()).toBe(0);
-    expect(h.prompts[0]).toBe(
-      `Rotating ${KEY}'s signing secret makes Siren sign with the new one at once, so the app refuses requests until it reads the new one. Type yes to rotate it: `,
-    );
+    expect(h.out()).toContain(`Rotating ${KEY}'s signing secret makes Siren sign with the new one at once, so the app refuses requests until it reads the new one.\n`);
+    expect(h.prompts[0]).toBe('Rotate it in Acme (3), sandbox? [y/N] ');
     expect(h.paths()).toEqual([`POST /apps/${KEY}/secret/rotate`]);
     expect(h.file('.env.sandbox')).toBe(OLD.replace(SIGNING_SECRET, NEW_SECRET));
     expect(h.out()).toContain(`Its new signing secret is in ${join(h.cwd, '.env.sandbox')}.`);

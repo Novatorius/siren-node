@@ -413,7 +413,7 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     if (plan.all && outgoing.method === 'GET' && isEnvelope(body)) {
       body = await allPages(body, outgoing.query, async (query) => (await request(query)).body);
     }
-    print(input, plan, status, body);
+    print(input, plan, status, body, outgoing.method === 'GET' ? undefined : orgLabel(run));
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
@@ -437,10 +437,16 @@ async function confirmLiveDelete(input: CommandInput, run: CommandContext, plan:
     return;
   }
   if (!input.io.interactive) {
-    throw new CliRefusal('Nothing was deleted.', { why: "A live delete needs the record's id typed, and there is no terminal to ask in.", fix: again });
+    throw new CliRefusal('Nothing was deleted.', { why: `Deleting from ${orgLabel(run)} needs the record's id typed, and there is no terminal to ask in.`, fix: again });
   }
-  const typed = (await input.io.prompt(`This deletes ${id} from ${run.current().orgName}, a live organization. Type ${id} to delete it: `)).trim();
+  const typed = (await input.io.prompt(`This deletes ${id} from ${orgLabel(run)}. Type ${id} to delete it: `)).trim();
   if (typed !== id) throw new CliRefusal('Nothing was deleted.', { why: `You typed ${JSON.stringify(typed)}, not ${JSON.stringify(id)}.` });
+}
+
+/** The organization this run acts in, as apply names it: `Acme (acme), live`. */
+function orgLabel(run: CommandContext): string {
+  const session = run.current();
+  return `${session.orgName} (${session.orgSlug ?? session.orgId}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
 /** A list in Siren's page envelope: `{items, total, page, perPage, totalPages}`. */
@@ -479,7 +485,7 @@ async function allPages(first: Envelope, query: Record<string, string>, read: (q
 }
 
 /** Prints Siren's answer: JSON, a table, a record, or one line. */
-function print(input: CommandInput, plan: Plan, status: number, body: unknown): void {
+function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string): void {
   const out = (text: string) => input.io.stdout(text.endsWith('\n') ? text : `${text}\n`);
   if (plan.json) {
     out(JSON.stringify(plan.all && isEnvelope(body) ? body.items : (body ?? null), null, 2));
@@ -511,11 +517,11 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown): 
     const record = body as Record<string, unknown>;
     const id = record.id;
     const what = `${singular(name)}${id !== undefined && id !== null ? ` ${String(id)}` : ''}`;
-    out(style.report({ headline: `${style.bold(what)}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)}`}`, rows: recordRows(record) }));
+    out(style.report({ headline: `${style.bold(what)}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)} in ${org}`}`, rows: recordRows(record) }));
     return;
   }
 
-  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}.`, ...(body !== undefined && body !== null ? { rows: [['answer', clip(typeof body === 'string' ? body : JSON.stringify(body), WIDTH - 11)]] } : {}) }));
+  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}${org === undefined ? '' : ` in ${org}`}.`, ...(body !== undefined && body !== null ? { rows: [['answer', clip(typeof body === 'string' ? body : JSON.stringify(body), WIDTH - 11)]] } : {}) }));
 }
 
 function pastTense(method: HttpMethod): string {

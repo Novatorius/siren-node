@@ -146,11 +146,11 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | Command | Sends | Prints |
 | --- | --- | --- |
 | `siren signup [--org-name] [--email] [--password-stdin] [--accept-terms]` | `GET /auth/signup-options`, then `POST /auth/register-org` once | The organization and the address signed in to. See "Confirmation and plan answers" for the other outcomes. |
-| `siren login [--email] [--org <slug or id>] [--password-stdin]` | signup-options, `POST /auth/login`, and `POST /auth/select-org` for a person in several organizations | The organization signed in to, and the days left to confirm the address when Siren says so. |
+| `siren login` | signup-options, `POST /auth/cli/code`, then `POST /auth/cli/token` each interval | The logo with its halves apart beside the code, the link and a spinner while it waits, the halves gripping when the approval lands, then `Logged in as <email> · N organizations`. |
+| `siren login --password [--email]`, or `--password-stdin --email` | signup-options, `POST /auth/login`, and `POST /auth/select-org` with the first organization for a person in several | The same line, and the days left to confirm the address when Siren says so. `--email` alone is a usage error. |
 | `siren logout` | `POST /auth/logout` with the access token and the refresh token | That the session is forgotten. It forgets it even when Siren refuses, and it needs no `--live` (AP-A640). |
-| `siren whoami [--json]` | nothing | Who is signed in to the Siren the line names, the organization and role, whether that Siren is live, and the session file's path. Exit 1 when no session is kept there (CLI pass 1, finding 2). |
-| `siren orgs` | `GET /auth/memberships` | One line per organization, `*` on the current one. |
-| `siren use <slug or id>` | memberships, then `POST /auth/switch-org` | The organization now in use. |
+| `siren whoami [--json]` | nothing, or with `SIREN_TOKEN` signup-options and `GET /personal-tokens/current` | Which credential is in use, who it acts as, the organization and role, and whether that Siren is live. For a session, the session file's path, and exit 1 when none is kept there (CLI pass 1, finding 2). For a token, its name, last four characters and expiry. |
+| `siren orgs` | `GET /auth/memberships` | A table of slug, name and role, with no current one, since each command picks its own. |
 | `siren apps init [--key] [--name]` | nothing | Writes siren.app.json with `$schema` and one Post-conversion action, adds `.env.sandbox`, `.env.live` and `.env.*.tmp` to .gitignore, never overwrites a file, and says where `SIREN_APP_URL` goes, how to add a feature, and that a handler on this machine needs a tunnel (CLI pass 1, finding 5). |
 | `siren apps apply [file] [--yes]` | `GET /apps/{key}`, then `PUT /apps/{key}` once after the person agrees (slice C6) | Each change the file would make, then the question, then the app and each feature with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that says this is fine when the service already holds a key, and that `siren apps rotate-key <key>` would revoke the key in use (CLI pass 2, finding 2). A file that gives a feature Siren holds a new kind is refused before anything is sent, naming its `app:{id}` and how many records select it, because the kind locks and the plan would replace the feature with a new id (finding 3). |
 | `siren apps list [--json]` | `GET /apps` | One block per app with its features, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
@@ -204,6 +204,18 @@ option tables and the dispatch. Each group of commands goes in its own file unde
 
 ## Signing in and the stored files
 
+Login logs in the person, not an organization (Alex, 2026-11-24). The session keeps every
+membership, and each command picks its organization in this order: `--org <slug>`, `SIREN_ORG`,
+`org` in siren.app.json, then the person's only organization. With none of those it asks in a
+terminal and refuses elsewhere with the list (`CommandContext.wantedOrg` and `pickOrg` in
+src/cli/context.ts). When the chosen organization differs from the one the tokens act in, the tool
+calls `POST /auth/switch-org` and holds the new pair in memory for that run, refreshes included
+(src/cli/org.ts). The stored session never changes, so two folders can act in two organizations
+at once.
+A personal access token acts in the organization it was made in, and the tool refuses when a flag,
+the variable or the file names another. Every question before a write names the organization, as
+`Apply to Acme (acme), live? [y/N]`.
+
 `SessionAuthClient` (src/cli/session-auth.ts) calls Siren's session routes through the `HttpClient`,
 as `OAuthClient` calls the OAuth routes: one JSON request each, the SDK's headers, the reads retried
 twice, every other call sent once, and no error that carries a password or a token. It is internal
@@ -218,9 +230,50 @@ matters: Node sets raw mode only once the terminal has taken the output already 
 uses TCSADRAIN), so with the question written first, a person or a password manager typing the
 instant it appeared got in while echo was still on. The checkpoint saw that in 3 of 6 runs, and
 test/cli-hidden-prompt.test.ts saw it in 45 of 60 runs before the fix and in none of 180 after.
-`PasswordSignIn` is the one `SignInMethod`. Device sign-in (slice 9) adds a
-second method that ends with the same `LoginResult`, so nothing after sign-in changes. That
-interface is the seam slice 9 builds on.
+`PasswordSignIn` is one `SignInMethod`, which `--password` or `--password-stdin` chooses.
+
+`DeviceSignIn` is the other, and `siren login` uses it by default in a terminal (Alex's ruling
+M105, contract/cli-signin.md in the run folder). It follows RFC 8628:
+
+- `POST /auth/cli/code` with the machine's host name. Siren answers a device code, which the tool
+  keeps in memory and never prints, a short user code, the dashboard's approval page with the code
+  filled in, its life and the poll interval.
+- The tool prints the user code and the page, and opens the page with the system's opener (`open`,
+  `rundll32` or `xdg-open`), given the address as one argument and never through a shell. It opens
+  nothing over SSH, on a Linux machine with no display, or for an address that is not http or
+  https. It refuses an answer whose user code holds anything but letters, digits and dashes.
+- It polls `POST /auth/cli/token` every interval: `authorization_pending` waits the interval Siren
+  names, `slow_down` waits the longer one it names, and a network fault, a 5xx or a 429 waits and
+  polls again until the code's life runs out. `access_denied`, `expired_token` and `invalid_grant`
+  stop with one line. An interval is held between 1 and 60 seconds whatever Siren names.
+- The approval answers the same `LoginResult` a password gives, so the session is kept as before.
+- The logo animation plays the moment the approval lands, with every skip rule. It counts as the
+  first-run animation, which `login` holds back for that moment.
+
+With no terminal, or with `CI` set, `siren login` with no password flag sends nothing and says to set
+`SIREN_TOKEN` or pass `--email` and `--password-stdin`. `--org` belongs to the password path, since
+the approval page asks for the organization.
+
+### SIREN_TOKEN
+
+A personal access token (`siren_pat_` and 48 hex characters) acts as one person in one organization
+on the apps routes the commands call, and nowhere else. When `SIREN_TOKEN` is set,
+`CommandContext.signedIn()` uses it before credentials.json:
+
+- A value of another form is refused before it is sent anywhere, and no message quotes it.
+- The edition read and the `--live` rule run as for a session. Then `GET /personal-tokens/current`
+  says who the token acts as, once a command, so `apply` can name the organization in its question.
+- The token is never refreshed. A 401 says the token was revoked or has expired. A 403
+  `token_not_accepted` says Siren takes no token there and names `siren login`.
+- Nothing is written to credentials.json, `envFiles` included.
+- The target is the flag, `SIREN_BASE_URL` or the default, never the Siren remembered from the last
+  sign-in, so a token never goes to a Siren the script did not name.
+- `apps answer`, `orgs` and `use` call routes that take no token. They use the stored session when
+  there is one, and otherwise refuse before sending.
+- `apply` reads how many records select a dropped feature from the `uses` that `GET /apps/{key}`
+  gives each feature, since the feature routes take no token.
+- `whoami` names the source in use. With a token it reads the edition and the token's own record,
+  and prints its name and last four characters, never the token.
 
 `credentials.json` sits in `SIREN_CONFIG_DIR`, else `%APPDATA%\siren` on Windows, else
 `$XDG_CONFIG_HOME/siren`, else `~/.config/siren`. The folder is mode 0700 and the file 0600, written
