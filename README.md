@@ -1987,7 +1987,9 @@ needs `--live` on every command but `siren logout`, and `--live` against a sandb
 command that sends anything first asks the Siren whether it is a sandbox or live, and refuses a
 session made when it was the other, so a sandbox session never reaches a Siren that became live.
 The session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,
-readable by you alone. It never holds your password, an app's key or its secret. The tool answers 0
+readable by you alone. It never holds your password, an app's key or its secret. The first time you
+run the tool in a terminal it plays Siren's hook for about a second. Any key skips it, and it never
+plays under `--quiet`, `--json`, `NO_COLOR`, `CI` or a pipe. The tool answers 0
 when it did what you asked, 1 when Siren or the tool refused, and 2 for a command line it cannot
 read.
 

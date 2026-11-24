@@ -258,6 +258,30 @@ not save and that `siren apps rotate-key <key>` or `rotate-secret` issues a new 
 After a rotate it also says that the old key left in the file is revoked. The new file is written
 as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps init` writes covers.
 
+### The hook on first run
+
+The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts): the
+two halves of the logo slide in and grip, 25 frames 50 milliseconds apart, about 1.2 seconds, in
+Siren green. Then it prints the wordmark, the version and one line that says what to do next.
+`siren` with nothing after it plays the hook each time and answers 0 after the next step, which
+is `siren login` with no session kept, else `siren apps init`.
+
+The frames are braille, 24 characters by 14 lines, in src/cli/hook-frames.ts. They come from the
+website's public/logo-animated-once.svg through scripts/build-hook-frames.mjs, which steps the
+SVG's CSS animation in headless Chromium, so the package gains no runtime dependency. The green is
+the dark theme's `--primary` in Siren's frontend/src/index.css, `164 100% 50%`, which that file
+names the exact logo color #00FFB9. The logo fills both halves with it. The tool draws it in
+truecolor when `COLORTERM` is `truecolor` or `24bit`, else as color 49 of 256.
+
+It never plays when standard output is not a terminal, under `CI` (any value but `false` or `0`),
+under `NO_COLOR` (any value but empty), when `TERM` is `dumb`, with `--quiet` or `--json`, in a
+terminal smaller than 28 by 18, or in a Windows console other than Windows Terminal. Each of those
+skips costs no time and leaves first run for later. Any key jumps to the still logo. Ctrl-C stops
+the command with exit code 130. The cursor comes back and standard input leaves raw mode however
+it ends, also when the process exits mid-way. When standard input is not a terminal, as with
+`--password-stdin`, the hook never reads it. `state.json` in the config folder records that it
+played.
+
 ## Sandbox and live
 
 - With no flag the command talks to `SIREN_BASE_URL`, else `SANDBOX_BASE_URL`. It reaches

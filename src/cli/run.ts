@@ -5,6 +5,7 @@ import * as requests from './commands/requests';
 import * as session from './commands/session';
 import { CommandContext } from './context';
 import type { CommandHandler } from './context';
+import { firstRun, welcome } from './hook';
 import type { CliIo } from './io';
 import { CliUsageError, commandLine, resolveTarget } from './targets';
 
@@ -63,6 +64,7 @@ const GLOBAL: Options = {
   sandbox: { type: 'boolean' },
   live: { type: 'boolean' },
   'base-url': { type: 'string' },
+  quiet: { type: 'boolean', short: 'q' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -167,8 +169,9 @@ function helpText(): string {
     'Commands:',
     ...COMMANDS.map((command) => `  siren ${SPECS[command].usage}\n      ${SPECS[command].summary}`),
     '',
-    'Every command takes --sandbox, --live, --base-url <url> and --help.',
+    'Every command takes --sandbox, --live, --base-url <url>, --quiet and --help.',
     'With none of them it talks to SIREN_BASE_URL, else the sandbox. A live organization needs --live.',
+    'The Siren hook plays the first time you run the tool. --quiet, NO_COLOR or CI skips it.',
     '',
   ].join('\n');
 }
@@ -202,7 +205,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
         io.stdout(helpText());
         return 0;
       }
-      throw new CliUsageError('Name a command.');
+      return await welcome(io, hookFlags(first.values), CLI_VERSION);
     }
 
     const name = words[0] === 'apps' ? `apps ${words[1] ?? ''}`.trim() : (words[0] ?? '');
@@ -227,6 +230,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       addressFlag: flags.baseUrl !== undefined ? ` --base-url ${flags.baseUrl}` : flags.sandbox ? ' --sandbox' : '',
     };
     const command = (words: string) => commandLine(hintTarget, words);
+    if (!(await firstRun(io, hookFlags(values), CLI_VERSION))) return 130;
     return await spec.run({ context, io, values: values as Record<string, string | boolean | undefined>, args, command });
   } catch (error) {
     if (error instanceof CliUsageError) {
@@ -236,6 +240,11 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     io.stderr(`siren: ${(error instanceof Error ? error.message : String(error)).replace(/^Siren: /, '')}\n`);
     return 1;
   }
+}
+
+/** The flags that keep the hook still. */
+function hookFlags(values: Record<string, unknown>) {
+  return { quiet: values.quiet === true, json: values.json === true };
 }
 
 /** Reads the line with these options, strict, or throws {@link CliUsageError} with `parseArgs`'s reason. */
