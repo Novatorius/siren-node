@@ -24,6 +24,9 @@ REQUESTS
   apps answer         Answer an ask by hand
   apps resend         Send a request again
 
+LOGS
+  logs tail           Watch requests, deliveries and API calls live
+
 ACCOUNT
   logout              Log out, and forget the session here
   whoami              Show who you are logged in as

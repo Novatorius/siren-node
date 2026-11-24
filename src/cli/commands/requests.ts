@@ -6,6 +6,7 @@ import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument } from './apply';
 import { kindLabel } from '../app-kinds';
 import { contextOf } from '../context';
+import { followFeed } from './logs';
 import type { CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
 
@@ -14,9 +15,6 @@ import { CliRefusal, CliUsageError } from '../targets';
  * organization's apps and what came back. Contract:
  * docs/architecture/apps-cli.md, "The commands".
  */
-
-/** How long `--follow` waits between reads, in milliseconds. */
-const FOLLOW_EVERY_MS = 2000;
 
 /** A request id: `apr_` and 32 lowercase hex characters. */
 const REQUEST_ID = /^apr_[0-9a-f]{32}$/;
@@ -33,12 +31,16 @@ export function requestIdArgument(id: string): string {
 /**
  * `siren apps requests`: the latest requests, oldest first, one line each,
  * for every app or the one `--app` names, and only those that need
- * attention with `--attention`. `--follow` reads again every 2 seconds and
- * prints each new request or status change once, until Ctrl-C, which ends
- * it with exit code 0. Before each poll after the first it reads the
- * target's edition again, so a target that changed edition stops the run
- * with exit code 1 before the session is sent there. With a request id it
- * shows that one request instead.
+ * attention with `--attention`. With a request id it shows that one
+ * request instead.
+ *
+ * `--follow` prints that list, then follows the log feed `siren logs tail`
+ * reads, `GET /logs` with `type=request` from now on, and prints each new
+ * request and each status change once, as the same request line, until
+ * Ctrl-C, which ends it with exit code 130. `--app` passes through, and
+ * `--attention` reads `status=failed`, which is `needs_attention`. Before
+ * each read after the first it reads the target's edition again, so a
+ * target that changed edition stops the run with exit code 1.
  */
 export async function appsRequests(input: CommandInput): Promise<number> {
   const id = input.args[0];
@@ -51,46 +53,44 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   }
 
   const run = contextOf(input);
-  const { io } = input;
   const appKey = typeof values.app === 'string' ? appKeyArgument(values.app) : undefined;
   await run.signedIn();
   const siren = run.siren();
   const filters: AppRequestListParams = values.attention ? { status: 'needs_attention' } : {};
-  let appId: number | undefined;
 
-  const seen = new Map<string, string>();
-  // While following, Ctrl-C aborts the signal and the loop ends with 0.
-  const following = () => undefined;
-  if (values.follow === true) io.signal?.addEventListener('abort', following);
-  try {
-    for (let poll = 1; ; poll += 1) {
-      if (poll > 1) await run.recheckEdition();
-      const rows = [...(await siren.apps.requests.list(filters))];
-      if (appKey !== undefined && appId === undefined) appId = (await siren.apps.retrieve(appKey)).id;
-      // The plain list is the organization's latest 50. Every request that needs attention joins it, however old,
-      // so an app's list never says it has none while `apps list` counts one.
-      if (values.attention !== true) {
-        const held = new Set(rows.map((row) => row.id));
-        rows.push(...(await siren.apps.requests.list({ status: 'needs_attention' })).filter((row) => !held.has(row.id)));
-        rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
-      }
-      for (const row of [...rows].reverse()) {
-        if (appId !== undefined && row.appId !== appId) continue;
-        if (seen.get(row.id) === row.status) continue;
-        seen.set(row.id, row.status);
-        run.print(requestLine(row));
-      }
-      if (values.follow !== true) {
-        if (seen.size === 0) run.print(emptyLine(values.attention === true, appKey));
-        return 0;
-      }
-      if (io.signal?.aborted) return 0;
-      await io.sleep(FOLLOW_EVERY_MS);
-      if (io.signal?.aborted) return 0;
-    }
-  } finally {
-    io.signal?.removeEventListener('abort', following);
+  const rows = [...(await siren.apps.requests.list(filters))];
+  const appId = appKey === undefined ? undefined : (await siren.apps.retrieve(appKey)).id;
+  // The plain list is the organization's latest 50. Every request that needs attention joins it, however old,
+  // so an app's list never says it has none while `apps list` counts one.
+  if (values.attention !== true) {
+    const held = new Set(rows.map((row) => row.id));
+    rows.push(...(await siren.apps.requests.list({ status: 'needs_attention' })).filter((row) => !held.has(row.id)));
+    rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
   }
+  let shown = 0;
+  for (const row of [...rows].reverse()) {
+    if (appId !== undefined && row.appId !== appId) continue;
+    shown += 1;
+    run.print(requestLine(row));
+  }
+  if (values.follow !== true) {
+    if (shown === 0) run.print(emptyLine(values.attention === true, appKey));
+    return 0;
+  }
+
+  return followFeed(run, input.io, {
+    query: { type: 'request', ...(appKey === undefined ? {} : { app: appKey }), ...(values.attention === true ? { status: 'failed' } : {}) },
+    onEntry: (entry) => {
+      if (typeof entry.request === 'object' && entry.request !== null) run.print(requestLine(feedRequest(entry.request as AppRequestRecord, entry.feature)));
+    },
+  });
+}
+
+/** A request from the feed, which names its feature as `item`, with `feature` as the request list names it. */
+function feedRequest(request: AppRequestRecord, featureKey: unknown): AppRequestRecord {
+  if (typeof request.feature === 'string') return request;
+  const item = (request as { item?: unknown }).item;
+  return { ...request, feature: typeof item === 'string' ? item : typeof featureKey === 'string' ? featureKey : '' };
 }
 
 /**
