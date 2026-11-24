@@ -7,8 +7,10 @@ import { CommandContext } from './context';
 import type { CommandHandler } from './context';
 import { CredentialStore } from './credentials';
 import { firstRun, welcome } from './hook';
+import type { HookCard } from './hook';
 import type { CliIo } from './io';
-import { CliUsageError, commandLine, resolveTarget } from './targets';
+import { CliUsageError, LIVE_BASE_URL, commandLine, resolveTarget } from './targets';
+import { SANDBOX_BASE_URL } from '../http';
 import type { Target } from './targets';
 
 /**
@@ -362,12 +364,13 @@ function commandHelp(spec: CommandSpec): string {
   ].join('\n');
 }
 
-/**
- * The screen `siren` alone prints under the hook: whether a session is kept
- * for the Siren this line names and which, then the three commands that come
- * next, then where every command is listed. Reads credentials.json only.
- */
-async function statusLines(io: CliIo, target: Target): Promise<string[]> {
+/** A Siren's address without `https://`, and without `/siren/v1` when it ends there, for a line a person reads. */
+function shortAddress(baseUrl: string): string {
+  return baseUrl.replace(/^https:\/\//, '').replace(/\/siren\/v1$/, '');
+}
+
+/** What `siren` alone shows beside the logo: where you stand, and the three commands that come next. */
+async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
   const store = new CredentialStore(io.configDir);
   const kept = await store.get(target.baseUrl).catch(() => null);
   const next: Array<readonly [string, string]> = kept
@@ -377,15 +380,16 @@ async function statusLines(io: CliIo, target: Target): Promise<string[]> {
         ['siren apps requests --follow', 'watch what Siren sends it'],
       ]
     : [
-        ['siren login', 'sign in to your organization, or siren signup to make one'],
+        ['siren login', 'log in, or siren signup to make an organization'],
         ['siren apps init', 'write siren.app.json in this folder'],
         ['siren apps apply', 'declare the app on Siren and save its key'],
       ];
+  const host = shortAddress(target.baseUrl);
+  const isDefault = target.baseUrl === SANDBOX_BASE_URL || target.baseUrl === LIVE_BASE_URL;
   const where = kept
-    ? [`Signed in as ${kept.email} to ${kept.orgName}.`, `Siren: ${target.baseUrl}, ${kept.edition === 'production' ? 'live' : 'a sandbox'}.`]
-    : [`Not signed in to ${target.baseUrl}.`];
-  const width = Math.max(...next.map(([command]) => command.length)) + 2;
-  return [...where, '', ...next.map(([command, about]) => `${command.padEnd(width)}${about}`), '', 'siren --help lists every command.'];
+    ? [`Logged in as ${kept.email} to ${kept.orgName}.`, `Siren: ${host}, ${kept.edition === 'production' ? 'live' : 'a sandbox'}.`]
+    : ['Not logged in. Run siren login to log in.', ...(isDefault ? [] : [`Siren: ${host}`])];
+  return { version: CLI_VERSION, where, next, footer: 'siren --help lists every command.' };
 }
 
 /** The nearest of `choices` to `typed` by edit distance, when it is near enough to be a typo. */
@@ -467,7 +471,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       }
       const flags = targetFlags(values);
       const target = resolveTarget(flags, io.env, await remembered(io));
-      return await welcome(io, hookFlags(values), CLI_VERSION, await statusLines(io, target));
+      return await welcome(io, hookFlags(values), await statusCard(io, target));
     }
     if (words[0] === 'apps' && words.length === 1) {
       io.stdout(appsHelpText());

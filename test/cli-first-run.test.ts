@@ -93,15 +93,21 @@ describe('cli pass 1, finding 3: bare siren, the apps group, help and typos', ()
   it('siren alone shows where you stand and the three commands that come next, and exits 0', async () => {
     const out = harness([]);
     expect(await out.run([])).toBe(0);
-    expect(out.out()).toContain(`Not signed in to ${SANDBOX_BASE_URL}.`);
+    // Alex after the demo: "Not logged in. Run siren login to log in.", with no API address on the default Siren.
+    expect(out.out()).toContain('Not logged in. Run siren login to log in.');
+    expect(out.out()).not.toContain(SANDBOX_BASE_URL);
     for (const next of ['siren login', 'siren apps init', 'siren apps apply', 'siren --help']) expect(out.out()).toContain(next);
     expect(out.sent()).toEqual([]);
+
+    const elsewhere = harness([], { env: { SIREN_BASE_URL: 'https://uat.example/siren/v1' } });
+    expect(await elsewhere.run([])).toBe(0);
+    expect(elsewhere.out()).toContain('Not logged in. Run siren login to log in.\n  Siren: uat.example\n');
 
     const signed = harness([]);
     signed.signedIn({ [SANDBOX_BASE_URL]: session({ baseUrl: SANDBOX_BASE_URL, orgSlug: 'acme' }) });
     expect(await signed.run([])).toBe(0);
-    expect(signed.out()).toContain(`Signed in as ${EMAIL} to Acme.`);
-    expect(signed.out()).toContain(`Siren: ${SANDBOX_BASE_URL}, a sandbox.`);
+    expect(signed.out()).toContain(`Logged in as ${EMAIL} to Acme.`);
+    expect(signed.out()).toContain('Siren: sandbox.sirenaffiliates.com, a sandbox.');
     expect(signed.out()).toContain('siren apps requests --follow');
   });
 

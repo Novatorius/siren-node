@@ -274,24 +274,36 @@ prints nothing, as gh and git do (src/cli/pipe.ts). Any other stream error still
 
 ## The hook on first run
 
-The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts): the
-two halves of the logo slide in and grip, 25 frames 50 milliseconds apart, about 1.2 seconds, in
-Siren green. Then it prints the wordmark, the version and one line that names `siren --help`.
-`siren` with nothing after it plays the hook each time, then prints whether a session is kept for
-the Siren it would talk to, and which, the three commands that come next (`login`, `apps init`
-and `apps apply`, or `apps init`, `apps apply` and `apps requests --follow` once signed in), and
-`siren --help`, and answers 0. It reads credentials.json and sends nothing.
+The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts). The
+two halves of the logo slide in and grip, 39 frames 50 milliseconds apart, about 1.9 seconds. Then
+the logo floats: it lifts up to one braille row (4 dots) into a blank row above it and settles,
+over a dim shadow that narrows as it rises, 20 frames more. The whole run takes 2.95 seconds.
+
+The text never waits for the logo. Every line is printed with the first frame, and each later frame
+redraws only the logo's columns in place. In a terminal wide enough for the logo and the longest
+line, the text sits to its right: "Siren" in bold Siren green with the version, then the card's
+lines. In a narrower one that is tall enough, the text sits under the logo, as before. When neither
+fits, the hook does not play and the plain text is printed.
+
+On first run the card is the wordmark and one line that names `siren --help`. `siren` with nothing
+after it plays the hook each time with the status card: "Not logged in. Run siren login to log in."
+or who is logged in to which organization on which Siren, the three commands that come next
+(`login`, `apps init` and `apps apply`, or `apps init`, `apps apply` and `apps requests --follow`
+once logged in), and `siren --help`, and answers 0. It reads credentials.json and sends nothing.
+The signed-out card names the Siren only when it is not the default sandbox or live one.
 
 The frames are braille, 24 characters by 14 lines, in src/cli/hook-frames.ts. They come from the
-website's public/logo-animated-once.svg through scripts/build-hook-frames.mjs, which steps the
-SVG's CSS animation in headless Chromium, so the package gains no runtime dependency. The green is
+website's public/logo-animated-once.svg through scripts/build-hook-frames.mjs with `--slow 1.6`,
+which steps the SVG's 1.2 second CSS animation in headless Chromium at 1.6 times as many points. The
+hover is not in the file: hook.ts lifts the last frame by whole dots. The package gains no runtime
+dependency. The green is
 the dark theme's `--primary` in Siren's frontend/src/index.css, `164 100% 50%`, which that file
 names the exact logo color #00FFB9. The logo fills both halves with it. The tool draws it in
 truecolor when `COLORTERM` is `truecolor` or `24bit`, else as color 49 of 256.
 
 It never plays when standard output is not a terminal, under `CI` (any value but `false` or `0`),
 under `NO_COLOR` (any value but empty), when `TERM` is `dumb`, with `--quiet` or `--json`, in a
-terminal smaller than 28 by 18, or in a Windows console other than Windows Terminal. Each of those
+terminal smaller than 28 by 20, or in a Windows console other than Windows Terminal. Each of those
 skips costs no time and leaves first run for later. Any key jumps to the still logo. Ctrl-C stops
 the command with exit code 130. The cursor comes back and standard input leaves raw mode however
 it ends, also when the process exits mid-way. When standard input is not a terminal, as with

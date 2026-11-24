@@ -7,7 +7,7 @@
  *
  *   node scripts/build-hook-frames.mjs \
  *     --svg ../siren-website/public/logo-animated-once.svg \
- *     --playwright /path/to/a/checkout/with/playwright [--mode braille|half] [--cols 24]
+ *     --playwright /path/to/a/checkout/with/playwright [--mode braille|half] [--cols 24] [--slow 1.6]
  *
  * The source is public/logo-animated-once.svg in the website repository
  * (Novatorius/siren-website-headless). The script loads it in headless
@@ -17,6 +17,12 @@
  * with a clear background, and reads the alpha of each pixel. It renders at
  * four times the size and averages each 4 by 4 block, then turns each block
  * on or off at half coverage.
+ *
+ * --slow plays the SVG's animation that many times slower: it samples the
+ * same motion at more, closer times, and the frames stay --fps apart. The
+ * CLI uses 1.6, so the 1.2 second slide and grip takes about 1.9 seconds.
+ * The hover after the grip is not in the SVG. hook.ts draws it by lifting
+ * the last frame.
  *
  * In braille mode each character holds 2 by 4 dots. In half mode each
  * character holds 1 by 2 pixels, drawn with ▀ ▄ █. A terminal cell is about
@@ -36,6 +42,7 @@ const { values } = parseArgs({
     mode: { type: 'string', default: 'braille' },
     cols: { type: 'string', default: '24' },
     fps: { type: 'string', default: '20' },
+    slow: { type: 'string', default: '1' },
     out: { type: 'string' },
     preview: { type: 'boolean', default: false },
   },
@@ -48,6 +55,8 @@ const mode = values.mode;
 if (mode !== 'braille' && mode !== 'half') throw new Error('--mode is braille or half');
 const cols = Number(values.cols);
 const fps = Number(values.fps);
+const slow = Number(values.slow);
+if (!(slow >= 1)) throw new Error('--slow is 1 or more');
 const here = dirname(fileURLToPath(import.meta.url));
 const out = resolve(values.out ?? join(here, '..', 'src', 'cli', 'hook-frames.ts'));
 
@@ -71,10 +80,10 @@ const page = await browser.newPage({ viewport: { width: dotsW * SS, height: dots
 const sized = svg.replace(/<svg width="[\d.]+" height="[\d.]+"/, `<svg width="${dotsW * SS}" height="${dotsH * SS}" preserveAspectRatio="xMidYMid meet"`);
 await page.setContent(`<!doctype html><html><body style="margin:0;background:transparent">${sized}</body></html>`);
 
-const count = Math.round(seconds * fps) + 1;
+const count = Math.round(seconds * fps * slow) + 1;
 const frames = [];
 for (let i = 0; i < count; i++) {
-  const ms = Math.min((i * 1000) / fps, seconds * 1000);
+  const ms = Math.min((i * 1000) / fps / slow, seconds * 1000);
   await page.evaluate((t) => {
     for (const animation of document.getAnimations()) {
       animation.pause();

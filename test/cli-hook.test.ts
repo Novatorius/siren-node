@@ -1,10 +1,13 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { CliIo, CliScreen } from '../src/cli/io';
+import type { CliIo } from '../src/cli/io';
 import { runCli } from '../src/cli/run';
 import { HOOK_FRAMES, HOOK_FRAME_MS, HOOK_WIDTH } from '../src/cli/hook-frames';
+import { HOOK_HOVER_LIFTS, liftFrame } from '../src/cli/hook';
 import { harness } from './cli-fakes';
+import { fakeScreen } from './cli-screen-fake';
+import type { FakeScreenOptions } from './cli-screen-fake';
 
 /*
  * The Siren hook animation. Contract: docs/architecture/apps-cli.md, "The
@@ -18,53 +21,6 @@ const SHOW = '\u001b[?25h';
 const TRUECOLOR = '\u001b[38;2;0;255;185m';
 const COLOR_256 = '\u001b[38;5;49m';
 
-interface FakeScreenOptions {
-  /** False when standard output is not a terminal. */
-  tty?: boolean;
-  columns?: number;
-  rows?: number;
-  /** False when standard input is not a terminal, so no key can skip. */
-  keys?: boolean;
-  platform?: NodeJS.Platform;
-  /** Presses this key during the wait with this number, from 1. */
-  press?: { at: number; key: string };
-}
-
-function fakeScreen(options: FakeScreenOptions = {}) {
-  const writes: string[] = [];
-  const waits: number[] = [];
-  const log: string[] = [];
-  let onKey: ((key: string) => void) | null = null;
-  let exitHooks = 0;
-  const screen: CliScreen = {
-    size: options.tty === false ? null : { columns: options.columns ?? 80, rows: options.rows ?? 24 },
-    platform: options.platform ?? 'linux',
-    write: (text) => {
-      writes.push(text);
-    },
-    wait: async (ms) => {
-      waits.push(ms);
-      if (options.press && options.press.at === waits.length) onKey?.(options.press.key);
-    },
-    listen: (callback) => {
-      if (options.keys === false) return null;
-      onKey = callback;
-      log.push('listen');
-      return () => {
-        onKey = null;
-        log.push('stop');
-      };
-    },
-    atExit: () => {
-      exitHooks += 1;
-      return () => {
-        exitHooks -= 1;
-      };
-    },
-  };
-  return { screen, writes, waits, log, text: () => writes.join(''), pendingExitHooks: () => exitHooks };
-}
-
 function setup(env: Record<string, string> = {}, screenOptions: FakeScreenOptions = {}) {
   const h = harness([], { env: { COLORTERM: 'truecolor', TERM: 'xterm-256color', ...env } });
   const fake = fakeScreen(screenOptions);
@@ -74,16 +30,25 @@ function setup(env: Record<string, string> = {}, screenOptions: FakeScreenOption
 
 const OFFLINE = ['apps', 'init', '--key', 'acme-payouts'];
 
+/** Every frame the hook draws: the slide and grip, then the hover. */
+const FRAME_COUNT = HOOK_FRAMES.length + HOOK_HOVER_LIFTS.length;
+const BRAILLE = /[\u2801-\u28ff]/;
+
+/** The text written before the first wait, which is all a fast reader needs. */
+function beforeFirstWait(fake: ReturnType<typeof fakeScreen>) {
+  return fake.writes.slice(0, fake.writtenAtWait[0] ?? fake.writes.length).join('');
+}
+
 describe('apps-cli: the hook plays on first run', () => {
-  it('plays every frame on the first command in a terminal, then the wordmark and a next step', async () => {
+  it('plays every frame on the first command in a terminal, with the wordmark and next step', async () => {
     const { fake, run, h } = setup();
     expect(await run(OFFLINE), h.err()).toBe(0);
     const text = fake.text();
     expect(text.startsWith(HIDE)).toBe(true);
     expect(text).toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]?.[3]?.trim());
-    expect(fake.waits).toHaveLength(HOOK_FRAMES.length - 1);
-    expect(h.out()).toContain('Siren');
-    expect(h.out()).toMatch(/siren --help/);
+    expect(fake.waits).toHaveLength(FRAME_COUNT - 1);
+    expect(text).toContain('Siren');
+    expect(text).toMatch(/siren --help/);
     expect(text.lastIndexOf(SHOW)).toBeGreaterThan(text.lastIndexOf(HIDE));
   });
 
@@ -99,15 +64,18 @@ describe('apps-cli: the hook plays on first run', () => {
   });
 
   it('plays on siren with nothing after it, every time, and exits 0', async () => {
-    const { fake, run, h } = setup();
+    const { fake, run } = setup();
     expect(await run([])).toBe(0);
     expect(await run([])).toBe(0);
-    expect(fake.waits).toHaveLength(2 * (HOOK_FRAMES.length - 1));
-    expect(h.out()).toContain('siren login');
+    expect(fake.waits).toHaveLength(2 * (FRAME_COUNT - 1));
+    expect(fake.text()).toContain('siren login');
   });
 
-  it('takes no more than 1.5 seconds', () => {
-    expect((HOOK_FRAMES.length - 1) * HOOK_FRAME_MS).toBeLessThanOrEqual(1500);
+  it('slides in and grips in about 1.8 to 2 seconds, and hovers, in no more than 3 seconds in all', () => {
+    const slide = (HOOK_FRAMES.length - 1) * HOOK_FRAME_MS;
+    expect(slide).toBeGreaterThanOrEqual(1800);
+    expect(slide).toBeLessThanOrEqual(2000);
+    expect((FRAME_COUNT - 1) * HOOK_FRAME_MS).toBeLessThanOrEqual(3000);
   });
 
   it('colors the hook Siren green in truecolor, and falls back to the nearest of 256 colors', async () => {
@@ -122,6 +90,68 @@ describe('apps-cli: the hook plays on first run', () => {
   });
 });
 
+describe('apps-cli: logo animation v2, after the demo', () => {
+  it('prints all the text with the first frame, so nobody waits to read it', async () => {
+    const { fake, run } = setup();
+    expect(await run([])).toBe(0);
+    const first = beforeFirstWait(fake);
+    for (const words of ['Siren', 'Not logged in. Run siren login to log in.', 'siren login', 'siren apps init', 'siren --help lists every command.']) expect(first).toContain(words);
+  });
+
+  it('sets the wordmark in bold Siren green beside the logo, with the version', async () => {
+    const { fake, run } = setup();
+    await run([]);
+    const lines = beforeFirstWait(fake).split('\n');
+    const mark = lines.find((line) => line.includes(`${TRUECOLOR}\u001b[1mSiren`));
+    expect(mark).toBeDefined();
+    expect(mark).toMatch(BRAILLE);
+    expect(mark).toMatch(/Siren\u001b\[0m \d+\.\d+\.\d+/);
+    expect(lines.some((line) => BRAILLE.test(line) && line.includes('siren login'))).toBe(true);
+  });
+
+  it('stacks the text under the logo when the terminal is too narrow for both side by side', async () => {
+    const { fake, run } = setup({}, { columns: 44, rows: 50 });
+    expect(await run([])).toBe(0);
+    const lines = beforeFirstWait(fake).split('\n');
+    expect(lines.some((line) => line.includes('siren login'))).toBe(true);
+    expect(lines.some((line) => BRAILLE.test(line) && /siren|Siren/.test(line))).toBe(false);
+  });
+
+  it('prints the text alone, with no animation, when neither layout fits', async () => {
+    const { fake, run, h } = setup({}, { columns: 44, rows: 24 });
+    expect(await run([])).toBe(0);
+    expect(fake.waits).toEqual([]);
+    expect(h.out()).toContain('siren login');
+  });
+
+  it('floats after the grip: the logo lifts and settles, over a shadow that narrows as it rises', async () => {
+    const { fake, run } = setup();
+    await run([]);
+    expect(Math.max(...HOOK_HOVER_LIFTS)).toBeGreaterThan(0);
+    expect(Math.max(...HOOK_HOVER_LIFTS)).toBeLessThanOrEqual(4);
+    expect(HOOK_HOVER_LIFTS[HOOK_HOVER_LIFTS.length - 1]).toBe(0);
+    const shadows = fake.writes.map((write) => /\u001b\[2m[^\u001b]*?(\u2824+)/.exec(write)?.[1]?.length).filter((width): width is number => width !== undefined);
+    expect(new Set(shadows).size).toBeGreaterThan(1);
+    const rest = shadows[shadows.length - 1]!;
+    expect(Math.min(...shadows)).toBeLessThan(rest);
+    const lifted = fake.writes.findIndex((write, at) => at > 0 && write.includes(HOOK_FRAMES[HOOK_FRAMES.length - 1]![3]!.trim()) === false && BRAILLE.test(write));
+    expect(lifted).toBeGreaterThan(0);
+    expect(fake.writes[fake.writes.length - 2] ?? '').toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]![3]!.trim());
+  });
+});
+
+describe('apps-cli: logo animation v2, the lift', () => {
+  it('a lift of 4 dots raises the logo one whole row into the headroom, and 0 keeps it at rest', () => {
+    const still = HOOK_FRAMES[HOOK_FRAMES.length - 1]!;
+    const rest = liftFrame(still, 0);
+    const up = liftFrame(still, 4);
+    expect(rest[0]!.trim()).toBe('');
+    expect(rest.slice(1).map((line) => line.trimEnd())).toEqual(still.map((line) => line.trimEnd()));
+    expect(up.slice(0, -1)).toEqual(rest.slice(1));
+    expect(liftFrame(still, 2)).not.toEqual(rest);
+  });
+});
+
 describe('apps-cli: the hook never gets in the way', () => {
   const SKIPS: Array<{ name: string; env?: Record<string, string>; screen?: FakeScreenOptions; argv?: string[] }> = [
     { name: 'standard output is not a terminal', screen: { tty: false } },
@@ -132,7 +162,7 @@ describe('apps-cli: the hook never gets in the way', () => {
     { name: '-q is given', argv: [...OFFLINE, '-q'] },
     { name: '--json is given', argv: ['apps', 'list', '--json', '--base-url', 'http://127.0.0.1:9'] },
     { name: 'the terminal is narrower than the hook', screen: { columns: HOOK_WIDTH } },
-    { name: 'the terminal is shorter than the hook', screen: { rows: HOOK_FRAMES[0]!.length } },
+    { name: 'the terminal is shorter than the hook', screen: { rows: HOOK_FRAMES[0]!.length + 2 } },
     { name: 'the Windows console cannot draw braille', screen: { platform: 'win32' } },
   ];
 
@@ -178,7 +208,7 @@ describe('apps-cli: the hook never gets in the way', () => {
     const { fake, run, h } = setup({}, { press: { at: 3, key: 'x' } });
     expect(await run(OFFLINE), h.err()).toBe(0);
     expect(fake.waits).toHaveLength(3);
-    expect(fake.text()).toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]?.[3]?.trim());
+    expect(fake.writes[fake.writes.length - 2]).toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]?.[3]?.trim());
     expect(fake.log).toEqual(['listen', 'stop']);
     expect(fake.text().lastIndexOf(SHOW)).toBeGreaterThan(fake.text().lastIndexOf(HIDE));
     expect(fake.pendingExitHooks()).toBe(0);
@@ -197,7 +227,7 @@ describe('apps-cli: the hook never gets in the way', () => {
   it('plays to the end with no key skip when standard input is not a terminal', async () => {
     const { fake, run } = setup({}, { keys: false });
     await run(OFFLINE);
-    expect(fake.waits).toHaveLength(HOOK_FRAMES.length - 1);
+    expect(fake.waits).toHaveLength(FRAME_COUNT - 1);
   });
 });
 
