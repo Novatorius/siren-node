@@ -15,6 +15,15 @@ course completions — and computes rewards from flexible rules you define. Affi
 referral programs, partner and reseller commissions, creator royalties, sales commissions, and
 loyalty rewards all run on the same engine.
 
+## How Siren talks to your app
+
+- **An app** is your own code that works with Siren. It holds a key, which it calls Siren with, and an address, where Siren sends it signed requests.
+- **The signing secret** belongs to the address. Siren signs every request with it, and the handler checks each one.
+- **A feature** is what the app adds to one of Siren's pickers. Its kind says what it does, such as `distributionResolver`, and its key names it in your app.
+- **A tell** lets the app know something happened, such as an approved conversion. The handler runs your function and replies 200.
+- **An ask** needs an answer, and the work it's about waits for it. The handler replies 200 at once, runs your function and posts what it returns.
+- **A custom event** goes the other way: the app sends it to Siren.
+
 ## What you can do
 
 - **Answer Siren from your own app.** One handler, `apps.requestHandler()`, checks each signed
@@ -112,7 +121,10 @@ fault shows on the first request. The answer only ever goes to the client's own 
 signs it with `SIREN_SIGNING_SECRET` and fills in Siren's sample question for the kind, which
 `sampleData(kind)` also gives. `answers.simulate(request)` runs the whole handler on it: the
 signature check, the function and the answer check. It answers `{ status, body, answer, error }` and
-posts nothing.
+posts nothing. For an ask it checks the answer with Siren's own rules for its kind, such as a share
+for every metric of the question and no share above the pool, so a bad answer comes back as `error`:
+a `ValidationError` with code `app_answer_invalid` and the words Siren's answer route would send.
+`simulate` never throws for a function that fails. It returns the error.
 
 ```js
 import assert from 'node:assert/strict'
@@ -141,6 +153,11 @@ Run it with any `SIREN_SIGNING_SECRET` and `SIREN_API_KEY` set. `appRequest` tak
 const { method, headers, rawBody } = appRequest('distributionResolver', 'split-by-score')
 await fetch('http://localhost:3000/siren', { method, headers, body: rawBody })
 ```
+
+A running app posts its answers to the real Siren Cloud, or to the client's `baseUrl`. The request
+`appRequest` builds is made up, so Siren has no request with its id. It refuses the answer, and the
+app's `onError` logs the refusal, which is expected here. `simulate` posts nothing, so use it to
+check answers in a test.
 
 ## Mount it on your server
 
@@ -222,7 +239,7 @@ TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 
 
 ### Options and functions
 
-`apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError })` takes:
+`apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError, extraKinds })` takes:
 
 - `signingSecret`, the app's signing secret, which Siren showed once when it made the app's
   address. Left out, it is `SIREN_SIGNING_SECRET` from the environment. The handler refuses an
@@ -233,16 +250,24 @@ TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 
 - `onError`, a function of the error and the request that gets every error Siren does not see: a
   function that threw, an answer that broke the rules, Siren's refusal of an answer, an
   `answerUrl` on another Siren, and a body a parser already read. By default it writes one `console.error` line with the kind, key and request
-  id, or an event's type and delivery id, and the error. It never writes the request's data or
+  id, or an event's type and delivery id, and the error. For an ask that failed after its 200, the
+  line adds when Siren sends it again, such as "Siren sends it again after 16:58 UTC, when its
+  answer window closes", and how to resend it sooner. It never writes the request's data or
   headers.
+- `extraKinds`, a list of kinds a newer Siren sends that this SDK does not know yet, which `on()`
+  then takes.
 
 `on(kind, key, fn)` takes one feature. `on(kind, fn)` takes every feature of a kind that no
 `on(kind, key, fn)` names, and `onEvent(type, fn)` takes a webhook event sent to the same address,
 such as `conversion.approved`. Each is chainable and refuses a feature or event it already has.
-Each function's request is typed by its kind, as [Feature kinds](#feature-kinds) lists:
-`on('distributionResolver', ...)` gets `AppAsk<AppDistributionQuestion>` and returns
-`AppDistributionAnswer`. A tell's function returns nothing. An ask's function returns the answer,
-or `undefined` when the app answers later with `apps.requests.answer()`.
+`on()` refuses a kind Siren never sends when you register it, and says what to write instead: the
+kind for a screen name such as `attributionModel`, the camelCase kind for `distribution_resolver`,
+`onEvent()` for an event name, and the nearest kind for a typo. In TypeScript the editor flags a
+wrong kind too. Each function's request is typed by its kind, as [Feature kinds](#feature-kinds)
+lists: `on('distributionResolver', ...)` gets `AppAsk<AppDistributionQuestion>` and returns
+`AppDistributionAnswer`. A tell's function returns nothing. An ask's function returns the answer.
+When the app will answer later with `apps.requests.answer()`, return `answers.later()`. When an
+ask's function returns nothing, `onError` gets an error that says so, and nothing is posted.
 
 `apps.splitPool(pool, weights)` divides a pool for the two kinds that share one out. On Siren's
 sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
@@ -265,7 +290,8 @@ Every reply is JSON with `Cache-Control: no-store`.
 | A signed body that is not JSON, or an app request that is not an envelope of version 1 | 400, naming the first field that breaks its rule, such as "The request's `id` must be `apr_` followed by 32 hex characters." | Nothing. |
 | An ask whose `answerUrl` is on another Siren than the client's `baseUrl` | 500 | `onError` gets a `SirenError` naming both addresses and the `baseUrl` to set. The function does not run, nothing is posted, and Siren sends the ask again. |
 | A tell with a function | 200 once the function returns, 500 when it throws | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. The function has Siren's 8 seconds. |
-| An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `undefined`, answer later with `apps.requests.answer()`. |
+| An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `answers.later()`, answer later with `apps.requests.answer()`. When it returns nothing, `onError` gets an error. |
+| When your function fails | A tell gets 500. An ask already got its 200. | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. Siren sends a failed ask again when its answer window closes, 60 minutes by default, and you can resend it sooner from Needs attention in Siren Cloud or with `siren apps resend <id>`. `onError` gets the error, and for an ask the default line says when Siren sends it again. |
 | An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
 | Another event with an `onEvent` function | 200 once it returns, 500 when it throws | Nothing more. |
 | Another event with no function | 200 | Nothing. |
@@ -296,8 +322,7 @@ one. A tell tells the app something happened. An ask waits for the app's answer.
 
 Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads
 and the dashboard shows. The code calls a feature an item, so the routes are `/apps/{app}/items`
-and the types are `AppItem` and `AppItemKind`. `AppItemKind.FulfillmentMethod` is an old name for
-`payoutMethod`, and Siren refuses the string `fulfillmentMethod`.
+and the types are `AppItem` and `AppItemKind`.
 
 Each sample below is the function for one feature, registered on the `answers` of the first sample.
 
@@ -796,7 +821,11 @@ the client's `maxRetries`, which is safe because Siren takes the same answer aga
 `duplicate: true`. Siren's refusals go to `onError` as the SDK's typed errors and are not sent
 again: 422 `app_answer_invalid`, 409 `app_request_already_answered` and `app_request_dropped`, 403
 and 404. The handler keeps no state, and Siren may deliver one request twice, so a tell's function
-writes once by `id`.
+writes once by `id`, the request's id, which is the same on every send. An ask's function can run
+more than once for one request: on a repeat delivery, and on each resend after its answer window
+closes. So an ask's function writes once by `id` too, and should return the same answer each time.
+Siren takes the same answer again as a duplicate and refuses a different one with 409
+`app_request_already_answered`.
 
 Siren sends an unanswered ask again each time its window closes, at `answerBy`, three sends in all,
 then marks it `needs_attention`, where a person can answer or resend it. A feature's

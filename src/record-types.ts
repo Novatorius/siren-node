@@ -1360,18 +1360,32 @@ export interface AppAnswerReceipt {
  */
 interface AppRequestBase<D = Record<string, unknown>> {
   version: 1;
-  /** The request key. Drop a repeat by this id, which the signature covers. */
+  /**
+   * The request's id, `apr_` and 32 hex characters. It is the dedupe id:
+   * the same on every send of this request, so write once by `id`. The
+   * signature covers it. `item.id` names the feature, and `deliveryId`
+   * names one delivery, so neither drops a repeat.
+   */
   id: string;
   type: 'app.request';
   /** The app's key. */
   app: string;
+  /**
+   * The feature the request is for: its `kind`, its `key` in the app, and
+   * `item.id`, which names the feature in Siren, such as `app:12`. `item.id`
+   * names the feature, not the request.
+   */
   item: { kind: AppItemKind | (string & {}); key: string; id: string };
   createdAt: string;
   /** The kind's payload. Its fields belong to the item's kind. */
   data: D;
   /** The signed `t` of `X-Siren-Signature-V2`, in Unix seconds. */
   timestamp: number;
-  /** The `X-Siren-Delivery` header, `{id}.{send number}`, when the request carried one. */
+  /**
+   * The `X-Siren-Delivery` header, `{id}.{send number}`, when the request
+   * carried one. It names one delivery and changes on every send, so drop a
+   * repeat by `id` instead.
+   */
   deliveryId?: string;
 }
 
@@ -1659,50 +1673,51 @@ export interface AppDistributionAnswer extends AppAnswer {
 }
 
 /**
+ * What an ask's function returns when the app will answer later with
+ * `apps.requests.answer()`: `answers.later()`, the one value of this type.
+ * The handler then posts nothing and reports nothing.
+ */
+export interface AppAnswerLater {
+  readonly [answerLaterBrand]: true;
+}
+declare const answerLaterBrand: unique symbol;
+
+/** What an ask's function returns: the answer `A`, or `answers.later()`, now or as a promise. */
+export type AppAskResult<A extends AppAnswer> = A | AppAnswerLater | Promise<A | AppAnswerLater>;
+
+/**
  * The function `apps.requestHandler().on(kind, ...)` takes for each kind of
  * feature, so the request and the answer are typed by the kind. A tell's
  * function returns nothing. An ask's function returns the answer, which the
- * handler posts, or `undefined` when the app answers later with
- * `apps.requests.answer()`.
+ * handler posts, or `answers.later()` when the app answers later with
+ * `apps.requests.answer()`. An ask's function that returns nothing is an
+ * error, which `onError` gets.
  */
 export interface AppFeatureFunctions {
   postConversionAction: (request: AppTell<AppConversionApprovedData>) => void | Promise<void>;
   postAllocationAction: (request: AppTell<AppAllocationCompletedData>) => void | Promise<void>;
-  distributionResolver: (
-    request: AppAsk<AppDistributionQuestion>,
-  ) => AppDistributionAnswer | undefined | Promise<AppDistributionAnswer | undefined>;
-  incentiveResolver: (request: AppAsk<AppRewardQuestion>) => AppRewardAnswer | undefined | Promise<AppRewardAnswer | undefined>;
-  payoutMethod: (request: AppAsk<AppPayoutQuestion>) => AppPayoutAnswer | undefined | Promise<AppPayoutAnswer | undefined>;
-  metricCalculation: (
-    request: AppAsk<AppMetricCalculationQuestion>,
-  ) => AppMetricCalculationAnswer | undefined | Promise<AppMetricCalculationAnswer | undefined>;
-  metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppMetricFilterAnswer | undefined | Promise<AppMetricFilterAnswer | undefined>;
-  incentiveType: (
-    request: AppAsk<AppIncentiveTypeQuestion>,
-  ) => AppIncentiveTypeAnswer | undefined | Promise<AppIncentiveTypeAnswer | undefined>;
-  engagementCalculation: (
-    request: AppAsk<AppEngagementCalculationQuestion>,
-  ) => AppEngagementCalculationAnswer | undefined | Promise<AppEngagementCalculationAnswer | undefined>;
-  engagementFilter: (
-    request: AppAsk<AppEngagementFilterQuestion>,
-  ) => AppEngagementFilterAnswer | undefined | Promise<AppEngagementFilterAnswer | undefined>;
-  programGroupSorter: (
-    request: AppAsk<AppGroupOrderQuestion>,
-  ) => AppGroupOrderAnswer | undefined | Promise<AppGroupOrderAnswer | undefined>;
-  transactionFilter: (
-    request: AppAsk<AppTransactionFilterQuestion>,
-  ) => AppTransactionFilterAnswer | undefined | Promise<AppTransactionFilterAnswer | undefined>;
+  distributionResolver: (request: AppAsk<AppDistributionQuestion>) => AppAskResult<AppDistributionAnswer>;
+  incentiveResolver: (request: AppAsk<AppRewardQuestion>) => AppAskResult<AppRewardAnswer>;
+  payoutMethod: (request: AppAsk<AppPayoutQuestion>) => AppAskResult<AppPayoutAnswer>;
+  metricCalculation: (request: AppAsk<AppMetricCalculationQuestion>) => AppAskResult<AppMetricCalculationAnswer>;
+  metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppAskResult<AppMetricFilterAnswer>;
+  incentiveType: (request: AppAsk<AppIncentiveTypeQuestion>) => AppAskResult<AppIncentiveTypeAnswer>;
+  engagementCalculation: (request: AppAsk<AppEngagementCalculationQuestion>) => AppAskResult<AppEngagementCalculationAnswer>;
+  engagementFilter: (request: AppAsk<AppEngagementFilterQuestion>) => AppAskResult<AppEngagementFilterAnswer>;
+  programGroupSorter: (request: AppAsk<AppGroupOrderQuestion>) => AppAskResult<AppGroupOrderAnswer>;
+  transactionFilter: (request: AppAsk<AppTransactionFilterQuestion>) => AppAskResult<AppTransactionFilterAnswer>;
   collaboratorGroupStructure: (
     request: AppAsk<AppCollaboratorGroupStructureQuestion>,
-  ) => AppCollaboratorGroupStructureAnswer | undefined | Promise<AppCollaboratorGroupStructureAnswer | undefined>;
+  ) => AppAskResult<AppCollaboratorGroupStructureAnswer>;
 }
 
 /**
- * The function `apps.requestHandler().on(kind, ...)` takes for a kind
- * {@link AppFeatureFunctions} does not name. It gets the request as
- * `apps.verifyRequest()` answers it.
+ * The function `apps.requestHandler().on(kind, ...)` takes for a kind the
+ * `extraKinds` option names. It gets the request as `apps.verifyRequest()`
+ * answers it. For a tell it returns nothing, and for an ask the answer or
+ * `answers.later()`.
  */
-export type AppRequestFunction = (request: AppRequest) => AppAnswer | void | undefined | Promise<AppAnswer | void | undefined>;
+export type AppRequestFunction = (request: AppRequest) => AppAnswer | AppAnswerLater | void | Promise<AppAnswer | AppAnswerLater | void>;
 
 /** The function `apps.requestHandler().onEvent(type, fn)` takes. Siren gets 200 when it returns, and 500 when it throws. */
 export type AppEventFunction = (event: WebhookEvent) => void | Promise<void>;

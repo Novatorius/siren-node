@@ -107,7 +107,7 @@ describe('finding 1: the answer goes only to the client base, and a different Si
 
   it('does not count the Cloud host pair over plain http', async () => {
     const { answers, errors } = client();
-    answers.on('distributionResolver', 'split-by-score', () => undefined);
+    answers.on('distributionResolver', 'split-by-score', () => answers.later());
     const result = await answers.handle(signedBy(envelope('distributionResolver', 'http://app.sirenaffiliates.com/siren/v1')));
     expect(result.status).toBe(500);
     expect(errors).toHaveLength(1);
@@ -217,7 +217,7 @@ describe('finding 2: answers.simulate()', () => {
 
   it('checks the signature, so a request signed with another secret gets 401', async () => {
     const { answers } = client();
-    answers.on('distributionResolver', 'split-by-score', () => undefined);
+    answers.on('distributionResolver', 'split-by-score', () => answers.later());
     const result = await answers.simulate(appRequest('distributionResolver', 'split-by-score', { secret: 'another secret' }));
     expect(result.status).toBe(401);
     expect(result.body).toEqual({ error: expect.any(String) });
@@ -244,7 +244,7 @@ describe('finding 3: a bad envelope names the field it breaks', () => {
 
   it.each(cases)('%s', async (_field, change, words) => {
     const { answers } = client();
-    answers.on('distributionResolver', 'split-by-score', () => undefined);
+    answers.on('distributionResolver', 'split-by-score', () => answers.later());
     const body = base();
     change(body);
     const result = await answers.handle(signedBy(body));

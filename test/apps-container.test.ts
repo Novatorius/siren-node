@@ -71,10 +71,11 @@ describe('apps-sdk-container: declaring from a file', () => {
     }
   });
 
-  it('sends the alias AppItemKind.FulfillmentMethod as payoutMethod, the value Siren stores', async () => {
-    expect(AppItemKind.FulfillmentMethod).toBe('payoutMethod');
+  it('sends AppItemKind.PayoutMethod as payoutMethod, the value Siren stores, and has no old alias', async () => {
+    expect(AppItemKind.PayoutMethod).toBe('payoutMethod');
+    expect(Object.keys(AppItemKind)).not.toContain('FulfillmentMethod');
     const { http, apps: resource } = apps([reply(200, app)]);
-    await resource.declare(KEY, { name: 'Acme', url: 'https://acme.example', items: [{ kind: AppItemKind.FulfillmentMethod, key: 'l', name: 'L', currencies: ['USD'] }] });
+    await resource.declare(KEY, { name: 'Acme', url: 'https://acme.example', items: [{ kind: AppItemKind.PayoutMethod, key: 'l', name: 'L', currencies: ['USD'] }] });
     expect((bodyOf(http.requests[0]) as { items: Array<{ kind: string }> }).items[0]?.kind).toBe('payoutMethod');
   });
 });

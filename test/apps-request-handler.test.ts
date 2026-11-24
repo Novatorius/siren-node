@@ -121,19 +121,19 @@ describe('apps-answer-handler: apps.requestHandler() options', () => {
   it('refuses a function that is not one, and a feature named twice', () => {
     const { answers } = setup();
     expect(() => answers.on('payoutMethod', 'acme-ledger', 'nope' as never)).toThrow(SirenError);
-    expect(() => answers.on('', 'acme-ledger', () => undefined)).toThrow(SirenError);
+    expect(() => answers.on('' as never, 'acme-ledger', (() => undefined) as never)).toThrow(SirenError);
     expect(() => answers.onEvent('conversion.approved', 3 as never)).toThrow(SirenError);
-    answers.on('payoutMethod', 'acme-ledger', () => undefined);
-    expect(() => answers.on('payoutMethod', 'acme-ledger', () => undefined)).toThrow(/already/);
-    answers.on('payoutMethod', () => undefined);
-    expect(() => answers.on('payoutMethod', () => undefined)).toThrow(/already/);
+    answers.on('payoutMethod', 'acme-ledger', () => answers.later());
+    expect(() => answers.on('payoutMethod', 'acme-ledger', () => answers.later())).toThrow(/already/);
+    answers.on('payoutMethod', () => answers.later());
+    expect(() => answers.on('payoutMethod', () => answers.later())).toThrow(/already/);
     answers.onEvent('conversion.approved', () => undefined);
     expect(() => answers.onEvent('conversion.approved', () => undefined)).toThrow(/already/);
   });
 
   it('chains on() and onEvent()', () => {
     const { answers } = setup();
-    expect(answers.on('payoutMethod', 'a', () => undefined).on('payoutMethod', () => undefined).onEvent('x', () => undefined)).toBe(answers);
+    expect(answers.on('payoutMethod', 'a', () => answers.later()).on('payoutMethod', () => answers.later()).onEvent('x', () => undefined)).toBe(answers);
   });
 });
 
@@ -292,10 +292,10 @@ describe('apps-answer-handler: table 3.1, one request', () => {
     expect(bodyOf(http.requests[0])).toEqual(features.kinds.distributionResolver!.answer);
   });
 
-  it('row 6: an ask whose function returns nothing posts nothing, so the app answers later with requests.answer()', async () => {
+  it('row 6: an ask whose function returns answers.later() posts nothing, so the app answers later with requests.answer()', async () => {
     const { answers, http, errors } = setup();
-    answers.on('payoutMethod', 'acme-ledger', () => undefined);
-    answers.on('distributionResolver', async () => undefined);
+    answers.on('payoutMethod', 'acme-ledger', () => answers.later());
+    answers.on('distributionResolver', async () => answers.later());
     for (const kind of ['distributionResolver']) {
       const raw = body(kind);
       const result = await answers.handle({ method: 'POST', headers: signed(raw), rawBody: raw });
@@ -308,7 +308,7 @@ describe('apps-answer-handler: table 3.1, one request', () => {
 
   it('row 7: a request for a kind and key with no function gets 404 with the words Siren shows', async () => {
     const { answers, errors } = setup();
-    answers.on('distributionResolver', 'another-key', () => undefined);
+    answers.on('distributionResolver', 'another-key', () => answers.later());
     answers.on('postConversionAction', () => undefined);
     const raw = body('distributionResolver');
     const result = await answers.handle({ method: 'POST', headers: signed(raw), rawBody: raw });

@@ -151,6 +151,7 @@ export type {
   AppFastifyRequest,
   AppFastifyReply,
   AppFunctionFor,
+  AppHandledKind,
 } from './resources/app-request-handler';
 export {
   AppsResource,

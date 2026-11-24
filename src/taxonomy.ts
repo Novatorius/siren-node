@@ -340,10 +340,8 @@ export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHold
  * distributor for a metric filter, a program or a distributor for a
  * transaction filter, and a collaborator group for its structure.
  *
- * The payout kind's stored value is `payoutMethod`, the documentation's
- * word. `FulfillmentMethod` stays as an alias of the same value, as Siren's
- * `AppItemKinds::FulfillmentMethod` does, so code written against it sends
- * the new word. Siren refuses the old value `fulfillmentMethod`.
+ * The payout kind is `payoutMethod`, the documentation's word. Siren
+ * refuses its old name.
  */
 export const AppItemKind = {
   PostConversionAction: 'postConversionAction',
@@ -354,8 +352,6 @@ export const AppItemKind = {
    * Siren drops the ask after 24 hours with no answer.
    */
   PayoutMethod: 'payoutMethod',
-  /** @deprecated Read `AppItemKind.PayoutMethod`. The same value, `payoutMethod`. */
-  FulfillmentMethod: 'payoutMethod',
   DistributionResolver: 'distributionResolver',
   /**
    * An event of the app's own, which the app sends Siren at

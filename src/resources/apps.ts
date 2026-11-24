@@ -800,8 +800,9 @@ export class AppsResource {
    *   the client's key, resent on a lost connection, 429 or 5xx within
    *   `maxRetries`, which is safe because Siren takes the same answer again
    *   as `duplicate: true`. A refusal (422, 409, 403, 404) goes to
-   *   `onError` and is not resent. A function that returns `undefined`
-   *   leaves the answer to `apps.requests.answer()`.
+   *   `onError` and is not resent. A function that returns
+   *   `answers.later()` leaves the answer to `apps.requests.answer()`, and
+   *   one that returns nothing is an error `onError` gets.
    * - 404 `No function handles <kind> <key>.` for a feature with no
    *   function, so Siren shows the request under Needs attention.
    * - For any other `X-Siren-Event`, 200 once the `onEvent` function
@@ -814,11 +815,13 @@ export class AppsResource {
    * `api.` and `app.` hosts count as one Siren.
    *
    * `signingSecret` defaults to `SIREN_SIGNING_SECRET` from the environment.
-   * Refuses with `SirenError`, when it is made, a missing signing secret and
-   * a `toleranceSeconds` outside 1 to 3600. It keeps no state.
+   * Refuses with `SirenError`, when it is made, a missing signing secret,
+   * a `toleranceSeconds` outside 1 to 3600 and an `extraKinds` that is not
+   * a list of kind names. `on()` refuses a kind Siren never sends unless
+   * `extraKinds` names it. It keeps no state.
    */
-  requestHandler(options?: AppRequestHandlerOptions): AppRequestHandler {
-    return createAppRequestHandler(this.http, options, {
+  requestHandler<X extends string = never>(options?: AppRequestHandlerOptions<X>): AppRequestHandler<X> {
+    return createAppRequestHandler<X>(this.http, options, {
       toleranceSeconds: DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,
       maxAnswerBytes: MAX_APP_ANSWER_BYTES,
     });

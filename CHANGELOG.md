@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- `answers.on()` refuses a kind Siren never sends when the function is registered, with a
+  `SirenError` that says what to write instead: the nearest kind for a typo, the kind for a screen
+  name such as `attributionModel`, the camelCase kind for `distribution_resolver`, `events.ingest()`
+  for `customEvent`, `onEvent()` for an event name, and `payoutMethod` for `fulfillmentMethod`. Its
+  types take only those kinds, so the editor flags a typo. The new `extraKinds` option names kinds a
+  newer Siren sends, which `on()` then takes.
+- An ask's function that returns nothing (`undefined` or `null`) is an error, which `onError` and
+  `simulate()` get: "The function for distributionResolver split-by-score returned nothing. Return
+  the answer, or return answers.later() when you will answer with apps.requests.answer()." Return
+  `answers.later()` to answer later. The ask function types no longer take `undefined`.
+- `AppItemKind.FulfillmentMethod` is gone. Use `AppItemKind.PayoutMethod`, the same value.
+
 - `apps.requestHandler()` replies 500 to an ask whose signed `answerUrl` is on another Siren than
   the client's `baseUrl`, and `onError` gets a `SirenError` naming both addresses and the `baseUrl`
   to set. Before, it replied 200 and the answer post failed into a log line. Siren Cloud's
@@ -46,6 +58,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `answers.later()`, which an ask's function returns when the app will answer later with
+  `apps.requests.answer()`, and the types `AppAnswerLater`, `AppAskResult` and `AppHandledKind`.
+- `answers.simulate()` checks an ask's answer with Siren's own rules for its kind, ported from
+  Siren's answer route, and returns a refused answer as a `ValidationError` with code
+  `app_answer_invalid` and Siren's words. The live handler still posts the answer and lets Siren
+  decide.
+- The default `onError` line for an ask that failed after its 200 says when Siren sends it again,
+  from `answerBy`, and how to resend it sooner: from Needs attention in Siren Cloud, or with
+  `siren apps resend <id>`.
+- The README opens with "How Siren talks to your app", the same block as the PHP and Python SDKs,
+  has a reply row for a failed function, and says an ask's function can run more than once.
 - `@novatorius/siren/testing`, with `appRequest(kind, key, { data, secret, id, app, baseUrl,
   timestamp })`, which signs an app request as Siren sends it, and `sampleData(kind)`, Siren's
   sample question for each kind.
