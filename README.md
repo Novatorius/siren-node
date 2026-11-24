@@ -252,7 +252,7 @@ TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 
   `answerUrl` on another Siren, and a body a parser already read. By default it writes one `console.error` line with the kind, key and request
   id, or an event's type and delivery id, and the error. For an ask that failed after its 200, the
   line adds when Siren sends it again, such as "Siren sends it again after 16:58 UTC, when its
-  answer window closes", and how to resend it sooner. It never writes the request's data or
+  answer window closes", and how to resend it sooner, ahead of the error and its stack trace. It never writes the request's data or
   headers.
 - `extraKinds`, a list of kinds a newer Siren sends that this SDK does not know yet, which `on()`
   then takes.

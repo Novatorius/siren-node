@@ -83,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decide.
 - The default `onError` line for an ask that failed after its 200 says when Siren sends it again,
   from `answerBy`, and how to resend it sooner: from Needs attention in Siren Cloud, or with
-  `siren apps resend <id>`.
+  `siren apps resend <id>`. It comes before the error, so a stack trace can't push it out of sight.
 - The README opens with "How Siren talks to your app", the same block as the PHP and Python SDKs,
   has a reply row for a failed function, and says an ask's function can run more than once.
 - `@novatorius/siren/testing`, with `appRequest(kind, key, { data, secret, id, app, baseUrl,
