@@ -11,8 +11,8 @@ import type { CommandContext, CommandHandler, CommandInput } from '../context';
 import { RESOURCE_COMMANDS } from '../resources.generated';
 import type { ResourceCommand, ResourceOp, ResourceRoute } from '../resources.generated';
 import { CliRefusal, CliUsageError } from '../targets';
-import { block, clip, errorLines, table, WIDTH } from './resource-output';
-import type { ErrorParts } from './resource-output';
+import { styleFor } from '../style';
+import { clip, recordRows, table, WIDTH } from './resource-output';
 
 /*
  * `siren <resource> <op>`, generated from Siren's openapi.json into
@@ -58,9 +58,11 @@ export interface ResourceSpec {
   usage: string;
   summary: string;
   group: 'Records';
+  /** The few words help prints beside it, with no full stop. */
+  short: string;
   options: Options;
   flags: Readonly<Record<string, readonly [string, string]>>;
-  example: string;
+  examples: readonly string[];
   positionals: readonly [number, number];
   offline?: boolean;
   readsOnly?: boolean;
@@ -99,7 +101,10 @@ function singular(name: string): string {
 export function commandFor(words: readonly string[]): { name: string; spec: ResourceSpec } | undefined {
   const [first, second] = words;
   if (first === 'resources') {
-    return { name: 'resources', spec: { usage: 'resources', summary: 'List the record commands generated from Siren\'s API.', group: 'Records', options: {}, flags: {}, example: 'siren resources', positionals: [0, 0], offline: true, run: listResources } };
+    return {
+      name: 'resources',
+      spec: { usage: 'resources', summary: "List the record commands generated from Siren's API.", short: 'List the record commands', group: 'Records', options: {}, flags: {}, examples: ['siren resources'], positionals: [0, 0], offline: true, run: listResources },
+    };
   }
 
   if ((RAW_VERBS as readonly string[]).includes(first ?? '')) {
@@ -111,10 +116,11 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
       spec: {
         usage: `${verb} <path> ${method === 'GET' ? '[-d key=value] [--limit <n>] [--all]' : method === 'DELETE' ? '[--confirm <id>]' : '[-d key=value] [--data <json or @file>]'} [--json] [--dry-run]`,
         summary: `Send ${method} to any of Siren's routes, such as /programs.`,
+        short: `Send ${method} to any route`,
         group: 'Records',
         options,
         flags,
-        example: method === 'GET' ? 'siren get /programs --limit 5' : method === 'DELETE' ? 'siren delete /programs/12' : `siren ${verb} /programs${method === 'POST' ? '' : '/12'} -d name="Referral program"`,
+        examples: [method === 'GET' ? 'siren get /programs --limit 5' : method === 'DELETE' ? 'siren delete /programs/12' : `siren ${verb} /programs${method === 'POST' ? '' : '/12'} -d name="Referral program"`],
         positionals: [1, 1],
         readsOnly: method === 'GET',
         run: (input) => sendRaw(input, method),
@@ -128,7 +134,18 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
   if (second === undefined) {
     return {
       name: resource.name,
-      spec: { usage: `${resource.name} <${ops.join('|')}>`, summary: `Read and change ${resource.name} on Siren.`, group: 'Records', options: {}, flags: {}, example: `siren ${resource.name} ${ops[0]}`, positionals: [0, 0], offline: true, run: (input) => resourceHelp(input, resource) },
+      spec: {
+        usage: `${resource.name} <${ops.join('|')}>`,
+        summary: `Read and change ${resource.name} on Siren.`,
+        short: `Read and change ${resource.name}`,
+        group: 'Records',
+        options: {},
+        flags: {},
+        examples: [`siren ${resource.name} ${ops[0]}`],
+        positionals: [0, 0],
+        offline: true,
+        run: (input) => resourceHelp(input, resource),
+      },
     };
   }
 
@@ -146,10 +163,11 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
     spec: {
       usage: `${resource.name} ${op}${takesId ? ' <id>' : ''}${Object.keys(flags).length > 0 ? ' [options]' : ''}`,
       summary: `${route.method} ${route.path}${route.required?.length ? `. Siren requires ${route.required.join(', ')}.` : '.'}`,
+      short: `${route.method} ${route.path}`,
       group: 'Records',
       options,
       flags,
-      example,
+      examples: [example],
       positionals: takesId ? [1, 1] : [0, 0],
       readsOnly: route.method === 'GET',
       run: (input) => sendResource(input, resource, op, route),
@@ -159,34 +177,40 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
 
 /** `siren resources`: every generated resource and its operations. */
 async function listResources(input: CommandInput): Promise<number> {
+  const style = styleFor(input.io, 'stdout', {});
   const width = Math.max(...RESOURCE_COMMANDS.map((resource) => resource.name.length));
-  input.io.stdout(
-    [
-      `✓ ${RESOURCE_COMMANDS.length} resources, generated from Siren's API`,
-      ...RESOURCE_COMMANDS.map((resource) => clip(`  ${resource.name.padEnd(width)}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`, WIDTH)),
-      '',
-      'Next',
-      `  1. siren ${RESOURCE_COMMANDS[0]?.name ?? 'programs'} list`,
-      '› siren get <path> reaches any other route.',
-      '',
-    ].join('\n'),
-  );
+  const lines = [
+    style.success(`${style.bold(String(RESOURCE_COMMANDS.length))} resources, generated from Siren's API`),
+    '',
+    ...RESOURCE_COMMANDS.map((resource) => clip(`  ${style.bold(resource.name.padEnd(width))}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`, WIDTH + (style.rich ? 8 : 0))),
+    '',
+    style.bold('Next'),
+    `  1  ${style.command(`siren ${RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')?.name ?? RESOURCE_COMMANDS[0]?.name ?? 'programs'} list`)}`,
+    '',
+    style.rich ? style.dim('› siren get <path> reaches any other route.') : 'siren get <path> reaches any other route.',
+  ];
+  input.io.stdout(`${lines.join('\n')}\n`);
   return 0;
 }
 
 /** `siren <resource>`: its operations, each with the route it sends. */
 async function resourceHelp(input: CommandInput, resource: ResourceCommand): Promise<number> {
+  const style = styleFor(input.io, 'stdout', {});
   const ops = RESOURCE_OPS.filter((op) => resource.ops[op]);
+  const rows = ops.map((op) => [`siren ${resource.name} ${op}${resource.ops[op]!.param ? ' <id>' : ''}`, `${resource.ops[op]!.method} ${resource.ops[op]!.path}`] as const);
+  const width = Math.max(...rows.map(([left]) => left.length)) + 3;
   input.io.stdout(
     [
-      `Usage: siren ${resource.name} <${ops.join('|')}>`,
+      `Read and change ${resource.name} on Siren.`,
       '',
-      ...ops.map((op) => {
-        const route = resource.ops[op]!;
-        return clip(`  siren ${resource.name} ${op}${route.param ? ' <id>' : ''}`.padEnd(36) + `${route.method} ${route.path}`, WIDTH);
-      }),
+      style.bold('USAGE'),
+      `  siren ${resource.name} <${ops.join('|')}> [flags]`,
       '',
-      `Run siren help ${resource.name} <op> for its options and an example.`,
+      style.bold('COMMANDS'),
+      ...rows.map(([left, right]) => clip(`  ${style.bold(left)}${' '.repeat(width - left.length)}${right}`, WIDTH + (style.rich ? 8 : 0))),
+      '',
+      style.bold('LEARN MORE'),
+      `  Run ${style.command(`siren ${resource.name} <command> --help`)} for its flags and an example.`,
       '',
     ].join('\n'),
   );
@@ -211,8 +235,8 @@ interface Plan {
   deleteId?: string;
   /** Names the record command, for the hints a list or an error prints. */
   resource?: ResourceCommand;
-  /** The line that ran, for an error's fix: `siren programs get` or `siren get`. */
-  line: string;
+  /** The command's words, for an error's fix: `programs get` or `get`. */
+  words: string;
 }
 
 /** `siren get|post|put|patch|delete <path>`. */
@@ -226,7 +250,7 @@ async function sendRaw(input: CommandInput, method: HttpMethod): Promise<number>
     dryRun: input.values['dry-run'] === true,
     all: input.values.all === true,
     ...(method === 'DELETE' && last !== undefined ? { deleteId: decodeURIComponent(last) } : {}),
-    line: `siren ${method.toLowerCase()} ${path}`,
+    words: method.toLowerCase(),
   });
 }
 
@@ -242,7 +266,7 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
     all: input.values.all === true,
     ...(op === 'delete' && id !== undefined ? { deleteId: id } : {}),
     resource,
-    line: `siren ${resource.name} ${op}`,
+    words: `${resource.name} ${op}`,
   });
 }
 
@@ -348,16 +372,21 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     const url = urlOf(run.target.baseUrl, outgoing);
     if (plan.json) {
       run.print(JSON.stringify({ method: outgoing.method, url, ...(outgoing.body !== undefined ? { body: outgoing.body } : {}) }, null, 2));
-    } else {
-      run.print(`✓ Would send ${outgoing.method} ${url}`);
-      if (outgoing.body !== undefined) run.print(`  ${JSON.stringify(outgoing.body)}`);
-      run.print('› Nothing was sent.');
+      return 0;
     }
+    const style = styleFor(input.io, 'stdout', {});
+    input.io.stdout(
+      style.report({
+        headline: `Would send ${style.bold(`${outgoing.method} ${url}`)}`,
+        ...(outgoing.body !== undefined ? { rows: [['body', clip(JSON.stringify(outgoing.body), WIDTH - 9)]] } : {}),
+        tips: ['Nothing was sent.'],
+      }),
+    );
     return 0;
   }
 
   await run.signedIn();
-  if (plan.deleteId !== undefined && (await run.targetEdition()) === 'production') await confirmLiveDelete(input, run, plan.deleteId);
+  if (plan.deleteId !== undefined && (await run.targetEdition()) === 'production') await confirmLiveDelete(input, run, plan, plan.deleteId);
 
   const transport = createHttpTransport({
     accessToken: new CallbackAccessTokenSource(
@@ -384,13 +413,14 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     if (plan.all && outgoing.method === 'GET' && isEnvelope(body)) {
       body = await allPages(body, outgoing.query, async (query) => (await request(query)).body);
     }
-    print(input, run, plan, status, body);
+    print(input, plan, status, body);
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
-    const parts = errorParts(error, plan, run);
-    if (plan.json) input.io.stderr(`${JSON.stringify({ error: { message: error.message, status: error.statusCode, code: error.code ?? null, fix: parts.fix } }, null, 2)}\n`);
-    else input.io.stderr(errorLines(parts));
+    const refusal = refusalOf(error, plan, input);
+    if (!plan.json) throw refusal;
+    const fix = refusal.parts.fix === undefined ? null : `${refusal.parts.fix}${refusal.parts.fixWords === undefined ? '' : ` ${refusal.parts.fixWords}`}`;
+    input.io.stderr(`${JSON.stringify({ error: { message: error.message.replace(/^Siren: /, ''), status: error.statusCode, code: error.code ?? null, fix } }, null, 2)}\n`);
     return 1;
   }
 }
@@ -399,17 +429,18 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
  * Asks the person to type the id before a delete on a live organization.
  * With no terminal, `--confirm <id>` must name it. A wrong id sends nothing.
  */
-async function confirmLiveDelete(input: CommandInput, run: CommandContext, id: string): Promise<void> {
+async function confirmLiveDelete(input: CommandInput, run: CommandContext, plan: Plan, id: string): Promise<void> {
+  const again = input.command(`${plan.words} ${plan.words.includes(' ') ? id : plan.outgoing.path} --confirm ${id}`);
   const confirm = input.values.confirm;
   if (typeof confirm === 'string') {
-    if (confirm !== id) throw new CliRefusal(`--confirm names ${JSON.stringify(confirm)}, and the record is ${JSON.stringify(id)}, so nothing was deleted.`);
+    if (confirm !== id) throw new CliRefusal('Nothing was deleted.', { why: `--confirm names ${JSON.stringify(confirm)}, and the record is ${JSON.stringify(id)}.`, fix: again });
     return;
   }
   if (!input.io.interactive) {
-    throw new CliRefusal(`Deleting from a live organization needs the record's id typed. There is no terminal to ask in, so pass --confirm ${id}.`);
+    throw new CliRefusal('Nothing was deleted.', { why: "A live delete needs the record's id typed, and there is no terminal to ask in.", fix: again });
   }
   const typed = (await input.io.prompt(`This deletes ${id} from ${run.current().orgName}, a live organization. Type ${id} to delete it: `)).trim();
-  if (typed !== id) throw new CliRefusal(`You typed ${JSON.stringify(typed)}, not ${JSON.stringify(id)}, so nothing was deleted.`);
+  if (typed !== id) throw new CliRefusal('Nothing was deleted.', { why: `You typed ${JSON.stringify(typed)}, not ${JSON.stringify(id)}.` });
 }
 
 /** A list in Siren's page envelope: `{items, total, page, perPage, totalPages}`. */
@@ -448,71 +479,79 @@ async function allPages(first: Envelope, query: Record<string, string>, read: (q
 }
 
 /** Prints Siren's answer: JSON, a table, a record, or one line. */
-function print(input: CommandInput, run: CommandContext, plan: Plan, status: number, body: unknown): void {
+function print(input: CommandInput, plan: Plan, status: number, body: unknown): void {
+  const out = (text: string) => input.io.stdout(text.endsWith('\n') ? text : `${text}\n`);
   if (plan.json) {
-    run.print(JSON.stringify(plan.all && isEnvelope(body) ? body.items : (body ?? null), null, 2));
+    out(JSON.stringify(plan.all && isEnvelope(body) ? body.items : (body ?? null), null, 2));
     return;
   }
 
+  const style = styleFor(input.io, 'stdout', {});
   const name = plan.resource?.name ?? (plan.outgoing.path.split('/').filter(Boolean)[0] ?? 'records');
   const rows = isEnvelope(body) ? body.items : Array.isArray(body) ? body : undefined;
   if (rows !== undefined) {
     const records = rows.filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null && !Array.isArray(row));
-    const paging = isEnvelope(body) && body.totalPages !== undefined && body.totalPages > 1 ? `  page ${body.page ?? 1} of ${body.totalPages}` : '';
-    run.print(`✓ ${rows.length} ${rows.length === 1 ? singular(name) : name}${paging}`);
-    const lines = records.length === rows.length ? table(records) : rows.map((row) => clip(`  ${JSON.stringify(row)}`, WIDTH));
-    for (const line of lines) run.print(line);
+    const paged = isEnvelope(body) && body.totalPages !== undefined && body.totalPages > 1;
+    const page = paged ? style.dim(`  page ${(body as Envelope).page ?? 1} of ${(body as Envelope).totalPages}`) : '';
+    const lines = [style.success(`${style.bold(`${rows.length} ${rows.length === 1 ? singular(name) : name}`)}${page}`)];
+    const shown = records.length === rows.length ? table(style, records) : rows.map((row) => clip(`  ${JSON.stringify(row)}`, WIDTH));
+    if (shown.length > 0) lines.push('', ...shown);
     const firstId = records[0]?.id;
     if (firstId !== undefined && firstId !== null) {
-      run.print('');
-      run.print('Next');
-      run.print(`  1. ${plan.resource?.ops.get ? `siren ${name} get ${String(firstId)}` : `siren get ${plan.outgoing.path}/${String(firstId)}`}`);
+      const next = plan.resource?.ops.get ? `${name} get ${String(firstId)}` : `get ${plan.outgoing.path}/${String(firstId)}`;
+      lines.push('', style.bold('Next'), `  1  ${style.command(input.command(next))}`);
     }
-    run.print(`› --json prints the answer as JSON.${paging ? ' --all reads every page.' : ''}`);
+    const tip = `--json prints the answer as JSON.${paged ? ' --all reads every page.' : ''}`;
+    lines.push('', style.rich ? style.dim(`› ${tip}`) : tip);
+    out(lines.join('\n'));
     return;
   }
 
   if (typeof body === 'object' && body !== null) {
     const record = body as Record<string, unknown>;
     const id = record.id;
-    run.print(`✓ ${singular(name)}${id !== undefined && id !== null ? ` ${String(id)}` : ''}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)}`}`);
-    for (const line of block(record)) run.print(line);
+    const what = `${singular(name)}${id !== undefined && id !== null ? ` ${String(id)}` : ''}`;
+    out(style.report({ headline: `${style.bold(what)}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)}`}`, rows: recordRows(record) }));
     return;
   }
 
-  run.print(`✓ ${plan.outgoing.method} ${plan.outgoing.path} answered ${status}.`);
-  if (body !== undefined) run.print(`  ${cellLine(body)}`);
-}
-
-function cellLine(value: unknown): string {
-  return clip(typeof value === 'string' ? value : JSON.stringify(value), WIDTH - 2);
+  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}.`, ...(body !== undefined && body !== null ? { rows: [['answer', clip(typeof body === 'string' ? body : JSON.stringify(body), WIDTH - 11)]] } : {}) }));
 }
 
 function pastTense(method: HttpMethod): string {
   return method === 'POST' ? 'saved' : method === 'DELETE' ? 'deleted' : 'updated';
 }
 
-/** An error's three parts: what was refused, what Siren said, and the command that helps. */
-export function errorParts(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'line'>, run: Pick<CommandContext, 'command'>): ErrorParts {
+/**
+ * Siren's refusal as the three-part error: what was refused, what Siren
+ * said, and the command that helps. Its status and code are the detail
+ * --verbose shows.
+ */
+export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'words'>, input: Pick<CommandInput, 'command'>): CliRefusal {
   const { method, path } = plan.outgoing;
   const status = error.statusCode ?? 0;
-  const said = error.message.replace(/^Siren: /, '');
+  const said = error.message.replace(/^Siren: /, '').replace(/\.?$/, '.');
   const fields = error instanceof BadRequestError && error.fieldErrors.length > 0 ? ` ${error.fieldErrors.map((field) => `${field.field}: ${field.message}`).join(' ')}` : '';
-  const why = `Siren says: ${said}${fields} (${status}${error.code ? `, ${error.code}` : ''})`;
-  const list = plan.resource?.ops.list ? `siren ${plan.resource.name} list` : `siren get /${path.split('/').filter(Boolean)[0] ?? ''}`;
-  const fix =
+  const why = `Siren answered ${status}${error.code ? ` ${error.code}` : ''}: ${said}${fields}`;
+  const list = plan.resource?.ops.list ? `${plan.resource.name} list` : `get /${path.split('/').filter(Boolean)[0] ?? ''}`;
+  const help = `${plan.words} --help`;
+  const fix: { fix?: string; fixWords?: string } =
     status === 401
-      ? `Run ${run.command('login')} to sign in again.`
+      ? { fix: input.command('login'), fixWords: 'to log in again' }
       : status === 403
-        ? `Run ${run.command('whoami')} to see your role. An admin of the organization can do this.`
+        ? { fix: input.command('whoami'), fixWords: 'to see your role' }
         : status === 404
-          ? `Run ${list} to see what is there.`
+          ? { fix: input.command(list), fixWords: 'to see what is there' }
           : status === 400 || status === 422
-            ? `Run siren help ${plan.line.replace(/^siren /, '')} for the fields, or add --dry-run to see what was sent.`
+            ? { fix: `siren ${help}`, fixWords: 'for the fields it takes' }
             : status === 405
-              ? `Siren serves no ${method} on ${path}. Run siren help ${plan.line.replace(/^siren /, '')} to see the methods.`
+              ? { fix: `siren ${help}`, fixWords: `to see the methods, since Siren serves no ${method} on ${path}` }
               : status >= 500
-                ? `Try again in a minute. Add --dry-run to see what was sent.`
-                : `Add --dry-run to see what was sent.`;
-  return { what: `Siren refused ${method} ${path}.`, why, fix };
+                ? { fix: input.command(`${plan.words} --dry-run`), fixWords: 'to see what was sent, and try again in a minute' }
+                : { fix: input.command(`${plan.words} --dry-run`), fixWords: 'to see what was sent' };
+  return new CliRefusal(`Siren refused ${method} ${path}.`, {
+    why,
+    ...fix,
+    detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
+  });
 }

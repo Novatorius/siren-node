@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { RESOURCE_COMMANDS } from '../src/cli/resources.generated';
 import { apiPath, fieldValue, setNested } from '../src/cli/commands/resources';
+import { runCli } from '../src/cli/run';
 import { harness, session } from './cli-fakes';
 import { reply } from './http-fakes';
 
@@ -56,10 +57,21 @@ describe('the generated resource commands', () => {
     expect(await h.run(['programs', 'list'])).toBe(0);
     expect(h.paths()).toEqual(['GET /programs']);
     const out = h.out();
-    expect(out).toContain('✓ 2 programs');
-    expect(out).toMatch(/ {2}ID {2}NAME {13}STATUS {2}UNITS\n/);
-    expect(out).toMatch(/ {2}1 {3}Referral program {2}active {2}usd\n/);
-    expect(out).toContain('  1. siren programs get 1');
+    expect(out).toBe(
+      [
+        '2 programs',
+        '',
+        '  id  name              status  units',
+        '  1   Referral program  active  usd',
+        '  2   Partner program   draft   usd',
+        '',
+        'Next',
+        '  1  siren programs get 1',
+        '',
+        '--json prints the answer as JSON.',
+        '',
+      ].join('\n'),
+    );
     for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
   });
 
@@ -67,8 +79,7 @@ describe('the generated resource commands', () => {
     const h = signedIn([reply(200, programs[0])]);
     expect(await h.run(['programs', 'get', '1'])).toBe(0);
     expect(h.paths()).toEqual(['GET /programs/1']);
-    expect(h.out()).toContain('✓ program 1\n');
-    expect(h.out()).toMatch(/ {2}name {4}Referral program\n/);
+    expect(h.out()).toBe('program 1\n\n  name     Referral program\n  status   active\n  units    usd\n');
   });
 
   it('prints Siren\'s answer as JSON with --json, and nothing else', async () => {
@@ -82,7 +93,7 @@ describe('the generated resource commands', () => {
     expect(await h.run(['programs', 'create', '-d', 'name=New', '-d', 'units=usd', '-d', 'limit=5', '-d', 'live=true'])).toBe(0);
     expect(h.paths()).toEqual(['POST /programs']);
     expect(JSON.parse(h.http.requests[0]!.body!)).toEqual({ name: 'New', units: 'usd', limit: 5, live: true });
-    expect(h.out()).toContain('✓ program 9 saved');
+    expect(h.out()).toContain('program 9 saved\n');
   });
 
   it('updates with the method the spec names for the route', async () => {
@@ -110,7 +121,7 @@ describe('the generated resource commands', () => {
   it('lists every resource with siren resources', async () => {
     const h = harness([]);
     expect(await h.run(['resources'])).toBe(0);
-    expect(h.out()).toContain(`✓ ${RESOURCE_COMMANDS.length} resources`);
+    expect(h.out()).toContain(`${RESOURCE_COMMANDS.length} resources, generated from Siren's API`);
     expect(h.out()).toMatch(/ {2}programs +list get create update delete\n/);
   });
 });
@@ -144,7 +155,7 @@ describe('siren get, post, put, patch and delete', () => {
   it('says how many pages there are when it read one of several', async () => {
     const h = signedIn([reply(200, envelope(programs, 1, 3, 6, 2))]);
     expect(await h.run(['get', '/programs'])).toBe(0);
-    expect(h.out()).toContain('✓ 2 programs  page 1 of 3');
+    expect(h.out()).toContain('2 programs  page 1 of 3\n');
     expect(h.out()).toContain('--all reads every page.');
   });
 
@@ -158,7 +169,7 @@ describe('siren get, post, put, patch and delete', () => {
   it('prints the request with --dry-run and sends nothing, not even the edition read', async () => {
     const h = harness([]);
     expect(await h.run(['post', '/programs', '-d', 'name=Referral program', '--dry-run'])).toBe(0);
-    expect(h.out()).toBe(`✓ Would send POST ${SANDBOX_BASE_URL}/programs\n  {"name":"Referral program"}\n› Nothing was sent.\n`);
+    expect(h.out()).toBe(`Would send POST ${SANDBOX_BASE_URL}/programs\n\n  body   {"name":"Referral program"}\n\nNothing was sent.\n`);
     expect(h.sent()).toEqual([]);
   });
 
@@ -172,13 +183,30 @@ describe('siren get, post, put, patch and delete', () => {
   it('prints a refusal in three parts: what, why, and the command that helps', async () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await h.run(['programs', 'get', '99'])).toBe(1);
-    expect(h.err()).toBe('✗ Siren refused GET /programs/99.\n  Siren says: Program not found. (404, not_found)\n  Run siren programs list to see what is there.\n');
+    expect(h.err()).toBe('siren: Siren refused GET /programs/99. Siren answered 404 not_found: Program not found. Run siren programs list to see what is there.\n');
+  });
+
+  it('styles the refusal in a terminal: a red ✗ headline, the why, and the command to run', async () => {
+    const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
+    expect(await runCli(['programs', 'get', '99'], { ...h.io, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } })).toBe(1);
+    const plain = h.err().replace(/\u001b\[[\d;]*m/g, '');
+    expect(plain).toBe('✗ Siren refused GET /programs/99.\n  Siren answered 404 not_found: Program not found.\n  › Run siren programs list to see what is there.\n');
+  });
+
+  it('styles a list in a terminal: a green ✓ headline and a dim header', async () => {
+    const h = signedIn([reply(200, envelope(programs))]);
+    expect(await runCli(['programs', 'list'], { ...h.io, stdoutTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } })).toBe(0);
+    expect(h.out()).toContain('✓');
+    expect(h.out()).toContain('\u001b[2mid  name');
+    const plain = h.out().replace(/\u001b\[[\d;]*m/g, '');
+    expect(plain).toContain('› --json prints the answer as JSON.');
+    for (const line of plain.split('\n')) expect([...line].length).toBeLessThanOrEqual(80);
   });
 
   it('prints a refusal as JSON on standard error with --json', async () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await h.run(['get', '/programs/99', '--json'])).toBe(1);
-    expect(JSON.parse(h.err())).toEqual({ error: { message: 'Program not found.', status: 404, code: 'not_found', fix: 'Run siren get /programs to see what is there.' } });
+    expect(JSON.parse(h.err())).toEqual({ error: { message: 'Program not found.', status: 404, code: 'not_found', fix: 'siren get /programs to see what is there' } });
     expect(h.out()).toBe('');
   });
 });
@@ -206,7 +234,7 @@ describe('the live guard', () => {
     const h = signedInLive([reply(200, {})], { env: { SIREN_BASE_URL: LIVE }, interactive: true, typed: ['12'] });
     expect(await h.run(['programs', 'delete', '7', '--live'])).toBe(1);
     expect(h.prompts[0]).toContain('Type 7 to delete it');
-    expect(h.err()).toContain('You typed "12", not "7", so nothing was deleted.');
+    expect(h.err()).toContain('Nothing was deleted. You typed "12", not "7".');
     expect(h.paths()).toEqual([]);
   });
 
@@ -219,7 +247,7 @@ describe('the live guard', () => {
   it('needs --confirm with the id for a live delete with no terminal', async () => {
     const h = signedInLive([reply(200, { id: 7 })], { env: { SIREN_BASE_URL: LIVE } });
     expect(await h.run(['programs', 'delete', '7', '--live'])).toBe(1);
-    expect(h.err()).toContain('pass --confirm 7');
+    expect(h.err()).toContain('Run siren programs delete 7 --confirm 7 --live.');
     expect(h.paths()).toEqual([]);
     expect(await h.run(['programs', 'delete', '7', '--live', '--confirm', '8'])).toBe(1);
     expect(h.paths()).toEqual([]);

@@ -7,8 +7,9 @@ import { RESERVED_APP_KEYS } from '../../resources/apps';
 import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types';
 import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
 import { appChanges, droppedLine } from '../app-changes';
-import { kindLabel } from '../app-kinds';
+import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
+import { styleFor } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError, commandLine } from '../targets';
 
@@ -78,19 +79,29 @@ export async function appsInit(input: CommandInput): Promise<number> {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CliRefusal(`${path} is already there, so nothing was written.`);
     throw error;
   }
-  io.stdout(`Wrote ${path} for the app ${key}, with one ${kindLabel('postConversionAction')}.\n`);
-
   const ignorePath = join(io.cwd, '.gitignore');
   const ignored = await readText(ignorePath);
   const have = (ignored ?? '').split(/\r?\n/);
   const missing = IGNORED.filter((line) => !have.includes(line));
   if (missing.length > 0) {
     await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
-    io.stdout(`Added ${missing.join(', ')} to ${ignorePath}, so the key apply saves stays out of git.\n`);
   }
-  io.stdout('To add a feature, add it under features. The README\'s Feature kinds table lists each kind, and the file\'s $schema lets your editor complete them.\n');
-  io.stdout(`Set SIREN_APP_URL to your app's https address, in your shell or in .env here, then run ${input.command('apps apply')}.\n`);
-  io.stdout('Siren must reach that address. For a handler on this machine, run a tunnel such as cloudflared or ngrok, and use the https address it gives.\n');
+  const style = styleFor(io, 'stdout', {});
+  io.stdout(
+    style.report({
+      headline: `Created ${style.bold(APP_FILE_NAME)}`,
+      rows: [
+        ['App', key],
+        ['Feature', `notify · ${kindName('postConversionAction')}`],
+        ...(missing.length > 0 ? [['Ignored', `${missing.join(', ')} (added to .gitignore)`] as const] : []),
+      ],
+      next: [
+        { text: "Set SIREN_APP_URL to your handler's https address", aside: 'in .env or your shell' },
+        { text: style.command(input.command('apps apply')) },
+      ],
+      tips: ['Running the handler on this machine? Use a tunnel such as cloudflared.', `Add features in ${APP_FILE_NAME}. Your editor completes them.`],
+    }),
+  );
   return 0;
 }
 

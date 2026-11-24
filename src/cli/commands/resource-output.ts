@@ -1,13 +1,16 @@
+import type { Style } from '../style';
+
 /*
- * How the record commands print: an aligned table for a list, a block of
- * labels and values for one record, and the three-part error. It follows
- * the shape Alex set (M114): a ✓ headline, a short aligned block, a numbered
- * Next and › tips, nothing past 80 columns. The style module on
- * pkt/apps-cli-dx replaces the marks and colours here once it lands.
+ * How the record commands lay out Siren's answers, through the style module
+ * (src/cli/style.ts): an aligned table for a list, labels and values for one
+ * record. Nothing passes 80 columns.
  */
 
 /** The widest line the tool prints. */
 export const WIDTH = 80;
+
+/** The widest a table column grows before its values are cut. */
+const COLUMN = 30;
 
 /** A value as one short line: text as it is, null as -, objects as compact JSON. */
 export function cell(value: unknown): string {
@@ -19,7 +22,8 @@ export function cell(value: unknown): string {
 
 /** Cuts a line to `width` characters, with … at the end when it was longer. */
 export function clip(text: string, width: number): string {
-  return text.length <= width ? text : `${text.slice(0, Math.max(0, width - 1))}…`;
+  const chars = [...text];
+  return chars.length <= width ? text : `${chars.slice(0, Math.max(0, width - 1)).join('')}…`;
 }
 
 /** True for a value a table column can show: text, a number, a boolean or null. */
@@ -38,7 +42,7 @@ export function columns(rows: readonly Record<string, unknown>[]): string[] {
   const chosen: string[] = [];
   let used = 2;
   for (const key of ordered) {
-    const width = Math.min(30, Math.max(key.length, ...rows.map((row) => cell(row[key]).length)));
+    const width = Math.min(COLUMN, Math.max(key.length, ...rows.map((row) => cell(row[key]).length)));
     if (chosen.length > 0 && used + width > WIDTH) break;
     chosen.push(key);
     used += width + 2;
@@ -46,31 +50,22 @@ export function columns(rows: readonly Record<string, unknown>[]): string[] {
   return chosen;
 }
 
-/** A list as an aligned table under upper-case headings, each line inside {@link WIDTH}. */
-export function table(rows: readonly Record<string, unknown>[]): string[] {
+/** A list as an aligned table, the header dim, indented two spaces. */
+export function table(style: Style, rows: readonly Record<string, unknown>[]): string[] {
   const keys = columns(rows);
   if (keys.length === 0) return [];
-  const widths = keys.map((key) => Math.min(30, Math.max(key.length, ...rows.map((row) => cell(row[key]).length))));
-  const line = (values: string[]) => clip(`  ${values.map((value, index) => clip(value, widths[index]!).padEnd(widths[index]!)).join('  ')}`.trimEnd(), WIDTH);
-  return [line(keys.map((key) => key.toUpperCase())), ...rows.map((row) => line(keys.map((key) => cell(row[key]))))];
+  const lines = style.table(
+    keys,
+    rows.map((row) => keys.map((key) => clip(cell(row[key]), COLUMN))),
+    WIDTH - 2,
+  );
+  return lines.map((line) => `  ${line}`);
 }
 
-/** One record as labels and values, the labels aligned, each line inside {@link WIDTH}. */
-export function block(record: Record<string, unknown>): string[] {
+/** One record as labels and values for {@link Style.report}, `id` left out, each line inside {@link WIDTH}. */
+export function recordRows(record: Record<string, unknown>): Array<readonly [string, string]> {
   const keys = Object.keys(record).filter((key) => key !== 'id');
   if (keys.length === 0) return [];
   const width = Math.min(24, Math.max(...keys.map((key) => key.length)));
-  return keys.map((key) => clip(`  ${clip(key, width).padEnd(width)}  ${cell(record[key])}`, WIDTH));
-}
-
-/** The three parts of an error: what went wrong, why, and the command that fixes it. */
-export interface ErrorParts {
-  what: string;
-  why: string;
-  fix: string;
-}
-
-/** An error as the tool prints it on standard error. */
-export function errorLines(parts: ErrorParts): string {
-  return `✗ ${parts.what}\n  ${parts.why}\n  ${parts.fix}\n`;
+  return keys.map((key) => [clip(key, width), clip(cell(record[key]), WIDTH - width - 5)] as const);
 }

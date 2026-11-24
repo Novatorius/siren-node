@@ -37,7 +37,7 @@ describe('feature rename: siren.app.json says features', () => {
     expect(appFileTemplate('acme-payouts', 'Acme')).not.toContain('"items"');
     const h = harness([]);
     await h.run(['apps', 'init', '--key', 'acme-payouts']);
-    expect(h.out()).toContain('add it under features');
+    expect(h.out()).toContain('Add features in siren.app.json.');
   });
 
   it('names features, never items, in the schema', () => {

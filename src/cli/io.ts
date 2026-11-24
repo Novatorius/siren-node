@@ -45,6 +45,10 @@ export interface CliIo {
    * tests, the hook never plays.
    */
   readonly screen?: CliScreen;
+  /** True when standard output is a terminal, so the style module may color it. Absent, as in tests, it is plain. */
+  readonly stdoutTty?: boolean;
+  /** True when standard error is a terminal. */
+  readonly stderrTty?: boolean;
 }
 
 /**
@@ -138,6 +142,8 @@ export function nodeIo(): CliIo {
       }),
     signal: controller.signal,
     screen: nodeScreen(),
+    stdoutTty: process.stdout.isTTY === true,
+    stderrTty: process.stderr.isTTY === true,
   };
 }
 

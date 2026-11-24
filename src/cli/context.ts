@@ -6,7 +6,8 @@ import type { StoredSession } from './credentials';
 import type { CliIo } from './io';
 import { SessionAuthClient } from './session-auth';
 import type { Edition, Membership, SessionTokens } from './session-auth';
-import { CliRefusal, assertEditionAllowed, assertSessionMatches, commandLine } from './targets';
+import { SANDBOX_BASE_URL } from '../http';
+import { CliRefusal, LIVE_BASE_URL, assertEditionAllowed, assertSessionMatches, commandLine } from './targets';
 import type { Target } from './targets';
 
 /** How long before the access token's `exp` the tool refreshes it, in seconds. */
@@ -277,12 +278,24 @@ export class CommandContext {
  * elsewhere learns where.
  */
 export async function notSignedIn(store: CredentialStore, target: Target, login: string): Promise<CliRefusal> {
-  const here = `You are not signed in to ${target.baseUrl}.`;
+  const here = target.baseUrl === SANDBOX_BASE_URL || target.baseUrl === LIVE_BASE_URL ? {} : { note: `Siren: ${shortAddress(target.baseUrl)}` };
+  const detail = [`Siren: ${shortAddress(target.baseUrl)}`];
   const sessions = Object.entries(await store.all().catch(() => ({}) as Record<string, StoredSession>));
   const [base, other] = sessions.find(([key]) => key !== target.baseUrl) ?? [];
-  if (base === undefined || other === undefined) return new CliRefusal(`${here} Run ${login} first.`);
+  if (base === undefined || other === undefined) return new CliRefusal('Not logged in.', { fix: login, fixWords: 'to log in', ...here, detail });
   const live = other.edition === 'production' ? ' --live' : '';
-  return new CliRefusal(`${here} You are signed in to ${other.orgName} on ${base}. Pass --base-url ${base}${live} to use it, or run ${login} to sign in here.`);
+  return new CliRefusal('Not logged in.', {
+    why: `You are logged in to ${other.orgName} on ${base}. Pass --base-url ${base}${live} to use it.`,
+    fix: login,
+    fixWords: 'to log in here',
+    ...here,
+    detail,
+  });
+}
+
+/** A Siren's address without `https://`, and without `/siren/v1` when it ends there, for a line a person reads. */
+export function shortAddress(baseUrl: string): string {
+  return baseUrl.replace(/^https:\/\//, '').replace(/\/siren\/v1$/, '');
 }
 
 /** One claim of a JWT's payload, read without checking the signature, or undefined. */
