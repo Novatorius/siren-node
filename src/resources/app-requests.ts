@@ -139,15 +139,15 @@ export async function resendAppRequest(http: Pick<HttpTransport, 'request'>, id:
  *
  * @internal
  */
-export async function answerAppRequest(
-  http: Pick<HttpTransport, 'request'>,
-  id: string,
-  answer: AppAnswer,
-  maxBytes: number,
-  retriable = false,
-): Promise<AppAnswerReceipt> {
-  const method = 'apps.requests.answer()';
-  const key = appRequestId(id, method);
+/**
+ * The answer as the answer route takes it: a copy of a plain object with a
+ * text `outcome`, at most `maxBytes` bytes as JSON. Refuses anything else
+ * with `SirenError` naming `method`. `answers.simulate()` runs the same
+ * check, so a test sees what a post would refuse.
+ *
+ * @internal
+ */
+export function checkedAnswer(answer: unknown, maxBytes: number, method: string): Record<string, unknown> {
   if (!isPlainObject(answer)) {
     throw new SirenError(`${method} takes the answer as a plain object, such as { outcome: 'paid', reference: 'TX-1' }.`);
   }
@@ -164,6 +164,19 @@ export async function answerAppRequest(
   if (Buffer.byteLength(json, 'utf8') > maxBytes) {
     throw new SirenError(`${method} takes an answer of at most ${maxBytes} bytes as JSON, which Siren also refuses past.`);
   }
+  return copy;
+}
+
+export async function answerAppRequest(
+  http: Pick<HttpTransport, 'request'>,
+  id: string,
+  answer: AppAnswer,
+  maxBytes: number,
+  retriable = false,
+): Promise<AppAnswerReceipt> {
+  const method = 'apps.requests.answer()';
+  const key = appRequestId(id, method);
+  const copy = checkedAnswer(answer, maxBytes, method);
 
   const path = `/apps/requests/${key}/answer`;
   // writeRecord sends once and answers only the body, so keep the status for the error below.
@@ -336,11 +349,12 @@ export function appRequestFrom(bytes: Buffer, t: number, headers: WebhookHeaders
   } catch (cause) {
     throw new SignatureVerificationError('The signed body is not JSON.', { cause });
   }
-  if (!isAppRequestEnvelope(parsed)) {
-    throw new SignatureVerificationError('The signed body is not an app request of version 1.');
+  const problem = envelopeProblem(parsed);
+  if (problem !== undefined) {
+    throw new SignatureVerificationError(`The signed body is not an app request of version 1. ${problem}`);
   }
 
-  const request = { ...parsed, timestamp: t } as unknown as AppRequest;
+  const request = { ...(parsed as Record<string, unknown>), timestamp: t } as unknown as AppRequest;
   const delivery = readHeader(headers, 'X-Siren-Delivery');
   if (delivery !== undefined) request.deliveryId = delivery;
   return request;
@@ -375,24 +389,47 @@ function readSignatureHeader(header: string): { t: number; signatures: Buffer[] 
   return { t, signatures };
 }
 
-/** True for the body of an app request of version 1 (Siren's `AppRequestEnvelope`). */
-function isAppRequestEnvelope(body: unknown): body is Record<string, unknown> {
-  if (!isJsonObject(body)) return false;
+/**
+ * The first rule the body of an app request of version 1 (Siren's
+ * `AppRequestEnvelope`) breaks, in words that name the field, or undefined
+ * when it keeps them all.
+ */
+function envelopeProblem(body: unknown): string | undefined {
+  if (!isJsonObject(body)) return 'The request must be a JSON object.';
+  if (body.version !== 1) return "The request's `version` must be 1.";
+  if (typeof body.id !== 'string' || !REQUEST_ID.test(body.id)) {
+    return "The request's `id` must be `apr_` followed by 32 hex characters.";
+  }
+  if (body.type !== 'app.request') return "The request's `type` must be `app.request`.";
+  if (typeof body.app !== 'string' || body.app === '') return "The request's `app` must be the app's key, a non-empty string.";
+  if (body.mode !== 'tell' && body.mode !== 'ask') return "The request's `mode` must be `tell` or `ask`.";
   const item = body.item;
-  return (
-    body.version === 1 &&
-    typeof body.id === 'string' &&
-    REQUEST_ID.test(body.id) &&
-    body.type === 'app.request' &&
-    typeof body.app === 'string' &&
-    body.app !== '' &&
-    isJsonObject(item) &&
-    typeof item.kind === 'string' &&
-    typeof item.key === 'string' &&
-    typeof item.id === 'string' &&
-    typeof body.createdAt === 'string' &&
-    isJsonObject(body.data) &&
-    (body.mode === 'tell' || body.mode === 'ask') &&
-    (body.mode === 'tell' || (typeof body.answerBy === 'string' && typeof body.answerUrl === 'string'))
-  );
+  if (!isJsonObject(item)) return "The request's `item` must be an object.";
+  for (const field of ['kind', 'key', 'id'] as const) {
+    if (typeof item[field] !== 'string') return `The request's \`item.${field}\` must be a string.`;
+  }
+  if (typeof body.createdAt !== 'string') return "The request's `createdAt` must be a date string.";
+  if (body.mode === 'ask') {
+    if (typeof body.answerBy !== 'string') return "An ask's `answerBy` must be a date string.";
+    if (typeof body.answerUrl !== 'string' || httpOrigin(body.answerUrl) === undefined) {
+      return "An ask's `answerUrl` must be an http or https URL.";
+    }
+  }
+  if (!isJsonObject(body.data)) return "The request's `data` must be a JSON object.";
+  return undefined;
+}
+
+/**
+ * `scheme://host[:port]` of an http or https URL, as `URL` writes an
+ * origin, or undefined for anything else.
+ *
+ * @internal
+ */
+export function httpOrigin(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.origin : undefined;
+  } catch {
+    return undefined;
+  }
 }

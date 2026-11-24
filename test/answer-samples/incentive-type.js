@@ -1,8 +1,9 @@
 import express from 'express'
 import { Siren } from '@novatorius/siren'
 
-const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: 'https://cloud.example.com/siren/v1' })
-const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+// Reads SIREN_API_KEY and SIREN_SIGNING_SECRET from the environment.
+const siren = new Siren()
+const answers = siren.apps.requestHandler()
 
 answers.on('incentiveType', 'pay-on-closed-deals', ({ data }) => {
   // A tenth of the sale, shared by every engagement. A lead earns nothing here.

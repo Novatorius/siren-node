@@ -41,7 +41,11 @@ describe('apps-cli: the siren command in the package', () => {
   it('builds dist in prepare, which a git dependency install runs', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts?: Record<string, string> };
     expect(pkg.scripts?.build).toBe('tsup');
-    expect(['tsup', 'npm run build'], 'scripts.prepare must run the build').toContain(pkg.scripts?.prepare);
+    expect(['tsup', 'npm run build', 'node scripts/prepare.mjs'], 'scripts.prepare must run the build').toContain(pkg.scripts?.prepare);
+    if (pkg.scripts?.prepare === 'node scripts/prepare.mjs') {
+      // The script builds with tsup whenever the dev dependencies are there, as they are in a git install.
+      expect(readFileSync(join(root, 'scripts', 'prepare.mjs'), 'utf8')).toContain("join('node_modules', '.bin'");
+    }
   });
 
   it('is present when CI runs the tests', () => {

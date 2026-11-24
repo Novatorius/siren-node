@@ -143,6 +143,7 @@ export type {
   AppRequestHandlerOptions,
   AppRequestInput,
   AppRequestReply,
+  AppSimulation,
   AppNodeRequest,
   AppWaitUntil,
   AppFastifyPlugin,

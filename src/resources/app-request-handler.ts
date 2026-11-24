@@ -3,7 +3,8 @@ import type { HttpTransport } from '../http';
 import type { AppEventFunction, AppFeatureFunctions, AppRequest, AppRequestFunction } from '../record-types';
 import type { WebhookEvent, WebhookHeaders } from '../types';
 import type { NodeResponseLike } from './events';
-import { answerAppRequest, appRequestFrom, checkSignedDelivery, MAX_TOLERANCE_SECONDS } from './app-requests';
+import { readEnvironment } from '../environment';
+import { answerAppRequest, appRequestFrom, checkedAnswer, checkSignedDelivery, httpOrigin, MAX_TOLERANCE_SECONDS } from './app-requests';
 import { isJsonObject } from './record-requests';
 import { readHeader, webhookEventFrom } from './webhooks';
 
@@ -35,10 +36,10 @@ const REPLY_HEADERS: Readonly<Record<string, string>> = {
 export interface AppRequestHandlerOptions {
   /**
    * The app's signing secret, which Siren showed when it made the app's
-   * address. `undefined` is refused when the handler is made, so
-   * `process.env.SIREN_SIGNING_SECRET` can be passed as it is.
+   * address. Left out, the handler reads `SIREN_SIGNING_SECRET` from the
+   * environment, and refuses when that is unset or empty too.
    */
-  signingSecret: string | undefined;
+  signingSecret?: string | undefined;
   /** How far a request's signed time may be from this machine's clock, either way. Whole seconds from 1 to 3600. Default 300. */
   toleranceSeconds?: number;
   /**
@@ -68,6 +69,19 @@ export interface AppRequestInput {
   headers: WebhookHeaders;
   /** The exact bytes received, as a string or bytes. Anything else, such as a parsed object, gets 500. */
   rawBody: unknown;
+}
+
+/**
+ * What `simulate()` answers: the reply the handler would send, its body
+ * parsed, and for an ask the answer the function returned. `error` is what
+ * `onError` would get: a function that threw, an answer the post would
+ * refuse, or an answer address on another Siren.
+ */
+export interface AppSimulation {
+  status: number;
+  body: Record<string, unknown>;
+  answer?: unknown;
+  error?: unknown;
 }
 
 /**
@@ -167,6 +181,13 @@ export interface AppRequestHandler {
   onEvent(type: string, fn: AppEventFunction): AppRequestHandler;
   /** Serves one request for any other server. Send the reply, then run `after` when it is there. */
   handle(input: AppRequestInput): Promise<AppRequestReply>;
+  /**
+   * Runs the whole handler on one request, as `handle()` does, but posts
+   * nothing and calls no `onError`. An ask's function runs at once, and its
+   * answer gets the check the post would give it. For tests, with
+   * `appRequest()` from `@novatorius/siren/testing`.
+   */
+  simulate(input: AppRequestInput): Promise<AppSimulation>;
   /** A Fastify plugin with its own raw body parser, scoped to the plugin. */
   readonly fastify: AppFastifyPlugin;
 }
@@ -180,10 +201,37 @@ type Body = string | Uint8Array | typeof UNREADABLE | typeof TOO_LARGE;
 
 interface HandlerSettings {
   secret: string;
+  /** The client's base address, the only place an answer is posted. */
+  base: string;
   tolerance: number;
   maxAnswerBytes: number;
   runLater: ((work: () => Promise<void>) => void) | undefined;
   onError: (error: unknown, request?: AppRequest | WebhookEvent) => void;
+}
+
+/** What a simulated request collects instead of posting or calling onError. */
+interface Simulation {
+  answer?: unknown;
+  error?: unknown;
+}
+
+/**
+ * Siren Cloud's two public hosts, which count as one Siren. Cloud builds
+ * `answerUrl` from its `APP_URL`, and the SDK's default base is the api
+ * host. Siren's own records put both hosts on one service:
+ * .github/workflows/deploy-cloud.yml checks health at
+ * https://app.sirenaffiliates.com/health,
+ * .github/workflows/publish-product-screenshots.yml sets
+ * APP_URL=https://app.sirenaffiliates.com, and docs/origin-lock-runbook.md
+ * has Cloudflare proxy both hosts to the same origin, where nginx answers
+ * with `server_name _`. Every other origin difference fails, and the answer
+ * still goes only to the client's base.
+ */
+const CLOUD_ORIGINS: readonly string[] = ['https://api.sirenaffiliates.com', 'https://app.sirenaffiliates.com'];
+
+/** Whether two origins are the same Siren. */
+function sameSiren(a: string, b: string): boolean {
+  return a === b || (CLOUD_ORIGINS.includes(a) && CLOUD_ORIGINS.includes(b));
 }
 
 /**
@@ -194,17 +242,21 @@ interface HandlerSettings {
  * @internal
  */
 export function createAppRequestHandler(
-  http: Pick<HttpTransport, 'request'>,
-  options: AppRequestHandlerOptions,
+  http: Pick<HttpTransport, 'request' | 'urlFor'>,
+  options: AppRequestHandlerOptions = {},
   defaults: { toleranceSeconds: number; maxAnswerBytes: number },
 ): AppRequestHandler {
   const method = 'apps.requestHandler()';
   if (!isJsonObject(options)) {
     throw new SirenError(`${method} takes its options as an object, such as { signingSecret: process.env.SIREN_SIGNING_SECRET }.`);
   }
-  const { signingSecret, toleranceSeconds, runLater, onError } = options;
+  const given: AppRequestHandlerOptions = options;
+  const { toleranceSeconds, runLater, onError } = given;
+  const signingSecret = given.signingSecret === undefined ? readEnvironment('SIREN_SIGNING_SECRET') : given.signingSecret;
   if (typeof signingSecret !== 'string' || signingSecret === '') {
-    throw new SirenError(`${method} needs the app's signing secret as signingSecret, which Siren showed when it made the app's address.`);
+    throw new SirenError(
+      `${method} needs the app's signing secret, which Siren showed when it made the app's address. Pass it as signingSecret, or set SIREN_SIGNING_SECRET in the environment.`,
+    );
   }
   const tolerance = toleranceSeconds ?? defaults.toleranceSeconds;
   if (!Number.isInteger(tolerance) || tolerance < 1 || tolerance > MAX_TOLERANCE_SECONDS) {
@@ -218,6 +270,7 @@ export function createAppRequestHandler(
   }
   const settings: HandlerSettings = {
     secret: signingSecret,
+    base: http.urlFor(''),
     tolerance,
     maxAnswerBytes: defaults.maxAnswerBytes,
     runLater,
@@ -236,7 +289,16 @@ export function createAppRequestHandler(
     }
   };
 
-  const respond = async (verb: string | undefined, headers: WebhookHeaders, read: () => Promise<Body>): Promise<AppRequestReply> => {
+  const respond = async (
+    verb: string | undefined,
+    headers: WebhookHeaders,
+    read: () => Promise<Body>,
+    sim?: Simulation,
+  ): Promise<AppRequestReply> => {
+    const note = (error: unknown, request?: AppRequest | WebhookEvent): void => {
+      if (sim === undefined) report(error, request);
+      else sim.error = error;
+    };
     if ((verb ?? 'POST').toUpperCase() !== 'POST') {
       return reply(405, { error: 'Siren sends app requests and events with POST.' }, { Allow: 'POST' });
     }
@@ -245,7 +307,7 @@ export function createAppRequestHandler(
       return reply(413, { error: `The request body is over ${APP_REQUEST_BODY_LIMIT} bytes, more than Siren sends.` });
     }
     if (raw === UNREADABLE) {
-      report(new SirenError(PARSED_BODY));
+      note(new SirenError(PARSED_BODY));
       return reply(500, { error: PARSED_BODY });
     }
 
@@ -258,11 +320,16 @@ export function createAppRequestHandler(
     }
 
     const event = readHeader(headers, 'X-Siren-Event');
-    if (event === undefined || event === 'app.request') return serveRequest(checked, headers);
-    return serveEvent(checked.bytes, headers);
+    if (event === undefined || event === 'app.request') return serveRequest(checked, headers, note, sim);
+    return serveEvent(checked.bytes, headers, note);
   };
 
-  const serveRequest = async ({ t, bytes }: { t: number; bytes: Buffer }, headers: WebhookHeaders): Promise<AppRequestReply> => {
+  const serveRequest = async (
+    { t, bytes }: { t: number; bytes: Buffer },
+    headers: WebhookHeaders,
+    note: (error: unknown, request?: AppRequest | WebhookEvent) => void,
+    sim: Simulation | undefined,
+  ): Promise<AppRequestReply> => {
     let request: AppRequest;
     try {
       request = appRequestFrom(bytes, t, headers);
@@ -278,13 +345,27 @@ export function createAppRequestHandler(
       try {
         await fn(request);
       } catch (error) {
-        report(error, request);
+        note(error, request);
         return reply(500, { error: `The function for ${kind} ${key} failed, so Siren will send this request again.` });
       }
       return reply(200, {});
     }
 
     const asked = request;
+    const elsewhere = otherSiren(asked.answerUrl ?? '');
+    if (elsewhere !== undefined) {
+      note(new SirenError(elsewhere), asked);
+      return reply(500, { error: elsewhere });
+    }
+    if (sim !== undefined) {
+      try {
+        sim.answer = await fn(asked);
+        if (sim.answer !== undefined) checkedAnswer(sim.answer, settings.maxAnswerBytes, 'answers.simulate()');
+      } catch (error) {
+        sim.error = error;
+      }
+      return reply(200, {});
+    }
     const after = async (): Promise<void> => {
       try {
         const answer = await fn(asked);
@@ -297,7 +378,27 @@ export function createAppRequestHandler(
     return { ...reply(200, {}), after };
   };
 
-  const serveEvent = async (bytes: Buffer, headers: WebhookHeaders): Promise<AppRequestReply> => {
+  /**
+   * The words for an answer address on another Siren than the client's
+   * base, or undefined when they are the same Siren. The handler never
+   * posts to the request's address, so the key goes only to the base.
+   */
+  const otherSiren = (answerUrl: string): string | undefined => {
+    const asked = httpOrigin(answerUrl);
+    const ours = httpOrigin(settings.base);
+    if (asked !== undefined && ours !== undefined && sameSiren(asked, ours)) return undefined;
+    const suggested = answerUrl.replace(/\/apps\/requests\/[^/]+\/answer$/, '');
+    return (
+      `Siren sent this request from ${answerUrl}, but this client sends answers to ${settings.base}. ` +
+      `Set baseUrl to ${suggested} when you build the client.`
+    );
+  };
+
+  const serveEvent = async (
+    bytes: Buffer,
+    headers: WebhookHeaders,
+    note: (error: unknown, request?: AppRequest | WebhookEvent) => void,
+  ): Promise<AppRequestReply> => {
     let parsed: unknown;
     try {
       parsed = JSON.parse(bytes.toString('utf8')) as unknown;
@@ -311,7 +412,7 @@ export function createAppRequestHandler(
     try {
       await fn(event);
     } catch (error) {
-      report(error, event);
+      note(error, event);
       return reply(500, { error: `The function for ${event.type} failed, so Siren will send this event again.` });
     }
     return reply(200, {});
@@ -411,6 +512,25 @@ export function createAppRequestHandler(
       }
       const raw = input.rawBody;
       return respond(input.method, input.headers, async () => (typeof raw === 'string' || raw instanceof Uint8Array ? raw : UNREADABLE));
+    },
+    async simulate(input: AppRequestInput): Promise<AppSimulation> {
+      if (!isJsonObject(input)) {
+        throw new SirenError('answers.simulate() takes { method, headers, rawBody }, such as appRequest() from @novatorius/siren/testing answers.');
+      }
+      const raw = input.rawBody;
+      const sim: Simulation = {};
+      const result = await respond(
+        input.method,
+        input.headers,
+        async () => (typeof raw === 'string' || raw instanceof Uint8Array ? raw : UNREADABLE),
+        sim,
+      );
+      return {
+        status: result.status,
+        body: JSON.parse(result.body) as Record<string, unknown>,
+        ...('answer' in sim ? { answer: sim.answer } : {}),
+        ...('error' in sim ? { error: sim.error } : {}),
+      };
     },
     fastify,
   };

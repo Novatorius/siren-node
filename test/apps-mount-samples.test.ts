@@ -1,8 +1,8 @@
-import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { appRequest } from '@novatorius/siren/testing';
 import { TEST_API_KEY } from './helpers';
 
 /*
@@ -15,7 +15,7 @@ import { TEST_API_KEY } from './helpers';
  * environment variables, and `listen(3000)`, which listens on a free port of
  * 127.0.0.1 instead. The SDK runs from source, node:http and Fastify are
  * real, and the fake Siren behind the global fetch takes the answer an ask
- * posts to cloud.example.com.
+ * posts to Siren Cloud's address, api.sirenaffiliates.com.
  */
 
 const servers = vi.hoisted(() => [] as Array<{ close: () => unknown }>);
@@ -74,7 +74,7 @@ const features = JSON.parse(
 ) as FeatureFixture;
 const SECRET = 'test-signing-secret-for-the-mount-samples';
 const ID = 'apr_9c60190a4501399d0ae55f041c237b39';
-const ANSWER_URL = `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`;
+const ANSWER_URL = `https://api.sirenaffiliates.com/siren/v1/apps/requests/${ID}/answer`;
 
 let posted: Array<{ url: string; body: unknown }> = [];
 let addToCrm: ReturnType<typeof vi.fn>;
@@ -88,7 +88,7 @@ beforeEach(() => {
   const loopback = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (new URL(url).hostname !== 'cloud.example.com') return loopback(input, init);
+    if (new URL(url).hostname !== 'api.sirenaffiliates.com') return loopback(input, init);
     posted.push({ url, body: JSON.parse(String(init?.body)) as unknown });
     return new Response(JSON.stringify({ status: 'accepted' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   });
@@ -102,20 +102,15 @@ afterEach(async () => {
   listening.splice(0);
 });
 
-/** Siren's request for `kind`: the raw body and its signed headers. */
+/**
+ * Siren's request for `kind`, signed by appRequest() from the package's
+ * testing entry, the helper the README hands developers, with the
+ * fixture's id, app and feature key.
+ */
 function signed(kind: string): { raw: string; headers: Record<string, string> } {
-  const raw = JSON.stringify(features.kinds[kind]!.request);
-  const t = Math.floor(Date.now() / 1000);
-  return {
-    raw,
-    headers: {
-      'content-type': 'application/json',
-      'x-siren-event': 'app.request',
-      'x-siren-delivery': `${ID}.1`,
-      'x-siren-timestamp': String(t),
-      'x-siren-signature-v2': `t=${t},v1=${createHmac('sha256', SECRET).update(`${t}.${raw}`).digest('hex')}`,
-    },
-  };
+  const request = features.kinds[kind]!.request as { app: string; item: { key: string } };
+  const { rawBody, headers } = appRequest(kind, request.item.key, { id: ID, app: request.app });
+  return { raw: rawBody, headers };
 }
 
 function webRequest(kind: string): Request {

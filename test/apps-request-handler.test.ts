@@ -47,8 +47,12 @@ const ID = 'apr_9c60190a4501399d0ae55f041c237b39';
 const ANSWER_PATH = `/apps/requests/${ID}/answer`;
 const ACCEPTED = () => reply(200, { status: 'accepted' });
 
+/**
+ * Siren's request for `kind`, with its answerUrl on the test client's base
+ * address, since the handler refuses an answer address on another Siren.
+ */
 function body(kind: string): string {
-  return JSON.stringify(features.kinds[kind]!.request);
+  return JSON.stringify(features.kinds[kind]!.request).replaceAll('https://cloud.example.com/siren/v1', BASE);
 }
 
 function now(): number {
@@ -542,7 +546,7 @@ describe('apps-answer-handler: section 3.2, posting an ask\'s answer', () => {
 describe('apps-answer-handler: the metric kinds of slice C16-1', () => {
   const metricAsk = (kind: string, key: string, data: Record<string, unknown>) =>
     JSON.stringify({
-      ...features.kinds.distributionResolver!.request,
+      ...(JSON.parse(body('distributionResolver')) as Record<string, unknown>),
       item: { kind, key, id: 'app:11' },
       data,
     });

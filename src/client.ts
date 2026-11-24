@@ -1,4 +1,5 @@
 import { SirenError } from './errors';
+import { readEnvironment } from './environment';
 import {
   DEFAULT_BASE_URL,
   DEFAULT_MAX_RETRIES,
@@ -155,8 +156,8 @@ export class Siren {
    * `AccessTokenSource` is used as given. Requests go through `httpClient`,
    * or a `FetchHttpClient` when there is none.
    */
-  constructor(options: SirenOptions) {
-    const http = createHttpTransport(options);
+  constructor(options: SirenOptions = {}) {
+    const http = createHttpTransport(withEnvironmentKey(options));
 
     this.events = new EventsResource(http);
     this.webhooks = new WebhooksResource(http);
@@ -179,6 +180,33 @@ export class Siren {
     this.settings = new SettingsResource(http);
     this.apps = new AppsResource(http);
   }
+}
+
+/**
+ * The options with `SIREN_API_KEY` from the environment as `apiKey`, when
+ * they name neither an `apiKey` nor an `accessToken` of their own. An
+ * explicit credential always wins. The copy holds the options' own values,
+ * read once, so the rules {@link createHttpTransport} applies still hold.
+ */
+function withEnvironmentKey(options: SirenOptions): SirenOptions {
+  const given: unknown = options ?? {};
+  // Look at each credential without reading it, so a getter is still read once, by createHttpTransport.
+  if (typeof given !== 'object' || given === null || names(given, 'apiKey') || names(given, 'accessToken')) return options;
+  const apiKey = readEnvironment('SIREN_API_KEY');
+  if (apiKey === undefined) return options;
+  const copy: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const name of ['httpClient', 'baseUrl', 'timeout', 'maxRetries'] as const) {
+    const value = ownOption(given, name);
+    if (value !== undefined) copy[name] = value;
+  }
+  copy.apiKey = apiKey;
+  return copy as SirenOptions;
+}
+
+/** True when `options` holds `name` itself, as a getter or as a value other than undefined. */
+function names(options: object, name: string): boolean {
+  const own = Object.getOwnPropertyDescriptor(options, name);
+  return own !== undefined && (own.get !== undefined || own.value !== undefined);
 }
 
 /**
@@ -263,7 +291,7 @@ function resolveTokens(apiKey: unknown, accessToken: unknown): AccessTokenSource
   }
   if (typeof apiKey === 'string' && apiKey.length > 0) return new StaticAccessToken(apiKey);
   throw new SirenError(
-    'Siren: an apiKey is required. Mint one in the Siren dashboard (Settings > API Keys), or pass an accessToken.',
+    'Siren: an apiKey is required. Pass apiKey, or set SIREN_API_KEY in the environment. Mint one in the Siren dashboard (Settings > API Keys), or pass an accessToken.',
   );
 }
 

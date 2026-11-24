@@ -4,13 +4,14 @@ import { SirenError, ConnectionError } from '../src/index';
 import { emptyResponse, jsonResponse, makeClient, TEST_API_KEY } from './helpers';
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
 describe('client construction', () => {
-  it('requires an apiKey', () => {
-    // @ts-expect-error intentionally missing apiKey
+  it('requires an apiKey, from the options or SIREN_API_KEY', () => {
+    vi.stubEnv('SIREN_API_KEY', '');
     expect(() => new Siren({})).toThrow(SirenError);
     expect(() => new Siren({ apiKey: '' })).toThrow(/apiKey is required/);
   });

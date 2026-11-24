@@ -780,7 +780,7 @@ export class AppsResource {
    * app's own key, since the handler posts an ask's answer with it.
    *
    * ```ts
-   * const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+   * const answers = siren.apps.requestHandler() // reads SIREN_SIGNING_SECRET
    * answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => { ... })
    * express().post('/siren', express.raw({ type: 'application/json' }), answers).listen(3000)
    * ```
@@ -807,10 +807,17 @@ export class AppsResource {
    * - For any other `X-Siren-Event`, 200 once the `onEvent` function
    *   returns, 500 when it throws, and 200 when there is none.
    *
+   * Before an ask's reply it checks that the request's `answerUrl` is on
+   * the same Siren as the client's base address, and replies 500 with both
+   * addresses when it is not, so the fault shows on the first request. The
+   * answer only ever goes to the client's base address. Siren Cloud's
+   * `api.` and `app.` hosts count as one Siren.
+   *
+   * `signingSecret` defaults to `SIREN_SIGNING_SECRET` from the environment.
    * Refuses with `SirenError`, when it is made, a missing signing secret and
    * a `toleranceSeconds` outside 1 to 3600. It keeps no state.
    */
-  requestHandler(options: AppRequestHandlerOptions): AppRequestHandler {
+  requestHandler(options?: AppRequestHandlerOptions): AppRequestHandler {
     return createAppRequestHandler(this.http, options, {
       toleranceSeconds: DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,
       maxAnswerBytes: MAX_APP_ANSWER_BYTES,

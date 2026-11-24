@@ -47,8 +47,11 @@ export interface SirenBaseOptions {
 
 /** A client that sends a fixed API key. */
 export interface SirenApiKeyOptions extends SirenBaseOptions {
-  /** Your Siren API key (`sk_live_...`). */
-  apiKey: string;
+  /**
+   * Your Siren API key (`sk_live_...`). Left out, `new Siren()` reads
+   * `SIREN_API_KEY` from the environment.
+   */
+  apiKey?: string;
   accessToken?: never;
 }
 
@@ -65,7 +68,9 @@ export interface SirenAccessTokenOptions extends SirenBaseOptions {
 
 /**
  * Options for `new Siren()`. Pass `apiKey` or `accessToken`, never both:
- * both, neither, or an empty one throws `SirenError` at construction.
+ * both, or an empty one, throws `SirenError` at construction. With neither,
+ * `new Siren()` reads `SIREN_API_KEY` from the environment, and throws
+ * when that is unset too.
  */
 export type SirenOptions = SirenApiKeyOptions | SirenAccessTokenOptions;
 
