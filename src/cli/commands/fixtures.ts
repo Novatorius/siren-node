@@ -4,7 +4,7 @@ import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { styleFor } from '../style';
 import { CliRefusal } from '../targets';
-import { TestActivityClient, activityBody, activityRows, askAndWait, assertSandbox, eventName, triggerAndWait, waitSeconds } from './trigger-client';
+import { TestActivityClient, activityBody, activityRows, askAndWait, assertSandbox, eventName, orgLabel, triggerAndWait, waitSeconds } from './trigger-client';
 import { ASK_WAIT_SECONDS, TRIGGER_WAIT_SECONDS } from './trigger';
 
 /*
@@ -120,7 +120,6 @@ export async function fixtures(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   if (steps.some((step) => step.trigger !== 'ask')) await assertSandbox(run, 'fixtures');
   await run.signedIn();
-  const edition = await run.targetEdition();
   const client = new TestActivityClient(run);
   const style = styleFor(io, 'stdout', {});
   const results = new Map<string, unknown>();
@@ -151,6 +150,6 @@ export async function fixtures(input: CommandInput): Promise<number> {
   }
 
   if (json) io.stdout(`${JSON.stringify({ steps: done }, null, 2)}\n`);
-  else io.stdout(`\n${style.report({ headline: `Ran ${steps.length} ${steps.length === 1 ? 'fixture' : 'fixtures'} in ${edition === 'production' ? 'a live organization' : 'the sandbox'}` })}`);
+  else io.stdout(`\n${style.report({ headline: `Ran ${steps.length} ${steps.length === 1 ? 'fixture' : 'fixtures'} in ${orgLabel(run)}` })}`);
   return 0;
 }

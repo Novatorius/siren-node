@@ -49,7 +49,7 @@ export async function trigger(input: CommandInput): Promise<number> {
   const result = await triggerAndWait(new TestActivityClient(run), io, body, seconds, json);
 
   if (json) io.stdout(`${JSON.stringify(result, null, 2)}\n`);
-  else io.stdout(activityReport(styleFor(io, 'stdout', {}), input, run, await run.targetEdition(), result));
+  else io.stdout(activityReport(styleFor(io, 'stdout', {}), input, run, result));
   return 0;
 }
 
@@ -71,6 +71,6 @@ export async function triggerAsk(input: CommandInput): Promise<number> {
   const request = await askAndWait(new TestActivityClient(run), io, app, feature, seconds, json);
 
   if (json) io.stdout(`${JSON.stringify({ request }, null, 2)}\n`);
-  else io.stdout(askReport(styleFor(io, 'stdout', {}), input, app, feature, request));
+  else io.stdout(askReport(styleFor(io, 'stdout', {}), input, run, app, feature, request));
   return 0;
 }

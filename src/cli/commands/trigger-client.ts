@@ -322,19 +322,14 @@ export function activityRows(result: ActivityResult): Array<readonly [string, st
   return fitted(rows);
 }
 
-/** Where the organization stands, such as "Acme (sandbox)". */
-function orgLabel(run: CommandContext, edition: string): string {
-  let name = 'your organization';
-  try {
-    name = run.current().orgName ?? name;
-  } catch {
-    // No session adopted yet. The generic name will do.
-  }
-  return `${name} (${edition === 'production' ? 'live' : 'sandbox'})`;
+/** "Acme (acme), sandbox": the organization the run acts in, as signedIn() settled it, and its edition. */
+export function orgLabel(run: CommandContext): string {
+  const session = run.current();
+  return `${session.orgName} (${session.orgSlug ?? session.orgId}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
 /** The report `siren trigger` and each `fixtures` step print for a result. */
-export function activityReport(style: Style, input: CommandInput, run: CommandContext, edition: string, result: ActivityResult): string {
+export function activityReport(style: Style, input: CommandInput, run: CommandContext, result: ActivityResult): string {
   const next: NextStep[] = [];
   const open = openWaits(result);
   if (open.length > 0) next.push({ text: style.command(input.command(`apps requests ${open[0]!.requestKey}`)), aside: 'the ask a reward waits on' });
@@ -344,11 +339,11 @@ export function activityReport(style: Style, input: CommandInput, run: CommandCo
     ...(open.length > 0 ? ['A reward that waits is settled once the app answers.'] : []),
     ...(result.message !== null && result.message !== '' ? [fit(result.message, WIDTH - 2)] : []),
   ];
-  return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run, edition)}`, rows: activityRows(result), next, tips });
+  return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: activityRows(result), next, tips });
 }
 
 /** The report `siren simulate` prints: who would earn what, and no ids, since none of them exist. */
-export function simulationReport(style: Style, result: ActivityResult): string {
+export function simulationReport(style: Style, run: CommandContext, result: ActivityResult): string {
   const programs = [...programNames(result).values()];
   const count = result.obligations.length + result.waits.length;
   const through = programs.length === 0 ? '' : programs.length === 1 ? ` through ${programs[0]}` : ` through ${programs.length} programs`;
@@ -358,7 +353,7 @@ export function simulationReport(style: Style, result: ActivityResult): string {
     ...result.waits.map((wait) => ['Waits', `on ${waitName(wait)}`] as const),
   ]);
   return style.report({
-    headline: `${total} sale${through} would earn ${count} ${count === 1 ? 'reward' : 'rewards'}`,
+    headline: `${total} sale${through} would earn ${count} ${count === 1 ? 'reward' : 'rewards'} in ${orgLabel(run)}`,
     rows,
     tips: [
       'Nothing was written.',
@@ -415,7 +410,7 @@ export async function askAndWait(client: TestActivityClient, io: CliIo, app: str
 }
 
 /** The report `siren trigger ask` prints for a test request. */
-export function askReport(style: Style, input: CommandInput, app: string, feature: string, request: AppRequestDetail): string {
+export function askReport(style: Style, input: CommandInput, run: CommandContext, app: string, feature: string, request: AppRequestDetail): string {
   const tell = request.mode === 'tell';
   const rows: Array<readonly [string, string]> = [
     ['Request', request.id],
@@ -426,7 +421,7 @@ export function askReport(style: Style, input: CommandInput, app: string, featur
   if (request.lastError !== null) rows.push(['Error', request.lastError]);
   if (!tell && request.answer !== null) rows.push(['Siren', 'took the answer as this kind would. Nothing acted on it.']);
   return style.report({
-    headline: `Siren ${tell ? 'told' : 'asked'} ${app} › ${feature} (test)`,
+    headline: `Siren ${tell ? 'told' : 'asked'} ${app} › ${feature} in ${orgLabel(run)} (test)`,
     rows: fitted(rows),
     next: [{ text: style.command(input.command(`apps requests ${request.id}`)), aside: 'each send and answer' }],
     tips: tell || request.answer !== null ? [] : [request.sendCount === 0 ? 'Siren queued it, and sends it on its next run.' : 'Your app answers it at the answerUrl the request carries.'],

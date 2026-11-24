@@ -58,7 +58,7 @@ describe('siren trigger <event>', () => {
     expect(h.paths()).toEqual(['POST /test-activity']);
     expect(bodyOf(h.http.requests[0])).toEqual({ event: 'sale', collaboratorId: 42, programId: 3, amount: '49.99', currency: 'USD' });
     const out = h.out();
-    expect(out).toContain('Sale recorded in Acme (sandbox)');
+    expect(out).toContain('Sale recorded in Acme (3), sandbox');
     expect(out).toMatch(/Transaction\s+3307 · \$49\.99 USD/);
     expect(out).toMatch(/Collaborator\s+Sam Lee \(42\)/);
     expect(out).toMatch(/Conversion\s+1042 · sale in Partner program · pending/);
@@ -138,12 +138,12 @@ describe('siren trigger <event>', () => {
     refund.signedIn();
     expect(await refund.run(['trigger', 'refund', '--transaction', '3307', '--amount', '10'])).toBe(0);
     expect(bodyOf(refund.http.requests[0])).toEqual({ event: 'refund', transactionId: 3307, amount: '10' });
-    expect(refund.out()).toContain('Refund recorded in Acme (sandbox)');
+    expect(refund.out()).toContain('Refund recorded in Acme (3), sandbox');
 
     const visit = harness([reply(200, sale({ event: 'visit', transactionId: null, total: null, conversions: [], obligations: [] }))]);
     visit.signedIn();
     expect(await visit.run(['trigger', 'visit', '--collaborator', '42'])).toBe(0);
-    expect(visit.out()).toContain('Visit recorded in Acme (sandbox)');
+    expect(visit.out()).toContain('Visit recorded in Acme (3), sandbox');
     expect(visit.out()).toMatch(/Opportunity\s+615/);
     expect(visit.out()).toContain('siren trigger sale --opportunity 615');
   });
@@ -167,7 +167,7 @@ describe('siren trigger ask <app> <feature>', () => {
     h.signedIn();
     expect(await h.run(['trigger', 'ask', 'acme-crm', 'split-the-pool']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['POST /apps/acme-crm/features/split-the-pool/test', `GET /apps/requests/${REQUEST}`, `GET /apps/requests/${REQUEST}`]);
-    expect(h.out()).toContain('Siren asked acme-crm › split-the-pool (test)');
+    expect(h.out()).toContain('Siren asked acme-crm › split-the-pool in Acme (3), sandbox (test)');
     expect(h.out()).toMatch(/Answer\s+\{"outcome":"suppress","reason":"Refunded\."\}/);
     expect(h.out()).toContain('Nothing acted on it.');
   });
@@ -177,7 +177,7 @@ describe('siren trigger ask <app> <feature>', () => {
     const h = harness([reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })], { edition: 'production' });
     h.signedIn(live());
     expect(await h.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live']), h.err()).toBe(0);
-    expect(h.out()).toContain('Siren told acme-crm › notify (test)');
+    expect(h.out()).toContain('Siren told acme-crm › notify in Acme (3), live (test)');
   });
 
   it("is a usage error without the app and the feature, and trigger alone needs an event", async () => {
@@ -193,7 +193,7 @@ describe('siren apps test <app>', () => {
     h.signedIn();
     expect(await h.run(['apps', 'test', 'acme-crm']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['POST /apps/acme-crm/test']);
-    expect(h.out()).toContain('Siren reached acme-crm');
+    expect(h.out()).toContain('Siren reached acme-crm in Acme (3), sandbox');
     expect(h.out()).toMatch(/Reply\s+HTTP 200/);
   });
 
@@ -241,7 +241,7 @@ describe('siren fixtures <file>', () => {
     expect(await h.run(['fixtures', 'flow.json']), h.err()).toBe(0);
     expect(bodyOf(h.http.requests[1])).toEqual({ event: 'sale', opportunityId: 615, fields: { source: 'shopify' } });
     expect(h.out()).toContain('visit');
-    expect(h.out()).toContain('Ran 2 fixtures');
+    expect(h.out()).toContain('Ran 2 fixtures in Acme (3), sandbox');
 
     const json = harness([reply(200, sale({ event: 'visit' })), reply(201, sale())]);
     json.signedIn();
@@ -285,7 +285,7 @@ describe('siren simulate', () => {
     expect(await h.run(['simulate', '--amount', '49.99', '--program', '3', '--base-url', BASE]), h.err()).toBe(0);
     expect(h.paths()).toEqual(['POST /simulations/sale']);
     expect(bodyOf(h.http.requests[0])).toEqual({ amount: '49.99', programId: 3 });
-    expect(h.out()).toContain('A $49.99 USD sale through Partner program would earn 1 reward');
+    expect(h.out()).toContain('A $49.99 USD sale through Partner program would earn 1 reward in Acme (3), live');
     expect(h.out()).toContain('Nothing was written.');
     expect(h.out()).toMatch(/Sam Lee\s+\$7\.50 USD\s+pending/);
     expect(h.out()).not.toContain('3307');

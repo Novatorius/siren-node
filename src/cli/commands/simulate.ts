@@ -22,6 +22,6 @@ export async function simulate(input: CommandInput): Promise<number> {
   const result = await new TestActivityClient(run).simulate(body);
 
   if (values.json === true) io.stdout(`${JSON.stringify(result, null, 2)}\n`);
-  else io.stdout(simulationReport(styleFor(io, 'stdout', {}), result));
+  else io.stdout(simulationReport(styleFor(io, 'stdout', {}), run, result));
   return 0;
 }

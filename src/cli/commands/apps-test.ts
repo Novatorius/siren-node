@@ -3,6 +3,7 @@ import type { CommandInput } from '../context';
 import { styleFor } from '../style';
 import { CliRefusal } from '../targets';
 import { appKeyArgument } from './apply';
+import { orgLabel } from './trigger-client';
 
 /*
  * `siren apps test <app>`: one signed `webhook.test` delivery to the app's
@@ -27,7 +28,7 @@ export async function appsTest(input: CommandInput): Promise<number> {
     return result.delivered ? 0 : 1;
   }
   if (!result.delivered) {
-    throw new CliRefusal(`Siren could not reach ${key}.`, {
+    throw new CliRefusal(`Siren could not reach ${key} in ${orgLabel(run)}.`, {
       why: `${result.httpStatus === null ? 'No answer' : `HTTP ${result.httpStatus}`}${result.error === null ? '' : `: ${result.error.replace(/\.+$/, '')}`}.`,
       fix: input.command(`apps show ${key}`),
       fixWords: 'to check its address',
@@ -36,7 +37,7 @@ export async function appsTest(input: CommandInput): Promise<number> {
   const style = styleFor(io, 'stdout', {});
   io.stdout(
     style.report({
-      headline: `Siren reached ${style.bold(key)}`,
+      headline: `Siren reached ${style.bold(key)} in ${orgLabel(run)}`,
       rows: [
         ['Reply', `HTTP ${result.httpStatus ?? ''}`.trim()],
         ['Event', result.eventType],

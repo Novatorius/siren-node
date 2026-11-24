@@ -24,6 +24,13 @@ REQUESTS
   apps answer         Answer an ask by hand
   apps resend         Send a request again
 
+TESTING
+  apps test           Send the app's address a test delivery
+  trigger             Make test activity in a sandbox
+  trigger ask         Send a feature a test ask
+  fixtures            Run a file of trigger steps
+  simulate            Show who a sale would pay, writing nothing
+
 ACCOUNT
   logout              Log out, and forget the session here
   whoami              Show who you are logged in as
