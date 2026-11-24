@@ -180,6 +180,6 @@ describe('apps-cli: every hint names a command the person can run as printed', (
     plain.signedIn();
     plain.write('siren.app.json', exampleFile);
     expect(await plain.run(['apps', 'apply', '--yes']), plain.err()).toBe(0);
-    expect(plain.out()).toContain(`Run siren apps rotate-key ${KEY} to make a new key and save it there.`);
+    expect(plain.out()).toContain(`siren apps rotate-key ${KEY} would save a new one here and revoke the one in use at once.`);
   });
 });

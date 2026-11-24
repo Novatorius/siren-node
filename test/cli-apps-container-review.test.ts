@@ -61,13 +61,18 @@ describe('apps-sdk-container review fix 1: the command for a missing key fits th
     }
   });
 
-  it('apply names rotate-key, never add-key, when the app holds a key this machine lacks', async () => {
+  // CLI pass 2, finding 2: a teammate who applies from a fresh clone must not be told to break the deployed key.
+  it('apply never advises rotating a key this machine lacks, and says what rotating would revoke', async () => {
     const h = harness([reply(200, appRecord({ name: 'Old' })), reply(200, appRecord())], { env: URL_ENV });
     h.signedIn();
     h.write('.env.sandbox', `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
     h.write('siren.app.json', exampleFile());
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain(`Run siren apps rotate-key ${KEY} to make a new key and save it there.`);
+    expect(h.out()).not.toContain('to make a new key and save it there');
+    expect(h.out()).toContain(
+      `.env.sandbox holds no key for ${KEY}. That is fine when your service already has one. ` +
+        `siren apps rotate-key ${KEY} would save a new one here and revoke the one in use at once.`,
+    );
     expect(h.printed()).not.toContain('add-key');
   });
 

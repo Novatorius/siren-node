@@ -4,7 +4,7 @@ import { access, lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/pr
 import { basename, dirname, join, resolve } from 'node:path';
 import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import { RESERVED_APP_KEYS } from '../../resources/apps';
-import type { App } from '../../record-types';
+import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types';
 import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
 import { appChanges, droppedLine } from '../app-changes';
 import { kindLabel } from '../app-kinds';
@@ -205,14 +205,16 @@ export async function appsApply(input: CommandInput): Promise<number> {
         `Make one with ${run.command(`apps add-key ${key}`)}, then run ${run.command('apps apply')} again to give it these scopes.`,
     );
   }
-  const removals = await Promise.all(
+  const uses = await Promise.all(
     changes.dropped.map(({ item }) =>
       siren.apps.features.retrieve(key, item.id).then(
-        (page) => droppedLine(item, page.uses),
-        () => droppedLine(item, undefined),
+        (page) => page.uses,
+        () => undefined,
       ),
     ),
   );
+  changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
+  const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
   const lines = [...changes.lines, ...removals];
   if (lines.length === 0) {
     run.print(`${key} on ${run.target.baseUrl} already matches ${shown}, so nothing was sent.`);
@@ -275,11 +277,43 @@ export async function appsApply(input: CommandInput): Promise<number> {
     if (app.apiKey === null || app.apiKey === undefined) {
       run.print(`${key} holds no key, so ${envPath} has none. Run ${run.command(`apps add-key ${key}`)} to make one and save it there.`);
     } else {
-      run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate-key ${key}`)} to make a new key and save it there.`);
+      // CLI pass 2, finding 2: a running service may hold the key, so never advise rotating it.
+      run.print(
+        `${envPath} holds no key for ${key}. That is fine when your service already has one. ` +
+          `${run.command(`apps rotate-key ${key}`)} would save a new one here and revoke the one in use at once.`,
+      );
     }
   }
   return 0;
 }
+
+/**
+ * Refuses a file that gives a feature Siren holds a different kind (CLI pass
+ * 2, finding 3). A kind locks once Siren makes the feature, so the plan
+ * would delete it or archive it and make a new one with a new `app:{id}`,
+ * and a record that stores the old id would keep pointing at the old one.
+ * `uses` is how many records select it, undefined when that read failed.
+ */
+function refuseKindChange(item: AppFeature, uses: number | undefined, wanted: readonly AppFeatureDeclaration[], shown: string): void {
+  const next = wanted.find((feature) => feature.key === item.key && feature.kind !== item.kind);
+  if (next === undefined) return;
+  const article = (label: string) => (/^[AEIOU]/.test(label) ? 'an' : 'a');
+  const was = kindLabel(item.kind);
+  const now = kindLabel(next.kind);
+  const replaced = `applying this would replace ${item.ref} with a new feature and a new id`;
+  const consequence =
+    uses === 0
+      ? `${replaced}. Nothing selects ${item.ref} today.`
+      : uses === undefined
+        ? `${replaced}, and any record that selects ${item.ref} would keep the old one.`
+        : `${replaced}, and the ${uses === 1 ? 'record that selects' : `${uses} records that select`} ${item.ref} would keep the old one.`;
+  throw new CliRefusal(
+    `${item.key} is ${article(was)} ${was} on Siren, and ${shown} makes it ${article(now)} ${now}. ` +
+      `A feature's kind locks once Siren makes it, so ${consequence} ` +
+      `Nothing was sent. Give the new feature its own key, and keep or remove ${item.key} on its own.`,
+  );
+}
+
 
 /** `siren apps list [--json]`: one block per app with its features, or the JSON Siren sent. */
 export async function appsList(input: CommandInput): Promise<number> {
