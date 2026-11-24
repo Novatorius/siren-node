@@ -4,7 +4,7 @@ import { kindLabel } from '../src/cli/app-kinds';
 import { AppErrorCode, ConflictError, appErrorCode } from '../src/errors';
 import { AppsResource } from '../src/resources/apps';
 import type { AppRewardAnswer, AppRewardQuestion } from '../src/record-types';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
 import { APP_KEY, APP_REQUEST_ID } from './apps-siren-answers';
@@ -33,20 +33,20 @@ const QUESTION: AppRewardQuestion = {
   ],
 };
 
-function file(items: Record<string, unknown>, url: string | null = URL): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
+function file(declared: Record<string, unknown>, url: string | null = URL): string {
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: declared } } });
 }
 
 describe('apps-c16-2: the incentive resolver kind', () => {
   it('names the kind with the value Siren stores and the name its catalog gives', () => {
-    expect(AppItemKind.IncentiveResolver).toBe('incentiveResolver');
+    expect(FeatureKind.IncentiveResolver).toBe('incentiveResolver');
     expect(kindLabel('incentiveResolver')).toBe('Attribution model (incentiveResolver)');
   });
 
   it('reads an app file with an incentive resolver and its answer window', () => {
     const parsed = parseAppFile(file({ split: { kind: 'incentiveResolver', name: 'Split the reward', answerWindowMinutes: 30 } }), {});
     expect(parsed.problems).toEqual([]);
-    expect(declarationFor(parsed.file!).params.items).toEqual([{ kind: 'incentiveResolver', key: 'split', name: 'Split the reward', answerWindowMinutes: 30 }]);
+    expect(declarationFor(parsed.file!).params.features).toEqual([{ kind: 'incentiveResolver', key: 'split', name: 'Split the reward', answerWindowMinutes: 30 }]);
   });
 
   it('refuses an incentive resolver with no url, since Siren asks the app at its address', () => {

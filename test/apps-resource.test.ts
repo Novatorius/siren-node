@@ -43,7 +43,7 @@ const declaration: DeclareAppParams = {
   url: 'https://acme.example/siren',
   scopes: [],
   events: ['conversion.approved'],
-  items: [
+  features: [
     { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 4320 },
     { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
   ],
@@ -86,7 +86,7 @@ describe('apps-cli: apps.declare', () => {
     await expectSentOnce((transport) => new AppsResource(transport).declare(KEY, declaration), reply(200, app));
   });
 
-  it('refuses a bad key, an unknown field and a broken item before sending', async () => {
+  it('refuses a bad key, an unknown field and a broken feature before sending', async () => {
     const cases: Array<[string, unknown]> = [
       ['Acme', declaration],
       ['acme--payouts', declaration],
@@ -97,12 +97,12 @@ describe('apps-cli: apps.declare', () => {
       [KEY, { ...declaration, status: undefined }],
       [KEY, { ...declaration, name: undefined }],
       [KEY, { ...declaration, url: undefined }],
-      [KEY, { ...declaration, items: {} }],
-      [KEY, { ...declaration, items: ['acme-ledger'] }],
-      [KEY, { ...declaration, items: [{ key: 'acme-ledger', name: 'Acme ledger' }] }],
-      [KEY, { ...declaration, items: [{ kind: 'payoutMethod', name: 'Acme ledger' }] }],
-      [KEY, { ...declaration, items: [{ kind: 'payoutMethod', key: 'acme-ledger' }] }],
-      [KEY, { ...declaration, items: [{ kind: 'payoutMethod', key: 'acme-ledger', name: 'A', settings: {} }] }],
+      [KEY, { ...declaration, features: {} }],
+      [KEY, { ...declaration, features: ['acme-ledger'] }],
+      [KEY, { ...declaration, features: [{ key: 'acme-ledger', name: 'Acme ledger' }] }],
+      [KEY, { ...declaration, features: [{ kind: 'payoutMethod', name: 'Acme ledger' }] }],
+      [KEY, { ...declaration, features: [{ kind: 'payoutMethod', key: 'acme-ledger' }] }],
+      [KEY, { ...declaration, features: [{ kind: 'payoutMethod', key: 'acme-ledger', name: 'A', settings: {} }] }],
     ];
     for (const [key, params] of cases) {
       const { http, apps: resource } = apps([reply(200, app)]);
@@ -120,7 +120,7 @@ describe('apps-cli: apps.declare', () => {
   });
 
   it('throws UnexpectedResponseError for an answer that is not an app, or holds a secret that is not text', async () => {
-    for (const body of [{ success: true }, { ...app, items: undefined }, { ...app, rawKey: 7 }, { ...app, signingSecret: null }]) {
+    for (const body of [{ success: true }, { ...app, features: undefined }, { ...app, rawKey: 7 }, { ...app, signingSecret: null }]) {
       const { apps: resource } = apps([reply(200, body)]);
       expect(await refused(() => resource.declare(KEY, declaration)), JSON.stringify(body)).toBeInstanceOf(
         UnexpectedResponseError,

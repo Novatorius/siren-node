@@ -5,7 +5,7 @@ import { Siren } from '../src/client';
 import { AppErrorCode, ConflictError, appErrorCode } from '../src/errors';
 import { AppsResource } from '../src/resources/apps';
 import type { AppPayoutAnswer, AppPayoutQuestion } from '../src/record-types';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient, reply } from './http-fakes';
 import { BASE, bodyOf, pathOf, transportOver } from './record-fakes';
@@ -30,7 +30,7 @@ const ENVELOPE = JSON.stringify({
   type: 'app.request',
   mode: 'ask',
   app: 'acme-crm',
-  item: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
+  feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
   createdAt: '2026-11-20T10:00:00+00:00',
   answerBy: '2026-11-21T10:00:00+00:00',
   answerUrl: `${BASE}/apps/requests/${ID}/answer`,
@@ -60,7 +60,7 @@ function headers(raw: string): Record<string, string> {
 
 describe('the payout method ask', () => {
   it('names the kind with the value Siren stores', () => {
-    expect(AppItemKind.PayoutMethod).toBe('payoutMethod');
+    expect(FeatureKind.PayoutMethod).toBe('payoutMethod');
   });
 
   it('reads the question from the JSON Siren sends', () => {

@@ -16,12 +16,12 @@ own pkt/apps-c16-3 branches.
 
 | Part | File | Change |
 |---|---|---|
-| `AppItemKind.TransactionFilter` | src/taxonomy.ts | The value `transactionFilter`. |
+| `FeatureKind.TransactionFilter` | src/taxonomy.ts | The value `transactionFilter`. |
 | Readable name | src/cli/app-kinds.ts | Transaction filter. |
 | Question types | src/record-types.ts | `AppTransactionFilterQuestion`, `AppTransactionLine`. |
 | Answer type | src/record-types.ts | `AppTransactionFilterAnswer`. |
 | `AppFeatureFunctions` | src/record-types.ts | `on('transactionFilter', ...)` gets `AppAsk<AppTransactionFilterQuestion>` and returns the answer. |
-| `AppItemDeclaration` | openapi.yaml | The kind `transactionFilter`. |
+| `AppFeatureDeclaration` | openapi.yaml | The kind `transactionFilter`. |
 
 ## The question
 

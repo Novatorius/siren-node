@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Siren } from '../src/client';
-import type { AppAsk, AppRewardQuestion } from '../src/record-types';
+import type { AppAsk, AppRewardAnswer, AppRewardQuestion } from '../src/record-types';
 import type { AppFunctionFor } from '../src/resources/app-request-handler';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient } from './http-fakes';
@@ -58,7 +58,7 @@ describe("C16-2: the incentive resolver sample answer meets Siren's check", () =
       units: question.pool.units,
       rewards: siren.apps.splitPool(question.pool, question.conversions.map((conversion) => [conversion.conversionId, conversion.score])),
     });
-    const answer = (await sample({ data } as AppAsk<AppRewardQuestion>))!;
+    const answer = (await sample({ data } as AppAsk<AppRewardQuestion>)) as AppRewardAnswer;
 
     expect(refusalOf(data, answer as unknown as Record<string, unknown>)).toBeNull();
     expect(answer).toEqual(entry.answer);

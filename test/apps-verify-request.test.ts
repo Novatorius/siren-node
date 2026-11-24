@@ -67,7 +67,7 @@ const tell = JSON.stringify({
   type: 'app.request',
   mode: 'tell',
   app: 'acme-payouts',
-  item: { kind: 'postConversionAction', key: 'notify-crm', id: 'app:11' },
+  feature: { kind: 'postConversionAction', key: 'notify-crm', id: 'app:11' },
   createdAt: '2026-11-17T09:14:03+00:00',
   // A conversion approved, as Siren's AppActionSubjects::forConversion() builds it (test/apps-siren-answers.ts).
   data: AppTells.conversionApproved(),
@@ -83,7 +83,7 @@ describe('apps-cli: apps.verifyRequest', () => {
         type: 'app.request',
         mode: 'ask',
         app: 'acme-payouts',
-        item: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
+        feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
         createdAt: '2026-11-17T09:14:03+00:00',
         answerBy: '2026-11-18T09:14:03+00:00',
         answerUrl: 'https://api.siren.test/siren/v1/apps/requests/apr_b79943ff8ca353ce5cf5312bb3fa66c7/answer',

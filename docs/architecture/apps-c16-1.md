@@ -15,12 +15,12 @@ pkt/apps-c16-1 branches.
 
 | Part | File | Change |
 |---|---|---|
-| `AppItemKind.MetricCalculation`, `AppItemKind.MetricFilter` | src/taxonomy.ts | The values `metricCalculation` and `metricFilter`. |
+| `FeatureKind.MetricCalculation`, `FeatureKind.MetricFilter` | src/taxonomy.ts | The values `metricCalculation` and `metricFilter`. |
 | Readable names | src/cli/app-kinds.ts | Metric calculation, and Customer filter for distributors. |
-| `scoresMoney` | src/cli/app-file.ts, src/resources/apps.ts, src/record-types.ts | A boolean on a metric calculation, sent by `apps.declare()`, `apps.items.create()` and `apps.items.update()`. |
+| `scoresMoney` | src/cli/app-file.ts, src/resources/apps.ts, src/record-types.ts | A boolean on a metric calculation, sent by `apps.declare()`, `apps.features.create()` and `apps.features.update()`. |
 | Apply's change lines | src/cli/app-changes.ts | A changed `scoresMoney` reads "scores money". Left out counts as false. |
 | Question and answer types | src/record-types.ts | `AppMetricCalculationQuestion`, `AppMetricCalculationAnswer`, `AppMetricFilterQuestion`, `AppMetricFilterAnswer`. |
-| `AppItemDeclaration` | openapi.yaml | The kinds `customEvent`, `metricCalculation` and `metricFilter`, and `scoresMoney`. |
+| `AppFeatureDeclaration` | openapi.yaml | The kinds `customEvent`, `metricCalculation` and `metricFilter`, and `scoresMoney`. |
 
 ## Rules
 

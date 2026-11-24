@@ -6,7 +6,7 @@ import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
 import type { AppRewardQuestion, AppTransactionFilterAnswer, AppTransactionFilterQuestion } from '../src/record-types';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient, reply } from './http-fakes';
 import { BASE, bodyOf, pathOf, transportOver } from './record-fakes';
@@ -16,7 +16,7 @@ import { APP_KEY, APP_REQUEST_ID } from './apps-siren-answers';
  * Slice C16-3 in the Node SDK: the transaction filter kind. Its name,
  * question and answer rules are the slice's contract. The request envelope
  * is Siren's own distribution resolver ask from
- * test/fixtures/apps-feature-contracts/requests.json, with this kind's item
+ * test/fixtures/apps-feature-contracts/requests.json, with this kind's feature
  * and data, signed as WebhookSignature::headers() signs it. The question's
  * transaction is the incentive resolver ask's from the same fixture, since
  * both carry the same currency object.
@@ -58,14 +58,14 @@ const DISTRIBUTOR_QUESTION: AppTransactionFilterQuestion = {
 const LINE_ITEMS: AppTransactionFilterAnswer = { outcome: 'filtered', include: [5501] };
 const NOTHING: AppTransactionFilterAnswer = { outcome: 'filtered', include: [] };
 
-function file(items: Record<string, unknown>, url: string | null = SITE): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
+function file(declared: Record<string, unknown>, url: string | null = SITE): string {
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: declared } } });
 }
 
 function ask(key: string, data: Record<string, unknown>): string {
   // The answer address goes on the test client's base, since the handler refuses one on another Siren.
   const answerUrl = `${BASE}/apps/requests/${String(features.kinds.distributionResolver!.request.id)}/answer`;
-  return JSON.stringify({ ...features.kinds.distributionResolver!.request, answerUrl, item: { kind: 'transactionFilter', key, id: 'app:11' }, data });
+  return JSON.stringify({ ...features.kinds.distributionResolver!.request, answerUrl, feature: { kind: 'transactionFilter', key, id: 'app:11' }, data });
 }
 
 function signed(raw: string): Record<string, string> {
@@ -81,14 +81,14 @@ function signed(raw: string): Record<string, string> {
 
 describe('apps-c16-3: the transaction filter kind', () => {
   it('names the kind with the value Siren stores and the name its catalog gives', () => {
-    expect(AppItemKind.TransactionFilter).toBe('transactionFilter');
+    expect(FeatureKind.TransactionFilter).toBe('transactionFilter');
     expect(kindLabel('transactionFilter')).toBe('Transaction filter (transactionFilter)');
   });
 
   it('reads an app file with a transaction filter and its answer window', () => {
     const parsed = parseAppFile(file({ lines: { kind: 'transactionFilter', name: 'Plan lines only', answerWindowMinutes: 30 } }), {});
     expect(parsed.problems).toEqual([]);
-    expect(declarationFor(parsed.file!).params.items).toEqual([
+    expect(declarationFor(parsed.file!).params.features).toEqual([
       { kind: 'transactionFilter', key: 'lines', name: 'Plan lines only', answerWindowMinutes: 30 },
     ]);
   });

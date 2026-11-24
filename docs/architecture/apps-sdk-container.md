@@ -27,7 +27,7 @@ Read from: Siren's `int/preview-apps` at `a22547327` (`lib/Apps`,
 | `apps.test(key)` | `POST /apps/{key}/test` | `src/resources/apps.ts` |
 | `apps.deliveries(key)` | `GET /apps/{key}/deliveries` | `src/resources/apps.ts` |
 | `apps.events()`, `apps.scopes()`, `apps.kinds()` | `GET /apps/events`, `/apps/scopes`, `/apps/kinds` | `src/resources/apps.ts` |
-| `apps.items.create`, `retrieve`, `update`, `delete` | `/apps/{app}/items` and `/apps/{app}/items/{id}` | `src/resources/apps.ts` |
+| `apps.features.create`, `retrieve`, `update`, `delete` | `/apps/{app}/features` and `/apps/{app}/features/{id}` | `src/resources/apps.ts` |
 
 `apps.declare()` still sends the whole app with `PUT /apps/{key}`. Its `url`
 is optional now. It answers `created: true` with `rawKey` when Siren made
@@ -41,7 +41,7 @@ feature carries `entitled`, `requiredCapability` and `requiredPlan`.
 `webhookSubscriptionId` and `apiKeyId` stay on the type as optional and
 deprecated, since Siren no longer sends them.
 
-`AppSource` and `AppItemsResource` are new exports. No export was removed.
+`AppSource` and `AppFeaturesResource` are new exports. No export was removed.
 `apps.rotate()`, which called Siren's removed `POST /apps/{key}/rotate`,
 is gone. It was never released, and `RotatedApp` stays as a deprecated type.
 
@@ -63,7 +63,7 @@ A malformed answer to a call that made a secret throws
 ## The app file
 
 A `url` is optional, so a file may declare a key-only app. A file with
-features and no `url` is refused at `apps.X.items`, since Siren sends a
+features and no `url` is refused at `apps.X.features`, since Siren sends a
 feature its requests at the app's address. The payout kind is
 `payoutMethod`. The file refuses `fulfillmentMethod` and names the new
 word. App keys never take `requests`, `events`, `scopes` or `kinds`, which
@@ -98,7 +98,7 @@ file changes, then each change, then asks
 `--yes` it sends nothing. With nothing to change it says so and writes
 nothing.
 
-A feature the file leaves out is read with `apps.items.retrieve()`, so the
+A feature the file leaves out is read with `apps.features.retrieve()`, so the
 line says whether records still select it and Siren archives it, or nothing
 does and Siren deletes it. The question says the last write wins. A
 difference may be a change someone made in the dashboard, and the tool
@@ -201,7 +201,7 @@ Left open: the optional line that says when the app last changed, from
 ## Where Siren overruled the brief
 
 - Siren keeps `AppItemKinds::FulfillmentMethod` as an alias with the value
-  `payoutMethod`, so the SDK keeps `AppItemKind.FulfillmentMethod` the same
+  `payoutMethod`, so the SDK keeps `FeatureKind.FulfillmentMethod` the same
   way and marks it deprecated.
 - `format()` and `toDecimalString()` disagree on the sign, so the SDK
   follows `format()`.

@@ -13,14 +13,14 @@ function read(path: string): string {
 }
 
 describe('apps-sdk-container: the note and the mutation list', () => {
-  it('the note names each call on apps and apps.items, and the claims it closes', () => {
+  it('the note names each call on apps and apps.features, and the claims it closes', () => {
     const note = read('docs/architecture/apps-sdk-container.md');
     const calls = Object.getOwnPropertyNames(AppsResource.prototype).filter((name) => name !== 'constructor');
     for (const call of ['create', 'update', 'createKey', 'rotateKey', 'revokeKey', 'rotateSecret', 'test', 'deliveries', 'events', 'scopes', 'kinds']) {
       expect(calls, call).toContain(call);
       expect(note, call).toContain(`apps.${call}(`);
     }
-    expect(note).toContain('apps.items.create');
+    expect(note).toContain('apps.features.create');
     for (const section of ['Section 10', 'Section 14', 'Section 15']) expect(note, section).toContain(section);
     expect(note).not.toMatch(/[—;]/);
   });

@@ -108,8 +108,8 @@ afterEach(async () => {
  * fixture's id, app and feature key.
  */
 function signed(kind: string): { raw: string; headers: Record<string, string> } {
-  const request = features.kinds[kind]!.request as { app: string; item: { key: string } };
-  const { rawBody, headers } = appRequest(kind, request.item.key, { id: ID, app: request.app });
+  const request = features.kinds[kind]!.request as { app: string; feature: { key: string } };
+  const { rawBody, headers } = appRequest(kind, request.feature.key, { id: ID, app: request.app });
   return { raw: rawBody, headers };
 }
 

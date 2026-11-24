@@ -3256,7 +3256,7 @@ paths:
       operationId: listApps
       summary: List the organization's apps
       description: |
-        Every app, on and off, ordered by id, each with its items. A signed-in
+        Every app, on and off, ordered by id, each with its features. A signed-in
         admin only. An API key gets 401 `api_key_not_accepted`.
       security:
         - dashboardSession: []
@@ -3354,7 +3354,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/AppItemKindEntry' }
+                items: { $ref: '#/components/schemas/AppFeatureKindEntry' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /apps/requests:
@@ -3493,7 +3493,7 @@ paths:
       tags: [Apps]
       operationId: getApp
       summary: Read one app
-      description: The app with its items. A signed-in admin only.
+      description: The app with its features. A signed-in admin only.
       security:
         - dashboardSession: []
       parameters:
@@ -3520,7 +3520,9 @@ paths:
         a key, makes an address and answers `signingSecret` when `url` is new,
         and removes the address when `url` is left out. An app with features
         needs a key and an address, or Siren answers 422
-        `app_items_need_key_and_address`. A signed-in admin who sees every store only. 403 with
+        `app_features_need_key_and_address`. A body that still holds `items`,
+        the features' name before Siren's feature rename, is refused with 422
+        on the field `items`, and nothing is written. A signed-in admin who sees every store only. 403 with
         `error.code` `app_limit_reached` when the plan has no room, and 409
         `app_change_in_progress` when another change held the org's apps.
       security:
@@ -3583,9 +3585,9 @@ paths:
       summary: Delete an app
       description: |
         Deletes an app that no record selects and with no open ask, revokes
-        its key, and deletes its items and subscription. Its requests stay
+        its key, and deletes its features and subscription. Its requests stay
         readable. 409 with `error.code` `app_in_use`, `context.uses` and
-        `context.openRequests` while a record selects one of its items or an
+        `context.openRequests` while a record selects one of its features or an
         ask is open. A signed-in admin who sees every store only.
       security:
         - dashboardSession: []
@@ -3674,7 +3676,7 @@ paths:
       description: |
         The app keeps its address. 409 `app_key_missing` with no key,
         `app_needs_a_part` with no address, and
-        `app_items_need_key_and_address` while it has features.
+        `app_features_need_key_and_address` while it has features.
       security:
         - dashboardSession: []
       parameters:
@@ -3787,15 +3789,15 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-  /apps/{key}/items:
+  /apps/{key}/features:
     post:
       tags: [Apps]
-      operationId: addAppItem
+      operationId: addAppFeature
       summary: Add one feature to an app
       description: |
         Checked by the rules a declaration's feature meets. 201, or 200 when
         an archived feature of the same kind and key comes back. 409
-        `app_items_need_key_and_address` when the app lacks a key or an
+        `app_features_need_key_and_address` when the app lacks a key or an
         address.
       security:
         - dashboardSession: []
@@ -3805,27 +3807,27 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/AppItemDeclaration' }
+            schema: { $ref: '#/components/schemas/AppFeatureDeclaration' }
       responses:
         '201':
           description: The feature, with who selects it.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AppItemPage' }
+              schema: { $ref: '#/components/schemas/AppFeaturePage' }
         '200':
           description: An archived feature, back.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AppItemPage' }
+              schema: { $ref: '#/components/schemas/AppFeaturePage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/AppRefused' }
         '422': { $ref: '#/components/responses/AppRefused' }
-  /apps/{key}/items/{id}:
+  /apps/{key}/features/{id}:
     get:
       tags: [Apps]
-      operationId: getAppItem
+      operationId: getAppFeature
       summary: Read one feature
       security:
         - dashboardSession: []
@@ -3837,13 +3839,13 @@ paths:
           description: The feature, how many records select it, and up to 100 of them.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AppItemPage' }
+              schema: { $ref: '#/components/schemas/AppFeaturePage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Apps]
-      operationId: editAppItem
+      operationId: editAppFeature
       summary: Change a feature
       description: A feature's kind and key never change, and Siren answers 422 for either.
       security:
@@ -3867,14 +3869,14 @@ paths:
           description: The feature.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AppItemPage' }
+              schema: { $ref: '#/components/schemas/AppFeaturePage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/AppRefused' }
     delete:
       tags: [Apps]
-      operationId: removeAppItem
+      operationId: removeAppFeature
       summary: Remove a feature
       description: Archived while a record selects it, deleted otherwise.
       security:
@@ -3891,9 +3893,9 @@ paths:
                 type: object
                 properties:
                   archived: { type: boolean }
-                  item:
+                  feature:
                     oneOf:
-                      - $ref: '#/components/schemas/AppItemPage'
+                      - $ref: '#/components/schemas/AppFeaturePage'
                       - type: 'null'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -3994,7 +3996,7 @@ components:
       description: The same one-store filter as `propertyId`, sent as a header.
       schema: { type: integer, minimum: 1 }
   schemas:
-    AppItemDeclaration:
+    AppFeatureDeclaration:
       type: object
       required: [kind, key, name]
       additionalProperties: false
@@ -4037,14 +4039,14 @@ components:
           type: array
           description: The webhook events the app's subscription receives.
           items: { type: string }
-        items:
+        features:
           type: array
-          items: { $ref: '#/components/schemas/AppItemDeclaration' }
-    AppItem:
+          items: { $ref: '#/components/schemas/AppFeatureDeclaration' }
+    AppFeature:
       type: object
       properties:
         id: { type: integer }
-        ref: { type: string, description: 'The `app:{id}` a record stores to select the item.' }
+        ref: { type: string, description: 'The `app:{id}` a record stores to select the feature.' }
         appId: { type: integer }
         kind: { type: string }
         key: { type: string }
@@ -4059,9 +4061,9 @@ components:
         entitled: { type: boolean }
         requiredCapability: { type: [string, 'null'] }
         requiredPlan: { type: [string, 'null'], description: 'The plan the feature needs, such as `pro`, when `entitled` is false.' }
-    AppItemPage:
+    AppFeaturePage:
       allOf:
-        - $ref: '#/components/schemas/AppItem'
+        - $ref: '#/components/schemas/AppFeature'
         - type: object
           properties:
             uses: { type: integer, minimum: 0 }
@@ -4078,7 +4080,7 @@ components:
         entitled: { type: boolean }
         requiredCapability: { type: [string, 'null'] }
         requiredPlan: { type: [string, 'null'] }
-    AppItemKindEntry:
+    AppFeatureKindEntry:
       allOf:
         - $ref: '#/components/schemas/AppPlanAccess'
         - type: object
@@ -4124,7 +4126,7 @@ components:
         scopes: { type: array, items: { type: string } }
     App:
       type: object
-      required: [key, items]
+      required: [key, features]
       properties:
         id: { type: integer }
         key: { type: string }
@@ -4156,9 +4158,9 @@ components:
         scopes: { type: array, items: { type: string } }
         apiKeyPrefix: { type: [string, 'null'] }
         needsAttention: { type: integer, minimum: 0, description: 'How many of the app''s requests need a person now (AppSerializer, capture apps-list-200-count-1).' }
-        items:
+        features:
           type: array
-          items: { $ref: '#/components/schemas/AppItem' }
+          items: { $ref: '#/components/schemas/AppFeature' }
     AppWithSecrets:
       description: An app with the secret of each part the call made, shown this once.
       allOf:
@@ -4172,7 +4174,7 @@ components:
       properties:
         id: { type: string, pattern: '^apr_[0-9a-f]{32}$' }
         appId: { type: integer }
-        item: { type: string, description: 'The item, as `app:{id}`.' }
+        feature: { type: string, description: 'The feature, as `app:{id}`.' }
         kind: { type: string }
         mode: { type: string, enum: [tell, ask] }
         subject:

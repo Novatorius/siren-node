@@ -331,98 +331,12 @@ export const CreditHoldStatus = {
 export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHoldStatus];
 
 /**
- * The registries an app item, a feature, can join, as Siren names them
- * (lib/Apps/Core/Enums/AppItemKinds.php on Siren's int/preview-apps at
- * a22547327). A record selects a feature by `app:{id}`: a program for a
- * post-conversion action or an incentive resolver, a distributor for a
- * post-allocation action or a distribution resolver, an autofulfiller for a
- * payout method, a distributor's metric type for a metric calculation, a
- * distributor for a metric filter, a program or a distributor for a
- * transaction filter, and a collaborator group for its structure.
- *
- * The payout kind's stored value is `payoutMethod`, the documentation's
- * word. `FulfillmentMethod` stays as an alias of the same value, as Siren's
- * `AppItemKinds::FulfillmentMethod` does, so code written against it sends
- * the new word. Siren refuses the old value `fulfillmentMethod`.
+ * The kinds of feature an app may add, generated from Siren's registry
+ * snapshot (src/feature-kind.ts, from src/app-kinds.json). A record selects a
+ * feature by `app:{id}`. The payout kind is `payoutMethod`, and Siren refuses
+ * its old name.
  */
-export const AppItemKind = {
-  PostConversionAction: 'postConversionAction',
-  PostAllocationAction: 'postAllocationAction',
-  /**
-   * A payout method an autofulfiller names. Siren asks the app to pay one
-   * payout, and the app answers paid with a reference or failed with a reason.
-   * Siren drops the ask after 24 hours with no answer.
-   */
-  PayoutMethod: 'payoutMethod',
-  /** @deprecated Read `AppItemKind.PayoutMethod`. The same value, `payoutMethod`. */
-  FulfillmentMethod: 'payoutMethod',
-  DistributionResolver: 'distributionResolver',
-  /**
-   * An event of the app's own, which the app sends Siren at
-   * `/event/{key}` and programs and distributors credit. It needs only the
-   * app's key, never an address.
-   */
-  CustomEvent: 'customEvent',
-  /**
-   * A calculation strategy a distributor's metric type selects. Siren asks
-   * the app to score a metric, and the app answers a score for each
-   * collaborator. Its `scoresMoney` setting says the score is money.
-   */
-  MetricCalculation: 'metricCalculation',
-  /**
-   * A metric filter a distributor selects, which Siren names "Customer
-   * filter for distributors". Siren asks the app whether one collaborator's
-   * metric counts, and the app answers allow or suppress.
-   */
-  MetricFilter: 'metricFilter',
-  /**
-   * An incentive resolver a program selects. Siren asks the app how to split
-   * the program's reward among the collaborators a sale, renewal or lead
-   * converted, and the rewards wait for the answer, 24 hours at most.
-   */
-  IncentiveResolver: 'incentiveResolver',
-  /**
-   * An incentive type a program selects, which Siren names "Incentive
-   * structure". Siren asks the app which engagements one sale, lead or
-   * renewal converts and the pool the program's resolver divides. The
-   * program's award waits for the answer, 24 hours at most.
-   */
-  IncentiveType: 'incentiveType',
-  /**
-   * A calculation strategy a program's engagement type selects, which Siren
-   * names "Engagement calculation". Siren asks the app who earns an
-   * engagement, and its score, each time one triggers, and makes no
-   * engagement until the answer, 24 hours at most.
-   */
-  EngagementCalculation: 'engagementCalculation',
-  /**
-   * An engagement filter a program selects, which Siren names "Customer
-   * filter for programs". Siren asks the app whether an engagement may be
-   * made each time one triggers, and the app answers allow or suppress.
-   */
-  EngagementFilter: 'engagementFilter',
-  /**
-   * A program group structure a program group selects, which Siren names
-   * "Program group structure". Siren asks the app the order to try the
-   * group's programs in for one sale or lead, and the group's award waits
-   * for the answer, 24 hours at most.
-   */
-  ProgramGroupSorter: 'programGroupSorter',
-  /**
-   * A transaction filter a program or a distributor selects, which Siren's
-   * catalog calls a transaction compiler. Once per sale for each program or
-   * distributor that picks it, Siren asks the app which of the sale's own
-   * lines count, and the app answers the ids of the lines to include.
-   */
-  TransactionFilter: 'transactionFilter',
-  /**
-   * A collaborator group's structure, which a group selects. Once per
-   * cascade trigger on the group, for a program or a distributor, Siren asks
-   * the app for the group's shape among the members in the question, and
-   * the app answers a chain or a tree.
-   */
-  CollaboratorGroupStructure: 'collaboratorGroupStructure',
-} as const;
+export { FeatureKind } from './feature-kind';
 
 /** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */
 export const AppSource = {
@@ -437,8 +351,6 @@ export const AppSource = {
 /** Union of the {@link AppSource} strings. */
 export type AppSource = (typeof AppSource)[keyof typeof AppSource];
 
-/** Union of the {@link AppItemKind} strings. */
-export type AppItemKind = (typeof AppItemKind)[keyof typeof AppItemKind];
 
 /** Whether an app is on (`active`) or off (`inactive`). Siren sends an off app nothing. */
 export const AppStatus = {

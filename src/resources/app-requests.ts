@@ -403,10 +403,10 @@ function envelopeProblem(body: unknown): string | undefined {
   if (body.type !== 'app.request') return "The request's `type` must be `app.request`.";
   if (typeof body.app !== 'string' || body.app === '') return "The request's `app` must be the app's key, a non-empty string.";
   if (body.mode !== 'tell' && body.mode !== 'ask') return "The request's `mode` must be `tell` or `ask`.";
-  const item = body.item;
-  if (!isJsonObject(item)) return "The request's `item` must be an object.";
+  const feature = body.feature;
+  if (!isJsonObject(feature)) return "The request's `feature` must be an object.";
   for (const field of ['kind', 'key', 'id'] as const) {
-    if (typeof item[field] !== 'string') return `The request's \`item.${field}\` must be a string.`;
+    if (typeof feature[field] !== 'string') return `The request's \`feature.${field}\` must be a string.`;
   }
   if (typeof body.createdAt !== 'string') return "The request's `createdAt` must be a date string.";
   if (body.mode === 'ask') {

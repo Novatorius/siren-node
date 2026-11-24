@@ -56,10 +56,16 @@ secret or the request body.
 | The signed body is not JSON, or `X-Siren-Event` is `app.request` (or missing) and the body is not an envelope of version 1 | 400, naming the first field that breaks its rule | Nothing. |
 | An ask whose `answerUrl` origin is another Siren than the client's base | 500 | `onError` gets a `SirenError` with both addresses and the `baseUrl` to set. The function does not run and nothing is posted. |
 | A tell with a function | 200 `{}` once the function returns, 500 when it throws | `onError` gets a thrown error and the request. |
-| An ask with a function | 200 `{}` at once | The function runs after the reply. Its answer is posted as below. `undefined` posts nothing. |
+| An ask with a function | 200 `{}` at once | The function runs after the reply. Its answer is posted as below. `answers.later()` posts nothing. `undefined` or `null` is an error `onError` gets, and nothing is posted. |
 | An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
 | Another event with an `onEvent` function | 200 once it returns, 500 when it throws | Events are checked as requests are, the time window included. |
 | Another event with no function | 200 `{}` | Nothing. |
+
+`on()` takes only the 13 kinds Siren sends, `FEATURE_KIND_NAMES` in
+app-feature-kinds.ts, and any the `extraKinds` option names. It refuses
+another kind when the function is registered, and `featureKindProblem()`
+words what to write instead. The types take the same kinds, through
+`AppHandledKind<X>`, where `X` is the extra kinds.
 
 `on(kind, key, fn)` wins over `on(kind, fn)` for its own key. Naming the same
 feature, kind or event twice throws `SirenError`, so a copy and paste slip
@@ -89,7 +95,10 @@ caught.
 
 The default `onError` writes one `console.error` line, `Siren request handler
 (<kind> <key> <id>):` or `(<type> <delivery id>):`, and the error, as the
-PHP SDK's default does. It never writes the request's data or headers.
+PHP SDK's default does. For an ask's work after its 200 it adds when Siren
+sends the ask again, from `answerBy` in UTC, and how to resend it sooner
+(`nextSend()`), unless Siren refused with 403, 404 or 409, after which it
+sends the ask no more. It never writes the request's data or headers.
 
 ## Mounting it
 
@@ -178,7 +187,11 @@ and pass-1-builder-spec.md in the apps run folder) changed these:
   `envelopeProblem()` in app-requests.ts. The status stays 400.
 - `answers.simulate(request)` runs `respond()` with a collector in place of
   `onError` and of the answer post. An ask's function runs at once, and its
-  answer gets `checkedAnswer()`, the check `answerAppRequest()` runs.
+  answer gets `checkedAnswer()`, the check `answerAppRequest()` runs, then
+  `sirenAnswerProblem()` in app-answer-rules.ts, Siren's own answer checks
+  for the kind ported with the Siren file and method beside each. A refusal
+  is a `ValidationError` with code `app_answer_invalid` and Siren's words.
+  The live handler does not run Siren's checks: it posts, and Siren decides.
 - `@novatorius/siren/testing` (src/testing/) holds `appRequest()` and
   `sampleData()`. src/testing/sample-data.ts is the `data` of Siren's
   request fixture, and test/apps-dx-first-contact.test.ts holds the two

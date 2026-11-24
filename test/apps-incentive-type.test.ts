@@ -5,7 +5,7 @@ import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
 import type { App, AppAsk, AppFeatureFunctions, AppIncentiveTypeAnswer, AppIncentiveTypeQuestion } from '../src/record-types';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
 import { APP_KEY, APP_REQUEST_ID, appRecord } from './apps-siren-answers';
@@ -27,13 +27,13 @@ interface FeatureFixture {
 }
 const features = JSON.parse(readFileSync(new URL('./fixtures/apps-feature-contracts/requests.json', import.meta.url), 'utf8')) as FeatureFixture;
 
-function file(items: Record<string, unknown>): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: ADDRESS, features: items } } });
+function file(declared: Record<string, unknown>): string {
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: ADDRESS, features: declared } } });
 }
 
 describe('apps-c16-6: the incentive type kind', () => {
   it('names the kind with the value Siren stores and the name its catalog gives', () => {
-    expect(AppItemKind.IncentiveType).toBe('incentiveType');
+    expect(FeatureKind.IncentiveType).toBe('incentiveType');
     expect(kindLabel('incentiveType')).toBe('Incentive structure (incentiveType)');
   });
 
@@ -57,7 +57,7 @@ describe('apps-c16-6: the incentive type kind', () => {
   it('reads an incentive type with its conversions and declares them in the catalog order', () => {
     const parsed = parseAppFile(file({ deals: { kind: 'incentiveType', name: 'Pay on deals', conversionTypes: ['renewal', 'sale'] } }), {});
     expect(parsed.problems).toEqual([]);
-    expect(declarationFor(parsed.file!).params.items).toEqual([
+    expect(declarationFor(parsed.file!).params.features).toEqual([
       { kind: 'incentiveType', key: 'deals', name: 'Pay on deals', conversionTypes: ['sale', 'renewal'] },
     ]);
   });
@@ -84,25 +84,25 @@ describe('apps-c16-6: the incentive type kind', () => {
     ]);
   });
 
-  it('declare and the item routes send conversionTypes, and apply shows a changed set', async () => {
-    const item = { kind: AppItemKind.IncentiveType, key: 'deals', name: 'Pay on deals', conversionTypes: ['sale' as const, 'renewal' as const] };
-    const over = transportOver([reply(200, appRecord()), reply(201, appRecord().items[0]), reply(200, appRecord().items[0])]);
+  it('declare and the feature routes send conversionTypes, and apply shows a changed set', async () => {
+    const feature = { kind: FeatureKind.IncentiveType, key: 'deals', name: 'Pay on deals', conversionTypes: ['sale' as const, 'renewal' as const] };
+    const over = transportOver([reply(200, appRecord()), reply(201, appRecord().features[0]), reply(200, appRecord().features[0])]);
     const apps = new AppsResource(over.transport);
-    await apps.declare(APP_KEY, { name: 'Acme', url: ADDRESS, items: [item] });
-    await apps.items.create(APP_KEY, { kind: AppItemKind.IncentiveType, name: 'Pay on deals', conversionTypes: ['lead'] });
-    await apps.items.update(APP_KEY, 3, { conversionTypes: ['sale'] });
-    expect((bodyOf(over.http.requests[0]!) as { items: unknown[] }).items).toEqual([item]);
+    await apps.declare(APP_KEY, { name: 'Acme', url: ADDRESS, features: [feature] });
+    await apps.features.create(APP_KEY, { kind: FeatureKind.IncentiveType, name: 'Pay on deals', conversionTypes: ['lead'] });
+    await apps.features.update(APP_KEY, 3, { conversionTypes: ['sale'] });
+    expect((bodyOf(over.http.requests[0]!) as { features: unknown[] }).features).toEqual([feature]);
     expect(bodyOf(over.http.requests[1]!)).toMatchObject({ kind: 'incentiveType', conversionTypes: ['lead'] });
     expect(bodyOf(over.http.requests[2]!)).toEqual({ conversionTypes: ['sale'] });
 
     const have = appRecord({
-      items: [{ ...appRecord().items[0], kind: 'incentiveType', key: 'deals', name: 'Pay on deals', settings: { conversionTypes: ['sale'] } }],
+      features: [{ ...appRecord().features[0], kind: 'incentiveType', key: 'deals', name: 'Pay on deals', settings: { conversionTypes: ['sale'] } }],
     }) as unknown as App;
-    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: ADDRESS, items: [item] }).lines).toEqual([
+    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: ADDRESS, features: [feature] }).lines).toEqual([
       'changes feature deals, Incentive structure (incentiveType): conversions it pays',
     ]);
-    const same = { ...item, conversionTypes: ['sale' as const] };
-    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: ADDRESS, items: [same] }).lines).toEqual([]);
+    const same = { ...feature, conversionTypes: ['sale' as const] };
+    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: ADDRESS, features: [same] }).lines).toEqual([]);
   });
 
   it('sends both answers through the one answer route', async () => {

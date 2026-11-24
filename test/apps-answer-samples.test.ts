@@ -100,8 +100,8 @@ async function load(sample: string): Promise<string> {
  * sample.
  */
 async function sirenSends(url: string, kind: string): Promise<{ status: number; body: unknown }> {
-  const request = features.kinds[kind]!.request as { app: string; item: { key: string } };
-  const { method, headers, rawBody } = appRequest(kind, request.item.key, { id: ID, app: request.app });
+  const request = features.kinds[kind]!.request as { app: string; feature: { key: string } };
+  const { method, headers, rawBody } = appRequest(kind, request.feature.key, { id: ID, app: request.app });
   const response = await fetch(url, { method, headers, body: rawBody });
   return { status: response.status, body: (await response.json()) as unknown };
 }

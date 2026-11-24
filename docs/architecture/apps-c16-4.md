@@ -19,11 +19,11 @@ gain the same kinds on their own pkt/apps-c16-4 branches.
 
 | Part | File | Change |
 |---|---|---|
-| `AppItemKind.EngagementCalculation`, `AppItemKind.EngagementFilter` | src/taxonomy.ts | The values `engagementCalculation` and `engagementFilter`. |
+| `FeatureKind.EngagementCalculation`, `FeatureKind.EngagementFilter` | src/taxonomy.ts | The values `engagementCalculation` and `engagementFilter`. |
 | Readable names | src/cli/app-kinds.ts | Engagement calculation, Customer filter for programs. |
 | Question and answer types | src/record-types.ts | `AppEngagementCalculationQuestion`, `AppEngagementCalculationAnswer`, `AppEngagementFilterQuestion`, `AppEngagementFilterAnswer`, `AppEngagementCause`, `AppEngagementOpportunity`. |
 | Typed handler | src/record-types.ts | `AppFeatureFunctions.engagementCalculation` and `.engagementFilter`, so `on(kind, ...)` types the request and the answer. |
-| `AppItemDeclaration` | openapi.yaml | The two kinds. |
+| `AppFeatureDeclaration` | openapi.yaml | The two kinds. |
 
 ## Rules
 

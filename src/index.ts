@@ -135,7 +135,7 @@ export { MappingsResource } from './resources/mappings';
 export { SettingsResource } from './resources/settings';
 export { PayoutsResource } from './resources/payouts';
 export { FulfillmentsResource } from './resources/fulfillments';
-export { AppItemKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
+export { FeatureKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
 export { AppSource } from './taxonomy';
 export { AppErrorCode, appErrorCode } from './errors';
 export type {
@@ -151,10 +151,11 @@ export type {
   AppFastifyRequest,
   AppFastifyReply,
   AppFunctionFor,
+  AppHandledKind,
 } from './resources/app-request-handler';
 export {
   AppsResource,
-  AppItemsResource,
+  AppFeaturesResource,
   AppRequestsResource,
   MAX_APP_ANSWER_BYTES,
   DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,

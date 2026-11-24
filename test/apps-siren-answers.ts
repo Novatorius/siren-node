@@ -64,7 +64,7 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
       dateCreated: '2026-11-16 21:00:00',
     },
     address: { id: 31, url: 'https://acme.example/siren', events: [], status: 'active', dateCreated: '2026-11-16 21:00:00' },
-    items: [
+    features: [
       {
         id: 11,
         ref: 'app:11',
@@ -110,7 +110,7 @@ export function appRecord(overrides: Record<string, unknown> = {}) {
  */
 export function itemPage(overrides: Record<string, unknown> = {}) {
   return {
-    ...(appRecord().items[1] as Record<string, unknown>),
+    ...(appRecord().features[1] as Record<string, unknown>),
     uses: 1,
     usedBy: [{ record: 'autofulfiller', id: 'USD' }],
     ...overrides,
@@ -188,8 +188,8 @@ export const PartAnswers = {
       error: {
         message:
           'An app with features needs a key and an address, and "acme-payouts" would lack an address. Siren asks the app at its address, and the app answers with its key.',
-        code: 'app_items_need_key_and_address',
-        context: { reason: 'app_items_need_key_and_address', missing: ['address'] },
+        code: 'app_features_need_key_and_address',
+        context: { reason: 'app_features_need_key_and_address', missing: ['address'] },
       },
     }),
 };
@@ -203,7 +203,7 @@ export function requestRow(overrides: Record<string, unknown> = {}) {
   return {
     id: APP_REQUEST_ID,
     appId: 4,
-    item: 'app:12',
+    feature: 'app:12',
     kind: 'payoutMethod',
     mode: 'ask',
     subject: { type: 'payout', id: '88' },

@@ -17,6 +17,16 @@
  *   with `addEventScope`, in order. An organization's custom event types add
  *   more at run time, and the fixture holds none.
  *
+ * It also copies, byte for byte, the files Siren keeps for the SDKs to hold:
+ *
+ * - src/app-kinds.json: docs/api/app-kinds.json, the feature kinds as
+ *   AppItemKindCatalog::catalog() registers them, which `composer
+ *   app-kinds-snapshot` writes. src/feature-kind.ts is generated from it by
+ *   scripts/feature-kind.mjs.
+ * - test/fixtures/apps-feature-contracts/requests.json and
+ *   test/fixtures/apps-exchange/{signed-request,answer}.json: Siren's own
+ *   request fixtures, from tests/Fixtures.
+ *
  * With `--check`, it writes nothing and exits 1 when a committed fixture
  * differs from what the source gives, so a stale fixture is caught.
  */
@@ -117,7 +127,32 @@ const outputs = {
   },
 };
 
+// Siren's path, then this repository's, for each file copied byte for byte.
+const copies = [
+  ['docs/api/app-kinds.json', 'src/app-kinds.json'],
+  ['tests/Fixtures/apps-feature-contracts/requests.json', 'test/fixtures/apps-feature-contracts/requests.json'],
+  ['tests/Fixtures/apps-exchange/signed-request.json', 'test/fixtures/apps-exchange/signed-request.json'],
+  ['tests/Fixtures/apps-exchange/answer.json', 'test/fixtures/apps-exchange/answer.json'],
+];
+
 let stale = 0;
+for (const [from, to] of copies) {
+  const bytes = readFileSync(resolve(sirenPath, from));
+  const path = resolve(process.cwd(), to);
+  if (check) {
+    let same = false;
+    try {
+      same = readFileSync(path).equals(bytes);
+    } catch {
+      same = false;
+    }
+    console.log(`${same ? 'OK   ' : 'STALE'} ${to}`);
+    if (!same) stale += 1;
+  } else {
+    writeFileSync(path, bytes);
+    console.log(`copied ${to}`);
+  }
+}
 for (const [name, content] of Object.entries(outputs)) {
   const path = resolve(fixtures, name);
   const text = `${JSON.stringify(content, null, 2)}\n`;

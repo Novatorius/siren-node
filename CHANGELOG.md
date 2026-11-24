@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- Siren calls a feature a feature everywhere now (Alex's ruling M104), and the SDK follows with no
+  old name kept. A request carries `request.feature` (`kind`, `key`, `id`) in place of `item`, and
+  a body that holds `item` and no `feature` is refused as not a version 1 request. The feature
+  calls are `siren.apps.features` (`AppFeaturesResource`) on `/apps/{app}/features` and
+  `/apps/{app}/features/{id}`. An app reads and declares its features under `features`, `DELETE`
+  answers `{ archived, feature }`, and a request row names its feature in `feature`. The kinds are
+  `FeatureKind`, which replaces `AppItemKind`, and every `AppItem*` type is now `AppFeature*`
+  (`AppFeature`, `AppFeatureDeclaration`, `AppFeaturePage`, `AppFeatureUse`, `RemovedAppFeature`,
+  `CreateAppFeatureParams`, `UpdateAppFeatureParams`, `AppFeatureKindEntry`,
+  `AppFeatureKindSetting`). The error code is `app_features_need_key_and_address`
+  (`AppErrorCode.FeaturesNeedKeyAndAddress`), with field paths `features`, `features.{i}.{field}`
+  and `feature`.
+- Kind names come from Siren's registry. The SDK ships Siren's docs/api/app-kinds.json byte for byte
+  as src/app-kinds.json, and `FeatureKind` is generated from it, so each kind's name, and Siren's
+  term for it where that differs, shows on hover. `answers.on()` takes the kinds the snapshot marks
+  as a tell or an ask, and a screen name gets "The kind for Attribution model is
+  incentiveResolver."
+- `answers.on()` refuses a kind Siren never sends when the function is registered, with a
+  `SirenError` that says what to write instead: the nearest kind for a typo, the kind for a screen
+  name such as `attributionModel`, the camelCase kind for `distribution_resolver`, `events.ingest()`
+  for `customEvent`, `onEvent()` for an event name, and `payoutMethod` for `fulfillmentMethod`. Its
+  types take only those kinds, so the editor flags a typo. The new `extraKinds` option names kinds a
+  newer Siren sends, which `on()` then takes.
+- An ask's function that returns nothing (`undefined` or `null`) is an error, which `onError` and
+  `simulate()` get: "The function for distributionResolver split-by-score returned nothing. Return
+  the answer, or return answers.later() when you will answer with apps.requests.answer()." Return
+  `answers.later()` to answer later. The ask function types no longer take `undefined`.
+- `AppItemKind.FulfillmentMethod` is gone. Use `FeatureKind.PayoutMethod`, the same value.
+
 - `apps.requestHandler()` replies 500 to an ask whose signed `answerUrl` is on another Siren than
   the client's `baseUrl`, and `onError` gets a `SirenError` naming both addresses and the `baseUrl`
   to set. Before, it replied 200 and the answer post failed into a log line. Siren Cloud's
@@ -46,6 +75,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `answers.later()`, which an ask's function returns when the app will answer later with
+  `apps.requests.answer()`, and the types `AppAnswerLater`, `AppAskResult` and `AppHandledKind`.
+- `answers.simulate()` checks an ask's answer with Siren's own rules for its kind, ported from
+  Siren's answer route, and returns a refused answer as a `ValidationError` with code
+  `app_answer_invalid` and Siren's words. The live handler still posts the answer and lets Siren
+  decide.
+- The default `onError` line for an ask that failed after its 200 says when Siren sends it again,
+  from `answerBy`, and how to resend it sooner: from Needs attention in Siren Cloud, or with
+  `siren apps resend <id>`.
+- The README opens with "How Siren talks to your app", the same block as the PHP and Python SDKs,
+  has a reply row for a failed function, and says an ask's function can run more than once.
 - `@novatorius/siren/testing`, with `appRequest(kind, key, { data, secret, id, app, baseUrl,
   timestamp })`, which signs an app request as Siren sends it, and `sampleData(kind)`, Siren's
   sample question for each kind.
@@ -83,7 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument, `Record<string, unknown>` by default. `on()` types each kind's request and answer, the metric
   calculation and metric filter kinds' included.
 
-- `AppItemKind.IncentiveType` (`incentiveType`), the feature kind a program selects as its
+- `FeatureKind.IncentiveType` (`incentiveType`), the feature kind a program selects as its
   incentive type, to let the app decide which engagements each sale, lead or renewal converts and
   the pool the program's resolver divides. The types `AppIncentiveTypeQuestion`,
   `AppIncentiveTypeEngagement`, `AppIncentiveTypeLine` and `AppIncentiveTypeAnswer` describe the
@@ -91,26 +131,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{ outcome: 'none' }`, which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as
   before, and `requestHandler().on('incentiveType', ...)` types both. A feature takes
   `conversionTypes` (`AppConversionType`: `sale`, `lead`, `renewal`) in `apps.declare()`,
-  `apps.items.create()` and `apps.items.update()`. The app file requires it for an incentive type,
+  `apps.features.create()` and `apps.features.update()`. The app file requires it for an incentive type,
   each once and known, refuses it on any other kind, and `siren apps apply` shows a change to it as
   "conversions it pays". `siren apps` names the kind Incentive structure, and `openapi.yaml`'s
-  `AppItemDeclaration` gains the kind and `conversionTypes`.
-- `AppItemKind.EngagementCalculation` (`engagementCalculation`) and `AppItemKind.EngagementFilter`
+  `AppFeatureDeclaration` gains the kind and `conversionTypes`.
+- `FeatureKind.EngagementCalculation` (`engagementCalculation`) and `FeatureKind.EngagementFilter`
   (`engagementFilter`), the feature kinds a program's engagement type and a program select to let the
   app decide who earns each engagement and whether it is made. The types
   `AppEngagementCalculationQuestion`, `AppEngagementCalculationAnswer`, `AppEngagementFilterQuestion`,
   `AppEngagementFilterAnswer`, `AppEngagementCause` and `AppEngagementOpportunity` describe the asks'
   `data` and their answers, which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer`
   as before, and `requestHandler().on(...)` types both. `siren apps` names them Engagement
-  calculation and Customer filter for programs, and `openapi.yaml`'s `AppItemDeclaration` gains them.
-- `AppItemKind.ProgramGroupSorter` (`programGroupSorter`), the feature kind a program group selects
+  calculation and Customer filter for programs, and `openapi.yaml`'s `AppFeatureDeclaration` gains them.
+- `FeatureKind.ProgramGroupSorter` (`programGroupSorter`), the feature kind a program group selects
   as its structure, to let the app order the group's programs for each sale or lead. The types
   `AppGroupOrderQuestion`, `AppGroupOrderProgram`, `AppGroupOrderEngagement` and
   `AppGroupOrderAnswer` describe the ask's `data` and its answer, `{ outcome: 'sorted', programIds }`,
   which `apps.requests.answer()` sends to `POST /apps/requests/{id}/answer` as before, and
   `requestHandler().on('programGroupSorter', ...)` types both. `siren apps` names the kind Program
-  group structure, and `openapi.yaml`'s `AppItemDeclaration` gains it.
-- `AppItemKind.TransactionFilter` (`transactionFilter`), the feature kind a program or a
+  group structure, and `openapi.yaml`'s `AppFeatureDeclaration` gains it.
+- `FeatureKind.TransactionFilter` (`transactionFilter`), the feature kind a program or a
   distributor selects to let the app say which of a sale's own lines count. Siren's catalog calls it
   a transaction compiler. Siren asks it once per sale for each program or distributor that picks
   it, and a refund reuses the stored answer. The types `AppTransactionFilterQuestion`,
@@ -118,9 +158,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the ids of the lines to include, which `apps.requests.answer()` sends to
   `POST /apps/requests/{id}/answer` as before. Siren refuses a line id the question lacks with 422
   `app_answer_invalid`. `apps.requestHandler().on('transactionFilter', ...)` is typed by them,
-  `siren apps` names the kind Transaction filter, and `openapi.yaml`'s `AppItemDeclaration` gains
+  `siren apps` names the kind Transaction filter, and `openapi.yaml`'s `AppFeatureDeclaration` gains
   it.
-- `AppItemKind.CollaboratorGroupStructure` (`collaboratorGroupStructure`), the feature kind a
+- `FeatureKind.CollaboratorGroupStructure` (`collaboratorGroupStructure`), the feature kind a
   collaborator group selects to let the app give the group's shape. Siren asks it once per cascade
   trigger on the group, for a program or a distributor. The types
   `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`,
@@ -132,25 +172,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an answer that leaves out or repeats a member, names one outside the group, or makes a cycle with
   422 `app_answer_invalid`. `apps.requestHandler().on('collaboratorGroupStructure', ...)` is typed
   by them, `siren apps` names the kind Collaborator group structure, and `openapi.yaml`'s
-  `AppItemDeclaration` gains it.
-- `AppItemKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
+  `AppFeatureDeclaration` gains it.
+- `FeatureKind.IncentiveResolver` (`incentiveResolver`), the feature kind a program selects to let
   the app split each sale's reward. The types `AppRewardQuestion`, `AppRewardConversion` and
   `AppRewardAnswer` describe the ask's `data` and its answer, which `apps.requests.answer()` sends to
   `POST /apps/requests/{id}/answer` as before. `AppErrorCode.Dropped` is
   `app_request_dropped`, the 409 Siren answers once it stopped waiting for an ask, 24 hours after the
   sale's reward began to wait. `siren apps` names the kind Attribution model, and `openapi.yaml`'s
-  `AppItemDeclaration` gains it.
+  `AppFeatureDeclaration` gains it.
 - `AppRequestStatus.Dropped` (`dropped`), the status of an ask Siren stopped waiting for, which
   `apps.requests.list()` can filter by. `openapi.yaml` lists it in both request status enums.
-- `AppItemKind.MetricCalculation` (`metricCalculation`) and `AppItemKind.MetricFilter`
+- `FeatureKind.MetricCalculation` (`metricCalculation`) and `FeatureKind.MetricFilter`
   (`metricFilter`), the feature kinds a distributor's metric type and a distributor select. The
   types `AppMetricCalculationQuestion`, `AppMetricCalculationAnswer`, `AppMetricFilterQuestion` and
   `AppMetricFilterAnswer` describe each ask's `data` and its answer, which `apps.requests.answer()`
   sends to `POST /apps/requests/{id}/answer` as before. A feature takes `scoresMoney`, a boolean, on
-  `apps.declare()`, `apps.items.create()` and `apps.items.update()`. The app file refuses
+  `apps.declare()`, `apps.features.create()` and `apps.features.update()`. The app file refuses
   `scoresMoney` that is not true or false, and refuses it on any kind but `metricCalculation`, and
   `siren apps apply` shows a changed `scoresMoney` as "scores money". `openapi.yaml`'s
-  `AppItemDeclaration` gains `scoresMoney` and the kinds `customEvent`, `metricCalculation` and
+  `AppFeatureDeclaration` gains `scoresMoney` and the kinds `customEvent`, `metricCalculation` and
   `metricFilter`.
 - `AppPayoutQuestion`, `AppPayoutPaid`, `AppPayoutFailed` and `AppPayoutAnswer` describe the
   `payoutMethod` ask's `data` and its answer, which `apps.requests.answer()` sends as before. The
@@ -304,7 +344,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`GET /apps/{key}`), `setStatus` (`POST /apps/{key}/status`) and `delete`
   (`DELETE /apps/{key}`). Each throws `SirenError` before sending for an app key that is not
   lowercase letters and digits joined by single dashes, at most 64 characters, or that is
-  `requests`, `events`, `scopes` or `kinds`, and `declare` for a field or item field Siren does not take, whatever its value. The
+  `requests`, `events`, `scopes` or `kinds`, and `declare` for a field or feature field Siren does not take, whatever its value. The
   reads retry, the writes are sent once, and a 2xx body that is not an app raises
   `UnexpectedResponseError`.
 - `siren.apps.verifyRequest(rawBody, headers, secret, options)` checks a request Siren sends an app:
@@ -338,8 +378,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clock when `verifyRequest` gets no `toleranceSeconds`.
 - `DEFAULT_BASE_URL`, the live address `https://api.sirenaffiliates.com/siren/v1`.
 - `AppErrorCode` names the codes the app routes send, and `appErrorCode(error)` reads one from an
-  error's `code`, else `data.reason`. `AppItemKind`, `AppStatus`, `AppRequestStatus` and
-  `AppRequestMode` are Siren's app vocabularies, and `App`, `AppItem`, `DeclareAppParams`,
+  error's `code`, else `data.reason`. `FeatureKind`, `AppStatus`, `AppRequestStatus` and
+  `AppRequestMode` are Siren's app vocabularies, and `App`, `AppFeature`, `DeclareAppParams`,
   `DeclaredApp`, `RotatedApp`, `AppRequest`, `AppRequestRecord`, `AppAnswer` and
   `AppAnswerReceipt` type the calls.
 - The sandbox's address, `https://sandbox.sirenaffiliates.com/siren/v1`, as an exported constant. A
@@ -363,7 +403,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anything is sent.
 - examples/apps/acme, an example app that checks each request, answers every ask and sends a sale
   with the app's own key.
-- `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppItem`,
+- `openapi.yaml` documents the app routes, the `AppDeclaration`, `App`, `AppFeature`,
   `AppRequestRecord`, `AppAnswer` and `AppAnswerReceipt` schemas, and the sandbox server.
 - `siren.apps.shownAmount(value, currency)` reads a stored amount and its currency as a person
   reads them, and answers `{ amount, decimal, text }`, such as `{ amount: 100, decimal: '100',
@@ -393,23 +433,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `apps.rotateSecret` (`POST /apps/{key}/secret/rotate`) gives the address a new signing secret.
   - `apps.test` (`POST /apps/{key}/test`) sends the address one signed `webhook.test`, and
     `apps.deliveries` (`GET /apps/{key}/deliveries`) reads its latest 50 deliveries.
-  - `apps.items.create`, `retrieve`, `update` and `delete` (`/apps/{app}/items` and
-    `/apps/{app}/items/{id}`) add, read, change and remove one feature. `update` refuses a change to
+  - `apps.features.create`, `retrieve`, `update` and `delete` (`/apps/{app}/features` and
+    `/apps/{app}/features/{id}`) add, read, change and remove one feature. `update` refuses a change to
     `kind` or `key` before sending, since a feature's kind and key never change.
   - `apps.events`, `apps.scopes` and `apps.kinds` (`GET /apps/events`, `/apps/scopes` and
     `/apps/kinds`) read the three catalogs.
 
   Each write is sent once and each read retries. A key or secret route that answers without its
-  secret raises `UnexpectedResponseError`. `AppItemsResource` is exported for typing
-  `siren.apps.items`.
-- Types `AppApiKey`, `AppAddress`, `AppPlanAccess`, `AppItemPage`, `AppItemUse`,
-  `RemovedAppItem`, `CreateAppParams`, `CreatedApp`, `UpdateAppParams`, `UpdatedApp`,
-  `CreateAppItemParams`, `UpdateAppItemParams`, `AppWithRawKey`, `AppWithSigningSecret`,
-  `AppItemKindEntry`, `AppItemKindSetting` and the `AppSource` taxonomy. `App` gains `source`,
-  `apiKey`, `address` and `eventsAccess`, and each `AppItem` gains `entitled`,
+  secret raises `UnexpectedResponseError`. `AppFeaturesResource` is exported for typing
+  `siren.apps.features`.
+- Types `AppApiKey`, `AppAddress`, `AppPlanAccess`, `AppFeaturePage`, `AppFeatureUse`,
+  `RemovedAppFeature`, `CreateAppParams`, `CreatedApp`, `UpdateAppParams`, `UpdatedApp`,
+  `CreateAppFeatureParams`, `UpdateAppFeatureParams`, `AppWithRawKey`, `AppWithSigningSecret`,
+  `AppFeatureKindEntry`, `AppFeatureKindSetting` and the `AppSource` taxonomy. `App` gains `source`,
+  `apiKey`, `address` and `eventsAccess`, and each `AppFeature` gains `entitled`,
   `requiredCapability` and `requiredPlan`.
-- `AppItemKind.PayoutMethod`, `payoutMethod`, the payout kind's word in Siren and its documentation.
-  `AppErrorCode` gains `AppNeedsAPart`, `ItemsNeedKeyAndAddress`, `KeyExists`, `KeyMissing`,
+- `FeatureKind.PayoutMethod`, `payoutMethod`, the payout kind's word in Siren and its documentation.
+  `AppErrorCode` gains `AppNeedsAPart`, `FeaturesNeedKeyAndAddress`, `KeyExists`, `KeyMissing`,
   `AddressMissing` and `AppCapReached`.
 - Custom events go out with short-lived app tokens. A client built with an app's key trades it at
   `POST /oauth/token` for a 20-minute token the first time `events.ingest()` sends a custom event,
@@ -446,7 +486,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apps.rotate()` is gone with Siren's `POST /apps/{key}/rotate`. Call `apps.rotateKey()` and
   `apps.rotateSecret()`. The `RotatedApp` type stays, deprecated.
 - `AppItemKind.FulfillmentMethod` is a deprecated alias whose value is now `payoutMethod`, as
-  Siren's `AppItemKinds::FulfillmentMethod` is. `apps.declare()` and `apps.items.create()` refuse
+  Siren's `AppItemKinds::FulfillmentMethod` is. `apps.declare()` and `apps.features.create()` refuse
   the old string `fulfillmentMethod` before sending, since Siren refuses it.
 - `apps.declare()` takes an app with no `url`, a key-only app, and refuses features with no `url`
   before sending. `DeclaredApp` carries `rawKey` on the first declaration and `signingSecret`
@@ -461,7 +501,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removes their routes. openapi.yaml marks each old `/webhooks` and `/api-keys` operation
   `deprecated: true` and names the app route that replaces it. `AppErrorCode.AppOwnedSubscription` names Siren's 409
   `app_owned_subscription` for a webhook call on an address an app owns. The README's apps section
-  describes an app's three parts and says "feature" where the code says item.
+  describes an app's three parts and says "feature", as the code does.
 - The app file's `url` is optional, so it can declare a key-only app. A file with features and no
   `url` is refused before anything is sent. The file takes `payoutMethod` and refuses
   `fulfillmentMethod` with a message that names the new word, refuses the app keys `events`,
@@ -491,8 +531,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `apply` warns when the file names scopes and the app holds no key, and names
   `siren apps add-key <key>`, a new command that makes the key with `POST /apps/{key}/key` and
   writes it to the env file.
-- The tool's output and the README say feature where they said item. Technical terms such as
-  `items`, `AppItem` and `app:{id}` stay as they are.
+- The tool's output and the README say feature, as Siren's screens do. A record still selects a
+  feature by `app:{id}`.
 - The tool prints each feature kind's readable name beside its term, as Payout method
   (payoutMethod), in `show`, `list`, apply's changes, the request lines and the app file's
   messages. The README's feature table and prose do the same. The names are Siren's kinds catalog
@@ -505,8 +545,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   request fixture is Siren's int/preview-apps copy, which carries `payoutMethod`.
 - `siren apps requests <id>` reads an app's sends from `GET /apps/{key}/deliveries`, since Siren
   refuses the webhook routes for a subscription an app owns.
-- `openapi.yaml` documents the new apps routes, the `AppItemPage`, `AppPlanAccess`,
-  `AppItemKindEntry`, `AppCreate`, `AppChange` and `AppWithSecrets` schemas, `payoutMethod`, and an
+- `openapi.yaml` documents the new apps routes, the `AppFeaturePage`, `AppPlanAccess`,
+  `AppFeatureKindEntry`, `AppCreate`, `AppChange` and `AppWithSecrets` schemas, `payoutMethod`, and an
   optional `url`, and drops `/apps/{key}/rotate` and `DeclaredApp`.
 
 - `siren apps delete` says to turn an app off only while it is on, and otherwise that the records

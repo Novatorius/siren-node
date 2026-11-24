@@ -19,13 +19,13 @@ d0b74ff gain the same kind on their own pkt/apps-c16-6 branches.
 
 | Part | File | Change |
 |---|---|---|
-| `AppItemKind.IncentiveType` | src/taxonomy.ts | The value `incentiveType`. |
+| `FeatureKind.IncentiveType` | src/taxonomy.ts | The value `incentiveType`. |
 | Readable name | src/cli/app-kinds.ts | Incentive structure. |
 | Question and answer types | src/record-types.ts | `AppIncentiveTypeQuestion`, `AppIncentiveTypeEngagement`, `AppIncentiveTypeLine`, `AppIncentiveTypeAnswer`. |
 | Typed handler | src/record-types.ts | `AppFeatureFunctions.incentiveType`, so `on('incentiveType', ...)` types the request and the answer. |
-| Setting | src/record-types.ts, src/resources/apps.ts | `conversionTypes` (`AppConversionType[]`) on a declaration, an item's settings and an update, sent by `apps.declare()`, `apps.items.create()` and `apps.items.update()`. |
+| Setting | src/record-types.ts, src/resources/apps.ts | `conversionTypes` (`AppConversionType[]`) on a declaration, an item's settings and an update, sent by `apps.declare()`, `apps.features.create()` and `apps.features.update()`. |
 | App file | src/cli/app-file.ts, src/cli/app-changes.ts | Reads `conversionTypes`, declares it in the catalog's order, and shows a change as "conversions it pays". |
-| `AppItemDeclaration` | openapi.yaml | The kind `incentiveType` and the property `conversionTypes`. |
+| `AppFeatureDeclaration` | openapi.yaml | The kind `incentiveType` and the property `conversionTypes`. |
 
 ## Rules
 

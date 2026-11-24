@@ -107,7 +107,7 @@ describe('finding 1: the answer goes only to the client base, and a different Si
 
   it('does not count the Cloud host pair over plain http', async () => {
     const { answers, errors } = client();
-    answers.on('distributionResolver', 'split-by-score', () => undefined);
+    answers.on('distributionResolver', 'split-by-score', () => answers.later());
     const result = await answers.handle(signedBy(envelope('distributionResolver', 'http://app.sirenaffiliates.com/siren/v1')));
     expect(result.status).toBe(500);
     expect(errors).toHaveLength(1);
@@ -144,7 +144,7 @@ describe('finding 2: appRequest and sampleData', () => {
       const request = appRequest(kind, 'a-feature', { secret: SECRET });
       expect(request.method).toBe('POST');
       const checked = siren.apps.verifyRequest(request.rawBody, request.headers, SECRET);
-      expect(checked.item).toMatchObject({ kind, key: 'a-feature' });
+      expect(checked.feature).toMatchObject({ kind, key: 'a-feature' });
       expect(checked.id).toMatch(/^apr_[0-9a-f]{32}$/);
       expect(checked.mode).toBe(kind === 'postConversionAction' || kind === 'postAllocationAction' ? 'tell' : 'ask');
       expect(checked.data).toEqual(features.kinds[kind]!.request.data);
@@ -175,7 +175,7 @@ describe('finding 2: appRequest and sampleData', () => {
     vi.stubEnv('SIREN_SIGNING_SECRET', SECRET);
     const { siren } = client();
     const request = appRequest('metricFilter', 'refund-check');
-    expect(siren.apps.verifyRequest(request.rawBody, request.headers, SECRET).item.kind).toBe('metricFilter');
+    expect(siren.apps.verifyRequest(request.rawBody, request.headers, SECRET).feature.kind).toBe('metricFilter');
     vi.stubEnv('SIREN_SIGNING_SECRET', '');
     expect(() => appRequest('metricFilter', 'refund-check')).toThrow(/secret.*SIREN_SIGNING_SECRET/s);
   });
@@ -217,7 +217,7 @@ describe('finding 2: answers.simulate()', () => {
 
   it('checks the signature, so a request signed with another secret gets 401', async () => {
     const { answers } = client();
-    answers.on('distributionResolver', 'split-by-score', () => undefined);
+    answers.on('distributionResolver', 'split-by-score', () => answers.later());
     const result = await answers.simulate(appRequest('distributionResolver', 'split-by-score', { secret: 'another secret' }));
     expect(result.status).toBe(401);
     expect(result.body).toEqual({ error: expect.any(String) });
@@ -232,10 +232,11 @@ describe('finding 3: a bad envelope names the field it breaks', () => {
     ['type', (b) => (b.type = 'app.other'), 'The request\'s `type` must be `app.request`.'],
     ['app', (b) => (b.app = ''), 'The request\'s `app` must be the app\'s key, a non-empty string.'],
     ['mode', (b) => (b.mode = 'maybe'), 'The request\'s `mode` must be `tell` or `ask`.'],
-    ['item', (b) => (b.item = 'x'), 'The request\'s `item` must be an object.'],
-    ['item.kind', (b) => ((b.item as Record<string, unknown>).kind = 3), 'The request\'s `item.kind` must be a string.'],
-    ['item.key', (b) => delete (b.item as Record<string, unknown>).key, 'The request\'s `item.key` must be a string.'],
-    ['item.id', (b) => ((b.item as Record<string, unknown>).id = null), 'The request\'s `item.id` must be a string.'],
+    ['feature', (b) => (b.feature = 'x'), 'The request\'s `feature` must be an object.'],
+    ['item in place of feature, the name before the rename', (b) => ((b.item = b.feature), delete b.feature), 'The request\'s `feature` must be an object.'],
+    ['feature.kind', (b) => ((b.feature as Record<string, unknown>).kind = 3), 'The request\'s `feature.kind` must be a string.'],
+    ['feature.key', (b) => delete (b.feature as Record<string, unknown>).key, 'The request\'s `feature.key` must be a string.'],
+    ['feature.id', (b) => ((b.feature as Record<string, unknown>).id = null), 'The request\'s `feature.id` must be a string.'],
     ['createdAt', (b) => delete b.createdAt, 'The request\'s `createdAt` must be a date string.'],
     ['answerBy', (b) => delete b.answerBy, 'An ask\'s `answerBy` must be a date string.'],
     ['answerUrl', (b) => (b.answerUrl = 'not a url'), 'An ask\'s `answerUrl` must be an http or https URL.'],
@@ -244,7 +245,7 @@ describe('finding 3: a bad envelope names the field it breaks', () => {
 
   it.each(cases)('%s', async (_field, change, words) => {
     const { answers } = client();
-    answers.on('distributionResolver', 'split-by-score', () => undefined);
+    answers.on('distributionResolver', 'split-by-score', () => answers.later());
     const body = base();
     change(body);
     const result = await answers.handle(signedBy(body));
