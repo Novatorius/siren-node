@@ -24,6 +24,13 @@ REQUESTS
   apps answer         Answer an ask by hand
   apps resend         Send a request again
 
+SANDBOX
+  sandbox create      Copy a live setup into a sandbox
+  sandbox list        List your sandbox organizations
+  sandbox reset       Clear activity, keep setup
+  sandbox inbox       Read the sandbox's caught emails
+  seed                Fill a sandbox with sample sales
+
 ACCOUNT
   logout              Log out, and forget the session here
   whoami              Show who you are logged in as

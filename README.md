@@ -2083,6 +2083,11 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps add-key <key>` | Makes a key for an app that holds none and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. The key holds no scopes until the next `siren apps apply`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
+| `siren sandbox create --from <org>` | Copies a live organization's setup into a new sandbox organization and switches to it: apps and their features, programs, groups and settings. Collaborators, keys and secrets stay on the live Siren, and the sandbox makes its own keys and secrets without printing them. `--live-url` names the live Siren when you keep more than one live session. |
+| `siren sandbox list` | Lists your organizations on the sandbox, `*` on the one in use, and the live organization each copy came from. |
+| `siren sandbox reset` | Clears the sandbox organization's conversions, obligations, transactions, payouts, requests and deliveries, and keeps its setup. You type the organization's slug to confirm, or pass `--confirm <slug>` with no terminal. |
+| `siren sandbox inbox [<number>]` | Lists the emails the sandbox caught for the organization, newest first, or shows one with its text. |
+| `siren seed` | Fills the sandbox organization with sample test sales spread back over past months: `--sales` up to 200, `--collaborators` up to 25 and `--months` up to 6. It makes sample collaborators when the organization has too few. Siren never pays test sales or counts them in reports. |
 
 `list`, `show` and `apply` print `requires Pro`, or the plan Siren names, beside a feature or the
 events the organization's plan cannot use, and say only that the plan cannot use it when Siren names
