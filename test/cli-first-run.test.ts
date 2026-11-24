@@ -195,7 +195,7 @@ describe('cli pass 1, finding 9: --base-url takes a bare host', () => {
 });
 
 describe('cli pass 1, finding 5: apps init writes a first app a newcomer can apply', () => {
-  it('writes one Post-conversion action, one name, a $schema, and says where SIREN_APP_URL goes', async () => {
+  it('writes one Post-conversion action, one name, a $schema, and says where SIREN_APP_URL goes and how listen reaches this machine', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'init', '--key', APP_KEY, '--name', 'Acme']), h.err()).toBe(0);
     const file = JSON.parse(h.file('siren.app.json')) as Record<string, any>;
@@ -207,7 +207,7 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);
     expect(h.out()).toContain('.env');
     expect(h.out()).toContain('Feature kinds');
-    expect(h.out()).toMatch(/tunnel/);
+    expect(h.out()).toContain('siren listen --forward-to localhost:<port>/<path>');
   });
 
   it('keeps the two env files out of git by name, so .env.example can still be committed', async () => {

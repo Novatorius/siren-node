@@ -2083,6 +2083,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps add-key <key>` | Makes a key for an app that holds none and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. The key holds no scopes until the next `siren apps apply`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
+| `siren listen --forward-to localhost:8787/siren` | On a sandbox, sends the app's asks, tells and events to a handler on this machine while it runs, so the app needs no public address. Siren signs each one with the app's own secret, and the handler's reply goes back to Siren as the delivery's result. Ctrl-C stops it, and Siren sends to the app's address again. An app with no url gets its signing secret in `.env.sandbox` the first time. |
 
 `list`, `show` and `apply` print `requires Pro`, or the plan Siren names, beside a feature or the
 events the organization's plan cannot use, and say only that the plan cannot use it when Siren names

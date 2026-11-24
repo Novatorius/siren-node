@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
+import * as listen from './commands/listen';
 import * as requests from './commands/requests';
 import * as session from './commands/session';
 import { CommandContext } from './context';
@@ -43,6 +44,7 @@ export const COMMANDS = [
   'apps on',
   'apps off',
   'apps delete',
+  'listen',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -309,6 +311,21 @@ const SPECS: Record<Command, CommandSpec> = {
     example: 'siren apps delete acme-payouts --yes',
     positionals: [1, 1],
     run: apply.appsDelete,
+  },
+  listen: {
+    usage: 'listen [--forward-to <url>] [--app <key>] [--events <types>] [--json]',
+    summary: "While it runs, send the app's asks, tells and events to a handler on this machine. Sandbox only.",
+    group: 'Requests',
+    options: { 'forward-to': { type: 'string' }, app: { type: 'string' }, events: { type: 'string' }, json: { type: 'boolean' } },
+    flags: {
+      'forward-to': ['--forward-to <url>', "Where your handler runs, such as localhost:8787/siren. Defaults to the app file's localhost url."],
+      app: ['--app <key>', 'The app to listen for. Defaults to the key in siren.app.json.'],
+      events: ['--events <types>', 'Only these, as a comma list of event types and app.request.'],
+      json: ['--json', 'Print one JSON object per line, for a script.'],
+    },
+    example: 'siren listen --forward-to localhost:8787/siren',
+    positionals: [0, 0],
+    run: listen.listen,
   },
 };
 

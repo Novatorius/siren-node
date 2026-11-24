@@ -89,8 +89,8 @@ export async function appsInit(input: CommandInput): Promise<number> {
     io.stdout(`Added ${missing.join(', ')} to ${ignorePath}, so the key apply saves stays out of git.\n`);
   }
   io.stdout('To add a feature, add it under features. The README\'s Feature kinds table lists each kind, and the file\'s $schema lets your editor complete them.\n');
-  io.stdout(`Set SIREN_APP_URL to your app's https address, in your shell or in .env here, then run ${input.command('apps apply')}.\n`);
-  io.stdout('Siren must reach that address. For a handler on this machine, run a tunnel such as cloudflared or ngrok, and use the https address it gives.\n');
+  io.stdout(`On a sandbox, leave SIREN_APP_URL unset and run ${input.command('apps apply')}, then ${input.command('listen --forward-to localhost:<port>/<path>')} to send Siren's requests to your handler on this machine.\n`);
+  io.stdout(`For a live organization, set SIREN_APP_URL to your app's https address, in your shell or in .env here, then run ${input.command('apps apply')}.\n`);
   return 0;
 }
 
@@ -166,7 +166,11 @@ export async function appsApply(input: CommandInput): Promise<number> {
   // The shell wins over .env beside the file, as Node's --env-file and dotenv do.
   const fromFile = await appVariablesIn(dirname(path));
   const shell = (name: string) => io.env[name] !== undefined && io.env[name] !== '';
-  const parsed = parseAppFile(text, { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) });
+  const variables = { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) };
+  let parsed = parseAppFile(text, variables);
+  // On a sandbox, siren listen carries the requests, so an app may go without a url.
+  const withoutUrl = parsed.file === null ? parseAppFile(text, variables, { urlMayBeUnset: true }) : undefined;
+  if (withoutUrl?.file && (await run.signedIn()).edition !== 'production') parsed = withoutUrl;
   if (parsed.file === null) {
     for (const problem of parsed.problems) {
       const at = problem.path === '' || problem.message.startsWith(problem.path) ? '' : `${problem.path}: `;
@@ -177,6 +181,8 @@ export async function appsApply(input: CommandInput): Promise<number> {
 
   const session = await run.signedIn();
   const { key, params } = declarationFor(parsed.file);
+  const listens = params.url == null && session.edition !== 'production';
+  for (const name of parsed.unset ?? []) run.print(`${name} is not set, so ${key} has no address. On a sandbox, siren listen sends its requests to your machine.`);
   if (params.url != null && onThisMachine(params.url)) {
     run.warn(
       "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
@@ -265,6 +271,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
     const envName = basename(envPath);
     run.print('Next:');
     run.print(`  Run your handler with its key: node --env-file=${envName} server.js, or load ${envName} as your framework does.`);
+    if (listens) run.print(`  Send Siren's requests to it: ${run.command('listen --forward-to localhost:<port>/<path>')}`);
     // A read, which needs no --live.
     run.print(`  Watch what Siren sends it: ${commandLine(run.target, 'apps requests --follow', false)}`);
     return 0;
@@ -614,7 +621,7 @@ interface ShownSecrets {
  * the file is revoked. Never
  * prints either value, and answers false.
  */
-async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<boolean> {
+export async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<boolean> {
   const { rawKey, signingSecret } = secrets;
   const both = rawKey !== undefined && signingSecret !== undefined;
   try {
