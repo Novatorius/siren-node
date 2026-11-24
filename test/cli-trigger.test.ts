@@ -285,8 +285,9 @@ describe('siren simulate', () => {
     expect(await h.run(['simulate', '--amount', '49.99', '--program', '3', '--base-url', BASE]), h.err()).toBe(0);
     expect(h.paths()).toEqual(['POST /simulations/sale']);
     expect(bodyOf(h.http.requests[0])).toEqual({ amount: '49.99', programId: 3 });
-    expect(h.out()).toContain('A $49.99 USD sale through Partner program would earn 1 reward in Acme (3), live');
+    expect(h.out()).toContain('A $49.99 USD sale would earn 1 reward in Acme (3), live');
     expect(h.out()).toContain('Nothing was written.');
+    expect(h.out()).toMatch(/Programs\s+Partner program/);
     expect(h.out()).toMatch(/Sam Lee\s+\$7\.50 USD\s+pending/);
     expect(h.out()).not.toContain('3307');
   });

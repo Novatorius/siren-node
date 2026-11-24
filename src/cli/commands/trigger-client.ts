@@ -346,14 +346,14 @@ export function activityReport(style: Style, input: CommandInput, run: CommandCo
 export function simulationReport(style: Style, run: CommandContext, result: ActivityResult): string {
   const programs = [...programNames(result).values()];
   const count = result.obligations.length + result.waits.length;
-  const through = programs.length === 0 ? '' : programs.length === 1 ? ` through ${programs[0]}` : ` through ${programs.length} programs`;
   const total = result.total === null ? 'A' : `A ${money(result.total)}`;
   const rows = fitted([
+    ...(programs.length === 0 ? [] : [['Programs', programs.join(', ')] as const]),
     ...earnRows(result, null),
     ...result.waits.map((wait) => ['Waits', `on ${waitName(wait)}`] as const),
   ]);
   return style.report({
-    headline: `${total} sale${through} would earn ${count} ${count === 1 ? 'reward' : 'rewards'} in ${orgLabel(run)}`,
+    headline: `${total} sale would earn ${count} ${count === 1 ? 'reward' : 'rewards'} in ${orgLabel(run)}`,
     rows,
     tips: [
       'Nothing was written.',
