@@ -2150,7 +2150,7 @@ Siren ships official SDKs in three languages, all built against the same API:
 ## Links
 
 - Siren — https://sirenaffiliates.com
-- OpenAPI specification — [`./openapi.yaml`](./openapi.yaml)
+- OpenAPI specification, generated from Siren's REST routes — [`./openapi.json`](./openapi.json)
 - Issues — https://github.com/Novatorius/siren-node/issues
 
 ## Contributing

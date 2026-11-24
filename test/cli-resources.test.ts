@@ -1,0 +1,258 @@
+import { describe, expect, it } from 'vitest';
+import { SANDBOX_BASE_URL } from '../src/http';
+import { RESOURCE_COMMANDS } from '../src/cli/resources.generated';
+import { apiPath, fieldValue, setNested } from '../src/cli/commands/resources';
+import { harness, session } from './cli-fakes';
+import { reply } from './http-fakes';
+
+/*
+ * devtools resources lane: `siren <resource> <op>` and `siren get|post|put|
+ * patch|delete <path>`. Contract: contract/devtools-resources.md in the
+ * devtools run folder, section 4. Siren's answers follow GetPrograms.php and
+ * ListResponseWrapperInterceptor.php on feat/apps 6d2abd936a.
+ */
+
+const LIVE = 'https://live.example.com/siren/v1';
+
+const programs = [
+  { id: 1, name: 'Referral program', status: 'active', units: 'usd' },
+  { id: 2, name: 'Partner program', status: 'draft', units: 'usd' },
+];
+
+function envelope(items: unknown[], page = 1, totalPages = 1, total = items.length, perPage = 10) {
+  return { items, total, page, perPage, totalPages };
+}
+
+function signedIn(replies: Parameters<typeof harness>[0], options: Parameters<typeof harness>[1] = {}) {
+  const h = harness(replies, options);
+  h.signedIn();
+  return h;
+}
+
+function signedInLive(replies: Parameters<typeof harness>[0], options: Parameters<typeof harness>[1] = {}) {
+  const h = harness(replies, { edition: 'production', ...options });
+  h.signedIn({ [LIVE]: session({ edition: 'production', baseUrl: LIVE }) });
+  return h;
+}
+
+describe('the generated resource commands', () => {
+  it('generates programs with all five operations from the spec', () => {
+    const programsCommand = RESOURCE_COMMANDS.find((resource) => resource.name === 'programs');
+    expect(programsCommand?.ops.list).toMatchObject({ method: 'GET', path: '/programs', paginated: true });
+    expect(programsCommand?.ops.get).toMatchObject({ method: 'GET', path: '/programs/{id}' });
+    expect(programsCommand?.ops.create).toMatchObject({ method: 'POST', path: '/programs' });
+    expect(programsCommand?.ops.update?.path).toBe('/programs/{id}');
+    expect(programsCommand?.ops.delete).toMatchObject({ method: 'DELETE', path: '/programs/{id}' });
+  });
+
+  it('leaves the apps and auth routes to their hand-written commands', () => {
+    const names = RESOURCE_COMMANDS.map((resource) => resource.name);
+    expect(names).not.toContain('apps');
+    expect(names).not.toContain('auth');
+  });
+
+  it('lists programs as an aligned table with a Next line', async () => {
+    const h = signedIn([reply(200, envelope(programs))]);
+    expect(await h.run(['programs', 'list'])).toBe(0);
+    expect(h.paths()).toEqual(['GET /programs']);
+    const out = h.out();
+    expect(out).toContain('✓ 2 programs');
+    expect(out).toMatch(/ {2}ID {2}NAME {13}STATUS {2}UNITS\n/);
+    expect(out).toMatch(/ {2}1 {3}Referral program {2}active {2}usd\n/);
+    expect(out).toContain('  1. siren programs get 1');
+    for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
+  });
+
+  it('shows one program as labels and values', async () => {
+    const h = signedIn([reply(200, programs[0])]);
+    expect(await h.run(['programs', 'get', '1'])).toBe(0);
+    expect(h.paths()).toEqual(['GET /programs/1']);
+    expect(h.out()).toContain('✓ program 1\n');
+    expect(h.out()).toMatch(/ {2}name {4}Referral program\n/);
+  });
+
+  it('prints Siren\'s answer as JSON with --json, and nothing else', async () => {
+    const h = signedIn([reply(200, envelope(programs))]);
+    expect(await h.run(['programs', 'list', '--json'])).toBe(0);
+    expect(JSON.parse(h.out())).toEqual(envelope(programs));
+  });
+
+  it('creates with -d fields, coercing numbers and booleans', async () => {
+    const h = signedIn([reply(201, { id: 9, name: 'New', units: 'usd' })]);
+    expect(await h.run(['programs', 'create', '-d', 'name=New', '-d', 'units=usd', '-d', 'limit=5', '-d', 'live=true'])).toBe(0);
+    expect(h.paths()).toEqual(['POST /programs']);
+    expect(JSON.parse(h.http.requests[0]!.body!)).toEqual({ name: 'New', units: 'usd', limit: 5, live: true });
+    expect(h.out()).toContain('✓ program 9 saved');
+  });
+
+  it('updates with the method the spec names for the route', async () => {
+    const programsCommand = RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')!;
+    const h = signedIn([reply(200, { id: 1, name: 'Renamed' })]);
+    expect(await h.run(['programs', 'update', '1', '-d', 'name=Renamed'])).toBe(0);
+    expect(h.paths()).toEqual([`${programsCommand.ops.update!.method} /programs/1`]);
+  });
+
+  it('refuses an operation the resource lacks, naming the ones it has', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['programs', 'frobnicate'])).toBe(2);
+    expect(h.err()).toContain('siren programs has no frobnicate. It has list, get, create, update, delete.');
+    expect(h.paths()).toEqual([]);
+  });
+
+  it('lists the operations for a resource named alone, sending nothing', async () => {
+    const h = harness([]);
+    expect(await h.run(['programs'])).toBe(0);
+    expect(h.out()).toContain('siren programs list');
+    expect(h.out()).toContain('GET /programs');
+    expect(h.sent()).toEqual([]);
+  });
+
+  it('lists every resource with siren resources', async () => {
+    const h = harness([]);
+    expect(await h.run(['resources'])).toBe(0);
+    expect(h.out()).toContain(`✓ ${RESOURCE_COMMANDS.length} resources`);
+    expect(h.out()).toMatch(/ {2}programs +list get create update delete\n/);
+  });
+});
+
+describe('siren get, post, put, patch and delete', () => {
+  it('reads any path, with or without the leading slash or /siren/v1', async () => {
+    const h = signedIn([reply(200, envelope(programs)), reply(200, envelope(programs)), reply(200, envelope(programs))]);
+    expect(await h.run(['get', '/programs'])).toBe(0);
+    expect(await h.run(['get', 'programs'])).toBe(0);
+    expect(await h.run(['get', '/siren/v1/programs'])).toBe(0);
+    expect(h.paths()).toEqual(['GET /programs', 'GET /programs', 'GET /programs']);
+  });
+
+  it('sends -d as query parameters on a read, with --limit and --offset as number and offset', async () => {
+    const h = signedIn([reply(200, envelope(programs))]);
+    expect(await h.run(['get', '/programs', '-d', 'status=active', '--limit', '2', '--offset', '4'])).toBe(0);
+    const url = new URL(h.http.requests[0]!.url);
+    expect(Object.fromEntries(url.searchParams)).toEqual({ status: 'active', number: '2', offset: '4' });
+  });
+
+  it('follows every page with --all and prints one JSON array with --json', async () => {
+    const h = signedIn([
+      reply(200, envelope([programs[0]], 1, 2, 2, 1)),
+      reply(200, envelope([programs[1]], 2, 2, 2, 1)),
+    ]);
+    expect(await h.run(['get', '/programs', '--limit', '1', '--all', '--json'])).toBe(0);
+    expect(h.http.requests.map((request) => new URL(request.url).searchParams.get('offset'))).toEqual([null, '1']);
+    expect(JSON.parse(h.out())).toEqual(programs);
+  });
+
+  it('says how many pages there are when it read one of several', async () => {
+    const h = signedIn([reply(200, envelope(programs, 1, 3, 6, 2))]);
+    expect(await h.run(['get', '/programs'])).toBe(0);
+    expect(h.out()).toContain('✓ 2 programs  page 1 of 3');
+    expect(h.out()).toContain('--all reads every page.');
+  });
+
+  it('builds a body from --data @file and lays -d fields over it', async () => {
+    const h = signedIn([reply(201, { id: 3 })]);
+    h.write('program.json', JSON.stringify({ name: 'From file', units: 'usd', settings: { a: 1 } }));
+    expect(await h.run(['post', '/programs', '--data', '@program.json', '-d', 'name=Over', '-d', 'settings[b]=2'])).toBe(0);
+    expect(JSON.parse(h.http.requests[0]!.body!)).toEqual({ name: 'Over', units: 'usd', settings: { a: 1, b: 2 } });
+  });
+
+  it('prints the request with --dry-run and sends nothing, not even the edition read', async () => {
+    const h = harness([]);
+    expect(await h.run(['post', '/programs', '-d', 'name=Referral program', '--dry-run'])).toBe(0);
+    expect(h.out()).toBe(`✓ Would send POST ${SANDBOX_BASE_URL}/programs\n  {"name":"Referral program"}\n› Nothing was sent.\n`);
+    expect(h.sent()).toEqual([]);
+  });
+
+  it('refuses a full address, so the session goes only to the Siren it targets', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['get', 'https://evil.example.com/siren/v1/programs'])).toBe(2);
+    expect(h.err()).toContain('Give a path such as /programs, not an address.');
+    expect(h.sent()).toEqual([]);
+  });
+
+  it('prints a refusal in three parts: what, why, and the command that helps', async () => {
+    const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
+    expect(await h.run(['programs', 'get', '99'])).toBe(1);
+    expect(h.err()).toBe('✗ Siren refused GET /programs/99.\n  Siren says: Program not found. (404, not_found)\n  Run siren programs list to see what is there.\n');
+  });
+
+  it('prints a refusal as JSON on standard error with --json', async () => {
+    const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
+    expect(await h.run(['get', '/programs/99', '--json'])).toBe(1);
+    expect(JSON.parse(h.err())).toEqual({ error: { message: 'Program not found.', status: 404, code: 'not_found', fix: 'Run siren get /programs to see what is there.' } });
+    expect(h.out()).toBe('');
+  });
+});
+
+describe('the live guard', () => {
+  it('reads a live organization without --live', async () => {
+    const h = signedInLive([reply(200, envelope(programs))], { env: { SIREN_BASE_URL: LIVE } });
+    expect(await h.run(['programs', 'list'])).toBe(0);
+  });
+
+  it('refuses a live write without --live, before sending it', async () => {
+    const h = signedInLive([reply(201, { id: 3 })], { env: { SIREN_BASE_URL: LIVE } });
+    expect(await h.run(['post', '/programs', '-d', 'name=X'])).toBe(1);
+    expect(h.err()).toContain('is a live Siren. Add --live');
+    expect(h.paths()).toEqual([]);
+  });
+
+  it('sends a live write with --live', async () => {
+    const h = signedInLive([reply(201, { id: 3 })], { env: { SIREN_BASE_URL: LIVE } });
+    expect(await h.run(['post', '/programs', '-d', 'name=X', '--live'])).toBe(0);
+    expect(h.paths()).toEqual(['POST /programs']);
+  });
+
+  it('asks for the id to be typed before a live delete, and sends nothing when it is wrong', async () => {
+    const h = signedInLive([reply(200, {})], { env: { SIREN_BASE_URL: LIVE }, interactive: true, typed: ['12'] });
+    expect(await h.run(['programs', 'delete', '7', '--live'])).toBe(1);
+    expect(h.prompts[0]).toContain('Type 7 to delete it');
+    expect(h.err()).toContain('You typed "12", not "7", so nothing was deleted.');
+    expect(h.paths()).toEqual([]);
+  });
+
+  it('deletes on a live organization once the id is typed', async () => {
+    const h = signedInLive([reply(200, { id: 7 })], { env: { SIREN_BASE_URL: LIVE }, interactive: true, typed: ['7'] });
+    expect(await h.run(['delete', '/programs/7', '--live'])).toBe(0);
+    expect(h.paths()).toEqual(['DELETE /programs/7']);
+  });
+
+  it('needs --confirm with the id for a live delete with no terminal', async () => {
+    const h = signedInLive([reply(200, { id: 7 })], { env: { SIREN_BASE_URL: LIVE } });
+    expect(await h.run(['programs', 'delete', '7', '--live'])).toBe(1);
+    expect(h.err()).toContain('pass --confirm 7');
+    expect(h.paths()).toEqual([]);
+    expect(await h.run(['programs', 'delete', '7', '--live', '--confirm', '8'])).toBe(1);
+    expect(h.paths()).toEqual([]);
+    expect(await h.run(['programs', 'delete', '7', '--live', '--confirm', '7'])).toBe(0);
+    expect(h.paths()).toEqual(['DELETE /programs/7']);
+  });
+
+  it('asks nothing before a sandbox delete', async () => {
+    const h = signedIn([reply(200, { id: 7 })], { interactive: true });
+    expect(await h.run(['programs', 'delete', '7'])).toBe(0);
+    expect(h.prompts).toEqual([]);
+    expect(h.paths()).toEqual(['DELETE /programs/7']);
+  });
+});
+
+describe('record command helpers', () => {
+  it('reads -d values as JSON scalars or text', () => {
+    expect(fieldValue('5')).toBe(5);
+    expect(fieldValue('-2.5')).toBe(-2.5);
+    expect(fieldValue('true')).toBe(true);
+    expect(fieldValue('null')).toBe(null);
+    expect(fieldValue('007')).toBe('007');
+    expect(fieldValue('usd')).toBe('usd');
+  });
+
+  it('nests a[b][c] keys', () => {
+    const target: Record<string, unknown> = {};
+    setNested(target, 'a[b][c]', 1);
+    setNested(target, 'a[d]', 2);
+    expect(target).toEqual({ a: { b: { c: 1 }, d: 2 } });
+  });
+
+  it('splits a query string off a path', () => {
+    expect(apiPath('/programs?status=active')).toEqual({ path: '/programs', query: { status: 'active' } });
+  });
+});

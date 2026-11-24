@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { specServes } from './spec-routes';
 
 /*
  * Alex's ruling M104 (contract/feature-rename.md in the apps run folder):
- * Siren calls a feature a feature everywhere a developer looks. The README,
- * openapi.yaml and the CHANGELOG follow the SDK's names, and no old name is
+ * Siren calls a feature a feature everywhere a developer looks. The README
+ * and the CHANGELOG follow the SDK's names, and no old name is
  * left for a reader to copy.
  */
 
@@ -32,12 +33,14 @@ describe('feature rename: the docs use the new names', () => {
     }
   });
 
-  it('gives openapi.yaml the feature routes, the features field and the renamed code', () => {
-    const spec = raw('openapi.yaml');
-    for (const old of OLD_NAMES) expect(spec, old).not.toContain(old);
-    for (const path of ['/apps/{key}/features:', '/apps/{key}/features/{id}:']) expect(spec, path).toContain(path);
-    expect(spec).toContain('app_features_need_key_and_address');
-    expect(spec).toMatch(/\n {8}features:\n/);
+  // Siren serves /apps/{app}/items until its own rename (pkt/apps-feature-rename)
+  // merges. openapi.json is a copy of Siren's spec, so it names the route
+  // Siren has. test/openapi-sdk-routes.test.ts lists the SDK's /features
+  // calls as unserved until then, and fails once they are served.
+  it("has openapi.json name the feature routes under one name, the one Siren serves", () => {
+    const features = specServes('post', '/apps/{key}/features') && specServes('get', '/apps/{key}/features/{id}');
+    const items = specServes('post', '/apps/{key}/items') && specServes('get', '/apps/{key}/items/{id}');
+    expect(features !== items).toBe(true);
   });
 
   it('records the rename under Breaking in the CHANGELOG', () => {

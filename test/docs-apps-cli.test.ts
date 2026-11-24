@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { COMMANDS } from '../src/cli/run';
 import { AppAnswers } from './apps-siren-answers';
+import { specServes } from './spec-routes';
 
 /*
- * apps-cli docs, packet docs: the README, the CHANGELOG and openapi.yaml
- * describe the apps calls and the `siren` command, as test/docs-apps-sdk-gaps.test.ts
+ * apps-cli docs, packet docs: the README and the CHANGELOG describe the apps calls and the `siren` command, as test/docs-apps-sdk-gaps.test.ts
  * pins the slice before. The parity rows have their own test in
  * test/docs-parity.test.ts.
  */
@@ -21,19 +21,6 @@ function section(markdown: string, heading: string): string {
   const rest = markdown.slice(start + heading.length + 2);
   const next = rest.search(new RegExp(`\\n#{1,${level.length}} `));
   return next < 0 ? rest : rest.slice(0, next);
-}
-
-function operation(openapi: string, key: string, method: string): string {
-  const start = openapi.indexOf(`\n  ${key}:\n`);
-  expect(start, key).toBeGreaterThan(-1);
-  const rest = openapi.slice(start + 1);
-  const end = rest.slice(1).search(/\n {2}\/|\n\S/);
-  const block = end < 0 ? rest : rest.slice(0, end + 1);
-  const at = block.search(new RegExp(`\\n {4}${method}:\\n`));
-  expect(at, `${key} ${method}`).toBeGreaterThan(-1);
-  const tail = block.slice(at + 1);
-  const next = tail.slice(1).search(/\n {4}[a-z]+:\n/);
-  return next < 0 ? tail : tail.slice(0, next + 1);
 }
 
 const ROUTES: Array<[string, string]> = [
@@ -62,19 +49,12 @@ const ROUTES: Array<[string, string]> = [
 ];
 
 describe('apps-cli docs', () => {
-  it.each(ROUTES)('openapi.yaml documents %s %s for a signed-in admin only', (key, method) => {
-    const block = operation(read('openapi.yaml'), key, method);
-    expect(block).toContain('dashboardSession: []');
-    expect(block).not.toContain('apiKey:');
+  it.each(ROUTES)("openapi.json, Siren's spec, serves %s %s", (key, method) => {
+    expect(specServes(method, key)).toBe(true);
   });
 
-  it("openapi.yaml documents the answer route for the app's key or an admin, and its codes", () => {
-    const block = operation(read('openapi.yaml'), '/apps/requests/{id}/answer', 'post');
-    expect(block).toContain('apiKey: []');
-    expect(block).toContain('dashboardSession: []');
-    for (const code of ['app_request_already_answered', 'app_answer_invalid', 'app_inactive', 'app_request_not_found']) {
-      expect(block).toContain(code);
-    }
+  it("openapi.json, Siren's spec, serves the answer route", () => {
+    expect(specServes('post', '/apps/requests/{id}/answer')).toBe(true);
   });
 
   it('the README shows the command-line tool, each command, and how to check a request', () => {
@@ -115,12 +95,11 @@ describe('apps-cli docs', () => {
   it('every description of resend follows merged Siren: an answered or held answer is applied, and only an applied request or a send to an off app is refused', async () => {
     // lib/Apps/Service/Rest/ResendAppRequest.php lines 31 to 38 and 82 to 87, and
     // AppRequestService::resend() lines 371 to 386, on Novatorius/siren feat/apps at 1557b0030.
-    for (const name of ['src/resources/apps.ts', 'src/errors.ts', 'docs/architecture/apps-cli.md', 'README.md', 'openapi.yaml']) {
+    for (const name of ['src/resources/apps.ts', 'src/errors.ts', 'docs/architecture/apps-cli.md', 'README.md']) {
       expect(read(name), name).not.toMatch(/answered or applied/);
     }
     const readme = section(read('README.md'), '### See what Siren sent');
-    const openapi = operation(read('openapi.yaml'), '/apps/requests/{id}/resend', 'post');
-    for (const [name, text] of [['README.md', readme], ['openapi.yaml', openapi], ['src/resources/apps.ts', read('src/resources/apps.ts')]] as const) {
+    for (const [name, text] of [['README.md', readme], ['src/resources/apps.ts', read('src/resources/apps.ts')]] as const) {
       expect(text, name).toMatch(/`answered`/);
       expect(text, name).toMatch(/app is off/);
     }

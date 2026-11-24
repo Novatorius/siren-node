@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
 import * as requests from './commands/requests';
+import * as records from './commands/resources';
 import * as session from './commands/session';
 import { CommandContext } from './context';
 import type { CommandHandler } from './context';
@@ -56,7 +57,7 @@ interface CommandSpec {
   usage: string;
   summary: string;
   /** The heading `siren --help` lists it under. */
-  group: 'Your session' | 'Your apps' | 'Requests';
+  group: 'Your session' | 'Your apps' | 'Requests' | 'Records';
   options: Options;
   /** Each option as `--help` shows it, such as `--email <address>`, and one line about it. Every key of `options` has one. */
   flags: Readonly<Record<string, readonly [string, string]>>;
@@ -313,7 +314,7 @@ const SPECS: Record<Command, CommandSpec> = {
 };
 
 /** Every option any command takes, for the first read of the line, which finds the command. */
-const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, ...Object.values(SPECS).map((spec) => spec.options));
+const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, records.OPTIONS, ...Object.values(SPECS).map((spec) => spec.options));
 
 /** The commands of one group, each with its usage and summary, as the top help lists them. */
 function listing(commands: readonly Command[]): string[] {
@@ -332,6 +333,12 @@ function helpText(): string {
     'Usage: siren <command> [options]',
     '',
     ...listing(COMMANDS),
+    'Records:',
+    '  siren <resource> <list|get|create|update|delete>',
+    "      Read and change Siren's records. siren resources lists them.",
+    '  siren get|post|put|patch|delete <path>',
+    "      Send any of Siren's routes, such as siren get /programs.",
+    '',
     'Every command takes --sandbox, --live, --base-url <url>, --quiet and --help.',
     'With none of them it talks to SIREN_BASE_URL, else the Siren you signed in to, else the sandbox.',
     'Changing a live organization needs --live. Run siren help <command> for its options and an example.',
@@ -449,7 +456,7 @@ function commandNamed(words: readonly string[]): Command {
  */
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {
   let spec: CommandSpec | undefined;
-  let name: Command | undefined;
+  let name: string | undefined;
   try {
     const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
     let words = loose.positionals;
@@ -478,8 +485,15 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       return 0;
     }
 
-    name = commandNamed(words);
-    spec = SPECS[name];
+    const record = records.commandFor(words);
+    if (record !== undefined) {
+      name = record.name;
+      spec = record.spec;
+    } else {
+      const named = commandNamed(words);
+      name = named;
+      spec = SPECS[named];
+    }
     if (wantsHelp) {
       io.stdout(commandHelp(spec));
       return 0;
