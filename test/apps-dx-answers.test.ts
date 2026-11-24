@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { format } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Siren } from '../src/client';
 import { SirenError, ValidationError } from '../src/errors';
@@ -144,7 +145,21 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     const t = Math.floor(Date.now() / 1000);
     const result = await answers.handle(ask('distributionResolver', 'split-by-score', { timestamp: t }));
     await result.after!();
-    expect(log.mock.calls).toEqual([[`Siren request handler (distributionResolver split-by-score ${ID}):`, failure, next(t)]]);
+    expect(log.mock.calls).toEqual([[`Siren request handler (distributionResolver split-by-score ${ID}):`, next(t), failure]]);
+  });
+
+  it('prints when Siren sends it again before the stack trace, so a reader sees it without scrolling', async () => {
+    const { answers } = setup([], false);
+    answers.on('distributionResolver', () => {
+      throw new Error('ledger down');
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const t = Math.floor(Date.now() / 1000);
+    await (await answers.handle(ask('distributionResolver', 'split-by-score', { timestamp: t }))).after!();
+    const printed = format(...(log.mock.calls[0] as unknown[]));
+    expect(printed.indexOf(next(t))).toBeGreaterThan(-1);
+    expect(printed.indexOf(next(t))).toBeLessThan(printed.indexOf('Error: ledger down'));
+    expect(printed.indexOf('Error: ledger down')).toBeLessThan(printed.indexOf('    at '));
   });
 
   it('names it for a function that returns nothing, and for an answer Siren refuses with 422', async () => {
@@ -157,10 +172,10 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     await (await answers.handle(ask('distributionResolver', 'split-by-score', { timestamp: t }))).after!();
     await (await answers.handle(ask('distributionResolver', 'another-key', { timestamp: t }))).after!();
     expect(log.mock.calls).toHaveLength(2);
-    expect(log.mock.calls[0]![2]).toBe(next(t));
-    expect((log.mock.calls[0]![1] as Error).message).toBe(NOTHING);
-    expect(log.mock.calls[1]![1]).toBeInstanceOf(ValidationError);
-    expect(log.mock.calls[1]![2]).toBe(next(t));
+    expect(log.mock.calls[0]![1]).toBe(next(t));
+    expect((log.mock.calls[0]![2] as Error).message).toBe(NOTHING);
+    expect(log.mock.calls[1]![2]).toBeInstanceOf(ValidationError);
+    expect(log.mock.calls[1]![1]).toBe(next(t));
   });
 
   it('says nothing of a resend when Siren already holds an answer', async () => {
@@ -181,7 +196,7 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const body = { ...features.kinds.distributionResolver!.request, answerBy: 'soon', answerUrl: `${BASE}/apps/requests/${ID}/answer` };
     await (await answers.handle(signedBy(body))).after!();
-    expect(log.mock.calls[0]![2]).toBe(
+    expect(log.mock.calls[0]![1]).toBe(
       `Siren sends it again when its answer window closes. Resend it sooner from Needs attention in Siren Cloud, or with \`siren apps resend ${ID}\`.`,
     );
   });

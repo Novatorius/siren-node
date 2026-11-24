@@ -63,7 +63,8 @@ export interface AppRequestHandlerOptions<X extends string = never> {
    * kind, key and request id (or the event's type and delivery id) and the
    * error, never the request's data or headers. For an ask that failed
    * after its 200, the line also says when Siren sends it again and how to
-   * resend it sooner.
+   * resend it sooner, before the error, so a stack trace can't push it out of
+   * sight.
    */
   onError?: (error: unknown, request?: AppRequest | WebhookEvent) => void;
   /**
@@ -620,7 +621,7 @@ function givenAnswer(answer: unknown, asked: AppAsk): unknown {
 function defaultOnError(error: unknown, request: AppRequest | WebhookEvent | undefined, afterReply: boolean): void {
   const line = `Siren request handler${describeRequest(request)}:`;
   if (afterReply && request !== undefined && 'feature' in request && request.mode === 'ask' && !settled(error)) {
-    console.error(line, error, nextSend(request));
+    console.error(line, nextSend(request), error);
   } else {
     console.error(line, error);
   }

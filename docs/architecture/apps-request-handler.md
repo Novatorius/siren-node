@@ -97,7 +97,7 @@ The default `onError` writes one `console.error` line, `Siren request handler
 (<kind> <key> <id>):` or `(<type> <delivery id>):`, and the error, as the
 PHP SDK's default does. For an ask's work after its 200 it adds when Siren
 sends the ask again, from `answerBy` in UTC, and how to resend it sooner
-(`nextSend()`), unless Siren refused with 403, 404 or 409, after which it
+(`nextSend()`), before the error so a stack trace can't hide it, unless Siren refused with 403, 404 or 409, after which it
 sends the ask no more. It never writes the request's data or headers.
 
 ## Mounting it
