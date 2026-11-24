@@ -65,8 +65,15 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   try {
     for (let poll = 1; ; poll += 1) {
       if (poll > 1) await run.recheckEdition();
-      const rows = await siren.apps.requests.list(filters);
+      const rows = [...(await siren.apps.requests.list(filters))];
       if (appKey !== undefined && appId === undefined) appId = (await siren.apps.retrieve(appKey)).id;
+      // The plain list is the organization's latest 50. Every request that needs attention joins it, however old,
+      // so an app's list never says it has none while `apps list` counts one.
+      if (values.attention !== true) {
+        const held = new Set(rows.map((row) => row.id));
+        rows.push(...(await siren.apps.requests.list({ status: 'needs_attention' })).filter((row) => !held.has(row.id)));
+        rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+      }
       for (const row of [...rows].reverse()) {
         if (appId !== undefined && row.appId !== appId) continue;
         if (seen.get(row.id) === row.status) continue;
@@ -74,7 +81,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
         run.print(requestLine(row));
       }
       if (values.follow !== true) {
-        if (seen.size === 0) run.print(values.attention ? 'No request needs attention.' : 'No requests yet.');
+        if (seen.size === 0) run.print(emptyLine(values.attention === true, appKey));
         return 0;
       }
       if (io.signal?.aborted) return 0;
@@ -264,4 +271,11 @@ async function readAnswerFile(path: string): Promise<string> {
   } catch (error) {
     throw new CliRefusal(`${path} could not be read: ${(error as Error).message}`);
   }
+}
+
+/** What `apps requests` prints when it found nothing, naming the requests it looked through. */
+function emptyLine(attention: boolean, appKey: string | undefined): string {
+  if (attention) return appKey === undefined ? 'No request needs attention.' : `No request of ${appKey} needs attention.`;
+  if (appKey === undefined) return 'No requests yet.';
+  return `No requests for ${appKey} among the organization's latest 50, and none of its requests needs attention.`;
 }

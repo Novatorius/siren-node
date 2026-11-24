@@ -96,6 +96,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(h.err()).toContain('Run siren login to sign in again.');
   });
 
+  // The follow runs here pass --attention, which reads one list a poll. The plain list also reads the attention list (demo fix 2).
   it('reads the edition once per command, before anything else, and again before each poll while following', async () => {
     const apply = harness([reply(200, [app])]);
     apply.signedIn();
@@ -104,7 +105,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
 
     const follow = harness([reply(200, { requests: [requestRow()] })], { onSleep: (count, abort) => count === 3 && abort() });
     follow.signedIn();
-    expect(await follow.run(['apps', 'requests', '--follow']), follow.err()).toBe(0);
+    expect(await follow.run(['apps', 'requests', '--attention', '--follow']), follow.err()).toBe(0);
     const polls = follow.paths().filter((path) => path === 'GET /apps/requests').length;
     expect(polls).toBeGreaterThan(1);
     expect(follow.editionReads).toHaveLength(polls);
@@ -123,7 +124,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
       onSleep: (count, abort) => count === 5 && abort(),
     });
     h.signedIn();
-    expect(await h.run(['apps', 'requests', '--follow'])).toBe(1);
+    expect(await h.run(['apps', 'requests', '--attention', '--follow'])).toBe(1);
     expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests']);
     expect(h.editionReads).toHaveLength(3);
     const followed = h.err();
@@ -144,7 +145,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
       onSleep: (count, abort) => count === 5 && abort(),
     });
     h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE }) });
-    expect(await h.run(['apps', 'requests', '--follow', '--live', '--base-url', BASE])).toBe(1);
+    expect(await h.run(['apps', 'requests', '--attention', '--follow', '--live', '--base-url', BASE])).toBe(1);
     expect(h.paths()).toEqual(['GET /apps/requests']);
     expect(h.err()).toContain('is now a sandbox Siren, and your session was made when it was a live one');
   });
@@ -228,7 +229,7 @@ describe('apps-cli: the edition check against a Cloud whose edition changes betw
     expect(login.status, login.stderr).toBe(0);
 
     const before = cloud.seen.length;
-    const following = runBuilt(cli, ['apps', 'requests', '--follow', ...base], config);
+    const following = runBuilt(cli, ['apps', 'requests', '--attention', '--follow', ...base], config);
     const polls = () => cloud.seen.slice(before).filter((request) => request.path === '/apps/requests');
     while (polls().length < 1) await new Promise((resolve) => setTimeout(resolve, 50));
     cloud.edition = 'production';

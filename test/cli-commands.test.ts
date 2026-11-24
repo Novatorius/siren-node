@@ -530,11 +530,15 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
 describe('apps-cli: siren apps requests, answer and resend', () => {
   it('lists the latest requests, for one app or those that need attention', async () => {
     const other = { ...row, id: 'apr_0123456789abcdef0123456789abcdef', appId: 9, status: 'delivered' };
+    // The plain list reads the latest requests, then those that need attention (demo fix 2).
+    const none = () => reply(200, { requests: [] });
     const h = harness([
       reply(200, { requests: [row, other] }),
+      none(),
       reply(200, { requests: [row, other] }),
       reply(200, app),
-      reply(200, { requests: [] }),
+      none(),
+      none(),
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
@@ -547,8 +551,8 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(h.out().slice(before)).not.toContain(other.id);
 
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', `GET /apps/${KEY}`, 'GET /apps/requests']);
-    expect(new URL(h.http.requests[3]!.url).searchParams.get('status')).toBe('needs_attention');
+    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', 'GET /apps/requests', `GET /apps/${KEY}`, 'GET /apps/requests', 'GET /apps/requests']);
+    expect(new URL(h.http.requests[5]!.url).searchParams.get('status')).toBe('needs_attention');
   });
 
   it('shows one request: the data Siren sent, each send, and what the app answered', async () => {
@@ -589,12 +593,13 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
 
   it('follows the requests, printing each change once, until Ctrl-C', async () => {
     const h = harness(
-      [reply(200, { requests: [row] }), reply(200, { requests: [row] }), reply(200, { requests: [{ ...row, status: 'delivered' }] })],
+      [row, row, { ...row, status: 'delivered' }].flatMap((polled) => [reply(200, { requests: [polled] }), reply(200, { requests: [] })]),
       { onSleep: (count, abort) => count === 3 && abort() },
     );
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(0);
-    expect(h.http.requests).toHaveLength(3);
+    // Each poll reads the latest requests and those that need attention (demo fix 2).
+    expect(h.http.requests).toHaveLength(6);
     const lines = h.out().split('\n').filter((line) => line.includes(REQUEST));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain('sent');

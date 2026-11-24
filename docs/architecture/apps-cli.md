@@ -155,7 +155,7 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | `siren apps apply [file] [--yes]` | `GET /apps/{key}`, then `PUT /apps/{key}` once after the person agrees (slice C6) | Each change the file would make, then the question, then the app and each feature with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate-key <key>` (AP-A635). |
 | `siren apps list [--json]` | `GET /apps` | One block per app with its features, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
 | `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its features, each archived feature marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
-| `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
+| `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests` and `GET /apps/requests?status=needs_attention`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first: the organization's latest 50 and every request that needs attention, however old, so an app that `apps list` counts one for never shows none. With `--app` and nothing to show, it says it looked through the latest 50. `--attention` reads the attention list alone. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
 | `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request's line, the data Siren sent, the answer Siren took and who gave it, or that none came yet, then each send with its HTTP status and what the app said back. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend`, and on 409 `app_request_not_resendable` for a request not `applied`, `GET /apps/requests/{requestKey}` and `GET /apps` | The request as it now stands. On that 409, that its app is off, with `siren apps on <key>` and the resend to run after. An `applied` request is told there is nothing to send. |
@@ -266,7 +266,13 @@ not save and that `siren apps rotate-key <key>` or `rotate-secret` issues a new 
 After a rotate it also says that the old key left in the file is revoked. The new file is written
 as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps init` writes covers.
 
-### The hook on first run
+### A closed pipe
+
+When the reader of the tool's output goes away, as `siren apps list | head` does after ten lines,
+Node reports EPIPE on standard output. The bin entry ends the command with exit code 0 there and
+prints nothing, as gh and git do (src/cli/pipe.ts). Any other stream error still ends the process.
+
+## The hook on first run
 
 The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts): the
 two halves of the logo slide in and grip, 25 frames 50 milliseconds apart, about 1.2 seconds, in
