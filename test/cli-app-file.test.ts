@@ -15,7 +15,7 @@ function file(app: Record<string, unknown>, top: Record<string, unknown> = {}): 
   return JSON.stringify({ version: 1, name: 'Acme', description: 'Example.', apps: { 'acme-payouts': app }, ...top }, null, 2);
 }
 
-const good = { name: 'Acme', url: 'https://acme.example/siren', items: { 'notify-crm': { kind: 'postConversionAction', name: 'Tell the CRM' } } };
+const good = { name: 'Acme', url: 'https://acme.example/siren', features: { 'notify-crm': { kind: 'postConversionAction', name: 'Tell the CRM' } } };
 
 function problems(text: string, environment: Record<string, string> = env): AppFileProblem[] {
   const parsed = parseAppFile(text, environment);
@@ -69,8 +69,8 @@ describe('apps-cli: the app file', () => {
 
     const inName = file({ ...good, name: '${SIREN_APP_NAME}' });
     expect(problems(inName, leaky).map((problem) => problem.path)).toContain('apps.acme-payouts.name');
-    const inItem = file({ ...good, items: { notify: { kind: 'postConversionAction', name: 'x', description: '${SIREN_APP_URL}' } } });
-    expect(problems(inItem, leaky).map((problem) => problem.path)).toContain('apps.acme-payouts.items.notify.description');
+    const inItem = file({ ...good, features: { notify: { kind: 'postConversionAction', name: 'x', description: '${SIREN_APP_URL}' } } });
+    expect(problems(inItem, leaky).map((problem) => problem.path)).toContain('apps.acme-payouts.features.notify.description');
     const atTop = file(good, { description: 'For ${SIREN_APP_NAME}' });
     expect(problems(atTop, leaky).map((problem) => problem.path)).toContain('description');
   });
@@ -99,22 +99,22 @@ describe('apps-cli: the app file', () => {
       [file({ ...good, url: 'http://acme.example/siren' }), 'apps.acme-payouts.url'],
       [file({ ...good, owner: 'me' }), 'apps.acme-payouts.owner'],
       [file({ ...good, name: undefined }), 'apps.acme-payouts.name'],
-      [file({ ...good, items: [] }), 'apps.acme-payouts.items'],
-      [file({ ...good, items: { 'Notify CRM': { kind: 'postConversionAction', name: 'x' } } }), 'apps.acme-payouts.items.Notify CRM'],
-      [file({ ...good, items: { notify: { kind: 'webhook', name: 'x' } } }), 'apps.acme-payouts.items.notify.kind'],
-      [file({ ...good, items: { notify: { kind: 'postConversionAction' } } }), 'apps.acme-payouts.items.notify.name'],
+      [file({ ...good, features: [] }), 'apps.acme-payouts.features'],
+      [file({ ...good, features: { 'Notify CRM': { kind: 'postConversionAction', name: 'x' } } }), 'apps.acme-payouts.features.Notify CRM'],
+      [file({ ...good, features: { notify: { kind: 'webhook', name: 'x' } } }), 'apps.acme-payouts.features.notify.kind'],
+      [file({ ...good, features: { notify: { kind: 'postConversionAction' } } }), 'apps.acme-payouts.features.notify.name'],
       [
-        file({ ...good, items: { notify: { kind: 'postConversionAction', name: 'x', currencies: ['USD'] } } }),
-        'apps.acme-payouts.items.notify.currencies',
+        file({ ...good, features: { notify: { kind: 'postConversionAction', name: 'x', currencies: ['USD'] } } }),
+        'apps.acme-payouts.features.notify.currencies',
       ],
-      [file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'x' } } }), 'apps.acme-payouts.items.pay.currencies'],
+      [file({ ...good, features: { pay: { kind: 'payoutMethod', name: 'x' } } }), 'apps.acme-payouts.features.pay.currencies'],
       [
-        file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 0 } } }),
-        'apps.acme-payouts.items.pay.answerWindowMinutes',
+        file({ ...good, features: { pay: { kind: 'payoutMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 0 } } }),
+        'apps.acme-payouts.features.pay.answerWindowMinutes',
       ],
       [
-        file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 43201 } } }),
-        'apps.acme-payouts.items.pay.answerWindowMinutes',
+        file({ ...good, features: { pay: { kind: 'payoutMethod', name: 'x', currencies: ['USD'], answerWindowMinutes: 43201 } } }),
+        'apps.acme-payouts.features.pay.answerWindowMinutes',
       ],
     ];
     for (const [text, path] of cases) {
@@ -158,7 +158,7 @@ describe('apps-cli: the app file', () => {
 describe("apps-cli: the app file's JSON reader", () => {
   it('reads strings, numbers and nesting exactly as JSON.parse does', () => {
     const tricky = 'Tab\there, \u00e9, "quoted", a \\ slash, and \ud83d\ude00.';
-    const text = file({ ...good, description: tricky, items: { pay: { kind: 'payoutMethod', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 1.5e1 } } });
+    const text = file({ ...good, description: tricky, features: { pay: { kind: 'payoutMethod', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 1.5e1 } } });
     const parsed = parseAppFile(text, env);
     expect(parsed.problems).toEqual([]);
     const { params } = declarationFor(parsed.file!);
@@ -180,8 +180,8 @@ describe("apps-cli: the app file's JSON reader", () => {
   });
 
   it('places a problem deep in an item at that key', () => {
-    const text = file({ ...good, items: { pay: { kind: 'payoutMethod', name: 'Pay', currencies: ['USD'], colour: 'red' } } });
-    const found = problems(text).find((problem) => problem.path === 'apps.acme-payouts.items.pay.colour');
+    const text = file({ ...good, features: { pay: { kind: 'payoutMethod', name: 'Pay', currencies: ['USD'], colour: 'red' } } });
+    const found = problems(text).find((problem) => problem.path === 'apps.acme-payouts.features.pay.colour');
     expect(found?.line).toBe(lineOf(text, '"colour"'));
     expect(found?.column).toBe(text.split('\n')[found!.line - 1]!.indexOf('"colour"') + 1);
   });

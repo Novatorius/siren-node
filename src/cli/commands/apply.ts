@@ -88,7 +88,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
     await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
     io.stdout(`Added ${missing.join(', ')} to ${ignorePath}, so the key apply saves stays out of git.\n`);
   }
-  io.stdout('To add a feature, add it under items. The README\'s Feature kinds table lists each kind, and the file\'s $schema lets your editor complete them.\n');
+  io.stdout('To add a feature, add it under features. The README\'s Feature kinds table lists each kind, and the file\'s $schema lets your editor complete them.\n');
   io.stdout(`Set SIREN_APP_URL to your app's https address, in your shell or in .env here, then run ${input.command('apps apply')}.\n`);
   io.stdout('Siren must reach that address. For a handler on this machine, run a tunnel such as cloudflared or ngrok, and use the https address it gives.\n');
   return 0;

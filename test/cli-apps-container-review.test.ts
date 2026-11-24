@@ -7,7 +7,7 @@ import { Siren } from '../src/client';
 import { FakeHttpClient, reply } from './http-fakes';
 import { harness, session } from './cli-fakes';
 import { APP_KEY, PartAnswers, appRecord, payoutKind } from './apps-siren-answers';
-import { kindLabel } from '../src/cli/app-kinds';
+import { APP_KINDS, kindLabel } from '../src/cli/app-kinds';
 import { parseAppFile } from '../src/cli/app-file';
 import { capturedReply } from './cloud-captures';
 
@@ -34,7 +34,7 @@ function exampleFile(scopes: string[] = []): string {
         url: '${SIREN_APP_URL}',
         scopes,
         events: [],
-        items: {
+        features: {
           'notify-crm': { kind: 'postConversionAction', name: 'Tell the CRM' },
           'acme-ledger': { kind: 'payoutMethod', name: 'Acme ledger', currencies: ['usd'], answerWindowMinutes: 1 },
         },
@@ -160,28 +160,11 @@ describe('apps-sdk-container review fix 3: a name the env file holds twice', () 
 });
 
 /**
- * Each kind's readable name as Siren's catalog and dashboard give it:
- * `name` in AppItemKindCatalog::entries() and APP_KINDS (with
- * CUSTOM_EVENT_KIND_INFO) in frontend/src/platform/saas/apps/apps.ts, on
- * Siren's feat/apps at 6d2abd936a. All 14 kinds, the custom event included.
- * The tool and the README both name each kind this way.
+ * Each kind's readable name from Siren's registry snapshot, which the tool
+ * carries as src/cli/app-kinds.json (Alex's ruling M104). No name here is
+ * typed by hand. All 14 kinds, the custom event included.
  */
-const SIREN_KIND_NAMES = {
-  postConversionAction: 'Post-conversion action',
-  postAllocationAction: 'Post-allocation action',
-  payoutMethod: 'Payout method',
-  distributionResolver: 'Distribution resolver',
-  incentiveResolver: 'Attribution model',
-  incentiveType: 'Incentive structure',
-  metricCalculation: 'Metric calculation',
-  metricFilter: 'Customer filter for distributors',
-  transactionFilter: 'Transaction filter',
-  engagementCalculation: 'Engagement calculation',
-  engagementFilter: 'Customer filter for programs',
-  programGroupSorter: 'Program group structure',
-  collaboratorGroupStructure: 'Collaborator group structure',
-  customEvent: 'Custom event',
-};
+const SIREN_KIND_NAMES: Record<string, string> = Object.fromEntries(APP_KINDS.map((entry) => [entry.kind, entry.name]));
 
 /** The kinds the README gives a section of their own: every kind Siren calls. */
 const DASHBOARD_KIND_NAMES = Object.fromEntries(Object.entries(SIREN_KIND_NAMES).filter(([kind]) => kind !== 'customEvent'));
@@ -211,16 +194,16 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
 
   it("the app file's kind messages name each kind readably beside the word the file takes", () => {
     const file = (item: Record<string, unknown>) =>
-      JSON.stringify({ version: 1, name: 'A', description: '', apps: { [KEY]: { name: 'A', url: 'https://acme.example', items: { pay: item } } } });
+      JSON.stringify({ version: 1, name: 'A', description: '', apps: { [KEY]: { name: 'A', url: 'https://acme.example', features: { pay: item } } } });
     expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
-      `apps.${KEY}.items.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ` +
+      `apps.${KEY}.features.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ` +
         'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
         'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), ' +
         'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
         'Transaction filter (transactionFilter), Collaborator group structure (collaboratorGroupStructure).',
     );
     expect(parseAppFile(file({ kind: 'payoutMethod', name: 'Pay' }), {}).problems[0]?.message).toBe(
-      `apps.${KEY}.items.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,
+      `apps.${KEY}.features.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,
     );
   });
 

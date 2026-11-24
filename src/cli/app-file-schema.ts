@@ -7,6 +7,7 @@ import {
   KINDS,
   MAX_ANSWER_WINDOW_MINUTES,
   MAX_DOMAINS,
+  MAX_FEATURES,
   RESERVED_APP_KEYS,
   TOP_FIELDS,
 } from './app-file';
@@ -86,7 +87,7 @@ function app(): Schema {
     scopes: { ...TEXT_LIST, description: "The app key's scopes." },
     events: { ...TEXT_LIST, description: 'The events Siren tells the app about.' },
     contacts: { ...TEXT_LIST, description: 'Email addresses Siren tells when something is wrong with the app.' },
-    items: { type: 'object', propertyNames: KEY_NAME, additionalProperties: feature(), description: 'Each feature under its feature key.' },
+    features: { type: 'object', propertyNames: KEY_NAME, maxProperties: MAX_FEATURES, additionalProperties: feature(), description: 'Each feature under its feature key.' },
   };
   const allCustomEvents = { additionalProperties: { required: ['kind'], properties: { kind: { const: AppItemKind.CustomEvent } } } };
   return {
@@ -95,7 +96,7 @@ function app(): Schema {
     additionalProperties: false,
     properties: Object.fromEntries(APP_FIELDS.map((field) => [field, properties[field] ?? {}])),
     // Siren sends a feature its requests at the app's address. Only custom events need none.
-    if: { required: ['items'], properties: { items: { not: allCustomEvents } } },
+    if: { required: ['features'], properties: { features: { not: allCustomEvents } } },
     then: { required: ['url'] },
   };
 }

@@ -2059,7 +2059,7 @@ no plan. They read this from what Siren sends and never guess a plan. When the f
 and the app holds no key, `apply` says so and names `siren apps add-key <key>`.
 
 siren.app.json holds one app, keyed by its app key, with its features in
-`items`, keyed by feature key. `${SIREN_APP_URL}` in the app's `url` is filled from a variable whose
+`features`, keyed by feature key, at most 50. A file that still says `items` is refused by name. `${SIREN_APP_URL}` in the app's `url` is filled from a variable whose
 name starts with `SIREN_APP_`, and only there: from your shell, else from `.env` beside the file.
 The package ships siren.app.schema.json, which `$schema` points at, so an editor completes kinds and
 fields. A top-level `name` and `description` are optional, and the dashboard shows the app's own. `url` is optional: a file with

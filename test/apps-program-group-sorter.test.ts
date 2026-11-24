@@ -52,7 +52,7 @@ function refusalOf(question: AppGroupOrderQuestion, answer: Record<string, unkno
 }
 
 function file(items: Record<string, unknown>, url: string | null = URL_): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), items } } });
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
 }
 
 /** The sample's function, as README and test/answer-samples/program-group-sorter.js write it, typed as on('programGroupSorter', ...) takes it. */
@@ -80,7 +80,7 @@ describe('apps-c16-5: the program group structure kind', () => {
 
   it('refuses a program group structure with no url, since Siren asks the app at its address', () => {
     const parsed = parseAppFile(file({ pick: { kind: 'programGroupSorter', name: 'Pick' } }, null), {});
-    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.items`]);
+    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features`]);
   });
 
   it("gives Siren's fixture answer for Siren's fixture question, one Siren takes", async () => {

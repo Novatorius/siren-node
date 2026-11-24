@@ -59,7 +59,7 @@ const LINE_ITEMS: AppTransactionFilterAnswer = { outcome: 'filtered', include: [
 const NOTHING: AppTransactionFilterAnswer = { outcome: 'filtered', include: [] };
 
 function file(items: Record<string, unknown>, url: string | null = SITE): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), items } } });
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
 }
 
 function ask(key: string, data: Record<string, unknown>): string {
@@ -95,7 +95,7 @@ describe('apps-c16-3: the transaction filter kind', () => {
 
   it('refuses a transaction filter with no url, since Siren asks the app at its address', () => {
     const parsed = parseAppFile(file({ lines: { kind: 'transactionFilter', name: 'Plan lines only' } }, null), {});
-    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.items`]);
+    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features`]);
   });
 
   it("types on('transactionFilter') by its question and answer, and posts the lines to include", async () => {

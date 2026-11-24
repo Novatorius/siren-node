@@ -94,6 +94,6 @@ describe('README: Send a custom event', () => {
     const parsed = parseAppFile(text, {});
 
     expect(parsed.problems).toEqual([]);
-    expect(parsed.file?.apps.signups?.items?.['newsletter-signup']?.domains).toEqual(['localhost', 'example.com', '*.example.com']);
+    expect(parsed.file?.apps.signups?.features?.['newsletter-signup']?.domains).toEqual(['localhost', 'example.com', '*.example.com']);
   });
 });

@@ -27,36 +27,36 @@ describe('apps-sdk-container: the app file', () => {
   });
 
   it('refuses features with no url, in plain words at the features', () => {
-    const text = file({ name: 'Reports', items: { notify: { kind: 'postConversionAction', name: 'Tell me' } } });
+    const text = file({ name: 'Reports', features: { notify: { kind: 'postConversionAction', name: 'Tell me' } } });
     const parsed = parseAppFile(text, {});
     expect(parsed.file).toBeNull();
     expect(parsed.problems).toHaveLength(1);
-    expect(parsed.problems[0]?.path).toBe('apps.acme-reports.items');
+    expect(parsed.problems[0]?.path).toBe('apps.acme-reports.features');
     expect(parsed.problems[0]?.message).toBe(
       'apps.acme-reports has features and no url. Siren sends a feature its requests at the app\'s address, so add a url, or keep only custom events for a key-only app.',
     );
   });
 
   it('reads an empty features object with no url as a key-only app', () => {
-    const parsed = parseAppFile(file({ name: 'Reports', items: {} }), {});
+    const parsed = parseAppFile(file({ name: 'Reports', features: {} }), {});
     expect(parsed.problems).toEqual([]);
   });
 
   it('accepts payoutMethod, and refuses fulfillmentMethod with a message that names the new word', () => {
     const pay = { kind: 'payoutMethod', name: 'Pay', currencies: ['USD'] };
-    expect(parseAppFile(file({ name: 'Pay', url: 'https://acme.example', items: { pay } }), {}).problems).toEqual([]);
+    expect(parseAppFile(file({ name: 'Pay', url: 'https://acme.example', features: { pay } }), {}).problems).toEqual([]);
 
-    const old = parseAppFile(file({ name: 'Pay', url: 'https://acme.example', items: { pay: { ...pay, kind: 'fulfillmentMethod' } } }), {});
-    expect(old.problems.map((problem) => problem.path)).toEqual(['apps.acme-reports.items.pay.kind']);
+    const old = parseAppFile(file({ name: 'Pay', url: 'https://acme.example', features: { pay: { ...pay, kind: 'fulfillmentMethod' } } }), {});
+    expect(old.problems.map((problem) => problem.path)).toEqual(['apps.acme-reports.features.pay.kind']);
     expect(old.problems[0]?.message).toBe(
-      'apps.acme-reports.items.pay.kind fulfillmentMethod is the old name of this kind. Write payoutMethod, the word Siren and its documentation use.',
+      'apps.acme-reports.features.pay.kind fulfillmentMethod is the old name of this kind. Write payoutMethod, the word Siren and its documentation use.',
     );
   });
 
   it('lists each kind once when a kind is unknown, and calls them features', () => {
-    const parsed = parseAppFile(file({ name: 'Pay', url: 'https://acme.example', items: { pay: { kind: 'other', name: 'Pay' } } }), {});
+    const parsed = parseAppFile(file({ name: 'Pay', url: 'https://acme.example', features: { pay: { kind: 'other', name: 'Pay' } } }), {});
     expect(parsed.problems[0]?.message).toBe(
-      'apps.acme-reports.items.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ' +
+      'apps.acme-reports.features.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ' +
         'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
         'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), ' +
         'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
@@ -74,7 +74,7 @@ describe('apps-sdk-container: the app file', () => {
   });
 
   it('says feature, never item, in its messages about features', () => {
-    const text = file({ name: 'A', url: 'https://acme.example', items: { Bad_Key: { kind: 'postConversionAction', name: 'A', colour: 'red' } } });
+    const text = file({ name: 'A', url: 'https://acme.example', features: { Bad_Key: { kind: 'postConversionAction', name: 'A', colour: 'red' } } });
     const messages = parseAppFile(text, {}).problems.map((problem) => problem.message.replace(/\bapps\.[^\s]+/g, ''));
     expect(messages.length).toBeGreaterThan(1);
     for (const message of messages) expect(message).not.toMatch(/\bitems?\b/);

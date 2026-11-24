@@ -6,7 +6,7 @@
     "signups": {
       "name": "Signups",
       "description": "Siren's custom event example.",
-      "items": {
+      "features": {
         "newsletter-signup": {
           "kind": "customEvent",
           "name": "Newsletter signup",

@@ -153,8 +153,8 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | `siren use <slug or id>` | memberships, then `POST /auth/switch-org` | The organization now in use. |
 | `siren apps init [--key] [--name]` | nothing | Writes siren.app.json with `$schema` and one Post-conversion action, adds `.env.sandbox`, `.env.live` and `.env.*.tmp` to .gitignore, never overwrites a file, and says where `SIREN_APP_URL` goes, how to add a feature, and that a handler on this machine needs a tunnel (CLI pass 1, finding 5). |
 | `siren apps apply [file] [--yes]` | `GET /apps/{key}`, then `PUT /apps/{key}` once after the person agrees (slice C6) | Each change the file would make, then the question, then the app and each feature with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate-key <key>` (AP-A635). |
-| `siren apps list [--json]` | `GET /apps` | One block per app with its items, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
-| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
+| `siren apps list [--json]` | `GET /apps` | One block per app with its features, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
+| `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its features, each archived feature marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
 | `siren apps requests [--app <key>] [--attention] [--follow]` | `GET /apps/requests`, and `GET /apps/{key}` once for `--app` | One line per request, oldest first. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once, and ends with 0 on Ctrl-C, or with 1 when the target changed edition. |
 | `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | The request's line, the data Siren sent, the answer Siren took and who gave it, or that none came yet, then each send with its HTTP status and what the app said back. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | Accepted, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
@@ -360,7 +360,7 @@ later without a rewrite (design AP-A215):
       "url": "${SIREN_APP_URL}",
       "scopes": ["event:site-visited", "event:sale"],
       "events": [],
-      "items": {
+      "features": {
         "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
         "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
         "acme-split": { "kind": "distributionResolver", "name": "Acme split", "answerWindowMinutes": 1 }
@@ -374,6 +374,13 @@ later without a rewrite (design AP-A215):
 column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url needs ...`, the path
 once, and sends nothing.
 
+- A file that still says `items` is refused at that key with `Siren calls an app's features
+  "features" now. Write them under features.`, so an old file never declares an app with none
+  (Alex's ruling M104, contract/feature-rename.md in the run folder).
+- A kind's readable name, as in `Attribution model (incentiveResolver)`, comes from
+  src/cli/app-kinds.json, Siren's docs/api/app-kinds.json copied byte for byte. Siren writes that
+  file from its kind registry, and test/cli-app-kinds.test.ts holds the copy to Siren's when
+  SIREN_CHECKOUT names a Siren checkout. No name is typed by hand in the tool.
 - `version` is 1. `name` and `description` at the top are optional text since CLI pass 1 (finding
   5). The tool never sends them, and Siren's recipe schema (lib/Recipes/Core/recipe.schema.json on
   feat/apps at 6d2abd936a) has no `apps` stanza to read them with yet. The dashboard shows the
@@ -390,12 +397,13 @@ once, and sends nothing.
 - Any other recipe stanza, such as `programs`, is refused by name. Recipes made of apps and
   programs wait for slice 12. Any other key is refused as not a recipe key.
 - `apps` holds exactly one app, keyed by its app key.
-- An app takes `name`, `description`, `url`, `scopes`, `events` and `items`, and nothing else. Its
-  key is never `requests`, `events`, `scopes` or `kinds`, which Siren keeps for its own routes.
+- An app takes `name`, `description`, `url`, `scopes`, `events`, `contacts` and `features`, and
+  nothing else. Its key is never `requests`, `events`, `scopes` or `kinds`, which Siren keeps for its own routes.
   `url` is optional, and an app with none is a key-only app (slice C6). When given, it starts with
   `https://`, or with `http://` for `localhost`, `127.0.0.1` or `host.docker.internal`, which only a
   local Cloud reaches (AP-A616).
-- `items` holds the app's features, an object keyed by feature key, so a key is unique within the
+- `features` holds the app's features, at most 50 (`AppService::MAX_ITEMS`), an object keyed by
+  feature key, so a key is unique within the
   app. A feature takes `kind`, `name`, `description`, `currencies` and `answerWindowMinutes`.
   `currencies` is required for a `payoutMethod` and refused for any other kind. The old word
   `fulfillmentMethod` is refused with a message that names `payoutMethod`. `answerWindowMinutes`
@@ -456,7 +464,7 @@ its package.json takes this package by `file:` (AP-A646).
   `ApiKey::hasEventScope()`, which also wants the exact scope for a slug a connected site
   forwards), and `ApiKeyScopePolicy::isIssuable()` lets an app hold `event:` scopes. Both are in
   test/fixtures/api-key-scopes.json, which a test checks.
-- Both ask items, `acme-ledger` and `acme-split`, declare `answerWindowMinutes: 1`, the shortest
+- Both ask features, `acme-ledger` and `acme-split`, declare `answerWindowMinutes: 1`, the shortest
   Siren allows (`AppService`, 1 to 43200). By the exchange contract's deadline rule an ask nobody
   answers is sent three times, each with a fresh one-minute window, and moves to `needs_attention`
   when the third window ends: about three minutes after the first send, plus however late the
@@ -717,7 +725,7 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | 4 | In a second terminal: `cloudflared tunnel --url http://localhost:8787`. Back in the first: `export SIREN_APP_URL=<the https address it printed>` | A `https://<words>.trycloudflare.com` address | none, cloudflared |
 | 5 | `siren apps apply` | `Declared acme-payouts on <address>.`, the app line, one line per item with its `app:{id}`, `Its url came from SIREN_APP_URL.`, and `Key sk_test_<8 hex> and its signing secret are in <folder>/.env.sandbox.` No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |
 | 6 | `npm start` | `Acme example app on http://localhost:8787, for <address> (<folder>/.env.sandbox).` | example-app |
-| 7 | In the dashboard, signed in with the same email and password: make a program with a sale reward, pick "Acme: Tell the CRM" among its post-conversion actions and "Acme: Acme split" as its distributor's resolver, and add a collaborator with a tracking code. Open Webhooks. | The three Acme items in the pickers, and the app's subscription marked as managed by the app | Siren slices 1, 3 (claim C3), 4 and 11, not this slice |
+| 7 | In the dashboard, signed in with the same email and password: make a program with a sale reward, pick "Acme: Tell the CRM" among its post-conversion actions and "Acme: Acme split" as its distributor's resolver, and add a collaborator with a tracking code. Open Webhooks. | The three Acme features in the pickers, and the app's subscription marked as managed by the app | Siren slices 1, 3 (claim C3), 4 and 11, not this slice |
 | 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: Siren made 1 conversion on opportunity <id>.` A sale no program pays for prints `Siren recorded it on opportunity <id> and made no conversion (no_program).` and Siren's message, which is what step 7 skipped gives (capture events-sale-200-no-program). | example-app |
 | 9 | Approve the conversion in the dashboard. Then `siren apps requests --follow`, and in another terminal `siren apps requests <id>` for the tell | The tell's line going from `sent` to `delivered`. The single request shows the send, `HTTP 200`, the app's answer and the body Siren sent. Ctrl-C ends `--follow` with exit 0. | cli-requests, Siren slices 2 and 3 |
 | 10 | Close the program's distribution with slice 4's test route (claim C7) | `--follow` shows the ask `sent`, then `answered`, then `applied`. The server logs the answer, and the distribution completes with the app's shares. | example-app, sdk-verify, sdk-answer, Siren slice 4 |
@@ -822,7 +830,7 @@ https.
 1. The backlog says the CLI's sign-in reuses the OAuth client in src/connect. That client mints a
    connector token for a connected site. The app routes need an admin's dashboard session, which
    only `/auth/login` gives. The command calls the session routes instead (AP-A606).
-2. Siren lets one app hold two items with the same key under two kinds. The file keys items by key,
+2. Siren lets one app hold two features with the same key under two kinds. The file keys features by key,
    so a key is unique within an app, which keeps `app:<appKey>/<itemKey>` unambiguous. A file cannot
    declare the same key twice under two kinds.
 3. Siren had no `GET /apps/requests/{id}` at 1557b0030 (capture apps-request-one-404-no-route).

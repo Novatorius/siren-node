@@ -28,7 +28,7 @@ interface FeatureFixture {
 const features = JSON.parse(readFileSync(new URL('./fixtures/apps-feature-contracts/requests.json', import.meta.url), 'utf8')) as FeatureFixture;
 
 function file(items: Record<string, unknown>): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: ADDRESS, items } } });
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: ADDRESS, features: items } } });
 }
 
 describe('apps-c16-6: the incentive type kind', () => {
@@ -74,13 +74,13 @@ describe('apps-c16-6: the incentive type kind', () => {
       {},
     );
     const required = (key: string) =>
-      `apps.${APP_KEY}.items.${key}.conversionTypes is required for an Incentive structure (incentiveType): a list of the conversions it pays, each once, from sale, lead, renewal.`;
+      `apps.${APP_KEY}.features.${key}.conversionTypes is required for an Incentive structure (incentiveType): a list of the conversions it pays, each once, from sale, lead, renewal.`;
     expect(parsed.problems.map((problem) => problem.message)).toEqual([
       required('none'),
       required('empty'),
       required('twice'),
       required('refund'),
-      `apps.${APP_KEY}.items.filter.conversionTypes is only for an Incentive structure (incentiveType).`,
+      `apps.${APP_KEY}.features.filter.conversionTypes is only for an Incentive structure (incentiveType).`,
     ]);
   });
 

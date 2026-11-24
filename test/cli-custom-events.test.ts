@@ -18,32 +18,32 @@ const signup = { kind: 'customEvent', name: 'Newsletter signup', fields: { list:
 
 describe('the app file and a custom event', () => {
   it('reads a key-only app with a custom event, and declares its fields and domains', () => {
-    const parsed = parseAppFile(file({ name: 'Signups', items: { 'newsletter-signup': signup } }), {});
+    const parsed = parseAppFile(file({ name: 'Signups', features: { 'newsletter-signup': signup } }), {});
 
     expect(parsed.problems).toEqual([]);
     expect(declarationFor(parsed.file!).params.items).toEqual([{ key: 'newsletter-signup', ...signup }]);
   });
 
   it('still needs a url for any feature Siren calls', () => {
-    const parsed = parseAppFile(file({ name: 'Signups', items: { 'newsletter-signup': signup, notify: { kind: 'postConversionAction', name: 'Tell' } } }), {});
+    const parsed = parseAppFile(file({ name: 'Signups', features: { 'newsletter-signup': signup, notify: { kind: 'postConversionAction', name: 'Tell' } } }), {});
 
-    expect(parsed.problems.map((problem) => problem.path)).toEqual(['apps.signups.items']);
+    expect(parsed.problems.map((problem) => problem.path)).toEqual(['apps.signups.features']);
   });
 
   it('refuses each domain Siren refuses, at its place, without quoting it', () => {
     const domains = ['*', 'https://example.com', 'example.com:8080', '*.com', 'a*.example.com', 'exa_mple.com', 'fine.example.com'];
-    const parsed = parseAppFile(file({ name: 'Signups', items: { 'newsletter-signup': { ...signup, domains } } }), {});
+    const parsed = parseAppFile(file({ name: 'Signups', features: { 'newsletter-signup': { ...signup, domains } } }), {});
 
-    expect(parsed.problems.map((problem) => problem.path)).toEqual([0, 1, 2, 3, 4, 5].map((index) => `apps.signups.items.newsletter-signup.domains.${index}`));
+    expect(parsed.problems.map((problem) => problem.path)).toEqual([0, 1, 2, 3, 4, 5].map((index) => `apps.signups.features.newsletter-signup.domains.${index}`));
     for (const problem of parsed.problems) expect(problem.message).not.toMatch(/https:|8080|exa_mple/);
   });
 
   it('refuses fields and domains on any other kind, and more than 20 domains', () => {
-    const other = parseAppFile(file({ name: 'S', url: 'https://s.example', items: { notify: { kind: 'postConversionAction', name: 'Tell', domains: ['example.com'], fields: {} } } }), {});
-    expect(other.problems.map((problem) => problem.path)).toEqual(['apps.signups.items.notify.fields', 'apps.signups.items.notify.domains']);
+    const other = parseAppFile(file({ name: 'S', url: 'https://s.example', features: { notify: { kind: 'postConversionAction', name: 'Tell', domains: ['example.com'], fields: {} } } }), {});
+    expect(other.problems.map((problem) => problem.path)).toEqual(['apps.signups.features.notify.fields', 'apps.signups.features.notify.domains']);
 
     const many = Array.from({ length: 21 }, (_, index) => `s${index}.example.com`);
-    const tooMany = parseAppFile(file({ name: 'S', items: { 'newsletter-signup': { ...signup, domains: many } } }), {});
+    const tooMany = parseAppFile(file({ name: 'S', features: { 'newsletter-signup': { ...signup, domains: many } } }), {});
     expect(tooMany.problems.map((problem) => problem.message)).toEqual([expect.stringContaining('at most 20')]);
   });
 
