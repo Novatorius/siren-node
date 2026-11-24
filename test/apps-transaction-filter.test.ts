@@ -63,7 +63,9 @@ function file(items: Record<string, unknown>, url: string | null = SITE): string
 }
 
 function ask(key: string, data: Record<string, unknown>): string {
-  return JSON.stringify({ ...features.kinds.distributionResolver!.request, item: { kind: 'transactionFilter', key, id: 'app:11' }, data });
+  // The answer address goes on the test client's base, since the handler refuses one on another Siren.
+  const answerUrl = `${BASE}/apps/requests/${String(features.kinds.distributionResolver!.request.id)}/answer`;
+  return JSON.stringify({ ...features.kinds.distributionResolver!.request, answerUrl, item: { kind: 'transactionFilter', key, id: 'app:11' }, data });
 }
 
 function signed(raw: string): Record<string, string> {

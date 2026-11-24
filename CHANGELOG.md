@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- `apps.requestHandler()` replies 500 to an ask whose signed `answerUrl` is on another Siren than
+  the client's `baseUrl`, and `onError` gets a `SirenError` naming both addresses and the `baseUrl`
+  to set. Before, it replied 200 and the answer post failed into a log line. Siren Cloud's
+  `api.sirenaffiliates.com` and `app.sirenaffiliates.com` count as one Siren. The answer still
+  goes only to the client's own address.
+- `prepare` runs `node scripts/prepare.mjs` in place of `tsup`, so an install from a local folder
+  without dev dependencies keeps the built `dist`, or says to run `npm ci` first.
+
 - `events.refund` requires `refundId`, the store's own id for the refund, such as WooCommerce
   refund 2201. Siren now refuses a refund without one with 400. Siren records each refund id once
   per order, so sending the same refund again is safe.
@@ -37,6 +45,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the SDK resent the request as a lost connection.
 
 ### Added
+
+- `@novatorius/siren/testing`, with `appRequest(kind, key, { data, secret, id, app, baseUrl,
+  timestamp })`, which signs an app request as Siren sends it, and `sampleData(kind)`, Siren's
+  sample question for each kind.
+- `answers.simulate(request)` runs the whole handler on one request, posts nothing, and answers
+  `{ status, body, answer, error }`. Its type is `AppSimulation`.
+- `new Siren()` reads `SIREN_API_KEY` when no `apiKey` or `accessToken` is passed, and
+  `apps.requestHandler()` reads `SIREN_SIGNING_SECRET` when no `signingSecret` is passed. An
+  explicit value wins, and with neither the refusal names the option and the variable.
+- openapi.yaml lists the `client_credentials` grant on `POST /oauth/token`, with its 400
+  `unauthorized_client` for a key that is no app's, and 409 `app_request_dropped` on the answer
+  route.
 
 - `apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError })` answers Siren for an
   app in a few lines. `on(kind, key, fn)` and `on(kind, fn)` register a function per feature, and
@@ -412,6 +432,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Siren's question and answer for every kind.
 
 ### Changed
+
+- The 400 for a signed body that is not an app request of version 1 names the first field that
+  breaks its rule, such as "The request's `id` must be `apr_` followed by 32 hex characters."
+- The README leads with answering Siren: What you can do, Install with the branch install lines,
+  Answer Siren in a few lines with no `baseUrl`, then Try it without Siren.
 
 - The `siren` tool names each feature kind as Siren's dashboard does, beside its kind: Post-conversion
   action (`postConversionAction`), Post-allocation action (`postAllocationAction`) and Attribution

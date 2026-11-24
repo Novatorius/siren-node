@@ -6,6 +6,7 @@ export default defineConfig({
     // The examples import the package by name, as an app would. Tests run
     // them against the source.
     alias: [
+      { find: /^@novatorius\/siren\/testing$/, replacement: fileURLToPath(new URL('./src/testing/index.ts', import.meta.url)) },
       { find: /^@novatorius\/siren\/storefront$/, replacement: fileURLToPath(new URL('./src/storefront/index.ts', import.meta.url)) },
       { find: /^@novatorius\/siren$/, replacement: fileURLToPath(new URL('./src/index.ts', import.meta.url)) },
     ],

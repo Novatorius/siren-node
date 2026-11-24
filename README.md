@@ -1,6 +1,6 @@
 # Siren SDK for Node.js
 
-Record affiliate and incentive events, and verify signed webhooks, in a few lines of TypeScript.
+Answer Siren from your own app, record affiliate and incentive events, and verify signed webhooks, in a few lines of TypeScript.
 
 [![npm version](https://img.shields.io/npm/v/@novatorius/siren.svg)](https://www.npmjs.com/package/@novatorius/siren)
 [![CI](https://github.com/Novatorius/siren-node/actions/workflows/ci.yml/badge.svg)](https://github.com/Novatorius/siren-node/actions/workflows/ci.yml)
@@ -50,9 +50,23 @@ CJS, and full type declarations.
 npm install @novatorius/siren
 ```
 
-npm 11 may warn that the package has an install script not covered by `allowScripts`. It names
-`prepare: tsup`, the build that a Git install of this package needs. npm does not run it for a
-registry or tarball install, so you can ignore the warning.
+The apps code in this README is unreleased. The published package lacks it until the apps pull
+requests merge and a release ships. Until then, install the branch from GitHub, or a local checkout
+of it:
+
+```sh
+npm install github:Novatorius/siren-node#feat/apps
+npm install /path/to/siren-node
+```
+
+A local folder needs its build first: run `npm ci` in it, which builds `dist`. The package's
+`prepare` script builds `dist` when tsup is there, keeps a `dist` that is already built when it is
+not, and otherwise says to run `npm ci` first. npm 11 may warn that `prepare` is an install script
+not covered by `allowScripts`. npm does not run it for a registry or tarball install, so you can
+ignore the warning.
+
+The samples are ES modules with top-level `await`. Run them from a package with `"type": "module"`
+in its package.json, or from a file ending in `.mjs`.
 
 ## Answer Siren in a few lines
 
@@ -69,8 +83,9 @@ posts the answer the function returns.
 import express from 'express'
 import { Siren } from '@novatorius/siren'
 
-const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: 'https://cloud.example.com/siren/v1' })
-const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+// Reads SIREN_API_KEY and SIREN_SIGNING_SECRET from the environment.
+const siren = new Siren()
+const answers = siren.apps.requestHandler()
 
 answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
   // Siren may send it twice, so add it once, keyed by id.
@@ -80,17 +95,63 @@ answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
 express().post('/siren', express.raw({ type: 'application/json' }), answers).listen(3000)
 ```
 
-The client must be built with the app's own key, since the handler posts answers with it.
+`new Siren()` reads the app's own key from `SIREN_API_KEY`, and `requestHandler()` reads its
+signing secret from `SIREN_SIGNING_SECRET`. Pass `apiKey` or `signingSecret` to use another value.
+With neither the option nor the variable set, each refuses when it is made and names both. The key
+must be the app's own, since the handler posts answers with it.
 
-### Mount it on your server
+The client sends to Siren Cloud, `https://api.sirenaffiliates.com/siren/v1`, by default, and an
+`sk_test_` key sends to the sandbox. Set `baseUrl` only for a local or sandbox Siren. Before an ask's
+reply the handler checks that the request's `answerUrl` is on the same Siren as the client. When it
+is not, the handler replies 500 and `onError` gets both addresses and the `baseUrl` to set, so the
+fault shows on the first request. The answer only ever goes to the client's own address.
+
+## Try it without Siren
+
+`@novatorius/siren/testing` builds a signed request as Siren sends it. `appRequest(kind, key)`
+signs it with `SIREN_SIGNING_SECRET` and fills in Siren's sample question for the kind, which
+`sampleData(kind)` also gives. `answers.simulate(request)` runs the whole handler on it: the
+signature check, the function and the answer check. It answers `{ status, body, answer, error }` and
+posts nothing.
+
+```js
+import assert from 'node:assert/strict'
+import { Siren } from '@novatorius/siren'
+import { appRequest } from '@novatorius/siren/testing'
+
+const siren = new Siren()
+const answers = siren.apps.requestHandler()
+answers.on('distributionResolver', 'split-by-score', ({ data }) => ({
+  outcome: 'allocated',
+  units: data.pool.units,
+  shares: siren.apps.splitPool(data.pool, data.metrics.map((metric) => [metric.metricId, metric.score])),
+}))
+
+// A signed ask with Siren's sample question. simulate() runs the handler and posts nothing.
+const { status, answer } = await answers.simulate(appRequest('distributionResolver', 'split-by-score'))
+assert.equal(status, 200)
+assert.deepEqual(answer.shares, { 41: 6000, 43: 4000 })
+```
+
+Run it with any `SIREN_SIGNING_SECRET` and `SIREN_API_KEY` set. `appRequest` takes `data`, `secret`,
+`id`, `app`, `baseUrl` and `timestamp` when the defaults don't fit. The request it returns is
+`{ method, headers, rawBody }`, so you can also post it to a running app with any HTTP client:
+
+```js
+const { method, headers, rawBody } = appRequest('distributionResolver', 'split-by-score')
+await fetch('http://localhost:3000/siren', { method, headers, body: rawBody })
+```
+
+## Mount it on your server
 
 None of these servers is a dependency of this package. Keep the handler in its own module:
 
 ```js
 import { Siren } from '@novatorius/siren'
 
-const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: 'https://cloud.example.com/siren/v1' })
-export const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+// Reads SIREN_API_KEY and SIREN_SIGNING_SECRET from the environment.
+const siren = new Siren()
+export const answers = siren.apps.requestHandler()
 
 answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
   // Siren may send it twice, so add it once, keyed by id.
@@ -164,13 +225,14 @@ TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 
 `apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError })` takes:
 
 - `signingSecret`, the app's signing secret, which Siren showed once when it made the app's
-  address. The handler refuses an empty or missing one when it is made.
+  address. Left out, it is `SIREN_SIGNING_SECRET` from the environment. The handler refuses an
+  empty or missing one when it is made.
 - `toleranceSeconds`, how far a request's signed time may be from this machine's clock, either way.
   A whole number from 1 to 3600, 300 by default.
 - `runLater`, a function handed an ask's work after the reply, such as Next.js's `after`.
 - `onError`, a function of the error and the request that gets every error Siren does not see: a
-  function that threw, an answer that broke the rules, Siren's refusal of an answer, and a body a
-  parser already read. By default it writes one `console.error` line with the kind, key and request
+  function that threw, an answer that broke the rules, Siren's refusal of an answer, an
+  `answerUrl` on another Siren, and a body a parser already read. By default it writes one `console.error` line with the kind, key and request
   id, or an event's type and delivery id, and the error. It never writes the request's data or
   headers.
 
@@ -200,7 +262,8 @@ Every reply is JSON with `Cache-Control: no-store`.
 | A body over 1 MiB | 413 | Nothing. |
 | A body a parser already turned into an object | 500 | `onError` gets a `SirenError` that says to mount the handler before the JSON parser, or to give the route a raw body. |
 | A missing or wrong `X-Siren-Signature-V2`, another `X-Siren-Timestamp`, or a time more than `toleranceSeconds` (default 300) from the clock | 401 | The checks are `verifyRequest`'s own. |
-| A signed body that is not JSON, or an app request that is not an envelope of version 1 | 400 | Nothing. |
+| A signed body that is not JSON, or an app request that is not an envelope of version 1 | 400, naming the first field that breaks its rule, such as "The request's `id` must be `apr_` followed by 32 hex characters." | Nothing. |
+| An ask whose `answerUrl` is on another Siren than the client's `baseUrl` | 500 | `onError` gets a `SirenError` naming both addresses and the `baseUrl` to set. The function does not run, nothing is posted, and Siren sends the ask again. |
 | A tell with a function | 200 once the function returns, 500 when it throws | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. The function has Siren's 8 seconds. |
 | An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `undefined`, answer later with `apps.requests.answer()`. |
 | An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
@@ -635,14 +698,21 @@ The request is the envelope Siren signed: `version` 1, its `id`, `type` `app.req
 the kind's `data`. An ask also carries `answerBy` and `answerUrl`.
 
 ```ts
-// createAcmeApp is the example app's handler, examples/apps/acme/handler.mjs. Copy it, or write your own in its shape.
-import { createAcmeApp } from './handler.mjs';
+import express from 'express';
+import { Siren, SignatureVerificationError } from '@novatorius/siren';
 
-const appSiren = new Siren({ apiKey: process.env.SIREN_API_KEY! }); // the app's own key
-const acme = createAcmeApp({ siren: appSiren, signingSecret: process.env.SIREN_SIGNING_SECRET!, log: console.log });
+const appSiren = new Siren(); // the app's own key, from SIREN_API_KEY
+const app = express();
 
-app.post('/siren', express.raw({ type: 'application/json' }), (req, res, next) => {
-  acme.handle(req.body, req.headers).then((reply) => res.status(reply.status).type('application/json').send(reply.body), next);
+app.post('/siren', express.raw({ type: 'application/json' }), (req, res) => {
+  try {
+    const request = appSiren.apps.verifyRequest(req.body, req.headers, process.env.SIREN_SIGNING_SECRET!);
+    queue.add(request); // do the work, and answer an ask, outside the request
+    res.status(200).json({});
+  } catch (err) {
+    if (!(err instanceof SignatureVerificationError)) throw err;
+    res.status(401).json({ error: err.message });
+  }
 });
 ```
 
@@ -650,8 +720,11 @@ Answer 200 as soon as the request checks out. Siren may deliver one request more
 repeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a
 repeat.
 
-The example's handler, which test/apps-example.test.ts drives with Siren's signed fixture, does the
-parts that are easy to get wrong. It answers an ask after the 200, outside the request, and catches
+The repository's example app wraps these calls in a whole handler, `createAcmeApp` in
+[examples/apps/acme/handler.mjs](https://github.com/Novatorius/siren-node/blob/feat/apps/examples/apps/acme/handler.mjs).
+Copy it, or write your own in its shape. Its handler, which the repository's
+test/apps-example.test.ts drives with Siren's signed fixture, does the parts that are easy to get
+wrong. It answers an ask after the 200, outside the request, and catches
 an answer that fails, so a 5xx or a dropped connection is logged and never ends the process. It counts
 an ask as handled only once Siren accepts the answer, so the next delivery answers again. A repeat that
 arrives while the first answer is in flight waits for that answer, so two deliveries close together
@@ -911,6 +984,11 @@ one call. Pass the request headers so it can fill in `type` and `deliveryId`. Wi
 `X-Siren-Event` header it throws `SignatureVerificationError`, because the body alone does not name
 the event. A connected site's subscription receives an envelope that names its own type and id, and
 `event.body` holds the whole envelope with its `records`.
+
+An app's address gets `X-Siren-Signature-V2`, which signs the time as well as the body, and
+`apps.requestHandler()` and `apps.verifyRequest()` check it. They never fall back to
+`X-Siren-Signature`. Use `constructEvent` for a webhook subscription's deliveries, and the app calls
+for an app's address.
 
 > **⚠️ You MUST pass the RAW request body bytes to `constructEvent`.**
 > Body parsers like `express.json()` re-serialize the payload, and the HMAC will never match a
@@ -1425,7 +1503,7 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.delete()` | `DELETE /apps/{key}` | Deletes an app that no record selects and that has no open ask. |
 | `siren.apps.verifyRequest()` | `POST /` at the app's own address, sent by Siren | Checks a request's timestamped signature and answers the parsed request. |
 | `siren.apps.shownAmount()` | None. It reads the value and currency of a tell, which Siren sends as `POST /` to the app's own address | Reads a stored amount and its currency as a person reads them, such as `$15.00` for 1500 in dollars and `¥100` for 10000 in yen. |
-| `siren.apps.requestHandler()` | `POST /` at the app's own address, sent by Siren, then `POST /apps/requests/{id}/answer` | Checks each request, hands it to the app's function for its kind and key, replies, and posts an ask's answer. |
+| `siren.apps.requestHandler()` | `POST /` at the app's own address, sent by Siren, then `POST /apps/requests/{id}/answer` | Checks each request, hands it to the app's function for its kind and key, replies, and posts an ask's answer to the client's own address. Replies 500 to an ask whose `answerUrl` is on another Siren. Reads `SIREN_SIGNING_SECRET` when no secret is passed. |
 | `siren.apps.splitPool()` | None. It splits the pool of a resolver's ask, which Siren sends as `POST /` to the app's own address | Splits a pool by weight in whole currency steps, never past the pool, evenly when every weight is 0. |
 | `siren.apps.requests.list()` | `GET /apps/requests` | Lists the latest requests Siren sent the organization's apps. |
 | `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` | Reads one request, however old, with the data Siren sent, the answer it took and the person who answered by hand. |
@@ -1587,15 +1665,16 @@ const storeConversions = await siren.conversions.list({ propertyId: 5, status: '
 ```ts
 const siren = new Siren({
   apiKey: 'sk_live_...',                                 // or accessToken, never both
-  baseUrl: 'https://api.sirenaffiliates.com/siren/v1',   // default, point at staging/local as needed
+  baseUrl: 'https://api.sirenaffiliates.com/siren/v1',   // default, set it only for a local or sandbox Siren
   timeout: 30_000,                                       // ms, default 30s
   maxRetries: 2,                                         // default 2
   httpClient: new FetchHttpClient(),                     // default, or your own HttpClient
 });
 ```
 
-Pass `apiKey` or `accessToken`, never both. Both, neither or an empty one throws `SirenError`
-when you build the client. So does a token with a control character or a character above U+00FF,
+Pass `apiKey` or `accessToken`, never both. With neither, the client reads `SIREN_API_KEY` from
+the environment. Both, an empty one, or neither with no `SIREN_API_KEY` throws `SirenError` when
+you build the client. So does a token with a control character or a character above U+00FF,
 which cannot go in an HTTP header. `baseUrl` takes an http or https URL with no user name or
 password in it, made only of visible ASCII (U+0021 to U+007E) with no query, fragment, backslash
 or `@`. It starts with `http://` or `https://` and the host, which holds no `%`. An international

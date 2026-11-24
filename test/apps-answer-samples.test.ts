@@ -1,8 +1,8 @@
-import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { appRequest } from '@novatorius/siren/testing';
 import { TEST_API_KEY } from './helpers';
 
 /*
@@ -19,8 +19,9 @@ import { TEST_API_KEY } from './helpers';
  * rest is real: the SDK from source, Express, and the global fetch the SDK
  * sends with, which here is a fake Siren. The fake signs Siren's own request
  * (test/fixtures/apps-feature-contracts/requests.json) with a test secret,
- * as WebhookSignature::headers() does, posts it to the sample, and takes
- * the answer the sample posts to cloud.example.com.
+ * with appRequest() from the testing entry, as WebhookSignature::headers()
+ * does, posts it to the sample, and takes the answer the sample posts to
+ * Siren Cloud's address, api.sirenaffiliates.com.
  */
 
 const started = vi.hoisted(() => [] as Server[]);
@@ -68,10 +69,10 @@ beforeEach(() => {
   vi.stubEnv('SIREN_API_KEY', TEST_API_KEY);
   vi.stubEnv('SIREN_SIGNING_SECRET', SECRET);
   const loopback = globalThis.fetch;
-  // The fake Siren: the answer route on cloud.example.com, and the guard's loopback for the sample's own server.
+  // The fake Siren: the answer route on api.sirenaffiliates.com, and the guard's loopback for the sample's own server.
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (new URL(url).hostname !== 'cloud.example.com') return loopback(input, init);
+    if (new URL(url).hostname !== 'api.sirenaffiliates.com') return loopback(input, init);
     const headers = new Headers(init?.headers);
     posted.push({ url, authorization: headers.get('authorization'), body: JSON.parse(String(init?.body)) as unknown });
     return new Response(JSON.stringify({ status: 'accepted' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -93,22 +94,15 @@ async function load(sample: string): Promise<string> {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}/siren`;
 }
 
-/** Siren's request for `kind`, signed now with the test secret, posted to the sample. */
+/**
+ * Siren's request for `kind`, signed by appRequest() from the package's
+ * testing entry with the fixture's id, app and feature key, posted to the
+ * sample.
+ */
 async function sirenSends(url: string, kind: string): Promise<{ status: number; body: unknown }> {
-  const raw = JSON.stringify(features.kinds[kind]!.request);
-  const t = Math.floor(Date.now() / 1000);
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Siren-Event': 'app.request',
-      'X-Siren-Delivery': `${ID}.1`,
-      'X-Siren-Timestamp': String(t),
-      'X-Siren-Signature-V2': `t=${t},v1=${createHmac('sha256', SECRET).update(`${t}.${raw}`).digest('hex')}`,
-      'Idempotency-Key': ID,
-    },
-    body: raw,
-  });
+  const request = features.kinds[kind]!.request as { app: string; item: { key: string } };
+  const { method, headers, rawBody } = appRequest(kind, request.item.key, { id: ID, app: request.app });
+  const response = await fetch(url, { method, headers, body: rawBody });
   return { status: response.status, body: (await response.json()) as unknown };
 }
 
@@ -150,7 +144,7 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
     expect(await sirenSends(url, 'distributionResolver')).toEqual({ status: 200, body: {} });
     await eventually(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({
-      url: `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`,
+      url: `https://api.sirenaffiliates.com/siren/v1/apps/requests/${ID}/answer`,
       authorization: `Bearer ${TEST_API_KEY}`,
       body: features.kinds.distributionResolver!.answer,
     });
@@ -161,7 +155,7 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
     expect(await sirenSends(url, 'incentiveResolver')).toEqual({ status: 200, body: {} });
     await eventually(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({
-      url: `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`,
+      url: `https://api.sirenaffiliates.com/siren/v1/apps/requests/${ID}/answer`,
       authorization: `Bearer ${TEST_API_KEY}`,
       body: features.kinds.incentiveResolver!.answer,
     });
@@ -172,7 +166,7 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
     expect(await sirenSends(url, 'programGroupSorter')).toEqual({ status: 200, body: {} });
     await eventually(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({
-      url: `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`,
+      url: `https://api.sirenaffiliates.com/siren/v1/apps/requests/${ID}/answer`,
       authorization: `Bearer ${TEST_API_KEY}`,
       body: features.kinds.programGroupSorter!.answer,
     });
@@ -183,7 +177,7 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
     expect(await sirenSends(url, 'incentiveType')).toEqual({ status: 200, body: {} });
     await eventually(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({
-      url: `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`,
+      url: `https://api.sirenaffiliates.com/siren/v1/apps/requests/${ID}/answer`,
       authorization: `Bearer ${TEST_API_KEY}`,
       body: features.kinds.incentiveType!.answer,
     });
@@ -203,7 +197,7 @@ describe("apps-docs: every other kind's sample, run as written", () => {
     const url = await load(sample);
     expect(await sirenSends(url, kind)).toEqual({ status: 200, body: {} });
     await eventually(() => expect(posted).toHaveLength(1));
-    expect(posted[0]!.url).toBe(`https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`);
+    expect(posted[0]!.url).toBe(`https://api.sirenaffiliates.com/siren/v1/apps/requests/${ID}/answer`);
     expect(posted[0]!.authorization).toBe(`Bearer ${TEST_API_KEY}`);
     const body = posted[0]!.body as Record<string, unknown>;
     expect(body.outcome).toBe((features.kinds[kind]!.answer as Record<string, unknown>).outcome);

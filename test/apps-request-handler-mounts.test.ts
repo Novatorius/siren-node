@@ -31,8 +31,12 @@ const SECRET = (
 ).secret;
 const ID = 'apr_9c60190a4501399d0ae55f041c237b39';
 
+/**
+ * Siren's request for `kind`, with its answerUrl on the test client's base
+ * address, since the handler refuses an answer address on another Siren.
+ */
 function body(kind: string): string {
-  return JSON.stringify(features.kinds[kind]!.request);
+  return JSON.stringify(features.kinds[kind]!.request).replaceAll('https://cloud.example.com/siren/v1', BASE);
 }
 
 function signed(raw: string, event = 'app.request'): Record<string, string> {

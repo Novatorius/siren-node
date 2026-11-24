@@ -33,7 +33,7 @@ const ENVELOPE = JSON.stringify({
   item: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
   createdAt: '2026-11-20T10:00:00+00:00',
   answerBy: '2026-11-21T10:00:00+00:00',
-  answerUrl: `https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`,
+  answerUrl: `${BASE}/apps/requests/${ID}/answer`,
   data: {
     payout: { id: 88, fulfillmentId: 31, attempt: 1 },
     amount: {
