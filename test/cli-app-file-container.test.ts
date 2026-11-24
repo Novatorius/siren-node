@@ -56,9 +56,9 @@ describe('apps-sdk-container: the app file', () => {
   it('lists each kind once when a kind is unknown, and calls them features', () => {
     const parsed = parseAppFile(file({ name: 'Pay', url: 'https://acme.example', items: { pay: { kind: 'other', name: 'Pay' } } }), {});
     expect(parsed.problems[0]?.message).toBe(
-      'apps.acme-reports.items.pay.kind must be one of Action after a conversion (postConversionAction), Action after an allocation (postAllocationAction), ' +
+      'apps.acme-reports.items.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ' +
         'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Incentive resolver (incentiveResolver), ' +
+        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), ' +
         'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
         'Transaction filter (transactionFilter), Collaborator group structure (collaboratorGroupStructure).',
     );

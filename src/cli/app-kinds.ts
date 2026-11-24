@@ -2,29 +2,24 @@
  * The readable name of each feature kind, shown beside the word the code
  * and the app file use, as "Payout method (payoutMethod)". The founder's
  * rulings AP-R39 and AP-R40: the technical term sits beside the readable
- * name, and the names match the docs. The names are `name` in Siren's
- * AppItemKindCatalog::entries() (lib/Apps/Core/Enums/AppItemKindCatalog.php
- * lines 189, 199, 209 and 228 on Siren's feat/apps at c8dbb1ab3), the same
- * catalog `GET /apps/kinds` serves. The two metric kinds' names are the ones
- * Siren's catalog gains in slice C16-1, the incentive resolver's name the
- * one it gains in slice C16-2, the two engagement kinds' the ones it gains in
- * slice C16-4, the program group structure's the one it gains in slice
- * C16-5, the incentive type's the one it gains in slice C16-6, the
- * transaction filter's the one it gains in slice C16-3, and the
- * collaborator group structure's the one it gains in slice C16-7. The tool
- * reads no catalog in `show`,
- * `list` or `apply`, so it holds this copy, and a test pins it to Siren's.
+ * name, and the names match the docs and the dashboard. The names are
+ * `name` in Siren's AppItemKindCatalog::entries() and APP_KINDS (with
+ * CUSTOM_EVENT_KIND_INFO) in frontend/src/platform/saas/apps/apps.ts, on
+ * Siren's feat/apps at 6d2abd936a, the same catalog `GET /apps/kinds`
+ * serves. The README's Feature kinds headings use the same names. The tool
+ * reads no catalog in `show`, `list` or `apply`, so it holds this copy, and
+ * test/cli-apps-container-review.test.ts pins it to Siren's.
  */
 
 const KIND_NAMES: Readonly<Record<string, string>> = {
-  postConversionAction: 'Action after a conversion',
-  postAllocationAction: 'Action after an allocation',
+  postConversionAction: 'Post-conversion action',
+  postAllocationAction: 'Post-allocation action',
   payoutMethod: 'Payout method',
   distributionResolver: 'Distribution resolver',
   customEvent: 'Custom event',
   metricCalculation: 'Metric calculation',
   metricFilter: 'Customer filter for distributors',
-  incentiveResolver: 'Incentive resolver',
+  incentiveResolver: 'Attribution model',
   incentiveType: 'Incentive structure',
   engagementCalculation: 'Engagement calculation',
   engagementFilter: 'Customer filter for programs',

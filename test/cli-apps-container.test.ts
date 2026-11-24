@@ -131,10 +131,10 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
       '  moves the address to a new url, keeping its signing secret',
       '  events: removes sale.created',
       '  key scopes: removes event:sale',
-      '  changes feature notify-crm, Action after a conversion (postConversionAction): name',
+      '  changes feature notify-crm, Post-conversion action (postConversionAction): name',
       '  brings back the archived feature acme-ledger, Payout method (payoutMethod)',
-      '  removes feature added-in-dashboard, Action after a conversion (postConversionAction): 2 records select it, so Siren archives it and never calls it',
-      '  removes feature unused, Action after a conversion (postConversionAction): nothing selects it, so Siren deletes it',
+      '  removes feature added-in-dashboard, Post-conversion action (postConversionAction): 2 records select it, so Siren archives it and never calls it',
+      '  removes feature unused, Post-conversion action (postConversionAction): nothing selects it, so Siren deletes it',
     ]) {
       expect(out, line).toContain(`${line}\n`);
     }
@@ -169,7 +169,7 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     expect(h.out()).toContain(
       `${KEY} is new on ${SANDBOX_BASE_URL}. Applying siren.app.json:\n` +
         '  makes the app with a key, an address and 2 features\n' +
-        '  adds feature notify-crm, Action after a conversion (postConversionAction), named Tell the CRM\n' +
+        '  adds feature notify-crm, Post-conversion action (postConversionAction), named Tell the CRM\n' +
         '  adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n',
     );
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
@@ -257,7 +257,7 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     const lines = h.out().split('\n');
     for (const line of [
-      '  app:11  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM  requires Pro',
+      '  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM  requires Pro',
       '  app:12  Distribution resolver (distributionResolver)  acme-split  Acme split',
       '  events  obligation.approved  requires Pro, so Siren does not send them',
     ]) {
@@ -276,10 +276,10 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     const h = harness([reply(200, app), reply(200, older)]);
     h.signedIn();
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain('  app:11  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM  requires Enterprise\n');
+    expect(h.out()).toContain('  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM  requires Enterprise\n');
     expect(h.out()).toContain('  app:12  Payout method (payoutMethod)  acme-ledger  Acme ledger  your plan cannot use it\n');
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
-    expect(h.out().split('\n').slice(-3, -1)).toEqual(['  app:11  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM', '  app:12  Payout method (payoutMethod)  acme-ledger  Acme ledger']);
+    expect(h.out().split('\n').slice(-3, -1)).toEqual(['  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM', '  app:12  Payout method (payoutMethod)  acme-ledger  Acme ledger']);
     expect(h.out()).not.toMatch(/requires Pro/);
   });
 
@@ -288,7 +288,7 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain('  app:11  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM  requires Pro\n');
+    expect(h.out()).toContain('  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM  requires Pro\n');
     expect(h.out()).toContain('  events  obligation.approved  requires Pro, so Siren does not send them\n');
   });
 

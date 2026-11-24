@@ -160,49 +160,36 @@ describe('apps-sdk-container review fix 3: a name the env file holds twice', () 
 });
 
 /**
- * Each kind's readable name as Siren's catalog gives it, `name` in
- * AppItemKindCatalog::entries() (lib/Apps/Core/Enums/AppItemKindCatalog.php
- * lines 189, 199, 209 and 228 on Siren's feat/apps at c8dbb1ab3), and the
- * two metric kinds' names from slice C16-1's catalog entries, the
- * incentive resolver's name from slice C16-2's catalog entry, the two
- * engagement kinds' names from slice C16-4's, the program group
- * structure's from slice C16-5's, the incentive type's from slice
- * C16-6's, the transaction filter's from slice C16-3's, and the
- * collaborator group structure's from slice C16-7's.
+ * Each kind's readable name as Siren's catalog and dashboard give it:
+ * `name` in AppItemKindCatalog::entries() and APP_KINDS (with
+ * CUSTOM_EVENT_KIND_INFO) in frontend/src/platform/saas/apps/apps.ts, on
+ * Siren's feat/apps at 6d2abd936a. All 14 kinds, the custom event included.
+ * The tool and the README both name each kind this way.
  */
 const SIREN_KIND_NAMES = {
-  postConversionAction: 'Action after a conversion',
-  postAllocationAction: 'Action after an allocation',
+  postConversionAction: 'Post-conversion action',
+  postAllocationAction: 'Post-allocation action',
   payoutMethod: 'Payout method',
   distributionResolver: 'Distribution resolver',
+  incentiveResolver: 'Attribution model',
+  incentiveType: 'Incentive structure',
   metricCalculation: 'Metric calculation',
   metricFilter: 'Customer filter for distributors',
-  incentiveResolver: 'Incentive resolver',
-  incentiveType: 'Incentive structure',
+  transactionFilter: 'Transaction filter',
   engagementCalculation: 'Engagement calculation',
   engagementFilter: 'Customer filter for programs',
   programGroupSorter: 'Program group structure',
-  transactionFilter: 'Transaction filter',
   collaboratorGroupStructure: 'Collaborator group structure',
+  customEvent: 'Custom event',
 };
 
-/*
- * Each kind's readable name as Siren's dashboard and kinds catalog give it
- * now: `name` in AppItemKindCatalog::entries() and APP_KINDS in
- * frontend/src/platform/saas/apps/apps.ts, on Siren's feat/apps at
- * 6d2abd936a. Three of them differ from the tool's own copy above, which
- * the README follows the dashboard in.
- */
-const DASHBOARD_KIND_NAMES = {
-  ...SIREN_KIND_NAMES,
-  postConversionAction: 'Post-conversion action',
-  postAllocationAction: 'Post-allocation action',
-  incentiveResolver: 'Attribution model',
-};
+/** The kinds the README gives a section of their own: every kind Siren calls. */
+const DASHBOARD_KIND_NAMES = Object.fromEntries(Object.entries(SIREN_KIND_NAMES).filter(([kind]) => kind !== 'customEvent'));
 
 describe('apps-sdk-container review fix 4: a kind shows its readable name beside its technical one', () => {
-  it("labels each kind with Siren's catalog name, and a kind the catalog lacks with its term alone", () => {
-    for (const [kind, name] of Object.entries(SIREN_KIND_NAMES)) expect(kindLabel(kind)).toBe(`${name} (${kind})`);
+  it("labels each of the 14 kinds with Siren's catalog name, and a kind the catalog lacks with its term alone", () => {
+    expect(Object.keys(SIREN_KIND_NAMES)).toHaveLength(14);
+    for (const [kind, name] of Object.entries(SIREN_KIND_NAMES)) expect(kindLabel(kind), kind).toBe(`${name} (${kind})`);
     expect(kindLabel('payoutMethod')).toBe(`${payoutKind().name} (payoutMethod)`);
     expect(kindLabel('futureKind')).toBe('futureKind');
   });
@@ -217,7 +204,7 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const out = h.out();
-    expect(out).toContain('  app:11  Action after a conversion (postConversionAction)  notify-crm  Tell the CRM\n');
+    expect(out).toContain('  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM\n');
     expect(out).toContain('  app:12  Payout method (payoutMethod)  acme-ledger  Acme ledger\n');
     expect(out).toContain('  adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n');
   });
@@ -226,9 +213,9 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     const file = (item: Record<string, unknown>) =>
       JSON.stringify({ version: 1, name: 'A', description: '', apps: { [KEY]: { name: 'A', url: 'https://acme.example', items: { pay: item } } } });
     expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
-      `apps.${KEY}.items.pay.kind must be one of Action after a conversion (postConversionAction), Action after an allocation (postAllocationAction), ` +
+      `apps.${KEY}.items.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ` +
         'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Incentive resolver (incentiveResolver), ' +
+        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), ' +
         'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
         'Transaction filter (transactionFilter), Collaborator group structure (collaboratorGroupStructure).',
     );

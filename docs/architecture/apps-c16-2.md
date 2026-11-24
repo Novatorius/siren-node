@@ -16,7 +16,7 @@ PHP and Python SDKs gain the same kind on their own pkt/apps-c16-2 branches.
 | Part | File | Change |
 |---|---|---|
 | `AppItemKind.IncentiveResolver` | src/taxonomy.ts | The value `incentiveResolver`. |
-| Readable name | src/cli/app-kinds.ts | Incentive resolver. |
+| Readable name | src/cli/app-kinds.ts | Attribution model, the dashboard's name for it. |
 | Question and answer types | src/record-types.ts | `AppRewardQuestion`, `AppRewardConversion`, `AppRewardAnswer`. |
 | `AppErrorCode.Dropped` | src/errors.ts | `app_request_dropped`, the answer route's 409 after Siren stopped waiting. |
 | `AppItemDeclaration` | openapi.yaml | The kind `incentiveResolver`. |

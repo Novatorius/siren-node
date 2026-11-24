@@ -40,7 +40,7 @@ function file(items: Record<string, unknown>, url: string | null = URL): string 
 describe('apps-c16-2: the incentive resolver kind', () => {
   it('names the kind with the value Siren stores and the name its catalog gives', () => {
     expect(AppItemKind.IncentiveResolver).toBe('incentiveResolver');
-    expect(kindLabel('incentiveResolver')).toBe('Incentive resolver (incentiveResolver)');
+    expect(kindLabel('incentiveResolver')).toBe('Attribution model (incentiveResolver)');
   });
 
   it('reads an app file with an incentive resolver and its answer window', () => {
