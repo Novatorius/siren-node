@@ -1,0 +1,325 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "siren.app.json",
+  "description": "One Siren app and its features, which siren apps apply declares.",
+  "type": "object",
+  "required": [
+    "version",
+    "apps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "description": "A recipe's name. The tool sends only the app's own name."
+    },
+    "description": {
+      "type": "string"
+    },
+    "apps": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+        "maxLength": 64,
+        "not": {
+          "enum": [
+            "requests",
+            "events",
+            "scopes",
+            "kinds"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name the dashboard shows."
+          },
+          "description": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "Where Siren sends requests: https, or http to localhost. ${SIREN_APP_URL} is filled from the shell or .env."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The app key's scopes."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The events Siren tells the app about."
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Email addresses Siren tells when something is wrong with the app."
+          },
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "maxLength": 64
+            },
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "kind",
+                "name"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "postConversionAction",
+                    "postAllocationAction",
+                    "payoutMethod",
+                    "distributionResolver",
+                    "customEvent",
+                    "metricCalculation",
+                    "metricFilter",
+                    "incentiveResolver",
+                    "incentiveType",
+                    "engagementCalculation",
+                    "engagementFilter",
+                    "programGroupSorter",
+                    "transactionFilter",
+                    "collaboratorGroupStructure"
+                  ],
+                  "description": "The feature's kind, which locks once Siren makes it: Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), Transaction filter (transactionFilter), Collaborator group structure (collaboratorGroupStructure)."
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The name the dashboard shows."
+                },
+                "description": {
+                  "type": "string"
+                },
+                "currencies": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "description": "For a Payout method (payoutMethod): the currency codes it pays."
+                },
+                "answerWindowMinutes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 43200,
+                  "description": "How long Siren waits for an answer to an ask, in minutes."
+                },
+                "scoresMoney": {
+                  "type": "boolean",
+                  "description": "For a Metric calculation (metricCalculation): whether its score is an amount of money."
+                },
+                "conversionTypes": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "sale",
+                      "lead",
+                      "renewal"
+                    ]
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "description": "For an Incentive structure (incentiveType): the conversions it pays, each once."
+                },
+                "fields": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "description": "For a Custom event (customEvent): each field's name to {\"type\": ..., \"required\": ...}."
+                },
+                "domains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "description": "For a Custom event (customEvent): the websites that may send it from a browser, such as example.com or *.example.com."
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "payoutMethod"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "currencies"
+                    ]
+                  },
+                  "else": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "currencies"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "incentiveType"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "conversionTypes"
+                    ]
+                  },
+                  "else": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "conversionTypes"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "metricCalculation"
+                      }
+                    }
+                  },
+                  "else": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "scoresMoney"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "customEvent"
+                      }
+                    }
+                  },
+                  "else": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "fields"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "domains"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "description": "Each feature under its feature key."
+          }
+        },
+        "if": {
+          "required": [
+            "items"
+          ],
+          "properties": {
+            "items": {
+              "not": {
+                "additionalProperties": {
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "customEvent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "url"
+          ]
+        }
+      },
+      "description": "One app, under its app key."
+    }
+  }
+}

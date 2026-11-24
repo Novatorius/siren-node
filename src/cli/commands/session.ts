@@ -1,5 +1,5 @@
 import { SirenError } from '../../errors';
-import { contextOf, jwtClaim, planLine } from '../context';
+import { contextOf, jwtClaim, notSignedIn, planLine } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { PasswordSignIn, askLine, readPassword } from '../session-auth';
@@ -172,6 +172,41 @@ export async function logout(input: CommandInput): Promise<number> {
   }
   await run.store.remove(run.target.baseUrl);
   run.print(`Signed out of ${run.target.baseUrl}.`);
+  return 0;
+}
+
+/**
+ * `siren whoami [--json]`: who is signed in to the Siren this command line
+ * names, in which organization and role, whether that Siren is a sandbox or
+ * live, and where the session is kept. Reads credentials.json only and sends
+ * nothing. Exits 1 when no session is kept for that Siren. Never prints a
+ * token.
+ */
+export async function whoami(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  const session = await run.store.get(run.target.baseUrl);
+  if (session === null) throw await notSignedIn(run.store, run.target, run.command('login'));
+  const edition = session.edition === 'production' ? 'live' : 'sandbox';
+  if (input.values.json === true) {
+    run.print(
+      JSON.stringify(
+        {
+          email: session.email,
+          org: { id: session.orgId, name: session.orgName, slug: session.orgSlug ?? null },
+          role: session.role,
+          baseUrl: run.target.baseUrl,
+          edition,
+          sessionFile: run.store.path,
+        },
+        null,
+        2,
+      ),
+    );
+    return 0;
+  }
+  run.print(`Signed in as ${session.email} to ${session.orgName}${session.orgSlug ? ` (${session.orgSlug})` : ''}, as ${session.role}.`);
+  run.print(`Siren: ${run.target.baseUrl}, ${edition === 'live' ? 'live' : 'a sandbox'}.`);
+  run.print(`Session file: ${run.store.path}`);
   return 0;
 }
 

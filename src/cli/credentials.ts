@@ -24,6 +24,8 @@ export interface StoredSession {
   userId: number;
   orgId: number;
   orgName: string;
+  /** The organization's slug. Absent in a file written before it was kept. */
+  orgSlug?: string;
   role: string;
   accessToken: string;
   refreshToken: string;
@@ -40,6 +42,11 @@ export interface StoredSession {
 /** The file's whole shape. `sessions` is keyed by the base URL with no trailing slash. */
 export interface CredentialsFile {
   version: 1;
+  /**
+   * The Siren the last `login`, `signup` or `use` was for, which a command
+   * talks to when it names none and `SIREN_BASE_URL` is not set.
+   */
+  current?: string;
   sessions: Record<string, StoredSession>;
 }
 
@@ -75,19 +82,33 @@ export class CredentialStore {
     return (await this.read()).sessions[baseUrl] ?? null;
   }
 
-  /** Saves the session for this base URL, replacing the one before. Other bases keep theirs. */
-  async put(baseUrl: string, session: StoredSession): Promise<void> {
+  /** Saves the session for this base URL, replacing the one before. Other bases keep theirs. With `current`, it becomes the Siren in use. */
+  async put(baseUrl: string, session: StoredSession, current = false): Promise<void> {
     const file = await this.read();
     file.sessions[baseUrl] = session;
+    if (current) file.current = baseUrl;
     await this.write(file);
   }
 
-  /** Forgets the session for this base URL. */
+  /** Forgets the session for this base URL, and forgets it as the Siren in use. */
   async remove(baseUrl: string): Promise<void> {
     const file = await this.read();
     if (!Object.prototype.hasOwnProperty.call(file.sessions, baseUrl)) return;
     delete file.sessions[baseUrl];
+    if (file.current === baseUrl) delete file.current;
     await this.write(file);
+  }
+
+  /** The Siren in use and its session, or null when none is remembered or its session is gone. */
+  async current(): Promise<{ baseUrl: string; session: StoredSession } | null> {
+    const file = await this.read();
+    const session = file.current === undefined ? undefined : file.sessions[file.current];
+    return file.current === undefined || session === undefined ? null : { baseUrl: file.current, session };
+  }
+
+  /** Every session kept, by base URL. */
+  async all(): Promise<Record<string, StoredSession>> {
+    return (await this.read()).sessions;
   }
 
   /** The whole file, or an empty one when there is none. Refuses a file others can read or one of another shape. */
@@ -117,7 +138,7 @@ export class CredentialStore {
     }
     const sessions = Object.create(null) as Record<string, StoredSession>;
     for (const [base, session] of Object.entries(parsed.sessions)) sessions[base] = session;
-    return { version: 1, sessions };
+    return { version: 1, ...(typeof parsed.current === 'string' ? { current: parsed.current } : {}), sessions };
   }
 
   /** Writes the whole file through a temporary file and a rename, mode 0600 in a folder of mode 0700. */
@@ -138,7 +159,8 @@ export class CredentialStore {
 /** True for `{ version: 1, sessions: { <base>: <session> } }` whose sessions each hold their tokens as text. */
 function isCredentialsFile(value: unknown): value is CredentialsFile {
   if (typeof value !== 'object' || value === null) return false;
-  const { version, sessions } = value as { version?: unknown; sessions?: unknown };
+  const { version, sessions, current } = value as { version?: unknown; sessions?: unknown; current?: unknown };
+  if (current !== undefined && typeof current !== 'string') return false;
   if (version !== 1 || typeof sessions !== 'object' || sessions === null || Array.isArray(sessions)) return false;
   return Object.values(sessions).every((session: unknown) => {
     if (typeof session !== 'object' || session === null) return false;

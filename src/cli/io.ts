@@ -40,6 +40,34 @@ export interface CliIo {
   sleep(ms: number): Promise<void>;
   /** Aborted when the person presses Ctrl-C. Ends `apps requests --follow` with exit code 0. */
   readonly signal?: AbortSignal;
+  /**
+   * The terminal the Siren hook plays on (see `hook.ts`). Absent, as in most
+   * tests, the hook never plays.
+   */
+  readonly screen?: CliScreen;
+}
+
+/**
+ * What the hook animation needs from the terminal standard output writes
+ * to. {@link nodeIo} builds it on `process.stdout` and `process.stdin`.
+ */
+export interface CliScreen {
+  /** The terminal's columns and rows, or null when standard output is not a terminal. */
+  readonly size: { columns: number; rows: number } | null;
+  readonly platform: NodeJS.Platform;
+  /** Writes to standard output as given. */
+  write(text: string): void;
+  /** Waits between frames. */
+  wait(ms: number): Promise<void>;
+  /**
+   * When standard input is a terminal, puts it in raw mode and calls
+   * `onKey` with each key typed, Ctrl-C included, and answers a function
+   * that stops reading and gives the mode back. Answers null, and reads
+   * nothing, when standard input is not a terminal.
+   */
+  listen(onKey: (key: string) => void): (() => void) | null;
+  /** Runs `fn` if the process exits before the answered function is called. */
+  atExit(fn: () => void): () => void;
 }
 
 /**
@@ -109,6 +137,40 @@ export function nodeIo(): CliIo {
         controller.signal.addEventListener('abort', done);
       }),
     signal: controller.signal,
+    screen: nodeScreen(),
+  };
+}
+
+/** The real terminal for the hook, read once when the command starts. */
+function nodeScreen(): CliScreen {
+  const out = process.stdout;
+  return {
+    size: out.isTTY === true ? { columns: out.columns ?? 80, rows: out.rows ?? 24 } : null,
+    platform: process.platform,
+    write: (text) => {
+      out.write(text);
+    },
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    listen: (onKey) => {
+      const input = process.stdin;
+      if (input.isTTY !== true) return null;
+      const wasRaw = input.isRaw;
+      const onData = (chunk: Buffer | string) => onKey(chunk.toString());
+      input.setRawMode(true);
+      input.on('data', onData);
+      input.resume();
+      return () => {
+        input.off('data', onData);
+        if (input.isRaw !== wasRaw) input.setRawMode(wasRaw);
+        input.pause();
+      };
+    },
+    atExit: (fn) => {
+      process.on('exit', fn);
+      return () => {
+        process.off('exit', fn);
+      };
+    },
   };
 }
 

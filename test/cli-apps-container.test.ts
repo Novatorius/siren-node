@@ -140,7 +140,9 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     }
     expect(h.printed()).not.toContain('elsewhere.example');
     expect(h.printed()).not.toContain(URL_ENV.SIREN_APP_URL);
-    expect(h.prompts).toEqual(['Apply these changes? The last write wins, so this replaces anything changed in the dashboard since. Type yes to apply: ']);
+    expect(h.prompts).toEqual([
+      `Apply these changes to ${KEY} on Acme, a sandbox organization? The last write wins, so this replaces anything changed in the dashboard since. Type yes to apply: `,
+    ]);
   });
 
   it('sends nothing when the person does not type yes, or when no terminal can ask and --yes is missing', async () => {
@@ -225,17 +227,7 @@ describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
     }
   });
 
-  it('siren apps rotate explains the split, sends nothing and exits non-zero', async () => {
-    const h = rotating([reply(200, { ...appRecord(), rawKey: NEW_KEY, signingSecret: NEW_SECRET })]);
-    expect(await h.run(['apps', 'rotate', KEY])).toBe(1);
-    expect(h.http.requests).toHaveLength(0);
-    expect(h.editionReads).toHaveLength(0);
-    expect(h.file('.env.sandbox')).toBe(OLD);
-    expect(h.err()).toContain(
-      `Rotating is now two commands, since an app's key and its signing secret change apart. Nothing was sent. ` +
-        `Run siren apps rotate-key ${KEY} for a new key, or siren apps rotate-secret ${KEY} for a new signing secret.`,
-    );
-  });
+  // `siren apps rotate` itself is gone since CLI pass 1 (finding 8). test/cli-first-run.test.ts checks it.
 });
 
 describe('apps-sdk-container item 6: plans in the output', () => {

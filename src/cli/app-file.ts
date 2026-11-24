@@ -81,9 +81,13 @@ export interface AppFileApp {
 
 /** A checked app file, with every `${NAME}` already filled from the environment. */
 export interface AppFile {
+  /** The JSON schema an editor completes the file from, which the tool ignores. */
+  $schema?: string;
   version: 1;
-  name: string;
-  description: string;
+  /** A recipe's name. The tool sends only the app's own name, which the dashboard shows. */
+  name?: string;
+  /** A recipe's description. The tool sends only the app's own. */
+  description?: string;
   /** Exactly one app in the first step. */
   apps: Record<string, AppFileApp>;
 }
@@ -162,27 +166,25 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
   return { key, params };
 }
 
+/** Where `apps init` points `$schema`: the schema the package ships, as npm installs it beside the app. */
+export const APP_FILE_SCHEMA_PATH = './node_modules/@novatorius/siren/siren.app.schema.json';
+
 /**
  * The text `apps init` writes: a file that passes {@link parseAppFile} once
  * `SIREN_APP_URL` is set, declaring the app `key` named `name` with one
- * post-conversion action, `notify`, and one payout method, `pay`,
- * paying `USD`.
+ * Post-conversion action, `notify`, the plainest feature, and the schema an
+ * editor completes the rest from.
  */
 export function appFileTemplate(key: string, name: string): string {
   const file = {
+    $schema: APP_FILE_SCHEMA_PATH,
     version: 1,
-    name,
-    description: `The Siren app ${name}.`,
     apps: {
       [key]: {
         name,
-        description: '',
         url: '${SIREN_APP_URL}',
-        scopes: [],
-        events: [],
         items: {
           notify: { kind: 'postConversionAction', name: 'Tell my service about each approved conversion' },
-          pay: { kind: 'payoutMethod', name: 'Pay through my service', currencies: ['USD'] },
         },
       },
     },
@@ -214,8 +216,11 @@ const RECIPE_KEYS = [
   'notifications',
 ];
 
+/** The keys an app file holds at its top. */
+export const TOP_FIELDS = ['$schema', 'version', 'name', 'description', 'apps'];
+
 /** The fields `PUT /apps/{key}` reads (DeclareApp.php). */
-const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'items'];
+export const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'items'];
 
 /** The most problem contacts an app may hold, `AppService::MAX_CONTACTS`. */
 export const MAX_CONTACTS = 10;
@@ -237,7 +242,7 @@ export function storedContacts(contacts: readonly string[]): string[] {
 }
 
 /** The fields Siren stores for a feature (AppService, "Items"). */
-const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains'];
+export const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains'];
 
 /**
  * The conversions an incentive type may pay, in the order Siren's kinds
@@ -247,7 +252,7 @@ const ITEM_FIELDS = ['kind', 'name', 'description', 'currencies', 'answerWindowM
 export const CONVERSION_TYPES: readonly AppConversionType[] = ['sale', 'lead', 'renewal'];
 
 /** The most allowed domains one custom event takes, `AllowedDomains::MAX_PATTERNS`. */
-const MAX_DOMAINS = 20;
+export const MAX_DOMAINS = 20;
 
 /** One label of a host, as Siren's `AllowedDomains` reads it. */
 const HOST_LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
@@ -257,19 +262,19 @@ const HOST = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})*$`);
  * Siren's feature kinds (lib/Apps/Core/Enums/AppItemKinds.php), each once:
  * `AppItemKind.FulfillmentMethod` is an alias of `payoutMethod`.
  */
-const KINDS: readonly string[] = [...new Set<string>(Object.values(AppItemKind))];
+export const KINDS: readonly string[] = [...new Set<string>(Object.values(AppItemKind))];
 
 /** The payout kind's old word, which Siren refuses since it took the documentation's. */
 const OLD_PAYOUT_KIND = 'fulfillmentMethod';
 
 /** The app keys Siren keeps for its own routes (`AppService::RESERVED_KEYS`). */
-const RESERVED_APP_KEYS = ['requests', 'events', 'scopes', 'kinds'];
+export const RESERVED_APP_KEYS = ['requests', 'events', 'scopes', 'kinds'];
 
 /** An app or feature key, as Siren's `AppService::KEY_PATTERN` reads it, at most 64 characters. */
-const KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const KEY = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** The longest answer window Siren takes, `AppService::ANSWER_WINDOW_MAX_MINUTES`. */
-const MAX_ANSWER_WINDOW_MINUTES = 43200;
+export const MAX_ANSWER_WINDOW_MINUTES = 43200;
 
 /** The hosts an app's url may reach over plain http, which only a local Cloud reaches. */
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', 'host.docker.internal'];
@@ -542,18 +547,19 @@ class AppFileCheck {
     const top = this.fill(value, '') as Record<string, unknown>;
 
     for (const key of Object.keys(top)) {
-      if (['version', 'name', 'description', 'apps'].includes(key)) continue;
+      if (TOP_FIELDS.includes(key)) continue;
       this.problem(
         key,
         this.where(key),
         RECIPE_KEYS.includes(key)
           ? `${key} is a recipe stanza, and an app file holds only apps for now. Keep ${key} in a recipe of its own.`
-          : `${key} is not a recipe key. An app file holds version, name, description and apps.`,
+          : `${key} is not a recipe key. An app file holds ${TOP_FIELDS.join(', ')}.`,
       );
     }
     if (top.version !== 1) this.problem('version', this.where('version'), 'version is required, and must be 1.');
-    if (typeof top.name !== 'string') this.problem('name', this.where('name'), 'name is required, as text.');
-    if (typeof top.description !== 'string') this.problem('description', this.where('description'), 'description is required, as text.');
+    if (top.$schema !== undefined && typeof top.$schema !== 'string') this.problem('$schema', this.where('$schema'), '$schema must be text.');
+    if (top.name !== undefined && typeof top.name !== 'string') this.problem('name', this.where('name'), 'name must be text.');
+    if (top.description !== undefined && typeof top.description !== 'string') this.problem('description', this.where('description'), 'description must be text.');
 
     const apps = top.apps;
     if (!isObject(apps)) {
@@ -789,7 +795,7 @@ class AppFileCheck {
       }
       const set = this.env[name];
       if (set === undefined || set === '') {
-        this.problem(path, where, `${path} needs the environment variable ${name}, which is not set.`);
+        this.problem(path, where, `${path} needs the environment variable ${name}, which is not set. Set it in your shell, or in .env beside the app file.`);
         complete = false;
         return '';
       }

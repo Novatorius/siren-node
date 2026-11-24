@@ -204,8 +204,8 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
       writeFileSync(credentialsPath, JSON.stringify({ version: 1, sessions }), { mode: 0o600 });
       chmodSync(credentialsPath, 0o600);
     },
-    credentials(): { version: number; sessions: Record<string, StoredSession> } {
-      return JSON.parse(readFileSync(credentialsPath, 'utf8')) as { version: number; sessions: Record<string, StoredSession> };
+    credentials(): { version: number; current?: string; sessions: Record<string, StoredSession> } {
+      return JSON.parse(readFileSync(credentialsPath, 'utf8')) as { version: number; current?: string; sessions: Record<string, StoredSession> };
     },
     credentialsText: () => readFileSync(credentialsPath, 'utf8'),
     modeOf: (path: string) => statSync(path).mode & 0o777,

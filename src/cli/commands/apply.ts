@@ -15,8 +15,7 @@ import { CliRefusal, CliUsageError } from '../targets';
 /*
  * `siren apps init`, `apply`, `list`, `show`, `on`, `off`, `rotate-key`,
  * `rotate-secret` and `delete`: the app file, the app on Siren, and its key
- * and signing secret on this machine. `rotate` names the two that replace
- * it.
+ * and signing secret on this machine.
  * Contract: docs/architecture/apps-cli.md, "The commands" and "Signing in
  * and the stored files".
  *
@@ -51,10 +50,16 @@ function isAppKey(key: string): boolean {
   return key.length <= 64 && APP_KEY.test(key) && !(RESERVED_APP_KEYS as readonly string[]).includes(key);
 }
 
+/** The lines `apps init` keeps in .gitignore: the two env files apply writes, by name, and the temporary file each is written through. */
+const IGNORED = ['.env.sandbox', '.env.live', '.env.*.tmp'];
+
 /**
  * `siren apps init`: writes siren.app.json in the working folder from the
- * template, never over a file that is there, and adds `.env.*` to
- * .gitignore so the key `apply` saves stays out of git. Sends nothing.
+ * template, never over a file that is there, and adds the env files `apply`
+ * writes to .gitignore by name, so their key stays out of git and a
+ * committed `.env.example` stays in. Then says where `SIREN_APP_URL` goes,
+ * how to add a feature, and how Siren reaches a handler on this machine.
+ * Sends nothing.
  */
 export async function appsInit(input: CommandInput): Promise<number> {
   const { io, values } = input;
@@ -73,16 +78,47 @@ export async function appsInit(input: CommandInput): Promise<number> {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CliRefusal(`${path} is already there, so nothing was written.`);
     throw error;
   }
-  io.stdout(`Wrote ${path} for the app ${key}.\n`);
+  io.stdout(`Wrote ${path} for the app ${key}, with one ${kindLabel('postConversionAction')}.\n`);
 
   const ignorePath = join(io.cwd, '.gitignore');
   const ignored = await readText(ignorePath);
-  if (!(ignored ?? '').split(/\r?\n/).includes('.env.*')) {
-    await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}.env.*\n`);
-    io.stdout(`Added .env.* to ${ignorePath}, so the key apply saves stays out of git.\n`);
+  const have = (ignored ?? '').split(/\r?\n/);
+  const missing = IGNORED.filter((line) => !have.includes(line));
+  if (missing.length > 0) {
+    await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
+    io.stdout(`Added ${missing.join(', ')} to ${ignorePath}, so the key apply saves stays out of git.\n`);
   }
-  io.stdout(`Set SIREN_APP_URL to your app's https address, then run ${input.command('apps apply')}.\n`);
+  io.stdout('To add a feature, add it under items. The README\'s Feature kinds table lists each kind, and the file\'s $schema lets your editor complete them.\n');
+  io.stdout(`Set SIREN_APP_URL to your app's https address, in your shell or in .env here, then run ${input.command('apps apply')}.\n`);
+  io.stdout('Siren must reach that address. For a handler on this machine, run a tunnel such as cloudflared or ngrok, and use the https address it gives.\n');
   return 0;
+}
+
+/**
+ * The `SIREN_APP_` lines of the `.env` file in `folder`, as `NAME=value`,
+ * `export NAME=value`, or with the value in quotes. Every other line is let
+ * go. Empty when there is no such file.
+ */
+async function appVariablesIn(folder: string): Promise<Record<string, string>> {
+  const text = await readText(join(folder, '.env'));
+  const found: Record<string, string> = {};
+  for (const line of (text ?? '').split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?(SIREN_APP_[A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!match) continue;
+    let value = match[2]!;
+    if (/^(["']).*\1$/.test(value)) value = value.slice(1, -1);
+    found[match[1]!] = value;
+  }
+  return found;
+}
+
+/** The scheme and host of an app's url, which a plan may show, since the path or query may hold a secret. */
+function originOf(url: string): string | undefined {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -127,15 +163,19 @@ export async function appsApply(input: CommandInput): Promise<number> {
   const text = await readText(path);
   if (text === undefined) throw new CliRefusal(`There is no app file at ${path}. Write one with ${run.command('apps init')}.`);
 
-  const parsed = parseAppFile(text, io.env);
+  // The shell wins over .env beside the file, as Node's --env-file and dotenv do.
+  const fromFile = await appVariablesIn(dirname(path));
+  const shell = (name: string) => io.env[name] !== undefined && io.env[name] !== '';
+  const parsed = parseAppFile(text, { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) });
   if (parsed.file === null) {
     for (const problem of parsed.problems) {
-      io.stderr(`${shown}:${problem.line}:${problem.column}: ${problem.path === '' ? '' : `${problem.path}: `}${problem.message}\n`);
+      const at = problem.path === '' || problem.message.startsWith(problem.path) ? '' : `${problem.path}: `;
+      io.stderr(`${shown}:${problem.line}:${problem.column}: ${at}${problem.message}\n`);
     }
     throw new CliRefusal(`${shown} has ${parsed.problems.length === 1 ? 'a problem' : `${parsed.problems.length} problems`}, so nothing was sent.`);
   }
 
-  await run.signedIn();
+  const session = await run.signedIn();
   const { key, params } = declarationFor(parsed.file);
   if (params.url != null && onThisMachine(params.url)) {
     run.warn(
@@ -184,8 +224,13 @@ export async function appsApply(input: CommandInput): Promise<number> {
       : `Applying ${shown} changes ${key} on ${run.target.baseUrl}:`,
   );
   for (const line of lines) run.print(`  ${line}`);
+  const origin = params.url == null ? undefined : originOf(params.url);
+  if (changes.isNew && origin !== undefined) run.print(`  sends its requests to ${origin}`);
+  const org = `${session.orgName}, a ${session.edition === 'production' ? 'live' : 'sandbox'} organization`;
   if (input.values.yes !== true) {
-    const question = `Apply ${lines.length === 1 ? 'this change' : 'these changes'}? The last write wins, so this replaces anything changed in the dashboard since. Type yes to apply: `;
+    const question = changes.isNew
+      ? `Make ${key} on ${org}? Type yes to make it: `
+      : `Apply ${lines.length === 1 ? 'this change' : 'these changes'} to ${key} on ${org}? The last write wins, so this replaces anything changed in the dashboard since. Type yes to apply: `;
     if (!io.interactive) {
       throw new CliRefusal(`Nothing was sent. Run ${run.command(input.args[0] === undefined ? 'apps apply --yes' : `apps apply ${shown} --yes`)} to apply ${lines.length === 1 ? 'it' : 'them'} without asking.`);
     }
@@ -197,7 +242,11 @@ export async function appsApply(input: CommandInput): Promise<number> {
 
   run.print(`Declared ${key} on ${run.target.baseUrl}.`);
   for (const line of appLines(app, false)) run.print(line);
-  for (const name of parsed.filled) run.print(`Its url came from ${name}.`);
+  if (app.items.length > 0) {
+    const ref = app.items[0]!.ref;
+    run.print(`${ref} is the id a program, distributor or autofulfiller stores to select that feature.`);
+  }
+  for (const name of parsed.filled) run.print(`Its url came from ${name}${shell(name) ? '' : ' in .env'}.`);
   if (app.items.some((item) => item.status === 'archived')) {
     const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);
     run.print(
@@ -210,7 +259,12 @@ export async function appsApply(input: CommandInput): Promise<number> {
   if (app.created) {
     const saved = await saveSecrets(run, key, envPath, { rawKey: app.rawKey, signingSecret: app.signingSecret }, false);
     await run.remember(key, envPath);
-    return saved ? 0 : 1;
+    if (!saved) return 1;
+    const envName = basename(envPath);
+    run.print('Next:');
+    run.print(`  Run your handler with its key: node --env-file=${envName} server.js, or load ${envName} as your framework does.`);
+    run.print(`  Watch what Siren sends it: ${run.command('apps requests --follow')}`);
+    return 0;
   }
   await run.remember(key, envPath);
   // A later declaration that gave the app its first address answers the address's secret once.
@@ -277,21 +331,6 @@ export function appsOn(input: CommandInput): Promise<number> {
 /** `siren apps off <key>`: turns the app off. Siren stops calling it. */
 export function appsOff(input: CommandInput): Promise<number> {
   return setStatus(input, 'inactive');
-}
-
-/**
- * `siren apps rotate [<key>]`: gone, since an app's key and its signing secret
- * now change apart (`POST /apps/{key}/key/rotate` and
- * `POST /apps/{key}/secret/rotate` on Siren's int/preview-apps). Sends
- * nothing, names the two commands that replace it, and exits 1.
- */
-export async function appsRotate(input: CommandInput): Promise<number> {
-  // With no key the explanation is the same, with a placeholder where the key goes.
-  const key = input.args[0] === undefined ? '<key>' : appKeyArgument(input.args[0]);
-  throw new CliRefusal(
-    `Rotating is now two commands, since an app's key and its signing secret change apart. Nothing was sent. ` +
-      `Run ${input.command(`apps rotate-key ${key}`)} for a new key, or ${input.command(`apps rotate-secret ${key}`)} for a new signing secret.`,
-  );
 }
 
 /**

@@ -134,16 +134,24 @@ work. `apps.verifyRequest()` requires the timestamped signature and never falls 
 
 The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup keeps the file's
 `#!/usr/bin/env node` line. It needs no new dependency: options are read with `node:util`
-`parseArgs`, strict.
+`parseArgs`, first loosely to find the command, then strictly with that command's options, so an
+unknown option is refused in the tool's own words with the nearest real one (`There is no option
+--emial for siren login. Did you mean --email?`), and a mistyped command names the nearest command.
+`siren` alone plays the hook and prints where you stand: signed in or not, to which Siren, and the
+three commands that come next, with exit code 0. `siren apps` lists the apps commands. `siren help
+[command]`, `siren version` and `-v` work as `--help` and `--version` do. Each command's `--help`
+lists its options with a line each, the shared ones, and an example (CLI pass 1, findings 3 and
+7).
 
 | Command | Sends | Prints |
 | --- | --- | --- |
 | `siren signup [--org-name] [--email] [--password-stdin] [--accept-terms]` | `GET /auth/signup-options`, then `POST /auth/register-org` once | The organization and the address signed in to. See "Confirmation and plan answers" for the other outcomes. |
 | `siren login [--email] [--org <slug or id>] [--password-stdin]` | signup-options, `POST /auth/login`, and `POST /auth/select-org` for a person in several organizations | The organization signed in to, and the days left to confirm the address when Siren says so. |
 | `siren logout` | `POST /auth/logout` with the access token and the refresh token | That the session is forgotten. It forgets it even when Siren refuses, and it needs no `--live` (AP-A640). |
+| `siren whoami [--json]` | nothing | Who is signed in to the Siren the line names, the organization and role, whether that Siren is live, and the session file's path. Exit 1 when no session is kept there (CLI pass 1, finding 2). |
 | `siren orgs` | `GET /auth/memberships` | One line per organization, `*` on the current one. |
 | `siren use <slug or id>` | memberships, then `POST /auth/switch-org` | The organization now in use. |
-| `siren apps init [--key] [--name]` | nothing | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
+| `siren apps init [--key] [--name]` | nothing | Writes siren.app.json with `$schema` and one Post-conversion action, adds `.env.sandbox`, `.env.live` and `.env.*.tmp` to .gitignore, never overwrites a file, and says where `SIREN_APP_URL` goes, how to add a feature, and that a handler on this machine needs a tunnel (CLI pass 1, finding 5). |
 | `siren apps apply [file] [--yes]` | `GET /apps/{key}`, then `PUT /apps/{key}` once after the person agrees (slice C6) | Each change the file would make, then the question, then the app and each feature with its `app:{id}`, never the url, and the name of each variable it filled. On the first apply, the key's 16-character prefix and the absolute path of the env file it wrote. On a later apply with no `SIREN_API_KEY` in that file, a line that names `siren apps rotate-key <key>` (AP-A635). |
 | `siren apps list [--json]` | `GET /apps` | One block per app with its items, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
 | `siren apps show <key> [--json]` | `GET /apps/{key}` | The app and its items, each archived item marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
@@ -153,18 +161,18 @@ The bin is `siren`, `./dist/cli.js`, built by tsup from src/cli/index.ts. tsup k
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend`, and on 409 `app_request_not_resendable` for a request not `applied`, `GET /apps/requests/{requestKey}` and `GET /apps` | The request as it now stands. On that 409, that its app is off, with `siren apps on <key>` and the resend to run after. An `applied` request is told there is nothing to send. |
 | `siren apps rotate-key <key> [--app-file <path>] [--yes]` | `POST /apps/{key}/key/rotate` | The new prefix and the absolute path of the env file. Asks first. Writes the new key where `apply` wrote the first, or beside the named app file (AP-A634), and leaves the signing secret's line alone (slice C6). |
 | `siren apps rotate-secret <key> [--app-file <path>] [--yes]` | `POST /apps/{key}/secret/rotate` | The absolute path of the env file. Asks first, and writes only `SIREN_SIGNING_SECRET` (slice C6). |
-| `siren apps rotate [<key>]` | nothing | Names `rotate-key` and `rotate-secret` and exits 1, with or without a key (slice C6). |
 | `siren apps on <key>` and `siren apps off <key>` | `POST /apps/{key}/status` | The app's new state. |
 | `siren apps delete <key> --yes` | `DELETE /apps/{key}`, and `GET /apps/{key}` after a 409 that names records | That it is gone. On 409 `app_in_use`: the records in `uses` with the `siren apps off` command while the app is on, or, once it is off, that those records must change before a delete, and when `openRequests` is above 0, `siren apps requests --app <key>` and the advice to answer or wait for the open asks (AP-A641). |
 
-Every command takes `--sandbox`, `--live`, `--base-url <url>` and `--help`. Exit codes: 0 for done,
-1 when Siren or the tool refused, 2 for a command line the tool cannot read, with nothing sent.
+Every command takes `--sandbox`, `--live`, `--base-url <url>`, `--quiet` and `--help`. Exit codes:
+0 for done, 1 when Siren or the tool refused, 2 for a command line the tool cannot read, with
+nothing sent, and 130 after Ctrl-C during the hook.
 Results go to standard output and every refusal is one message on standard error.
 
 A command checks what it was given on the line before it sends anything, the edition read
 included, and answers 2 in its own words with the usage line: a request id that is not `apr_` and
 32 lowercase hex characters (`answer`, `resend`, `requests <id>`), an app key Siren cannot hold
-(`show`, `on`, `off`, `rotate`, `delete`, `requests --app`), and an answer that is not JSON, not
+(`show`, `on`, `off`, `rotate-key`, `rotate-secret`, `add-key`, `delete`, `requests --app`), and an answer that is not JSON, not
 an object, has no text `outcome`, or is longer than 16384 bytes. Before, `siren apps answer
 apr_xyz` exited 1 with the SDK's line, which named `apps.requests.answer()` (e2e step 11d), and
 `requests --app <bad key>` sent the list before it refused. test/cli-arguments.test.ts covers each.
@@ -258,10 +266,42 @@ not save and that `siren apps rotate-key <key>` or `rotate-secret` issues a new 
 After a rotate it also says that the old key left in the file is revoked. The new file is written
 as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps init` writes covers.
 
+### The hook on first run
+
+The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts): the
+two halves of the logo slide in and grip, 25 frames 50 milliseconds apart, about 1.2 seconds, in
+Siren green. Then it prints the wordmark, the version and one line that names `siren --help`.
+`siren` with nothing after it plays the hook each time, then prints whether a session is kept for
+the Siren it would talk to, and which, the three commands that come next (`login`, `apps init`
+and `apps apply`, or `apps init`, `apps apply` and `apps requests --follow` once signed in), and
+`siren --help`, and answers 0. It reads credentials.json and sends nothing.
+
+The frames are braille, 24 characters by 14 lines, in src/cli/hook-frames.ts. They come from the
+website's public/logo-animated-once.svg through scripts/build-hook-frames.mjs, which steps the
+SVG's CSS animation in headless Chromium, so the package gains no runtime dependency. The green is
+the dark theme's `--primary` in Siren's frontend/src/index.css, `164 100% 50%`, which that file
+names the exact logo color #00FFB9. The logo fills both halves with it. The tool draws it in
+truecolor when `COLORTERM` is `truecolor` or `24bit`, else as color 49 of 256.
+
+It never plays when standard output is not a terminal, under `CI` (any value but `false` or `0`),
+under `NO_COLOR` (any value but empty), when `TERM` is `dumb`, with `--quiet` or `--json`, in a
+terminal smaller than 28 by 18, or in a Windows console other than Windows Terminal. Each of those
+skips costs no time and leaves first run for later. Any key jumps to the still logo. Ctrl-C stops
+the command with exit code 130. The cursor comes back and standard input leaves raw mode however
+it ends, also when the process exits mid-way. When standard input is not a terminal, as with
+`--password-stdin`, the hook never reads it. `state.json` in the config folder records that it
+played.
+
 ## Sandbox and live
 
-- With no flag the command talks to `SIREN_BASE_URL`, else `SANDBOX_BASE_URL`. It reaches
-  `https://api.sirenaffiliates.com` only with `--live`.
+- With no flag the command talks to `SIREN_BASE_URL`, else the Siren the last `login`, `signup`
+  or `use` was for (`current` in credentials.json), else `SANDBOX_BASE_URL`. It reaches
+  `https://api.sirenaffiliates.com` only with `--live` or after signing in to it. `--live` alone
+  skips a remembered sandbox. `logout` forgets the remembered Siren with its session. A command
+  with no session for its Siren names the Siren a session is kept for and the `--base-url` that
+  reaches it (CLI pass 1, finding 2).
+- An address may be a bare host. `siren.example.com` becomes `https://siren.example.com/siren/v1`,
+  and an address with no path gets `/siren/v1` (CLI pass 1, finding 9).
 - `--sandbox` with `--live` or with `--base-url` is a usage error.
 - `--base-url` and `SIREN_BASE_URL` take `http://` only for `localhost`, `127.0.0.1` and
   `host.docker.internal`. Any other address must be https, or the command is a usage error, exit 2,
@@ -277,8 +317,12 @@ as `.env.sandbox.<hex>.tmp` before the rename, a name the `.env.*` line `apps in
   poll after the first (`recheckEdition()`), so a target that changes edition during the run stops
   it with the same one line before the session is sent there again. That costs one more GET every
   2 seconds while following. `apps init` sends nothing and reads nothing.
-- A live edition needs `--live` on every command but `logout`, whatever address chose it. Signing
-  out sends only the session's own tokens, to revoke them. `--live` against a sandbox is refused.
+- A live edition needs `--live` to sign up, sign in, and change anything: `apply`, `answer`,
+  `resend`, `rotate-key`, `rotate-secret`, `add-key`, `on`, `off` and `delete`, whatever address
+  chose it. The reads, `whoami`, `orgs`, `use`, `apps list`, `apps show` and `apps requests`, need
+  none, since signing in with `--live` already said the person means that Siren (CLI pass 1,
+  finding 2). Signing out sends only the session's own tokens, to revoke them. `--live` against a
+  sandbox is refused. A new app's question names the organization and whether it is live.
 - A stored session keeps the edition and the address it was made for (`edition`, `baseUrl`). A
   command whose target now reports another edition, or a session stored for another address,
   stops with one line before it sends anything with the session: what the target is now, what the
@@ -327,9 +371,20 @@ later without a rewrite (design AP-A215):
 ```
 
 `parseAppFile(text, env)` answers the file or every problem, each with its dotted path, line and
-column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url: ...` and sends nothing.
+column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url needs ...`, the path
+once, and sends nothing.
 
-- `version` is 1. `name` and `description` are both required and are text.
+- `version` is 1. `name` and `description` at the top are optional text since CLI pass 1 (finding
+  5). The tool never sends them, and Siren's recipe schema (lib/Recipes/Core/recipe.schema.json on
+  feat/apps at 6d2abd936a) has no `apps` stanza to read them with yet. The dashboard shows the
+  app's own name. `$schema` is allowed and ignored. `apps init` writes it as
+  `./node_modules/@novatorius/siren/siren.app.schema.json`.
+- siren.app.schema.json ships in the package. `appFileSchema()` in src/cli/app-file-schema.ts
+  builds it from the lists and limits the checks use (`TOP_FIELDS`, `APP_FIELDS`, `ITEM_FIELDS`,
+  `KINDS`, `CONVERSION_TYPES` and the rest), and test/cli-app-file-schema.test.ts holds the file to
+  that output and runs good and bad files through both. The schema checks shape. The tool alone
+  checks the url's scheme after filling, each contact's address and their count, and each domain's
+  grammar.
 - Any other recipe stanza, such as `programs`, is refused by name. Recipes made of apps and
   programs wait for slice 12. Any other key is refused as not a recipe key.
 - `apps` holds exactly one app, keyed by its app key.
@@ -346,8 +401,9 @@ column. `apply` prints them as `siren.app.json:9:7: apps.acme-payouts.url: ...` 
   Siren asks a feature at the app's address. A feature's kind and key lock once Siren makes it:
   Siren matches the file's features to its own by kind and key, so a renamed key is a new feature,
   and the old one is archived while a record selects it and deleted otherwise.
-- `${NAME}` is filled from the environment only in the app's `url`, and only from a variable whose
-  name starts with `SIREN_APP_` (AP-A633). A placeholder anywhere else, any other name, or a name
+- `${NAME}` is filled only in the app's `url`, and only from a variable whose name starts with
+  `SIREN_APP_` (AP-A633): from the shell, else from `.env` beside the app file, read for
+  `SIREN_APP_` lines alone. `apply` says `Its url came from SIREN_APP_URL in .env.` for the second. A placeholder anywhere else, any other name, or a name
   that is not set is a problem at that key, naming the place and never a value. `parseAppFile`
   answers the names it filled in `filled`, and `apply` prints those names, never the values, and
   never writes them back to the file.
@@ -693,21 +749,21 @@ A later lane runs this against a local sandbox Cloud. Nothing here ran it.
    `SIREN_SANDBOX_IMAGE=siren-sandbox:apps-e2e SIREN_SANDBOX_PORT=33918 docker compose -p apps-e2e-cloud -f uat/sandbox/docker-compose.yml -f <override> up -d`.
    Check `curl -s localhost:33918/siren/v1/auth/signup-options` names `"edition":"sandbox"`.
 3. In this repository: `npm ci && npm run build && npm pack`, then install the tarball in an empty
-   folder and check `npx siren --version` prints 0.3.0.
+   folder and check `npx @novatorius/siren --version` prints 0.3.0.
 4. `export SIREN_BASE_URL=http://localhost:33918/siren/v1 SIREN_CONFIG_DIR=$(mktemp -d)`.
-5. `printf '%s' "$PASSWORD" | npx siren signup --org-name "Apps E2E" --email apps-e2e+$(date +%s)@example.invalid --password-stdin --accept-terms`.
+5. `printf '%s' "$PASSWORD" | npx @novatorius/siren signup --org-name "Apps E2E" --email apps-e2e+$(date +%s)@example.invalid --password-stdin --accept-terms`.
    Check credentials.json is mode 0600 and holds no password. Then, by hand in a real terminal, run
-   `npx siren login` with no flags and check the password prompt echoes nothing, and that Ctrl-C
+   `npx @novatorius/siren login` with no flags and check the password prompt echoes nothing, and that Ctrl-C
    at it ends the command and leaves the terminal echoing again.
-6. In examples/apps/acme of this checkout: `SIREN_APP_URL=http://host.docker.internal:8787 npx siren apps apply`.
+6. In examples/apps/acme of this checkout: `SIREN_APP_URL=http://host.docker.internal:8787 npx @novatorius/siren apps apply`.
    Check .env.sandbox holds an `sk_test_` key, and that no key, secret or url was printed.
 7. `npm install && npm start`, then `npm run send-sale -- tracking:<code> 49` for a collaborator
    made in the sandbox dashboard, and run the walk above from step 7.
-8. `npx siren apps requests --follow` shows the ask go from `sent` to `answered` to `applied`.
-   `npx siren apps requests <id>` shows the send, the 200 and the body.
-9. `npx siren apps answer <id> --body '{"outcome":"paid","reference":"acme-88"}'` says Siren already
+8. `npx @novatorius/siren apps requests --follow` shows the ask go from `sent` to `answered` to `applied`.
+   `npx @novatorius/siren apps requests <id>` shows the send, the 200 and the body.
+9. `npx @novatorius/siren apps answer <id> --body '{"outcome":"paid","reference":"acme-88"}'` says Siren already
    had it. A different answer gets 409 `app_request_already_answered`.
-10. `npx siren apps rotate acme-payouts`, restart the server, and resend a request. The new secret
+10. `npx @novatorius/siren apps rotate-secret acme-payouts --yes`, restart the server, and resend a request. The new secret
     verifies.
 11. Capture every answer the steps saw (S1) and replace the hand-written fakes in
     test/sdk-gaps-fakes.ts, test/cli-fakes.ts and test/apps-siren-answers.ts where they differ.

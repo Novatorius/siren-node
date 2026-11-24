@@ -75,6 +75,8 @@ export class CommandContext {
   constructor(
     readonly io: CliIo,
     readonly target: Target,
+    /** True for a command that only reads, which a live organization serves without `--live`. */
+    readonly readsOnly: boolean = false,
   ) {
     this.store = new CredentialStore(io.configDir);
     this.auth = new SessionAuthClient({ baseUrl: target.baseUrl, httpClient: io.httpClient });
@@ -142,10 +144,10 @@ export class CommandContext {
    */
   async signedIn(): Promise<StoredSession> {
     const session = await this.store.get(this.target.baseUrl);
-    if (session === null) throw new CliRefusal(`You are not signed in to ${this.target.baseUrl}. Run ${this.command('login')} first.`);
+    if (session === null) throw await notSignedIn(this.store, this.target, this.command('login'));
     const edition = await this.targetEdition();
     assertSessionMatches(this.target, session, edition);
-    assertEditionAllowed(this.target, edition);
+    if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition);
     this.adopt(session);
     return session;
   }
@@ -238,13 +240,14 @@ export class CommandContext {
       userId: tokens.user.id,
       orgId: org.orgId,
       orgName: org.orgName,
+      ...(org.orgSlug ? { orgSlug: org.orgSlug } : {}),
       role: org.role,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       accessExpiresAt: this.expiryOf(tokens.accessToken),
     };
     if (before?.envFiles !== undefined && before.orgId === session.orgId && before.userId === session.userId) session.envFiles = before.envFiles;
-    await this.store.put(this.target.baseUrl, session);
+    await this.store.put(this.target.baseUrl, session, true);
     this.session = session;
     return session;
   }
@@ -266,6 +269,20 @@ export class CommandContext {
     const exp = jwtClaim(accessToken, 'exp');
     return typeof exp === 'number' && Number.isFinite(exp) ? exp : Math.floor(this.io.now() / 1000) + ACCESS_TOKEN_SECONDS;
   }
+}
+
+/**
+ * The refusal for a Siren with no session here: it names `login`, and the
+ * Siren a session is kept for, when there is one, so a person who signed in
+ * elsewhere learns where.
+ */
+export async function notSignedIn(store: CredentialStore, target: Target, login: string): Promise<CliRefusal> {
+  const here = `You are not signed in to ${target.baseUrl}.`;
+  const sessions = Object.entries(await store.all().catch(() => ({}) as Record<string, StoredSession>));
+  const [base, other] = sessions.find(([key]) => key !== target.baseUrl) ?? [];
+  if (base === undefined || other === undefined) return new CliRefusal(`${here} Run ${login} first.`);
+  const live = other.edition === 'production' ? ' --live' : '';
+  return new CliRefusal(`${here} You are signed in to ${other.orgName} on ${base}. Pass --base-url ${base}${live} to use it, or run ${login} to sign in here.`);
 }
 
 /** One claim of a JWT's payload, read without checking the signature, or undefined. */

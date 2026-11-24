@@ -40,15 +40,21 @@ export interface Target {
  *   the rules `new Siren()` applies to `baseUrl`, and https unless its host
  *   is `localhost`, `127.0.0.1` or `host.docker.internal`, since the tool
  *   sends a password and session tokens to it.
- * - None of the three: `SIREN_BASE_URL` from the environment when set, else
- *   {@link SANDBOX_BASE_URL}. A command never reaches the live deployment
- *   unless the person typed `--live`.
+ * - None of the three: `SIREN_BASE_URL` from the environment when set,
+ *   else `remembered`, the Siren the last `login`, `signup` or `use` was
+ *   for (skipped for `--live` when that one is a sandbox), else {@link SANDBOX_BASE_URL}, or {@link LIVE_BASE_URL} with
+ *   `--live`. A command never reaches the live deployment unless the person
+ *   typed `--live` or signed in to it.
+ *
+ * An address may be a bare host, such as `siren.example.com`, which gets
+ * `https://`, and one with no path gets `/siren/v1`, as `gh --hostname`
+ * takes a host.
  *
  * Throws {@link CliUsageError} for `--sandbox` with `--live` or with
  * `--base-url`, and for an address the rules refuse, `SIREN_BASE_URL`
  * included, before anything is sent. No message quotes the address.
  */
-export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, string | undefined>>): Target {
+export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, string | undefined>>, remembered?: { baseUrl: string; live: boolean }): Target {
   if (flags.sandbox && flags.live) throw new CliUsageError('--sandbox and --live name two different Sirens. Pass one of them.');
   if (flags.sandbox && flags.baseUrl !== undefined) throw new CliUsageError('--sandbox and --base-url name two Sirens. Pass one of them.');
 
@@ -64,6 +70,9 @@ export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, s
   } else if (fromEnv !== undefined) {
     chosen = fromEnv;
     source = 'SIREN_BASE_URL';
+  } else if (remembered !== undefined && (remembered.live || !flags.live)) {
+    chosen = remembered.baseUrl;
+    source = 'The Siren you signed in to';
   } else {
     chosen = flags.live ? LIVE_BASE_URL : SANDBOX_BASE_URL;
     source = flags.live ? '--live' : 'the default';
@@ -122,7 +131,8 @@ export function assertSessionMatches(target: Target, session: { edition: Edition
  * it came from: one `new Siren()` would refuse as `baseUrl`, or plain http to
  * a host that is not on this machine.
  */
-function checkedAddress(address: string, source: string): string {
+function checkedAddress(given: string, source: string): string {
+  const address = fullAddress(given);
   try {
     resolveBaseUrl(address);
   } catch {
@@ -135,6 +145,23 @@ function checkedAddress(address: string, source: string): string {
     );
   }
   return address.replace(/\/+$/, '');
+}
+
+/** The API path every Siren serves its routes under. */
+const API_PATH = '/siren/v1';
+
+/** `https://` before a bare host, and {@link API_PATH} after an address with no path. Anything else as given. */
+function fullAddress(given: string): string {
+  const trimmed = given.trim();
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    return given;
+  }
+  if (url.pathname !== '/' || url.search !== '' || url.hash !== '') return withScheme;
+  return `${withScheme.replace(/\/+$/, '')}${API_PATH}`;
 }
 
 /**
@@ -153,7 +180,7 @@ function checkedAddress(address: string, source: string): string {
  */
 export function assertEditionAllowed(target: Target, edition: Edition): void {
   if (edition === 'production' && !target.live) {
-    throw new CliRefusal(`${target.baseUrl} is a live Siren. Add --live to act on a live organization.`);
+    throw new CliRefusal(`${target.baseUrl} is a live Siren. Add --live to change a live organization.`);
   }
   if (edition === 'sandbox' && target.live) {
     throw new CliRefusal(`${target.baseUrl} is a sandbox Siren, and --live is only for a live one. Leave --live out.`);

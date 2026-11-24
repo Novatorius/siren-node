@@ -91,8 +91,9 @@ describe('apps-cli: the app file', () => {
   it('refuses each broken app or item field at its path', () => {
     const cases: Array<[string, string]> = [
       [file(good, { version: 2 }), 'version'],
-      [JSON.stringify({ version: 1, description: '', apps: { 'acme-payouts': good } }), 'name'],
-      [JSON.stringify({ version: 1, name: 'Acme', apps: { 'acme-payouts': good } }), 'description'],
+      // A recipe's name and description are optional since CLI pass 1 (finding 5), and text when given.
+      [JSON.stringify({ version: 1, name: 7, apps: { 'acme-payouts': good } }), 'name'],
+      [JSON.stringify({ version: 1, description: false, apps: { 'acme-payouts': good } }), 'description'],
       [JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { Acme: good } }), 'apps.Acme'],
       [JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { requests: good } }), 'apps.requests'],
       [file({ ...good, url: 'http://acme.example/siren' }), 'apps.acme-payouts.url'],
@@ -149,10 +150,7 @@ describe('apps-cli: the app file', () => {
     const { key, params } = declarationFor(parsed.file!);
     expect(key).toBe('acme-payouts');
     expect(params.name).toBe('Acme');
-    expect(params.items?.map((item) => [item.kind, item.key])).toEqual([
-      ['postConversionAction', 'notify'],
-      ['payoutMethod', 'pay'],
-    ]);
+    expect(params.items?.map((item) => [item.kind, item.key])).toEqual([['postConversionAction', 'notify']]);
     expect(parseAppFile(text, {}).problems[0]?.message).toContain('SIREN_APP_URL');
   });
 });
