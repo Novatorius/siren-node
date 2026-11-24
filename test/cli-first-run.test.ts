@@ -32,7 +32,7 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     expect(h.credentials()).toMatchObject({ current: UAT });
     expect(await h.run(['orgs']), h.err()).toBe(0);
     expect(h.http.requests.at(-1)?.url.startsWith(UAT)).toBe(true);
-    expect(h.out()).toContain('* acme');
+    expect(h.out()).toMatch(/acme\s+Acme\s+admin/);
   });
 
   it('lets a flag or SIREN_BASE_URL win over the remembered Siren', async () => {
@@ -108,7 +108,7 @@ describe('cli pass 1, finding 3: bare siren, the apps group, help and typos', ()
     const signed = harness([]);
     signed.signedIn({ [SANDBOX_BASE_URL]: session({ baseUrl: SANDBOX_BASE_URL, orgSlug: 'acme' }) });
     expect(await signed.run([])).toBe(0);
-    expect(signed.out()).toContain(`Logged in as ${EMAIL} to Acme.`);
+    expect(signed.out()).toContain(`Logged in as ${EMAIL}.`);
     expect(signed.out()).toContain('Siren: sandbox.sirenaffiliates.com, a sandbox.');
     expect(signed.out()).toContain('siren apps requests --follow');
   });
@@ -169,7 +169,7 @@ describe('cli pass 1, finding 7: each command explains its options and shows an 
     }
     const login = harness([]);
     await login.run(['login', '--help']);
-    expect(login.out()).toMatch(/--org <slug or id>\s+\S/);
+    expect(login.out()).toMatch(/--password\s+\S/);
     expect(login.out()).toMatch(/--password-stdin\s+\S/);
   });
 });
@@ -251,7 +251,7 @@ describe('cli pass 1, finding 6: the first apply says what comes next', () => {
     h.signedIn();
     await h.run(['apps', 'init', '--key', APP_KEY]);
     expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
-    expect(h.prompts.at(-1)).toContain(`Make ${APP_KEY} on Acme, a sandbox organization?`);
+    expect(h.prompts.at(-1)).toBe(`Make ${APP_KEY} in Acme (3), sandbox? [y/N] `);
     expect(h.prompts.at(-1)).not.toContain('last write wins');
     expect(h.out()).toContain('https://acme.example');
     expect(h.printed()).not.toContain('token=abc');
@@ -302,7 +302,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
   it('says sign in to, not change, when login meets a live Siren without --live', async () => {
     const h = harness([], { edition: 'production', stdin: PASSWORD });
     expect(await h.run(['login', '--base-url', UAT, '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain(`${UAT} is a live Siren. Add --live to sign in to a live organization.`);
+    expect(h.err()).toContain(`${UAT} is a live Siren. Add --live to log in to a live organization.`);
     const help = harness([]);
     await help.run(['login', '--help']);
     expect(help.out()).not.toMatch(/--live\s+Change a live organization/);

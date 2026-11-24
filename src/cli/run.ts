@@ -3,7 +3,7 @@ import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
 import * as requests from './commands/requests';
 import * as session from './commands/session';
-import { CommandContext, shortAddress } from './context';
+import { CommandContext, shortAddress, tokenRefusal } from './context';
 import type { CommandHandler } from './context';
 import { CredentialStore } from './credentials';
 import { firstRun, welcome } from './hook';
@@ -18,7 +18,8 @@ import type { Target } from './targets';
 /**
  * The version `siren --version` prints, the package's.
  */
-export const CLI_VERSION = '0.3.0';
+export { CLI_VERSION } from './version';
+import { CLI_VERSION } from './version';
 
 /**
  * The commands, in the order `siren --help` lists them. The architecture
@@ -31,7 +32,6 @@ export const COMMANDS = [
   'logout',
   'whoami',
   'orgs',
-  'use',
   'apps init',
   'apps apply',
   'apps list',
@@ -75,6 +75,8 @@ interface CommandSpec {
   offline?: boolean;
   /** True for a command that changes nothing, which a live organization serves without `--live`. */
   readsOnly?: boolean;
+  /** True for a command whose route takes no personal access token, so it needs a signed-in session even with SIREN_TOKEN set. */
+  sessionOnly?: boolean;
   run: CommandHandler;
 }
 
@@ -85,6 +87,7 @@ const GLOBAL: Options = {
   'base-url': { type: 'string' },
   quiet: { type: 'boolean', short: 'q' },
   verbose: { type: 'boolean' },
+  org: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -93,6 +96,7 @@ const GLOBAL_FLAGS: ReadonlyArray<readonly [string, string]> = [
   ['--sandbox', "Use Siren's sandbox, whatever you logged in to last"],
   ['--live', 'Log in to or change a live organization'],
   ['--base-url <url>', 'Use another Siren, such as siren.example.com'],
+  ['--org <slug>', 'The organization to act in, when you have several'],
   ['-q, --quiet', 'Skip the logo animation'],
   ['--verbose', 'Show the detail behind an error'],
   ['-h, --help', 'Show help for a command'],
@@ -124,16 +128,16 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   login: {
     usage: 'login [flags]',
-    summary: 'Log in, and use this Siren for the commands after it.',
+    summary: 'Log in by approving a code in your browser.',
     group: 'Getting started',
-    short: 'Log in to Siren',
-    options: { email: { type: 'string' }, org: { type: 'string' }, 'password-stdin': { type: 'boolean' } },
+    short: 'Log in to Siren in your browser',
+    options: { password: { type: 'boolean' }, email: { type: 'string' }, 'password-stdin': { type: 'boolean' } },
     flags: {
-      email: ['--email <address>', 'The email you log in with, asked when left out'],
-      org: ['--org <slug or id>', 'The organization to use, asked when you have several'],
-      'password-stdin': ['--password-stdin', 'Read the password from standard input'],
+      password: ['--password', 'Log in with your email and password, with no browser'],
+      'password-stdin': ['--password-stdin', 'Read the password from standard input, for scripts'],
+      email: ['--email <address>', 'The email for --password, asked when left out'],
     },
-    examples: ['siren login', 'siren login --live'],
+    examples: ['siren login', 'siren login --password'],
     positionals: [0, 0],
     run: session.login,
   },
@@ -150,7 +154,7 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   whoami: {
     usage: 'whoami [flags]',
-    summary: 'Show who you are logged in as, in which organization, on which Siren. Sends nothing.',
+    summary: 'Show which credential the commands use, who it acts as, and on which Siren.',
     group: 'Account',
     short: 'Show who you are logged in as',
     options: { json: { type: 'boolean' } },
@@ -170,20 +174,10 @@ const SPECS: Record<Command, CommandSpec> = {
     examples: ['siren orgs'],
     positionals: [0, 0],
     readsOnly: true,
+    sessionOnly: true,
     run: session.orgs,
   },
-  use: {
-    usage: 'use <slug or id>',
-    summary: 'Switch to another of your organizations.',
-    group: 'Account',
-    short: 'Switch to another organization',
-    options: {},
-    flags: {},
-    examples: ['siren use acme-two'],
-    positionals: [1, 1],
-    readsOnly: true,
-    run: session.use,
-  },
+
   'apps init': {
     usage: 'apps init [flags]',
     summary: 'Write siren.app.json here, and keep the env files apply writes out of git.',
@@ -262,6 +256,7 @@ const SPECS: Record<Command, CommandSpec> = {
     },
     examples: ['siren apps answer apr_0123456789abcdef0123456789abcdef --file answer.json'],
     positionals: [1, 1],
+    sessionOnly: true,
     run: requests.appsAnswer,
   },
   'apps resend': {
@@ -413,6 +408,8 @@ function helpText(style: Style): string {
       columns(
         [
           ['SIREN_BASE_URL', 'The Siren to use when no flag names one'],
+          ['SIREN_ORG', 'The organization to act in, when no flag names one'],
+          ['SIREN_TOKEN', 'A personal access token, for scripts and CI'],
           ['SIREN_DEBUG=1', 'The same as --verbose'],
           ['NO_COLOR, CI', 'Plain output, and no logo animation'],
         ],
@@ -456,8 +453,9 @@ function commandHelp(style: Style, spec: CommandSpec): string {
 /** What `siren` alone shows beside the logo: where you stand, and the three commands that come next. */
 async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
   const store = new CredentialStore(io.configDir);
-  const kept = await store.get(target.baseUrl).catch(() => null);
-  const next: Array<readonly [string, string]> = kept
+  const token = io.env.SIREN_TOKEN !== undefined && io.env.SIREN_TOKEN !== '';
+  const kept = token ? null : await store.get(target.baseUrl).catch(() => null);
+  const next: Array<readonly [string, string]> = kept || token
     ? [
         ['siren apps init', 'write siren.app.json in this folder'],
         ['siren apps apply', 'declare the app on Siren and save its key'],
@@ -470,9 +468,11 @@ async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
       ];
   const host = shortAddress(target.baseUrl);
   const isDefault = target.baseUrl === SANDBOX_BASE_URL || target.baseUrl === LIVE_BASE_URL;
-  const where = kept
-    ? [`Logged in as ${kept.email} to ${kept.orgName}.`, `Siren: ${host}, ${kept.edition === 'production' ? 'live' : 'a sandbox'}.`]
-    : ['Not logged in. Run siren login to log in.', ...(isDefault ? [] : [`Siren: ${host}`])];
+  const where = token
+    ? ['SIREN_TOKEN is set, so commands act with it.', ...(isDefault ? [] : [`Siren: ${host}`])]
+    : kept
+      ? [`Logged in as ${kept.email}.`, `Siren: ${host}, ${kept.edition === 'production' ? 'live' : 'a sandbox'}.`]
+      : ['Not logged in. Run siren login to log in.', ...(isDefault ? [] : [`Siren: ${host}`])];
   return { version: CLI_VERSION, where, next, footer: 'siren --help lists every command.' };
 }
 
@@ -534,6 +534,7 @@ function commandNamed(words: readonly string[]): Command {
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {
   let spec: CommandSpec | undefined;
   let name: Command | undefined;
+  let login = 'siren login';
   try {
     const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
     let words = loose.positionals;
@@ -576,15 +577,29 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     }
 
     const flags = targetFlags(values);
-    const context = spec.offline ? null : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true);
+    const context = spec.offline
+      ? null
+      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined);
+    if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     // A command that sends nothing checks no address, so its hints repeat the flags as typed.
     const hintTarget = context?.target ?? {
       live: flags.live,
       addressFlag: flags.baseUrl !== undefined ? ` --base-url ${flags.baseUrl}` : flags.sandbox ? ' --sandbox' : '',
     };
     const command = (words: string) => commandLine(hintTarget, words);
-    if (!(await firstRun(io, hookFlags(values), CLI_VERSION))) return 130;
-    return await spec.run({ context, io, values: values as Record<string, string | boolean | undefined>, args, command });
+    login = command('login');
+    // A browser sign-in plays the logo animation when the approval lands, so the first run waits for that moment.
+    const playsAtApproval = name === 'login' && session.usesBrowserSignIn(values);
+    if (!playsAtApproval && !(await firstRun(io, hookFlags(values), CLI_VERSION))) return 130;
+    const kept = async () => {
+      try {
+        const target = context?.target ?? resolveTarget(flags, io.env, await remembered(io));
+        return await new CredentialStore(io.configDir).get(target.baseUrl);
+      } catch {
+        return null;
+      }
+    };
+    return await spec.run({ context, io, values: values as Record<string, string | boolean | undefined>, args, command, kept });
   } catch (error) {
     const style = styleFor(io, 'stderr', { json: argv.includes('--json') });
     if (error instanceof CliUsageError) {
@@ -597,7 +612,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       return 2;
     }
     const verbose = argv.includes('--verbose') || io.env.SIREN_DEBUG === '1';
-    io.stderr(style.error(asRefusal(error), verbose));
+    io.stderr(style.error(tokenRefusal(error, login) ?? asRefusal(error), verbose));
     return 1;
   }
 }
@@ -625,6 +640,8 @@ function targetFlags(values: Record<string, unknown>) {
 
 /** The Siren the last sign-in was for, and whether it is live, or undefined. A file the tool would refuse names none here, and the command refuses it later. */
 async function remembered(io: CliIo): Promise<{ baseUrl: string; live: boolean } | undefined> {
+  // A personal access token goes only to the Siren the command line or SIREN_BASE_URL names.
+  if (io.env.SIREN_TOKEN !== undefined && io.env.SIREN_TOKEN !== '') return undefined;
   const current = await new CredentialStore(io.configDir).current().catch(() => null);
   return current === null ? undefined : { baseUrl: current.baseUrl, live: current.session.edition === 'production' };
 }

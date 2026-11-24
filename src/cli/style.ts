@@ -72,6 +72,8 @@ export interface Spinner {
   /** Changes the words beside the spinner. */
   update(text: string): void;
   stop(ok: boolean, line: string): void;
+  /** Stops and clears the spinner's line, printing nothing in its place. */
+  cancel(): void;
 }
 
 /** True when CI names a build machine: set, and not empty, `false` or `0`. */
@@ -213,7 +215,7 @@ export class Style {
   spinner(text: string, write: (text: string) => void): Spinner {
     if (!this.rich) {
       write(`${text}...\n`);
-      return { update: () => undefined, stop: (_ok, line) => write(`${line}\n`) };
+      return { update: () => undefined, stop: (_ok, line) => write(`${line}\n`), cancel: () => undefined };
     }
     let words = text;
     let frame = 0;
@@ -236,6 +238,12 @@ export class Style {
         stopped = true;
         clearInterval(timer);
         write(`\r${CLEAR_LINE}${ok ? this.success(line) : this.failure(line)}\n${SHOW_CURSOR}`);
+      },
+      cancel: () => {
+        if (stopped) return;
+        stopped = true;
+        clearInterval(timer);
+        write(`\r${CLEAR_LINE}${SHOW_CURSOR}`);
       },
     };
   }

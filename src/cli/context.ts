@@ -2,10 +2,13 @@ import { CallbackAccessTokenSource } from '../auth/callback-access-token-source'
 import { Siren } from '../client';
 import { ApiError, ConnectionError, SirenError } from '../errors';
 import { CredentialStore } from './credentials';
-import type { StoredSession } from './credentials';
+import type { StoredMembership, StoredSession } from './credentials';
+import { readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { APP_FILE_NAME } from './app-file';
 import type { CliIo } from './io';
 import { SessionAuthClient } from './session-auth';
-import type { Edition, Membership, SessionTokens } from './session-auth';
+import type { Edition, Membership, PersonalToken, SessionTokens } from './session-auth';
 import { SANDBOX_BASE_URL } from '../http';
 import { CliRefusal, LIVE_BASE_URL, assertEditionAllowed, assertSessionMatches, commandLine } from './targets';
 import type { Target } from './targets';
@@ -15,6 +18,44 @@ const REFRESH_EARLY_SECONDS = 60;
 
 /** How long Siren's access token lasts (AuthService::TOKEN_TTL), used when a token's `exp` cannot be read. */
 const ACCESS_TOKEN_SECONDS = 3600;
+
+/** A personal access token's form: `siren_pat_` and 48 lowercase hex characters (contract/cli-signin.md, section 2). */
+const PERSONAL_TOKEN = /^siren_pat_[0-9a-f]{48}$/;
+
+/**
+ * The personal access token in SIREN_TOKEN, or undefined when it is unset or
+ * empty. Throws `CliRefusal` for a value of any other form, before it is sent
+ * anywhere, and never quotes it.
+ */
+export function tokenFrom(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const value = env.SIREN_TOKEN;
+  if (value === undefined || value === '') return undefined;
+  if (!PERSONAL_TOKEN.test(value.trim())) {
+    throw new CliRefusal(
+      'SIREN_TOKEN does not hold a Siren personal access token, which starts siren_pat_ and comes from API keys in the Siren dashboard. Nothing was sent.',
+    );
+  }
+  return value.trim();
+}
+
+/**
+ * The refusal Siren's refusals of a personal access token get, with `login`
+ * the `siren login` line for this Siren, or undefined for any other error.
+ */
+export function tokenRefusal(error: unknown, login: string): CliRefusal | undefined {
+  const code = error instanceof SirenError ? error.code : undefined;
+  if (code === 'invalid_token') {
+    return new CliRefusal('SIREN_TOKEN was revoked or has expired.', {
+      why: 'Make a new one in the Siren dashboard, or unset SIREN_TOKEN.',
+      fix: login,
+      fixWords: 'to log in',
+    });
+  }
+  if (code === 'token_not_accepted') {
+    return new CliRefusal('Siren takes no personal access token for this.', { why: 'Unset SIREN_TOKEN.', fix: login, fixWords: 'to log in, then run the command again' });
+  }
+  return undefined;
+}
 
 /**
  * The line Siren's plan code gets, on login, organization choice, switch and
@@ -50,6 +91,8 @@ export interface CommandInput {
    * init` included, which sends nothing.
    */
   command(words: string): string;
+  /** The session kept for the Siren this command line names, read from credentials.json, or null. Sends nothing. */
+  kept?(): Promise<StoredSession | null>;
 }
 
 /** One command's body. Answers the exit code. Throws `CliRefusal`, `CliUsageError` or a `SirenError` to refuse. */
@@ -72,15 +115,28 @@ export class CommandContext {
   readonly auth: SessionAuthClient;
   private session: StoredSession | null = null;
   private editionRead: Promise<Edition> | null = null;
+  /** The token from SIREN_TOKEN and what Siren said about it, once {@link signedIn} chose it. */
+  private personal: { token: string; about: PersonalToken } | null = null;
+  /** The organization --org names, which wins over every other way to pick one. */
+  orgFlag: string | undefined;
+  /** The app file whose "org" picks the organization after --org and SIREN_ORG: siren.app.json here, or the file apply reads. */
+  appFilePath: string;
 
   constructor(
     readonly io: CliIo,
     readonly target: Target,
     /** True for a command that only reads, which a live organization serves without `--live`. */
     readonly readsOnly: boolean = false,
+    /**
+     * The command's name when Siren takes no personal access token on its
+     * route, such as `apps answer`: it uses the stored session even when
+     * SIREN_TOKEN is set, and refuses before sending when there is none.
+     */
+    readonly sessionOnly?: string,
   ) {
     this.store = new CredentialStore(io.configDir);
     this.auth = new SessionAuthClient({ baseUrl: target.baseUrl, httpClient: io.httpClient });
+    this.appFilePath = join(io.cwd, APP_FILE_NAME);
   }
 
   /**
@@ -143,14 +199,150 @@ export class CommandContext {
    * match the edition (`assertEditionAllowed`). With no session nothing is
    * sent at all.
    */
-  async signedIn(): Promise<StoredSession> {
+  async signedIn(options: { org?: boolean } = {}): Promise<StoredSession> {
+    const pick = options.org !== false;
+    const token = tokenFrom(this.io.env);
+    if (token !== undefined && this.sessionOnly === undefined) {
+      const session = await this.withToken(token);
+      if (pick) await this.checkTokenOrg(session);
+      return session;
+    }
     const session = await this.store.get(this.target.baseUrl);
+    if (session === null && token !== undefined) {
+      throw new CliRefusal(`siren ${this.sessionOnly} needs you to log in, since Siren takes no personal access token there.`, {
+        fix: this.command('login'),
+        fixWords: 'to log in',
+      });
+    }
     if (session === null) throw await notSignedIn(this.store, this.target, this.command('login'));
+    // Which organization is decided before anything is sent, so a refusal sends nothing.
+    const org = pick ? await this.pickOrg(membershipsOf(session)) : undefined;
     const edition = await this.targetEdition();
     assertSessionMatches(this.target, session, edition);
     if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition);
     this.adopt(session);
+    if (org !== undefined && org.orgId !== session.orgId) return this.switchTo(org);
     return session;
+  }
+
+  /**
+   * What names the organization this command acts in, and where it came
+   * from: --org, then SIREN_ORG, then "org" in the app file. Undefined when
+   * none of them names one.
+   */
+  private async wantedOrg(): Promise<{ value: string; from: string } | undefined> {
+    if (this.orgFlag !== undefined && this.orgFlag !== '') return { value: this.orgFlag, from: '--org' };
+    const env = this.io.env.SIREN_ORG;
+    if (env !== undefined && env !== '') return { value: env, from: 'SIREN_ORG' };
+    const fromFile = await orgInFile(this.appFilePath);
+    return fromFile === undefined ? undefined : { value: fromFile, from: basename(this.appFilePath) };
+  }
+
+  /**
+   * The organization this command acts in, from {@link wantedOrg}, else the
+   * person's only one. With neither it asks in a terminal and refuses
+   * elsewhere, naming each organization. Sends nothing.
+   */
+  async pickOrg(memberships: readonly StoredMembership[]): Promise<StoredMembership> {
+    const wanted = await this.wantedOrg();
+    if (wanted !== undefined) {
+      const found = findOrg(memberships, wanted.value);
+      if (found === undefined) {
+        throw new CliRefusal(`You are not in an organization named ${wanted.value}. Yours are ${orgList(memberships)}.`, {
+          fix: this.command('orgs'),
+          fixWords: 'to list them',
+        });
+      }
+      return found;
+    }
+    if (memberships.length === 1) return memberships[0]!;
+    if (!this.io.interactive) {
+      throw new CliRefusal(
+        `You belong to ${memberships.length} organizations: ${orgList(memberships)}. Pick one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.`,
+      );
+    }
+    return askOrg(this.io, memberships);
+  }
+
+  /** Refuses a SIREN_TOKEN run when --org, SIREN_ORG or the app file names another organization than the token's. */
+  private async checkTokenOrg(session: StoredSession): Promise<void> {
+    const wanted = await this.wantedOrg();
+    if (wanted === undefined) return;
+    const own = { orgId: session.orgId, orgName: session.orgName, orgSlug: session.orgSlug ?? '', role: session.role };
+    if (findOrg([own], wanted.value) !== undefined) return;
+    throw new CliRefusal(`SIREN_TOKEN acts in ${session.orgName} (${session.orgSlug ?? session.orgId}), and ${wanted.from} names ${wanted.value}.`, {
+      why: 'A personal access token works only in the organization it was made in.',
+    });
+  }
+
+  /**
+   * Moves the session in use to `org` with `POST /auth/switch-org` and saves
+   * the new pair, which acts there. The person's other organizations stay
+   * kept, so a later command can switch again.
+   */
+  private async switchTo(org: StoredMembership): Promise<StoredSession> {
+    const session = this.current();
+    let tokens: SessionTokens;
+    try {
+      tokens = await this.withAccessToken((accessToken) => this.auth.switchOrg(accessToken, org.orgId));
+    } catch (error) {
+      const plan = planLine(error instanceof SirenError ? error.code : undefined, this.command('login'));
+      throw plan === undefined ? error : new CliRefusal(plan);
+    }
+    const moved: StoredSession = {
+      ...this.current(),
+      orgId: org.orgId,
+      orgName: org.orgName,
+      ...(org.orgSlug ? { orgSlug: org.orgSlug } : {}),
+      role: org.role,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      accessExpiresAt: this.expiryOf(tokens.accessToken),
+      memberships: membershipsOf(session),
+    };
+    this.session = moved;
+    await this.store.put(this.target.baseUrl, moved);
+    return moved;
+  }
+
+
+  /**
+   * The SIREN_TOKEN path of {@link signedIn}: the edition read and the
+   * `--live` rule as for a session, then `GET /personal-tokens/current`
+   * once, so the commands know the person and organization the token acts
+   * as. The token is held for this run only and never written to
+   * credentials.json.
+   */
+  private async withToken(token: string): Promise<StoredSession> {
+    const edition = await this.targetEdition();
+    if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition);
+    let about: PersonalToken;
+    try {
+      about = await this.auth.personalToken(token);
+    } catch (error) {
+      throw tokenRefusal(error, this.command('login')) ?? error;
+    }
+    this.personal = { token, about };
+    const session: StoredSession = {
+      edition,
+      baseUrl: this.target.baseUrl,
+      email: about.user.email,
+      userId: about.user.id,
+      orgId: about.org.orgId,
+      orgName: about.org.orgName,
+      ...(about.org.orgSlug ? { orgSlug: about.org.orgSlug } : {}),
+      role: about.user.role,
+      accessToken: token,
+      refreshToken: '',
+      accessExpiresAt: Number.MAX_SAFE_INTEGER,
+    };
+    this.session = session;
+    return session;
+  }
+
+  /** True when this run acts with SIREN_TOKEN rather than a stored session. */
+  usesToken(): boolean {
+    return this.personal !== null;
   }
 
   /** A `siren` command line for a hint, with the flags that reach this Siren (`commandLine`). */
@@ -187,6 +379,7 @@ export class CommandContext {
 
   /** The access token, refreshed first when it ends within 60 seconds. */
   async accessToken(): Promise<string> {
+    if (this.personal !== null) return this.personal.token;
     const session = this.current();
     if (session.accessExpiresAt - REFRESH_EARLY_SECONDS <= this.io.now() / 1000) return this.refresh();
     return session.accessToken;
@@ -199,6 +392,8 @@ export class CommandContext {
    * Siren that could not answer says to try again, keeping the session.
    */
   async refresh(): Promise<string> {
+    // A personal access token never refreshes. A 401 means Siren no longer takes it.
+    if (this.personal !== null) throw tokenRefusal(new SirenError('', { code: 'invalid_token' }), this.command('login'))!;
     const session = this.current();
     let tokens: SessionTokens;
     try {
@@ -232,7 +427,7 @@ export class CommandContext {
    * same person in the same organization, since another organization's apps
    * are other apps.
    */
-  async keep(tokens: SessionTokens, org: Membership, edition: Edition, email: string): Promise<StoredSession> {
+  async keep(tokens: SessionTokens, org: Membership, edition: Edition, email: string, memberships?: readonly Membership[]): Promise<StoredSession> {
     const before = await this.store.get(this.target.baseUrl);
     const session: StoredSession = {
       edition,
@@ -246,8 +441,9 @@ export class CommandContext {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       accessExpiresAt: this.expiryOf(tokens.accessToken),
+      ...(memberships === undefined ? {} : { memberships: memberships.map(({ orgId, orgName, orgSlug, role }) => ({ orgId, orgName, orgSlug, role })) }),
     };
-    if (before?.envFiles !== undefined && before.orgId === session.orgId && before.userId === session.userId) session.envFiles = before.envFiles;
+    if (before?.envFiles !== undefined && before.userId === session.userId) session.envFiles = before.envFiles;
     await this.store.put(this.target.baseUrl, session, true);
     this.session = session;
     return session;
@@ -257,7 +453,8 @@ export class CommandContext {
   async remember(key: string, envPath: string): Promise<void> {
     const session = this.current();
     this.session = { ...session, envFiles: { ...(session.envFiles ?? {}), [key]: envPath } };
-    await this.store.put(this.target.baseUrl, this.session);
+    // A run on SIREN_TOKEN writes nothing to credentials.json.
+    if (this.personal === null) await this.store.put(this.target.baseUrl, this.session);
   }
 
   /** The env file an app's key goes to for this session: `.env.live` for a live organization, else `.env.sandbox`. */
@@ -318,4 +515,42 @@ function refreshRefusal(error: unknown, login: string): CliRefusal {
     return new CliRefusal('Siren could not renew your session just now. Try again in a minute.');
   }
   return new CliRefusal(`Your session has ended. Run ${login} to sign in again.`);
+}
+
+/** The person's organizations from a stored session: those kept at login, else the session's own one. */
+export function membershipsOf(session: StoredSession): StoredMembership[] {
+  if (session.memberships !== undefined && session.memberships.length > 0) return [...session.memberships];
+  return [{ orgId: session.orgId, orgName: session.orgName, orgSlug: session.orgSlug ?? '', role: session.role }];
+}
+
+/** The membership whose slug or id is `wanted`. */
+export function findOrg<T extends { orgId: number; orgSlug: string }>(memberships: readonly T[], wanted: string): T | undefined {
+  return memberships.find((membership) => (membership.orgSlug !== '' && membership.orgSlug === wanted) || String(membership.orgId) === wanted);
+}
+
+/** "acme (Acme) and acme-two (Acme Two)". */
+export function orgList(memberships: readonly StoredMembership[]): string {
+  const names = memberships.map((membership) => `${membership.orgSlug || membership.orgId} (${membership.orgName})`);
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/** The "org" an app file names at its top, or undefined when it names none or cannot be read. */
+export async function orgInFile(path: string): Promise<string | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
+    const org = typeof parsed === 'object' && parsed !== null ? (parsed as { org?: unknown }).org : undefined;
+    return typeof org === 'string' && org !== '' ? org : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Lists the person's organizations on standard error, asks which one, and answers it, or refuses one they are not in. */
+export async function askOrg(io: CliIo, memberships: readonly StoredMembership[]): Promise<StoredMembership> {
+  io.stderr(`You belong to ${memberships.length} organizations:\n`);
+  for (const membership of memberships) io.stderr(`  ${membership.orgSlug}  ${membership.orgName}\n`);
+  const typed = (await io.prompt('Organization (slug): ')).trim();
+  const chosen = findOrg(memberships, typed);
+  if (chosen === undefined) throw new CliRefusal(`You are not in an organization named ${typed}. Yours are ${orgList(memberships)}.`);
+  return chosen;
 }

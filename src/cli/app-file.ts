@@ -85,6 +85,11 @@ export interface AppFile {
   /** The JSON schema an editor completes the file from, which the tool ignores. */
   $schema?: string;
   version: 1;
+  /**
+   * The slug of the organization the app belongs to, for a person in
+   * several. The commands act there unless --org or SIREN_ORG names another.
+   */
+  org?: string;
   /** A recipe's name. The tool sends only the app's own name, which the dashboard shows. */
   name?: string;
   /** A recipe's description. The tool sends only the app's own. */
@@ -181,10 +186,11 @@ export const APP_FILE_SCHEMA_PATH = 'https://unpkg.com/@novatorius/siren@0.3.0/s
  * Post-conversion action, `notify`, the plainest feature, and the schema an
  * editor completes the rest from.
  */
-export function appFileTemplate(key: string, name: string): string {
+export function appFileTemplate(key: string, name: string, org?: string): string {
   const file = {
     $schema: APP_FILE_SCHEMA_PATH,
     version: 1,
+    ...(org === undefined ? {} : { org }),
     apps: {
       [key]: {
         name,
@@ -223,7 +229,7 @@ const RECIPE_KEYS = [
 ];
 
 /** The keys an app file holds at its top. */
-export const TOP_FIELDS = ['$schema', 'version', 'name', 'description', 'apps'];
+export const TOP_FIELDS = ['$schema', 'version', 'org', 'name', 'description', 'apps'];
 
 /** The fields `PUT /apps/{key}` reads (DeclareApp.php), with the features under `features` (contract/feature-rename.md, section 4). */
 export const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'features'];
@@ -570,6 +576,9 @@ class AppFileCheck {
     }
     if (top.version !== 1) this.problem('version', this.where('version'), 'version is required, and must be 1.');
     if (top.$schema !== undefined && typeof top.$schema !== 'string') this.problem('$schema', this.where('$schema'), '$schema must be text.');
+    if (top.org !== undefined && (typeof top.org !== 'string' || top.org.trim() === '')) {
+      this.problem('org', this.where('org'), "org must be the slug of one of your organizations, such as acme. siren orgs lists them.");
+    }
     if (top.name !== undefined && typeof top.name !== 'string') this.problem('name', this.where('name'), 'name must be text.');
     if (top.description !== undefined && typeof top.description !== 'string') this.problem('description', this.where('description'), 'description must be text.');
 

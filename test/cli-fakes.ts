@@ -116,6 +116,8 @@ export interface HarnessOptions {
   stdin?: string;
   /** Called on each `sleep`, with the number of the call, from 1. */
   onSleep?: (count: number, abort: () => void) => void;
+  /** What opening the browser answers: true when it opened. Defaults to true. */
+  opens?: boolean;
 }
 
 export function harness(replies: Array<HttpResponse | Error>, options: HarnessOptions = {}) {
@@ -132,6 +134,8 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
   const http = new FakeHttpClient(replies);
   const controller = new AbortController();
   let sleeps = 0;
+  const slept: number[] = [];
+  const opened: string[] = [];
   const editionReads: HttpRequest[] = [];
   const sent: string[] = [];
   const editionOption = options.edition ?? 'sandbox';
@@ -176,11 +180,17 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
     configDir,
     httpClient: client,
     now: () => NOW_MS,
-    sleep: async () => {
+    sleep: async (ms) => {
       sleeps += 1;
+      slept.push(ms);
       options.onSleep?.(sleeps, () => controller.abort());
     },
     signal: controller.signal,
+    machine: 'test-laptop',
+    openUrl: async (url) => {
+      opened.push(url);
+      return options.opens ?? true;
+    },
   };
 
   const credentialsPath = join(configDir, 'credentials.json');
@@ -217,5 +227,9 @@ export function harness(replies: Array<HttpResponse | Error>, options: HarnessOp
     editionReads,
     /** Every request in the order sent, the edition read included. */
     sent: () => [...sent],
+    /** Each wait, in milliseconds. */
+    slept,
+    /** Each address the tool opened in the browser. */
+    opened,
   };
 }

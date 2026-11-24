@@ -122,7 +122,6 @@ const LIVE_CASES: Case[] = [
   },
   { name: 'a login refused for the plan', argv: ['login', '--email', EMAIL, '--password-stdin'], replies: [ConfirmationAnswers.loginNoPlan('no_entitlement')], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
   { name: 'a login with the address unconfirmed', argv: ['login', '--email', EMAIL, '--password-stdin'], replies: [ConfirmationAnswers.loginUnconfirmed(EMAIL)], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
-  { name: 'a login to several organizations without --org', argv: ['login', '--email', EMAIL, '--password-stdin'], replies: [AuthAnswers.severalOrgs()], options: { stdin: PASSWORD }, command: `siren login --org <slug>${LIVE}` },
   { name: 'a login with --org for another organization', argv: ['login', '--email', EMAIL, '--password-stdin', '--org', 'nope'], replies: [AuthAnswers.oneOrg()], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
   { name: 'a sign-up without the terms', argv: ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin'], options: { stdin: PASSWORD }, command: `siren signup --accept-terms${LIVE}` },
   { name: 'a sign-up turned off', argv: ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'], replies: [ConfirmationAnswers.signupOff()], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
