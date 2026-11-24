@@ -9,6 +9,7 @@ import { AuthenticationError } from '../src/errors';
 import { FakeHttpClient } from './http-fakes';
 import { BASE } from './record-fakes';
 import { capturedBody, capturedReply } from './cloud-captures';
+import { renamedBody, renamedReply } from './cli-renamed-captures';
 import { reply } from './http-fakes';
 
 /*
@@ -26,7 +27,7 @@ const ARCHIVED_LINE = '  app:1  Post-conversion action (postConversionAction)  n
 
 describe('apps-sdk-followups-1: an archived item', () => {
   it('apply marks the archived item beside it, and says once what archiving means and how to bring it back', async () => {
-    const h = harness([appBefore(), capturedReply(DROPPED)], { env: appEnv });
+    const h = harness([appBefore(), renamedReply(DROPPED)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
@@ -43,7 +44,7 @@ describe('apps-sdk-followups-1: an archived item', () => {
   });
 
   it('keeps the target flags in the apply hint, and names the file as it was given', async () => {
-    const h = harness([appBefore(), capturedReply(DROPPED)], { env: appEnv });
+    const h = harness([appBefore(), renamedReply(DROPPED)], { env: appEnv });
     h.signedIn();
     h.write('my.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', 'my.app.json', '--sandbox', '--yes']), h.err()).toBe(0);
@@ -51,8 +52,8 @@ describe('apps-sdk-followups-1: an archived item', () => {
   });
 
   it('says nothing about archiving when no item is archived', async () => {
-    const body = capturedBody<App>(DROPPED);
-    const h = harness([appBefore(), ...[capturedReply(DROPPED)].map(() => ({ status: 200, headers: {}, body: JSON.stringify({ ...body, items: body.items.map((item) => ({ ...item, status: 'active' })) }) }))], { env: appEnv });
+    const body = renamedBody<App>(DROPPED);
+    const h = harness([appBefore(), ...[renamedReply(DROPPED)].map(() => ({ status: 200, headers: {}, body: JSON.stringify({ ...body, features: body.features.map((item) => ({ ...item, status: 'active' })) }) }))], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
@@ -60,8 +61,8 @@ describe('apps-sdk-followups-1: an archived item', () => {
   });
 
   it('show and list mark the archived item beside it', async () => {
-    const body = capturedBody<App>(DROPPED);
-    const h = harness([capturedReply(DROPPED), { status: 200, headers: {}, body: JSON.stringify([body]) }]);
+    const body = renamedBody<App>(DROPPED);
+    const h = harness([renamedReply(DROPPED), { status: 200, headers: {}, body: JSON.stringify([body]) }]);
     h.signedIn();
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
     expect(h.out().split('\n')).toContain(ARCHIVED_LINE);
@@ -78,7 +79,7 @@ const ONE_ID = 'apr_e221f712e2dd08c2daa566d3ac5ce340';
 
 describe('apps-sdk-followups-1: siren apps requests <id> reads the one request', () => {
   it('reads it with GET /apps/requests/{id}, and shows its line, the data Siren sent, and that no one has answered', async () => {
-    const h = harness([capturedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
+    const h = harness([renamedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
@@ -86,7 +87,7 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     expect(out.split('\n')[0]).toBe(
       `${ONE_ID}  needs_attention  tell Post-conversion action (postConversionAction)  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
     );
-    expect(out).toContain(`The data Siren sent:\n${JSON.stringify(capturedBody<{ data: unknown }>(ONE).data, null, 2)}\n`);
+    expect(out).toContain(`The data Siren sent:\n${JSON.stringify(renamedBody<{ data: unknown }>(ONE).data, null, 2)}\n`);
     expect(out).toContain('A tell takes no answer.');
     expect(out).not.toContain('not among the latest 50');
   });
@@ -109,7 +110,7 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
   });
 
   it('shows a request older than the latest 50, since it no longer looks among them', async () => {
-    const h = harness([capturedReply(ONE), reply(200, []), reply(200, [])]);
+    const h = harness([renamedReply(ONE), reply(200, []), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
     expect(h.paths()).not.toContain('GET /apps/requests');
@@ -127,14 +128,14 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
 
 describe('apps-sdk-followups-1: how many of an app\'s requests need attention', () => {
   it('types needsAttention as the count Siren sends on every app', () => {
-    const listed = capturedBody<App[]>('apps-list-200-count-1');
+    const listed = renamedBody<App[]>('apps-list-200-count-1');
     const counts: number[] = listed.map((one) => one.needsAttention);
     expect(counts).toEqual([1, 0]);
-    expect(capturedBody<App>('apps-retrieve-200-with-count').needsAttention).toBe(0);
+    expect(renamedBody<App>('apps-retrieve-200-with-count').needsAttention).toBe(0);
   });
 
   it('list says how many need attention under an app that has any, with the command that shows them', async () => {
-    const h = harness([capturedReply('apps-list-200-count-1')]);
+    const h = harness([renamedReply('apps-list-200-count-1')]);
     h.signedIn();
     expect(await h.run(['apps', 'list', '--sandbox']), h.err()).toBe(0);
     const lines = h.out().split('\n');
@@ -145,8 +146,8 @@ describe('apps-sdk-followups-1: how many of an app\'s requests need attention', 
   });
 
   it('show says the count when it is above zero, and nothing when it is zero', async () => {
-    const body = capturedBody<App>('apps-retrieve-200-with-count');
-    const h = harness([reply(200, { ...body, needsAttention: 2 }), capturedReply('apps-retrieve-200-with-count')]);
+    const body = renamedBody<App>('apps-retrieve-200-with-count');
+    const h = harness([reply(200, { ...body, needsAttention: 2 }), renamedReply('apps-retrieve-200-with-count')]);
     h.signedIn();
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
     expect(h.out().split('\n')).toContain('  2 requests need attention. See them with siren apps requests --app acme-payouts --attention.');

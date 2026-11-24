@@ -44,7 +44,7 @@ describe('apps-cli: the app file', () => {
         url: 'https://acme.example/siren',
         scopes: ['event:site-visited', 'event:sale'],
         events: [],
-        items: [
+        features: [
           { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
           { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'], answerWindowMinutes: 1 },
           { kind: 'distributionResolver', key: 'acme-split', name: 'Acme split', answerWindowMinutes: 1 },
@@ -150,7 +150,7 @@ describe('apps-cli: the app file', () => {
     const { key, params } = declarationFor(parsed.file!);
     expect(key).toBe('acme-payouts');
     expect(params.name).toBe('Acme');
-    expect(params.items?.map((item) => [item.kind, item.key])).toEqual([['postConversionAction', 'notify']]);
+    expect(params.features?.map((item) => [item.kind, item.key])).toEqual([['postConversionAction', 'notify']]);
     expect(parseAppFile(text, {}).problems[0]?.message).toContain('SIREN_APP_URL');
   });
 });
@@ -163,7 +163,7 @@ describe("apps-cli: the app file's JSON reader", () => {
     expect(parsed.problems).toEqual([]);
     const { params } = declarationFor(parsed.file!);
     expect(params.description).toBe(tricky);
-    expect(params.items).toEqual([{ kind: 'payoutMethod', key: 'pay', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 15 }]);
+    expect(params.features).toEqual([{ kind: 'payoutMethod', key: 'pay', name: 'Pay', currencies: ['USD', 'EUR'], answerWindowMinutes: 15 }]);
   });
 
   it.each([

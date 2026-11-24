@@ -254,7 +254,7 @@ function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unkno
 function requestLine(row: AppRequestRecord): string {
   const subject = row.subject ? `${row.subject.type} ${row.subject.id}` : '';
   const sends = `${row.sendCount} ${row.sendCount === 1 ? 'send' : 'sends'}`;
-  return [row.id, row.status, `${row.mode} ${kindLabel(row.kind)}`, row.item, subject, sends, row.createdAt, row.lastError ?? '']
+  return [row.id, row.status, `${row.mode} ${kindLabel(row.kind)}`, row.feature, subject, sends, row.createdAt, row.lastError ?? '']
     .filter((part) => part !== '')
     .join('  ');
 }

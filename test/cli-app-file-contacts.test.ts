@@ -30,7 +30,7 @@ function held(contacts: string[] | undefined): App {
     apiKeyPrefix: null,
     apiKey: null,
     address: null,
-    items: [],
+    features: [],
     eventsAccess: { entitled: true, requiredCapability: null, requiredPlan: null },
     needsAttention: 0,
   };

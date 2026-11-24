@@ -62,7 +62,7 @@ const LIVE_CASES: Case[] = [
   {
     name: 'apply that leaves an archived item',
     argv: ['apps', 'apply', '--yes'],
-    replies: [appBefore(), reply(200, appRecord({ items: app.items.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) }))],
+    replies: [appBefore(), reply(200, appRecord({ features: app.features.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) }))],
     options: { env: appEnv },
     setup: (h) => {
       h.signedIn(signedInLive);

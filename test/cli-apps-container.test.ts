@@ -23,7 +23,7 @@ function appFile(app: Record<string, unknown>): string {
 }
 
 const keyOnlyFile = appFile({ name: 'Acme', scopes: ['records:programs:read'] });
-const keyOnly = appRecord({ url: null, address: null, events: [], items: [] });
+const keyOnly = appRecord({ url: null, address: null, events: [], features: [] });
 const URL_ENV = { SIREN_APP_URL: 'https://acme.example/siren' };
 
 /** Siren's answer to `GET /apps/{key}` for a key it lacks, as a real Cloud sent it. */
@@ -43,7 +43,7 @@ describe('apps-sdk-container item 3: a key-only app from the file', () => {
   });
 
   it('saves the signing secret a later apply gets when the file adds a url, and keeps the key', async () => {
-    const h = harness([reply(200, keyOnly), reply(200, { ...appRecord({ items: [] }), signingSecret: SIGNING_SECRET })], { env: URL_ENV });
+    const h = harness([reply(200, keyOnly), reply(200, { ...appRecord({ features: [] }), signingSecret: SIGNING_SECRET })], { env: URL_ENV });
     h.signedIn();
     h.write('.env.sandbox', `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\n`);
     h.write('siren.app.json', appFile({ name: 'Acme', description: "Siren's example app.", url: '${SIREN_APP_URL}' }));
@@ -108,11 +108,11 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
       address: { id: 31, url: 'https://elsewhere.example/siren', events: ['sale.created'], status: 'active', dateCreated: null },
       events: ['sale.created'],
       apiKey: { ...appRecord().apiKey, scopes: ['event:sale'] },
-      items: [
-        { ...appRecord().items[0], name: 'Tell the CRM, renamed' },
-        { ...appRecord().items[1], status: 'archived' },
-        { ...appRecord().items[0], id: 13, ref: 'app:13', key: 'added-in-dashboard', name: 'Added' },
-        { ...appRecord().items[0], id: 14, ref: 'app:14', key: 'unused', name: 'Unused' },
+      features: [
+        { ...appRecord().features[0], name: 'Tell the CRM, renamed' },
+        { ...appRecord().features[1], status: 'archived' },
+        { ...appRecord().features[0], id: 13, ref: 'app:13', key: 'added-in-dashboard', name: 'Added' },
+        { ...appRecord().features[0], id: 14, ref: 'app:14', key: 'unused', name: 'Unused' },
       ],
     });
     const h = harness(
@@ -122,7 +122,7 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `GET /apps/${KEY}/items/13`, `GET /apps/${KEY}/items/14`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `GET /apps/${KEY}/features/13`, `GET /apps/${KEY}/features/14`, `PUT /apps/${KEY}`]);
     const out = h.out();
     for (const line of [
       `Applying siren.app.json changes ${KEY} on ${SANDBOX_BASE_URL}:`,
@@ -235,9 +235,9 @@ describe('apps-sdk-container item 6: plans in the output', () => {
   const onPlus = appRecord({
     events: ['obligation.approved'],
     address: { ...appRecord().address, events: ['obligation.approved'] },
-    items: [
-      { ...appRecord().items[0], ...PlanFields.needsPro() },
-      { ...appRecord().items[1], kind: 'distributionResolver', key: 'acme-split', name: 'Acme split', settings: {} },
+    features: [
+      { ...appRecord().features[0], ...PlanFields.needsPro() },
+      { ...appRecord().features[1], kind: 'distributionResolver', key: 'acme-split', name: 'Acme split', settings: {} },
     ],
     eventsAccess: PlanFields.needsPro(),
   });
@@ -259,12 +259,12 @@ describe('apps-sdk-container item 6: plans in the output', () => {
 
   it('names the plan Siren names, says only that the plan cannot use it when Siren names none, and never guesses', async () => {
     const app = appRecord({
-      items: [
-        { ...appRecord().items[0], entitled: false, requiredCapability: 'outbound-apps', requiredPlan: 'enterprise' },
-        { ...appRecord().items[1], entitled: false, requiredCapability: null, requiredPlan: null },
+      features: [
+        { ...appRecord().features[0], entitled: false, requiredCapability: 'outbound-apps', requiredPlan: 'enterprise' },
+        { ...appRecord().features[1], entitled: false, requiredCapability: null, requiredPlan: null },
       ],
     });
-    const older = appRecord({ items: appRecord().items.map(({ entitled: _e, requiredCapability: _c, requiredPlan: _p, ...item }) => item) });
+    const older = appRecord({ features: appRecord().features.map(({ entitled: _e, requiredCapability: _c, requiredPlan: _p, ...item }) => item) });
     const h = harness([reply(200, app), reply(200, older)]);
     h.signedIn();
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
@@ -318,7 +318,7 @@ describe('apps-sdk-container item 6: plans in the output', () => {
 
 describe('apps-sdk-container item 7: a person reads feature, never item', () => {
   it('the tool says feature in what it prints for apply, show, list and a refused delete', async () => {
-    const archived = appRecord({ items: appRecord().items.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) });
+    const archived = appRecord({ features: appRecord().features.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) });
     const h = harness(
       [reply(200, appRecord({ name: 'Old' })), reply(200, archived), reply(200, archived), reply(200, [archived]), AppAnswers.inUse(), reply(200, archived)],
       { env: URL_ENV },

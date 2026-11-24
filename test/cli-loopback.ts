@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { capturedBody } from './cloud-captures';
+import { renamedBody } from './cli-renamed-captures';
 import { jwt } from './cli-fakes';
 
 /*
@@ -75,7 +76,7 @@ export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbo
       if (route === 'POST /auth/login') {
         return send(200, capturedBody('auth-login-200', { '<ACCESSTOKEN>': loopbackAccessToken(), '<REFRESHTOKEN>': 'made-up-refresh-token' }));
       }
-      if (route === 'GET /apps') return send(200, capturedBody('apps-list-200'));
+      if (route === 'GET /apps') return send(200, renamedBody('apps-list-200'));
       if (route === 'GET /apps/requests') return send(200, capturedBody('apps-requests-list-empty'));
       if (route === 'POST /auth/logout') return send(200, capturedBody('auth-logout-200'));
       return send(404, { error: 'Not found.' });

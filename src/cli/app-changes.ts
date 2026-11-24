@@ -1,6 +1,6 @@
-import type { App, AppItem, AppItemDeclaration, DeclareAppParams } from '../record-types';
+import type { App, AppFeature, AppFeatureDeclaration, DeclareAppParams } from '../record-types';
 import { API_KEY_RECORD_SCOPES } from '../api-key-scopes';
-import { AppItemKind } from '../taxonomy';
+import { FeatureKind } from '../taxonomy';
 import { kindLabel } from './app-kinds';
 import { storedContacts } from './app-file';
 
@@ -20,7 +20,7 @@ import { storedContacts } from './app-file';
 
 /** One feature the file leaves out that Siren still holds active. Apply reads how many records select it. */
 export interface DroppedFeature {
-  item: AppItem;
+  item: AppFeature;
 }
 
 /** The changes, in the order they print. Empty `lines` and `dropped` mean the app matches the file. */
@@ -65,7 +65,7 @@ function setLine(label: string, have: readonly string[], want: readonly string[]
 }
 
 /** The fields of a feature that differ from what Siren holds, in words. */
-function featureDifferences(have: AppItem, want: AppItemDeclaration): string[] {
+function featureDifferences(have: AppFeature, want: AppFeatureDeclaration): string[] {
   const differences: string[] = [];
   if (want.name.trim() !== have.name) differences.push('name');
   if ((want.description ?? '') !== have.description) differences.push('description');
@@ -73,11 +73,11 @@ function featureDifferences(have: AppItem, want: AppItemDeclaration): string[] {
   const haveCurrencies = have.settings.currencies ?? [];
   if (wantCurrencies.join(',') !== haveCurrencies.join(',')) differences.push('currencies');
   if (want.answerWindowMinutes !== have.settings.answerWindowMinutes) differences.push('answer window');
-  if (want.kind === AppItemKind.MetricCalculation && (want.scoresMoney === true) !== (have.settings.scoresMoney === true)) differences.push('scores money');
-  if (want.kind === AppItemKind.IncentiveType && [...(want.conversionTypes ?? [])].sort().join(',') !== [...(have.settings.conversionTypes ?? [])].sort().join(',')) {
+  if (want.kind === FeatureKind.MetricCalculation && (want.scoresMoney === true) !== (have.settings.scoresMoney === true)) differences.push('scores money');
+  if (want.kind === FeatureKind.IncentiveType && [...(want.conversionTypes ?? [])].sort().join(',') !== [...(have.settings.conversionTypes ?? [])].sort().join(',')) {
     differences.push('conversions it pays');
   }
-  if (want.kind === AppItemKind.CustomEvent) {
+  if (want.kind === FeatureKind.CustomEvent) {
     if (fieldsText(want.fields) !== fieldsText(have.settings.fields)) differences.push('fields');
     const domains = setChange(storedDomains(have.settings.domains ?? []), storedDomains(want.domains ?? []));
     if (domains.added.length > 0 || domains.removed.length > 0) {
@@ -102,8 +102,8 @@ function fieldsText(fields: Record<string, { type: string; required?: boolean }>
 }
 
 /** `, allowing a, b` for a new custom event that names domains, else nothing. */
-function allowing(feature: AppItemDeclaration): string {
-  if (feature.kind !== AppItemKind.CustomEvent) return '';
+function allowing(feature: AppFeatureDeclaration): string {
+  if (feature.kind !== FeatureKind.CustomEvent) return '';
   const domains = storedDomains(feature.domains ?? []);
   return domains.length > 0 ? `, allowing ${domains.join(', ')}` : ', from the app\'s server only';
 }
@@ -114,7 +114,7 @@ function allowing(feature: AppItemDeclaration): string {
  * have come from the environment, nor any secret.
  */
 export function appChanges(have: App | undefined, want: DeclareAppParams): AppChanges {
-  const features = want.items ?? [];
+  const features = want.features ?? [];
   if (have === undefined) {
     const parts = ['a key', ...(want.url != null ? ['an address'] : []), ...(features.length > 0 ? [`${features.length} ${features.length === 1 ? 'feature' : 'features'}`] : [])];
     const lines = [`makes the app with ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`}`];
@@ -151,7 +151,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
   const dropped: DroppedFeature[] = [];
   const named = new Set(features.map((feature) => `${feature.kind} ${feature.key}`));
   for (const feature of features) {
-    const held = have.items.find((item) => item.kind === feature.kind && item.key === feature.key);
+    const held = have.features.find((item) => item.kind === feature.kind && item.key === feature.key);
     const name = featureName(feature.kind, feature.key);
     if (held === undefined) {
       lines.push(`adds feature ${name}, named ${feature.name.trim()}${allowing(feature)}`);
@@ -164,7 +164,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
       lines.push(`changes feature ${name}: ${differences.join(', ')}`);
     }
   }
-  for (const item of have.items) {
+  for (const item of have.features) {
     if (item.status === 'archived' || named.has(`${item.kind} ${item.key}`)) continue;
     dropped.push({ item });
   }
@@ -176,7 +176,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
  * records select it: Siren archives it while any does and deletes it
  * otherwise. `uses` is undefined when that read failed.
  */
-export function droppedLine(item: AppItem, uses: number | undefined): string {
+export function droppedLine(item: AppFeature, uses: number | undefined): string {
   const name = featureName(item.kind, item.key);
   if (uses === undefined) return `removes feature ${name}: Siren archives it if a record selects it, and deletes it otherwise`;
   if (uses === 0) return `removes feature ${name}: nothing selects it, so Siren deletes it`;

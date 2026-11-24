@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { appChanges } from '../src/cli/app-changes';
 import { declarationFor, domainProblem, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
-import type { App, AppItem } from '../src/record-types';
+import type { App, AppFeature } from '../src/record-types';
 
 /*
  * Slice C13 (apps-event-tokens): the app file and `siren apps apply` carry a
@@ -21,7 +21,7 @@ describe('the app file and a custom event', () => {
     const parsed = parseAppFile(file({ name: 'Signups', features: { 'newsletter-signup': signup } }), {});
 
     expect(parsed.problems).toEqual([]);
-    expect(declarationFor(parsed.file!).params.items).toEqual([{ key: 'newsletter-signup', ...signup }]);
+    expect(declarationFor(parsed.file!).params.features).toEqual([{ key: 'newsletter-signup', ...signup }]);
   });
 
   it('still needs a url for any feature Siren calls', () => {
@@ -72,12 +72,12 @@ describe('siren apps apply and a custom event', () => {
       description: '',
       settings: { fields: { list: { type: 'string', required: true } }, domains },
       status: 'active',
-    } as unknown as AppItem;
-    return { key: 'signups', name: 'Signups', description: '', url: null, address: null, events: [], scopes: [], apiKey: null, items: [item] } as unknown as App;
+    } as unknown as AppFeature;
+    return { key: 'signups', name: 'Signups', description: '', url: null, address: null, events: [], scopes: [], apiKey: null, features: [item] } as unknown as App;
   }
   const want = (domains: string[]) => ({
     name: 'Signups',
-    items: [{ kind: 'customEvent' as const, key: 'newsletter-signup', name: 'Newsletter signup', fields: { list: { type: 'string', required: true } }, domains }],
+    features: [{ kind: 'customEvent' as const, key: 'newsletter-signup', name: 'Newsletter signup', fields: { list: { type: 'string', required: true } }, domains }],
   });
 
   it('lists the domains a new event allows, or that only the server sends it', () => {

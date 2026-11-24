@@ -1,5 +1,5 @@
-import type { AppConversionType, AppItemDeclaration, CustomEventField, DeclareAppParams } from '../record-types';
-import { AppItemKind } from '../taxonomy';
+import type { AppConversionType, AppFeatureDeclaration, CustomEventField, DeclareAppParams } from '../record-types';
+import { FeatureKind } from '../taxonomy';
 import { kindLabel } from './app-kinds';
 
 /*
@@ -42,7 +42,7 @@ export const APP_FILE_NAME = 'siren.app.json';
  * deleted.
  */
 export interface AppFileItem {
-  kind: AppItemKind;
+  kind: FeatureKind;
   name: string;
   description?: string;
   currencies?: string[];
@@ -152,8 +152,8 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
   if (app.events !== undefined) params.events = [...app.events];
   if (app.contacts !== undefined) params.contacts = storedContacts(app.contacts);
   if (app.features !== undefined) {
-    params.items = Object.entries(app.features).map(([featureKey, item]) => {
-      const declared: AppItemDeclaration = { kind: item.kind, key: featureKey, name: item.name };
+    params.features = Object.entries(app.features).map(([featureKey, item]) => {
+      const declared: AppFeatureDeclaration = { kind: item.kind, key: featureKey, name: item.name };
       if (item.description !== undefined) declared.description = item.description;
       if (item.currencies !== undefined) declared.currencies = [...item.currencies];
       if (item.answerWindowMinutes !== undefined) declared.answerWindowMinutes = item.answerWindowMinutes;
@@ -272,9 +272,9 @@ const HOST = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})*$`);
 
 /**
  * Siren's feature kinds (lib/Apps/Core/Enums/AppItemKinds.php), each once:
- * `AppItemKind.FulfillmentMethod` is an alias of `payoutMethod`.
+ * `FeatureKind.FulfillmentMethod` is an alias of `payoutMethod`.
  */
-export const KINDS: readonly string[] = [...new Set<string>(Object.values(AppItemKind))];
+export const KINDS: readonly string[] = [...new Set<string>(Object.values(FeatureKind))];
 
 /** The payout kind's old word, which Siren refuses since it took the documentation's. */
 const OLD_PAYOUT_KIND = 'fulfillmentMethod';
@@ -636,7 +636,7 @@ class AppFileCheck {
     if (count > MAX_FEATURES) {
       this.problem(`${path}.features`, this.where(`${path}.features`), `${path}.features holds ${count} features, and an app may hold at most ${MAX_FEATURES}.`);
     }
-    const needAddress = Object.values(features).some((item) => !isObject(item) || item.kind !== AppItemKind.CustomEvent);
+    const needAddress = Object.values(features).some((item) => !isObject(item) || item.kind !== FeatureKind.CustomEvent);
     if (app.url === undefined && needAddress) {
       this.problem(
         `${path}.features`,
@@ -691,21 +691,21 @@ class AppFileCheck {
       this.problem(`${path}.description`, this.where(`${path}.description`), `${path}.description must be text.`);
     }
     // The old word names the same kind, so its currencies are checked as a payout method's are.
-    if (entry.kind === AppItemKind.PayoutMethod || entry.kind === OLD_PAYOUT_KIND) {
+    if (entry.kind === FeatureKind.PayoutMethod || entry.kind === OLD_PAYOUT_KIND) {
       if (!isTextList(entry.currencies) || entry.currencies.length === 0) {
-        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a ${kindLabel(AppItemKind.PayoutMethod)}: a list of the currency codes it pays.`);
+        this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is required for a ${kindLabel(FeatureKind.PayoutMethod)}: a list of the currency codes it pays.`);
       }
     } else if (entry.currencies !== undefined) {
-      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a ${kindLabel(AppItemKind.PayoutMethod)}.`);
+      this.problem(`${path}.currencies`, this.where(`${path}.currencies`), `${path}.currencies is only for a ${kindLabel(FeatureKind.PayoutMethod)}.`);
     }
-    if (entry.kind === AppItemKind.MetricCalculation) {
+    if (entry.kind === FeatureKind.MetricCalculation) {
       if (entry.scoresMoney !== undefined && typeof entry.scoresMoney !== 'boolean') {
         this.problem(`${path}.scoresMoney`, this.where(`${path}.scoresMoney`), `${path}.scoresMoney must be true or false.`);
       }
     } else if (entry.scoresMoney !== undefined) {
-      this.problem(`${path}.scoresMoney`, this.where(`${path}.scoresMoney`), `${path}.scoresMoney is only for a ${kindLabel(AppItemKind.MetricCalculation)}.`);
+      this.problem(`${path}.scoresMoney`, this.where(`${path}.scoresMoney`), `${path}.scoresMoney is only for a ${kindLabel(FeatureKind.MetricCalculation)}.`);
     }
-    if (entry.kind === AppItemKind.IncentiveType) {
+    if (entry.kind === FeatureKind.IncentiveType) {
       const types = entry.conversionTypes;
       if (
         !isTextList(types) ||
@@ -716,11 +716,11 @@ class AppFileCheck {
         this.problem(
           `${path}.conversionTypes`,
           this.where(`${path}.conversionTypes`),
-          `${path}.conversionTypes is required for an ${kindLabel(AppItemKind.IncentiveType)}: a list of the conversions it pays, each once, from ${CONVERSION_TYPES.join(', ')}.`,
+          `${path}.conversionTypes is required for an ${kindLabel(FeatureKind.IncentiveType)}: a list of the conversions it pays, each once, from ${CONVERSION_TYPES.join(', ')}.`,
         );
       }
     } else if (entry.conversionTypes !== undefined) {
-      this.problem(`${path}.conversionTypes`, this.where(`${path}.conversionTypes`), `${path}.conversionTypes is only for an ${kindLabel(AppItemKind.IncentiveType)}.`);
+      this.problem(`${path}.conversionTypes`, this.where(`${path}.conversionTypes`), `${path}.conversionTypes is only for an ${kindLabel(FeatureKind.IncentiveType)}.`);
     }
     this.checkCustomEventSettings(path, entry);
     const window = entry.answerWindowMinutes;
@@ -739,10 +739,10 @@ class AppFileCheck {
    * checks the types. Each domain passes {@link domainProblem}.
    */
   private checkCustomEventSettings(path: string, entry: Record<string, unknown>): void {
-    const custom = entry.kind === AppItemKind.CustomEvent;
+    const custom = entry.kind === FeatureKind.CustomEvent;
     for (const field of ['fields', 'domains']) {
       if (!custom && entry[field] !== undefined) {
-        this.problem(`${path}.${field}`, this.where(`${path}.${field}`), `${path}.${field} is only for a ${kindLabel(AppItemKind.CustomEvent)}.`);
+        this.problem(`${path}.${field}`, this.where(`${path}.${field}`), `${path}.${field} is only for a ${kindLabel(FeatureKind.CustomEvent)}.`);
       }
     }
     if (!custom) return;

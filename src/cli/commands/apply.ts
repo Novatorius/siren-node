@@ -207,7 +207,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   }
   const removals = await Promise.all(
     changes.dropped.map(({ item }) =>
-      siren.apps.items.retrieve(key, item.id).then(
+      siren.apps.features.retrieve(key, item.id).then(
         (page) => droppedLine(item, page.uses),
         () => droppedLine(item, undefined),
       ),
@@ -242,12 +242,12 @@ export async function appsApply(input: CommandInput): Promise<number> {
 
   run.print(`Declared ${key} on ${run.target.baseUrl}.`);
   for (const line of appLines(app, false)) run.print(line);
-  if (app.items.length > 0) {
-    const ref = app.items[0]!.ref;
+  if (app.features.length > 0) {
+    const ref = app.features[0]!.ref;
     run.print(`${ref} is the id a program, distributor or autofulfiller stores to select that feature.`);
   }
   for (const name of parsed.filled) run.print(`Its url came from ${name}${shell(name) ? '' : ' in .env'}.`);
-  if (app.items.some((item) => item.status === 'archived')) {
+  if (app.features.some((item) => item.status === 'archived')) {
     const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);
     run.print(
       `An archived feature is one ${shown} no longer names while a record still selects it. ` +
@@ -499,7 +499,7 @@ export async function appsDelete(input: CommandInput): Promise<number> {
 export function appLines(app: App, showUrl = true): string[] {
   const state = app.status === 'active' ? 'on' : 'off';
   const lines = [`${app.key}  ${app.name}  ${state}${showUrl && app.url ? `  ${app.url}` : ''}`];
-  for (const item of app.items) {
+  for (const item of app.features) {
     const archived = item.status === 'archived' ? '  archived, so Siren no longer calls it' : '';
     lines.push(`  ${item.ref}  ${kindLabel(item.kind)}  ${item.key}  ${item.name}${archived}${planMark(item)}`);
   }

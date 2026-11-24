@@ -1,4 +1,4 @@
-import { AppItemKind } from '../taxonomy';
+import { FeatureKind } from '../taxonomy';
 import {
   APP_FIELDS,
   CONVERSION_TYPES,
@@ -48,22 +48,22 @@ function feature(): Schema {
     },
     name: { type: 'string', minLength: 1, description: 'The name the dashboard shows.' },
     description: TEXT,
-    currencies: { ...TEXT_LIST, minItems: 1, description: `For a ${kindLabel(AppItemKind.PayoutMethod)}: the currency codes it pays.` },
+    currencies: { ...TEXT_LIST, minItems: 1, description: `For a ${kindLabel(FeatureKind.PayoutMethod)}: the currency codes it pays.` },
     answerWindowMinutes: { type: 'integer', minimum: 1, maximum: MAX_ANSWER_WINDOW_MINUTES, description: 'How long Siren waits for an answer to an ask, in minutes.' },
-    scoresMoney: { type: 'boolean', description: `For a ${kindLabel(AppItemKind.MetricCalculation)}: whether its score is an amount of money.` },
+    scoresMoney: { type: 'boolean', description: `For a ${kindLabel(FeatureKind.MetricCalculation)}: whether its score is an amount of money.` },
     conversionTypes: {
       type: 'array',
       items: { enum: [...CONVERSION_TYPES] },
       minItems: 1,
       uniqueItems: true,
-      description: `For an ${kindLabel(AppItemKind.IncentiveType)}: the conversions it pays, each once.`,
+      description: `For an ${kindLabel(FeatureKind.IncentiveType)}: the conversions it pays, each once.`,
     },
     fields: {
       type: 'object',
       additionalProperties: { type: 'object', required: ['type'], properties: { type: TEXT, required: { type: 'boolean' } } },
-      description: `For a ${kindLabel(AppItemKind.CustomEvent)}: each field's name to {"type": ..., "required": ...}.`,
+      description: `For a ${kindLabel(FeatureKind.CustomEvent)}: each field's name to {"type": ..., "required": ...}.`,
     },
-    domains: { ...TEXT_LIST, maxItems: MAX_DOMAINS, description: `For a ${kindLabel(AppItemKind.CustomEvent)}: the websites that may send it from a browser, such as example.com or *.example.com.` },
+    domains: { ...TEXT_LIST, maxItems: MAX_DOMAINS, description: `For a ${kindLabel(FeatureKind.CustomEvent)}: the websites that may send it from a browser, such as example.com or *.example.com.` },
   };
   return {
     type: 'object',
@@ -71,10 +71,10 @@ function feature(): Schema {
     additionalProperties: false,
     properties: Object.fromEntries(ITEM_FIELDS.map((field) => [field, properties[field] ?? {}])),
     allOf: [
-      onlyFor(AppItemKind.PayoutMethod, ['currencies'], true),
-      onlyFor(AppItemKind.IncentiveType, ['conversionTypes'], true),
-      onlyFor(AppItemKind.MetricCalculation, ['scoresMoney'], false),
-      onlyFor(AppItemKind.CustomEvent, ['fields', 'domains'], false),
+      onlyFor(FeatureKind.PayoutMethod, ['currencies'], true),
+      onlyFor(FeatureKind.IncentiveType, ['conversionTypes'], true),
+      onlyFor(FeatureKind.MetricCalculation, ['scoresMoney'], false),
+      onlyFor(FeatureKind.CustomEvent, ['fields', 'domains'], false),
     ],
   };
 }
@@ -89,7 +89,7 @@ function app(): Schema {
     contacts: { ...TEXT_LIST, description: 'Email addresses Siren tells when something is wrong with the app.' },
     features: { type: 'object', propertyNames: KEY_NAME, maxProperties: MAX_FEATURES, additionalProperties: feature(), description: 'Each feature under its feature key.' },
   };
-  const allCustomEvents = { additionalProperties: { required: ['kind'], properties: { kind: { const: AppItemKind.CustomEvent } } } };
+  const allCustomEvents = { additionalProperties: { required: ['kind'], properties: { kind: { const: FeatureKind.CustomEvent } } } };
   return {
     type: 'object',
     required: ['name'],

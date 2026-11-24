@@ -178,7 +178,7 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
   });
 
   it('show, list and apply print the readable name beside the kind', async () => {
-    const h = harness([reply(200, appRecord()), reply(200, [appRecord()]), reply(200, appRecord({ name: 'Old', items: [appRecord().items[0]] })), reply(200, appRecord())], {
+    const h = harness([reply(200, appRecord()), reply(200, [appRecord()]), reply(200, appRecord({ name: 'Old', features: [appRecord().features[0]] })), reply(200, appRecord())], {
       env: URL_ENV,
     });
     h.signedIn();
@@ -198,9 +198,9 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.features.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ` +
         'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), ' +
+        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), Transaction filter (transactionFilter), ' +
         'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
-        'Transaction filter (transactionFilter), Collaborator group structure (collaboratorGroupStructure).',
+        'Collaborator group structure (collaboratorGroupStructure).',
     );
     expect(parseAppFile(file({ kind: 'payoutMethod', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.features.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,
