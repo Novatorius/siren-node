@@ -3,6 +3,7 @@ import { baseUrlForKey } from '../client';
 import { readEnvironment } from '../environment';
 import { SirenError } from '../errors';
 import { DEFAULT_BASE_URL } from '../http';
+import APP_KINDS from '../app-kinds.json';
 import { SAMPLE_DATA } from './sample-data';
 
 /*
@@ -12,8 +13,8 @@ import { SAMPLE_DATA } from './sample-data';
  * README's own samples are tested with these same calls.
  */
 
-/** The two kinds Siren tells. Every other kind asks. */
-const TELL_KINDS: readonly string[] = ['postConversionAction', 'postAllocationAction'];
+/** The kinds Siren tells, from its registry snapshot. Every other kind it sends is an ask. */
+const TELL_KINDS: readonly string[] = APP_KINDS.filter((entry) => entry.mode === 'tell').map((entry) => entry.kind);
 
 /** A request as Siren sends it: ready for `answers.simulate()`, `answers.handle()` or `fetch`. */
 export interface AppTestRequest {
@@ -87,7 +88,7 @@ export function appRequest(kind: string, key: string, options: AppTestRequestOpt
     type: 'app.request',
     mode: ask ? 'ask' : 'tell',
     app: options.app ?? 'my-app',
-    item: { kind, key, id: 'app:1' },
+    feature: { kind, key, id: 'app:1' },
     createdAt: at(t),
   };
   if (ask) {

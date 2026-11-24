@@ -320,9 +320,11 @@ one. A tell tells the app something happened. An ask waits for the app's answer.
 | Transaction filter (`transactionFilter`) | a program or a distributor | An ask for which of each sale's lines count, answered `{ outcome: 'filtered', include }`. |
 | Collaborator group structure (`collaboratorGroupStructure`) | a collaborator group | An ask for the group's shape on each cascade trigger, answered a chain or a tree. |
 
-Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads
-and the dashboard shows. The code calls a feature an item, so the routes are `/apps/{app}/items`
-and the types are `AppItem` and `AppItemKind`.
+Each kind's readable name is the `name` Siren's registry gives it, which `apps.kinds()` reads and
+the dashboard shows. `FeatureKind` holds every kind, and your editor shows each one's name and what
+it does on hover. The SDK ships Siren's registry snapshot as `src/app-kinds.json`, so the names stay
+Siren's own. The feature routes are `/apps/{app}/features`, and a request names its feature in
+`request.feature.kind` and `request.feature.key`.
 
 Each sample below is the function for one feature, registered on the `answers` of the first sample.
 
@@ -719,7 +721,7 @@ body that is not a request of version 1, each with `SignatureVerificationError`.
 to the older `X-Siren-Signature`, which signs no time.
 
 The request is the envelope Siren signed: `version` 1, its `id`, `type` `app.request`, its `mode`
-(`tell` or `ask`), the `app` key, the `item` with the feature's `kind` and `key`, `createdAt`, and
+(`tell` or `ask`), the `app` key, the `feature` with its `kind` and `key`, `createdAt`, and
 the kind's `data`. An ask also carries `answerBy` and `answerUrl`.
 
 ```ts
@@ -764,7 +766,7 @@ by hand:
 import type { AppConversionApprovedData } from '@novatorius/siren';
 
 const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
-if (request.mode === 'tell' && request.item.kind === 'postConversionAction') {
+if (request.mode === 'tell' && request.feature.kind === 'postConversionAction') {
   const { conversion, reward } = request.data as unknown as AppConversionApprovedData;
   if (reward !== null) {
     const shown = siren.apps.shownAmount(reward.value, reward.currency);
@@ -787,7 +789,7 @@ Siren stops waiting for it. The answer is a plain object with a text `outcome`, 
 import type { AppCollaboratorGroupStructureAnswer } from '@novatorius/siren';
 
 const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
-if (request.mode === 'ask' && request.item.kind === 'collaboratorGroupStructure') {
+if (request.mode === 'ask' && request.feature.kind === 'collaboratorGroupStructure') {
   const chain: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'chain', order: [63, 57, 42] };
   await appSiren.apps.requests.answer(request.id, chain);
 }
@@ -862,7 +864,7 @@ try {
 | `app_limit_reached` | 403 | Turn another app off, or move to a plan with room. |
 | `app_cap_reached` | 400 | The organization holds 250 apps, on or off. Delete one first. |
 | `app_needs_a_part` | 422, 409 | Give the app a key, an address or both. |
-| `app_items_need_key_and_address` | 422, 409 | An app with features needs a key and an address. `missing` names the part it lacks. |
+| `app_features_need_key_and_address` | 422, 409 | An app with features needs a key and an address. `missing` names the part it lacks. |
 | `app_key_exists` | 409 | Rotate the key instead of making one. |
 | `app_key_missing` | 409 | Make a key with `apps.createKey()` first. |
 | `app_address_missing` | 409 | Give the app a `url` first. |
@@ -1538,10 +1540,10 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` | Reads one request, however old, with the data Siren sent, the answer it took and the person who answered by hand. |
 | `siren.apps.requests.resend()` | `POST /apps/requests/{id}/resend` | Sends a request again under the same key. |
 | `siren.apps.requests.answer()` | `POST /apps/requests/{id}/answer` | Posts an app's answer to an ask. A repeat of the same answer is safe. |
-| `siren.apps.items.create()` | `POST /apps/{app}/items` | Adds one feature to an app that holds a key and an address. |
-| `siren.apps.items.retrieve()` | `GET /apps/{app}/items/{id}` | Reads one feature with how many records select it and which. |
-| `siren.apps.items.update()` | `PATCH /apps/{app}/items/{id}` | Changes a feature's name, description or settings. Its kind and key never change. |
-| `siren.apps.items.delete()` | `DELETE /apps/{app}/items/{id}` | Archives a feature a record selects, and deletes one nothing selects. |
+| `siren.apps.features.create()` | `POST /apps/{app}/features` | Adds one feature to an app that holds a key and an address. |
+| `siren.apps.features.retrieve()` | `GET /apps/{app}/features/{id}` | Reads one feature with how many records select it and which. |
+| `siren.apps.features.update()` | `PATCH /apps/{app}/features/{id}` | Changes a feature's name, description or settings. Its kind and key never change. |
+| `siren.apps.features.delete()` | `DELETE /apps/{app}/features/{id}` | Archives a feature a record selects, and deletes one nothing selects. |
 
 ## Storefront module (browser)
 
@@ -1978,7 +1980,7 @@ const app = await siren.apps.declare('acme-payouts', {
   name: 'Acme',
   url: 'https://acme.example/siren',
   scopes: ['event:sale'],
-  items: [
+  features: [
     { kind: 'postConversionAction', key: 'notify-crm', name: 'Tell the CRM' },
     { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] },
   ],
@@ -2011,8 +2013,8 @@ The dashboard changes an app one part at a time, and so can you:
 - `apps.rotateSecret(key)` gives the address a new signing secret. The key stays.
 - `apps.test(key)` sends the address one signed `webhook.test` and answers what it did, and
   `apps.deliveries(key)` reads the address's latest 50 deliveries.
-- `apps.items.create(key, feature)`, `apps.items.retrieve(key, id)`, `apps.items.update(key, id,
-  change)` and `apps.items.delete(key, id)` add, read, change and remove one feature. `retrieve`
+- `apps.features.create(key, feature)`, `apps.features.retrieve(key, id)`,
+  `apps.features.update(key, id, change)` and `apps.features.delete(key, id)` add, read, change and remove one feature. `retrieve`
   answers how many records select it in `uses`, and which in `usedBy`. `create` may leave out `key`,
   and Siren then makes it from the name, adding `-2` when the app already holds it. `update` refuses
   a change to its `kind` or `key`.

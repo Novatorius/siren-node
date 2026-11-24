@@ -7,7 +7,7 @@
  */
 import { Siren } from '../../src/client';
 import type { AppFeatureFunctions } from '../../src/record-types';
-import type { AppItemKind } from '../../src/taxonomy';
+import type { FeatureKind } from '../../src/taxonomy';
 
 const siren = new Siren({ apiKey: 'sk_live_x' });
 const answers = siren.apps.requestHandler();
@@ -33,7 +33,7 @@ newer.on('distributionResolver', () => newer.later());
 // @ts-expect-error a kind extraKinds does not name
 newer.on('anotherNewKind', () => newer.later());
 
-/** The kinds `on()` takes are AppItemKind without customEvent, both ways round. */
+/** The kinds `on()` takes are FeatureKind without customEvent, both ways round. */
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
-const sameKinds: Same<keyof AppFeatureFunctions, Exclude<AppItemKind, 'customEvent'>> = true;
+const sameKinds: Same<keyof AppFeatureFunctions, Exclude<FeatureKind, 'customEvent'>> = true;
 void sameKinds;

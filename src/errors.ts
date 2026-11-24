@@ -183,7 +183,7 @@ export const AppErrorCode = {
    * began to wait, and Siren then takes no answer to it.
    */
   Dropped: 'app_request_dropped',
-  /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the item's kind refuses. */
+  /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the feature's kind refuses. */
   AnswerInvalid: 'app_answer_invalid',
   /**
    * 401 from the answer route: no bearer, or one Siren does not know. Siren's
@@ -196,7 +196,7 @@ export const AppErrorCode = {
   AnswerForbidden: 'app_answer_forbidden',
   /** 409 from the resend route: the request is applied, or it would be sent and its app is off. */
   NotResendable: 'app_request_not_resendable',
-  /** 409 `data.reason` from `DELETE /apps/{key}`: a record still selects one of the app's items, or an ask is open. */
+  /** 409 `data.reason` from `DELETE /apps/{key}`: a record still selects one of the app's features, or an ask is open. */
   AppInUse: 'app_in_use',
   /** 403 `data.reason` from declaring or turning on an app: the plan has no room for another active app. */
   AppLimitReached: 'app_limit_reached',
@@ -215,7 +215,7 @@ export const AppErrorCode = {
    * declaration, 409 on a change or a first feature, with `data.missing`
    * naming `key`, `address` or both.
    */
-  ItemsNeedKeyAndAddress: 'app_items_need_key_and_address',
+  FeaturesNeedKeyAndAddress: 'app_features_need_key_and_address',
   /** 409 from `POST /apps/{key}/key`: the app already holds an active key. Rotate it instead. */
   KeyExists: 'app_key_exists',
   /** 409: the app holds no active key to rotate or revoke, or a change sends `scopes` to an app with none. */

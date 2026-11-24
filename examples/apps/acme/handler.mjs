@@ -57,7 +57,7 @@ export function createAcmeApp({ siren, signingSecret, log = () => {}, now }) {
 
       if (request.mode === 'tell') {
         handled.add(request.id);
-        log(`${request.id}: told about ${request.item.key} (${request.item.kind}): ${describeTell(siren, request)}`);
+        log(`${request.id}: told about ${request.feature.key} (${request.feature.kind}): ${describeTell(siren, request)}`);
         return { status: 200, body: received };
       }
 
@@ -69,7 +69,7 @@ export function createAcmeApp({ siren, signingSecret, log = () => {}, now }) {
         return { status: 500, body: JSON.stringify({ error: 'unanswerable' }) };
       }
       if (answer === null) {
-        log(`${request.id}: no answer for an ask on ${request.item.kind}.`);
+        log(`${request.id}: no answer for an ask on ${request.feature.kind}.`);
         return { status: 200, body: received };
       }
 
@@ -123,7 +123,7 @@ export function createRequestListener(app, log) {
  * came, so the example never prints a stored integer as an amount.
  *
  * @param {import('@novatorius/siren').Siren} siren
- * @param {{ item: { kind: string }, data: Record<string, unknown> }} request
+ * @param {{ feature: { kind: string }, data: Record<string, unknown> }} request
  * @returns {string}
  */
 export function describeTell(siren, request) {
@@ -136,7 +136,7 @@ export function describeTell(siren, request) {
       return undefined;
     }
   };
-  if (request.item.kind === 'postConversionAction' && data.conversion && data.program) {
+  if (request.feature.kind === 'postConversionAction' && data.conversion && data.program) {
     /** @type {import('@novatorius/siren').AppConversionApprovedData} */
     const told = /** @type {any} */ (data);
     const about = `conversion ${told.conversion.id} approved for collaborator ${told.conversion.collaboratorId} in program ${told.program.name}`;
@@ -144,7 +144,7 @@ export function describeTell(siren, request) {
     const shown = read(told.reward?.value, told.reward?.currency);
     return shown === undefined ? asCame : `${about}, reward ${shown}.`;
   }
-  if (request.item.kind === 'postAllocationAction' && data.allocation && data.distributor) {
+  if (request.feature.kind === 'postAllocationAction' && data.allocation && data.distributor) {
     /** @type {import('@novatorius/siren').AppAllocationCompletedData} */
     const told = /** @type {any} */ (data);
     const { allocation } = told;
@@ -160,16 +160,16 @@ export function describeTell(siren, request) {
  * answer. Throws, naming the field, for an ask whose data lacks what the
  * answer needs, so the example never answers with a guess.
  *
- * @param {{ item: { kind: string }, data: Record<string, unknown> }} request
+ * @param {{ feature: { kind: string }, data: Record<string, unknown> }} request
  * @returns {{ outcome: string, [field: string]: unknown } | null}
  */
 export function answerFor(request) {
   const { data } = request;
-  if (request.item.kind === 'payoutMethod') {
+  if (request.feature.kind === 'payoutMethod') {
     if (typeof data.payoutId !== 'number' && typeof data.payoutId !== 'string') throw new Error('a payout ask needs data.payoutId.');
     return { outcome: 'paid', reference: `acme-${data.payoutId}` };
   }
-  if (request.item.kind === 'distributionResolver') {
+  if (request.feature.kind === 'distributionResolver') {
     if (!Number.isSafeInteger(Number(data.amount)) || !Array.isArray(data.metrics) || data.metrics.length === 0) {
       throw new Error('a pool ask needs data.amount in whole minor units and a list of data.metrics.');
     }

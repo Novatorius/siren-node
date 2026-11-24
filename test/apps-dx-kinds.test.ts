@@ -4,7 +4,7 @@ import { Siren } from '../src/client';
 import { SirenError } from '../src/errors';
 import { kindLabel } from '../src/cli/app-kinds';
 import { FEATURE_KIND_NAMES } from '../src/resources/app-feature-kinds';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { appRequest } from '../src/testing';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient } from './http-fakes';
@@ -13,12 +13,11 @@ import { BASE } from './record-fakes';
 /*
  * DX pass 2, finding 1 (review/sdk-dx/pass-2-review.md in the apps run
  * folder): `on()` refuses a kind Siren never sends when the function is
- * registered, and says what to write instead. The list is the 13 kinds of
- * APP_KINDS on Siren's feat/apps (frontend/src/platform/saas/apps/apps.ts)
- * without `customEvent`, which Siren's own contract file
+ * registered, and says what to write instead. The list is the 13 kinds
+ * Siren's registry snapshot (src/app-kinds.json) marks tell or ask, which
+ * leaves out `customEvent`. Siren's own contract file
  * (test/fixtures/apps-feature-contracts/requests.json) holds one request
- * for each, and whose screen names test/cli-apps-container-review.test.ts
- * pins to Siren's for the CLI.
+ * for each. test/feature-kind.test.ts holds the snapshot itself.
  */
 
 const SECRET = 'a-secret-for-the-kind-checks';
@@ -54,10 +53,10 @@ function refusal(kind: string, options: { extraKinds?: readonly string[] } = {})
 }
 
 describe('DX pass 2, finding 1: on() takes only a kind Siren sends', () => {
-  it("holds the 13 kinds Siren sends, equal to Siren's contract file, with the names the dashboard shows", () => {
+  it("holds the 13 kinds Siren sends, equal to Siren's contract file, with the names Siren's registry gives", () => {
     expect(Object.keys(FEATURE_KIND_NAMES).sort()).toEqual(Object.keys(features.kinds).sort());
     expect(Object.keys(FEATURE_KIND_NAMES).sort()).toEqual(
-      Object.values(AppItemKind)
+      Object.values(FeatureKind)
         .filter((kind) => kind !== 'customEvent')
         .sort(),
     );
@@ -78,10 +77,10 @@ describe('DX pass 2, finding 1: on() takes only a kind Siren sends', () => {
     ['distributionResolvr', 'distributionResolvr is not a feature kind. Did you mean distributionResolver?'],
     ['DistributionResolver', 'DistributionResolver is not a feature kind. Did you mean distributionResolver?'],
     ['payoutMethd', 'payoutMethd is not a feature kind. Did you mean payoutMethod?'],
-    ['attributionModel', "Attribution model's kind is incentiveResolver."],
-    ['Attribution model', "Attribution model's kind is incentiveResolver."],
+    ['attributionModel', 'The kind for Attribution model is incentiveResolver.'],
+    ['Attribution model', 'The kind for Attribution model is incentiveResolver.'],
     ['customer filter for programs', 'The kind for Customer filter for programs is engagementFilter.'],
-    ['incentiveStructure', "Incentive structure's kind is incentiveType."],
+    ['incentiveStructure', 'The kind for Incentive structure is incentiveType.'],
     ['distribution_resolver', 'Kinds are camelCase, as Siren sends them: distributionResolver.'],
     ['post_conversion_action', 'Kinds are camelCase, as Siren sends them: postConversionAction.'],
     ['customEvent', 'Siren never sends a custom event. Your app sends one with events.ingest().'],
@@ -119,9 +118,9 @@ describe('DX pass 2, finding 1: on() takes only a kind Siren sends', () => {
 });
 
 describe("DX pass 2, finding 5: the old payout kind's name is gone", () => {
-  it('drops AppItemKind.FulfillmentMethod', () => {
-    expect(Object.keys(AppItemKind)).not.toContain('FulfillmentMethod');
-    expect(Object.values(AppItemKind)).not.toContain('fulfillmentMethod');
+  it('drops FeatureKind.FulfillmentMethod', () => {
+    expect(Object.keys(FeatureKind)).not.toContain('FulfillmentMethod');
+    expect(Object.values(FeatureKind)).not.toContain('fulfillmentMethod');
     expect(readFileSync(new URL('../src/taxonomy.ts', import.meta.url), 'utf8')).not.toContain('FulfillmentMethod');
   });
 
@@ -129,7 +128,7 @@ describe("DX pass 2, finding 5: the old payout kind's name is gone", () => {
     const types = readFileSync(new URL('../src/record-types.ts', import.meta.url), 'utf8');
     const base = types.slice(types.indexOf('interface AppRequestBase'), types.indexOf('export interface AppTell'));
     expect(base).toContain('the same on every send of this request, so write once by `id`');
-    expect(base).toContain('`item.id` names the feature');
+    expect(base).toContain('`feature.id` names the feature');
     expect(base).toContain('changes on every send');
   });
 });

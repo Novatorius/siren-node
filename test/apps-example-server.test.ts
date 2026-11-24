@@ -27,7 +27,7 @@ const fixture = JSON.parse(
 ) as SignedFixture;
 const BAD_ID = 'apr_0123456789abcdef0123456789abcdef';
 
-/** Siren's fixture with its item and data changed, signed again with the fixture's secret. */
+/** Siren's fixture with its feature and data changed, signed again with the fixture's secret. */
 function signed(change: (request: Record<string, unknown>) => void): { body: string; headers: Record<string, string> } {
   const request = JSON.parse(fixture.body) as Record<string, unknown>;
   change(request);
@@ -67,7 +67,7 @@ describe('apps-cli: the example app keeps serving', () => {
     const { http, app, lines } = acme([reply(200, { status: 'accepted' })]);
     const pool = signed((request) => {
       request.id = BAD_ID;
-      request.item = { kind: 'distributionResolver', key: 'acme-split', id: 'app:13' };
+      request.feature = { kind: 'distributionResolver', key: 'acme-split', id: 'app:13' };
       request.data = { amount: 1000, currency: 'USD' };
     });
     const first = await app.handle(pool.body, pool.headers);

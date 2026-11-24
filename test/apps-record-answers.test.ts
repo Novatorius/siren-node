@@ -11,12 +11,12 @@ import { APP_KEY, appRecord } from './apps-siren-answers';
  * test/apps-resource.test.ts. Each app route answers an app as
  * AppSerializer::toArray() gives it (lib/Apps/Service/Services/AppSerializer.php
  * on Novatorius/siren `feat/apps` at 1619218d0), so every read and write of
- * one checks for a text `key` and an `items` list, and a declare that sends
+ * one checks for a text `key` and a `features` list, and a declare that sends
  * secrets sends them as text.
  */
 
 const app = appRecord();
-const notAnApp = { ...app, items: undefined };
+const notAnApp = { ...app, features: undefined };
 
 function apps(replies: Parameters<typeof transportOver>[0]) {
   const over = transportOver(replies);

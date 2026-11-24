@@ -17,12 +17,12 @@ their own pkt/apps-c16-7 branches.
 
 | Part | File | Change |
 |---|---|---|
-| `AppItemKind.CollaboratorGroupStructure` | src/taxonomy.ts | The value `collaboratorGroupStructure`. |
+| `FeatureKind.CollaboratorGroupStructure` | src/taxonomy.ts | The value `collaboratorGroupStructure`. |
 | Readable name | src/cli/app-kinds.ts | Collaborator group structure. |
 | Question types | src/record-types.ts | `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`, `AppCollaboratorGroupStructureProgramQuestion`, `AppCollaboratorGroupMember`. |
 | Answer types | src/record-types.ts | `AppCollaboratorGroupChain`, `AppCollaboratorGroupTree` and their union `AppCollaboratorGroupStructureAnswer`. |
 | `AppFeatureFunctions` | src/record-types.ts | `on('collaboratorGroupStructure', ...)` gets `AppAsk<AppCollaboratorGroupStructureQuestion>` and returns the answer. |
-| `AppItemDeclaration` | openapi.yaml | The kind `collaboratorGroupStructure`. |
+| `AppFeatureDeclaration` | openapi.yaml | The kind `collaboratorGroupStructure`. |
 
 ## The question
 

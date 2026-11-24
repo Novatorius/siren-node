@@ -10,7 +10,7 @@ import type {
   AppMetricFilterAnswer,
   AppMetricFilterQuestion,
 } from '../src/record-types';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
 import { APP_KEY, APP_REQUEST_ID, appRecord } from './apps-siren-answers';
@@ -25,14 +25,14 @@ import { APP_KEY, APP_REQUEST_ID, appRecord } from './apps-siren-answers';
 
 const URL = 'https://acme.example/siren';
 
-function file(items: Record<string, unknown>): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: URL, features: items } } });
+function file(declared: Record<string, unknown>): string {
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: URL, features: declared } } });
 }
 
 describe('apps-c16-1: the metric kinds', () => {
   it('names both kinds with the values Siren stores and the names its catalog gives', () => {
-    expect(AppItemKind.MetricCalculation).toBe('metricCalculation');
-    expect(AppItemKind.MetricFilter).toBe('metricFilter');
+    expect(FeatureKind.MetricCalculation).toBe('metricCalculation');
+    expect(FeatureKind.MetricFilter).toBe('metricFilter');
     expect(kindLabel('metricCalculation')).toBe('Metric calculation (metricCalculation)');
     expect(kindLabel('metricFilter')).toBe('Customer filter for distributors (metricFilter)');
   });
@@ -46,7 +46,7 @@ describe('apps-c16-1: the metric kinds', () => {
       {},
     );
     expect(parsed.problems).toEqual([]);
-    expect(declarationFor(parsed.file!).params.items).toEqual([
+    expect(declarationFor(parsed.file!).params.features).toEqual([
       { kind: 'metricCalculation', key: 'score', name: 'Partner score', answerWindowMinutes: 30, scoresMoney: true },
       { kind: 'metricFilter', key: 'owned', name: 'Owned customers' },
     ]);
@@ -73,17 +73,17 @@ describe('apps-c16-1: the metric kinds', () => {
 
   it('declare sends scoresMoney on a feature, and apply shows a changed one', async () => {
     const over = transportOver([reply(200, appRecord())]);
-    const item = { kind: AppItemKind.MetricCalculation, key: 'score', name: 'Score', scoresMoney: true };
-    await new AppsResource(over.transport).declare(APP_KEY, { name: 'Acme', url: URL, items: [item] });
-    expect((bodyOf(over.http.requests[0]) as { items: unknown[] }).items).toEqual([item]);
+    const feature = { kind: FeatureKind.MetricCalculation, key: 'score', name: 'Score', scoresMoney: true };
+    await new AppsResource(over.transport).declare(APP_KEY, { name: 'Acme', url: URL, features: [feature] });
+    expect((bodyOf(over.http.requests[0]) as { features: unknown[] }).features).toEqual([feature]);
 
     const have = appRecord({
-      items: [{ ...appRecord().items[0], kind: 'metricCalculation', key: 'score', name: 'Score', settings: {} }],
+      features: [{ ...appRecord().features[0], kind: 'metricCalculation', key: 'score', name: 'Score', settings: {} }],
     }) as unknown as App;
-    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: URL, items: [item] }).lines).toEqual([
+    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: URL, features: [feature] }).lines).toEqual([
       'changes feature score, Metric calculation (metricCalculation): scores money',
     ]);
-    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: URL, items: [{ ...item, scoresMoney: false }] }).lines).toEqual([]);
+    expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: URL, features: [{ ...feature, scoresMoney: false }] }).lines).toEqual([]);
   });
 
   it('answers both asks with the typed answers, through the one answer route', async () => {

@@ -79,13 +79,13 @@ describe('apps-cli: the example app', () => {
   });
 
   it('pays a payout with its own reference, and divides a pool by each metric in whole minor units', () => {
-    expect(answerFor({ item: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' }, data: { payoutId: 88, amount: 2500, currency: 'USD' } })).toEqual({
+    expect(answerFor({ feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' }, data: { payoutId: 88, amount: 2500, currency: 'USD' } })).toEqual({
       outcome: 'paid',
       reference: 'acme-88',
     });
     const split = (amount: number, values: number[]) =>
       answerFor({
-        item: { kind: 'distributionResolver', key: 'acme-split', id: 'app:13' },
+        feature: { kind: 'distributionResolver', key: 'acme-split', id: 'app:13' },
         data: { amount, currency: 'USD', metrics: values.map((value, index) => ({ id: `m${index + 1}`, value })) },
       });
     expect(split(1000, [3, 1])).toEqual({ outcome: 'resolved', shares: [{ id: 'm1', amount: 750 }, { id: 'm2', amount: 250 }] });
@@ -94,7 +94,7 @@ describe('apps-cli: the example app', () => {
       shares: [{ id: 'm1', amount: 34 }, { id: 'm2', amount: 33 }, { id: 'm3', amount: 33 }],
     });
     expect(split(10, [0, 0])).toEqual({ outcome: 'resolved', shares: [{ id: 'm1', amount: 5 }, { id: 'm2', amount: 5 }] });
-    expect(answerFor({ item: { kind: 'postConversionAction', key: 'notify-crm', id: 'app:11' }, data: {} })).toBeNull();
+    expect(answerFor({ feature: { kind: 'postConversionAction', key: 'notify-crm', id: 'app:11' }, data: {} })).toBeNull();
   });
 
   it('reads the env file apply wrote, and never guesses between the sandbox and live', () => {

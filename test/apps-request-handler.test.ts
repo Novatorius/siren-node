@@ -329,7 +329,7 @@ describe('apps-answer-handler: table 3.1, one request', () => {
     expect(own).toHaveBeenCalledTimes(1);
     expect(any).not.toHaveBeenCalled();
     const request = features.kinds.postConversionAction!.request;
-    const other = JSON.stringify({ ...request, item: { kind: 'postConversionAction', key: 'other-key', id: 'app:99' } });
+    const other = JSON.stringify({ ...request, feature: { kind: 'postConversionAction', key: 'other-key', id: 'app:99' } });
     expectJsonReply(await answers.handle({ method: 'POST', headers: signed(other), rawBody: other }), 200);
     expect(any).toHaveBeenCalledTimes(1);
   });
@@ -547,7 +547,7 @@ describe('apps-answer-handler: the metric kinds of slice C16-1', () => {
   const metricAsk = (kind: string, key: string, data: Record<string, unknown>) =>
     JSON.stringify({
       ...(JSON.parse(body('distributionResolver')) as Record<string, unknown>),
-      item: { kind, key, id: 'app:11' },
+      feature: { kind, key, id: 'app:11' },
       data,
     });
   const cause = { id: 'evt-1', type: 'transaction', causeId: '3307' };

@@ -15,7 +15,7 @@ import { BASE, bodyOf } from './record-fakes';
  * DX pass 2 (review/sdk-dx/pass-2-review.md in the apps run folder):
  * finding 3, an ask's function says "answer later" with answers.later(),
  * and returning nothing is an error; finding 4, the default onError line
- * for a failed ask says when Siren sends it again; and the item carried
+ * for a failed ask says when Siren sends it again; and the feature carried
  * from pass 1, that simulate() checks an answer the way Siren's answer
  * route does, with Siren's own words.
  */

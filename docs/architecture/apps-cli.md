@@ -42,7 +42,7 @@ slice copies), and 55b9ea76a with the apps-sandbox branch at ec1b3a190 (`sk_test
 | `siren.apps.requests.answer(id, answer)` | `POST /apps/requests/{id}/answer` | the app's key, or an admin session | src/resources/apps.ts |
 
 Every app route but the answer route refuses an API key with 401 `api_key_not_accepted`. The types
-live in src/record-types.ts. The vocabularies `AppItemKind`, `AppStatus`, `AppRequestStatus` and
+live in src/record-types.ts. The vocabularies `FeatureKind`, `AppStatus`, `AppRequestStatus` and
 `AppRequestMode` live in src/taxonomy.ts. `AppErrorCode` lives in src/errors.ts beside `ErrorCode`,
 which must equal Siren's shared `ApiErrorCode` list exactly (test/wire-taxonomy.test.ts), so the app
 codes cannot join it. `SANDBOX_BASE_URL` lives in src/http.ts beside `DEFAULT_BASE_URL`.
@@ -118,7 +118,7 @@ value's first item).
    one matches.
 6. It refuses a `t` more than the tolerance from `now`, either way. Exactly 300 seconds passes.
 7. It refuses a body that is not an envelope of version 1: `id` `apr_` and 32 hex, `type`
-   `app.request`, `mode` `tell` or `ask`, `app`, `item` with `kind`, `key` and `id`, `createdAt`, an
+   `app.request`, `mode` `tell` or `ask`, `app`, `feature` with `kind`, `key` and `id`, `createdAt`, an
    object `data`, and for an ask `answerBy` and `answerUrl`.
 8. It answers the envelope with `timestamp` (the signed `t`) and `deliveryId` (`X-Siren-Delivery`,
    when present).
@@ -966,7 +966,7 @@ which Siren stores at scale 2 and shows with 0 decimal places, is ¥100.
 not a safe integer, a currency that is not an object, a `scale` outside 0 to 8
 (`Currency::MAX_SCALE`) and `decimalPlaces` outside 0 to the scale, which `Currency`'s constructor
 also refuses. `AppRequest.data` stays `Record<string, unknown>`, since its fields belong to the
-item's kind, and a caller narrows it by `item.kind`. openapi.yaml documents the routes the SDK
+feature's kind, and a caller narrows it by `feature.kind`. openapi.yaml documents the routes the SDK
 calls, and a tell is a request Siren sends the app, so it gains no schema.
 
 The example's handler logs each tell through `describeTell()`, which reads the amount with

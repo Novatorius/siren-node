@@ -24,7 +24,7 @@ function tell(kind: string, key: string, data: unknown): { body: string; headers
     type: 'app.request',
     mode: 'tell',
     app: 'acme-payouts',
-    item: { kind, key, id: 'app:11' },
+    feature: { kind, key, id: 'app:11' },
     createdAt: '2026-11-17T09:14:03+00:00',
     data,
   });
@@ -50,20 +50,20 @@ describe('apps-sdk-followups-1: the example app reads the amount in a tell', () 
   });
 
   it('logs a completed allocation with its amount, and a conversion with no reward as such', () => {
-    expect(describeTell(siren, { item: { kind: 'postAllocationAction' }, data: AppTells.allocationCompleted(2500) })).toBe(
+    expect(describeTell(siren, { feature: { kind: 'postAllocationAction' }, data: AppTells.allocationCompleted(2500) })).toBe(
       'allocation 21:40 completed for collaborator 4 by distributor Partner pool, $25.00.',
     );
-    expect(describeTell(siren, { item: { kind: 'postConversionAction' }, data: AppTells.conversionApproved(10000, AppCurrencies.jpy()) })).toBe(
+    expect(describeTell(siren, { feature: { kind: 'postConversionAction' }, data: AppTells.conversionApproved(10000, AppCurrencies.jpy()) })).toBe(
       'conversion 51 approved for collaborator 4 in program Partners, reward ¥100.',
     );
-    expect(describeTell(siren, { item: { kind: 'postConversionAction' }, data: AppTells.conversionWithoutReward() })).toBe(
+    expect(describeTell(siren, { feature: { kind: 'postConversionAction' }, data: AppTells.conversionWithoutReward() })).toBe(
       'conversion 52 approved for collaborator 4 in program Partners, with no reward.',
     );
   });
 
   it('logs the data as it came for a tell it does not know, and never reads an amount without its currency', () => {
-    expect(describeTell(siren, { item: { kind: 'someNewKind' }, data: { value: 10000 } })).toBe('{"value":10000}');
+    expect(describeTell(siren, { feature: { kind: 'someNewKind' }, data: { value: 10000 } })).toBe('{"value":10000}');
     const noCurrency = { ...AppTells.allocationCompleted(10000), allocation: { ...AppTells.allocationCompleted(10000).allocation, currency: undefined } };
-    expect(describeTell(siren, { item: { kind: 'postAllocationAction' }, data: noCurrency })).toBe(JSON.stringify(noCurrency));
+    expect(describeTell(siren, { feature: { kind: 'postAllocationAction' }, data: noCurrency })).toBe(JSON.stringify(noCurrency));
   });
 });

@@ -9,7 +9,7 @@ import type {
   AppEngagementFilterQuestion,
   AppFeatureFunctions,
 } from '../src/record-types';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
 import { APP_KEY, APP_REQUEST_ID } from './apps-siren-answers';
@@ -45,14 +45,14 @@ const FILTER: AppEngagementFilterQuestion = {
   cause: { id: '4b7e0c9d2a1f3e58', event: 'referredSiteVisit', occurredAt: '2026-11-17T12:20:00+00:00' },
 };
 
-function file(items: Record<string, unknown>, url: string | null = URL): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
+function file(declared: Record<string, unknown>, url: string | null = URL): string {
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: declared } } });
 }
 
 describe('apps-c16-4: the engagement kinds', () => {
   it('names both kinds with the values Siren stores and the names its catalog gives', () => {
-    expect(AppItemKind.EngagementCalculation).toBe('engagementCalculation');
-    expect(AppItemKind.EngagementFilter).toBe('engagementFilter');
+    expect(FeatureKind.EngagementCalculation).toBe('engagementCalculation');
+    expect(FeatureKind.EngagementFilter).toBe('engagementFilter');
     expect(kindLabel('engagementCalculation')).toBe('Engagement calculation (engagementCalculation)');
     expect(kindLabel('engagementFilter')).toBe('Customer filter for programs (engagementFilter)');
   });
@@ -66,7 +66,7 @@ describe('apps-c16-4: the engagement kinds', () => {
       {},
     );
     expect(parsed.problems).toEqual([]);
-    expect(declarationFor(parsed.file!).params.items).toEqual([
+    expect(declarationFor(parsed.file!).params.features).toEqual([
       { kind: 'engagementCalculation', key: 'weight', name: 'Visit weight', answerWindowMinutes: 30 },
       { kind: 'engagementFilter', key: 'staff', name: 'Staff check' },
     ]);
@@ -93,11 +93,11 @@ describe('apps-c16-4: the engagement kinds', () => {
       data.collaborator.id === 42 ? { outcome: 'suppress', reason: 'The visitor works for the partner.' } : { outcome: 'allow' };
 
     const ask = { id: APP_REQUEST_ID, version: 1, type: 'app.request', mode: 'ask', app: APP_KEY, createdAt: '', answerBy: '', answerUrl: '' } as const;
-    expect(await calculate({ ...ask, item: { kind: 'engagementCalculation', key: 'weight', id: 'app:21' }, data: CALCULATION } as never)).toEqual({
+    expect(await calculate({ ...ask, feature: { kind: 'engagementCalculation', key: 'weight', id: 'app:21' }, data: CALCULATION } as never)).toEqual({
       outcome: 'engagements',
       results: [{ collaboratorId: 42, score: 10 }],
     });
-    expect(await filter({ ...ask, item: { kind: 'engagementFilter', key: 'staff', id: 'app:22' }, data: FILTER } as never)).toEqual({
+    expect(await filter({ ...ask, feature: { kind: 'engagementFilter', key: 'staff', id: 'app:22' }, data: FILTER } as never)).toEqual({
       outcome: 'suppress',
       reason: 'The visitor works for the partner.',
     });

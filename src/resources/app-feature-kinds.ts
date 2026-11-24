@@ -1,4 +1,15 @@
+import APP_KINDS from '../app-kinds.json';
 import type { AppFeatureFunctions } from '../record-types';
+
+/** One kind as Siren's registry snapshot holds it. */
+interface SnapshotKind {
+  kind: string;
+  term: string;
+  name: string;
+  description: string;
+  mode: 'tell' | 'ask' | 'receive';
+  direction: 'out' | 'in';
+}
 
 /*
  * The kinds of feature Siren sends an app a request for, and the check
@@ -7,29 +18,17 @@ import type { AppFeatureFunctions } from '../record-types';
  */
 
 /**
- * Each kind Siren sends a request for, with the name the dashboard shows:
- * every kind of APP_KINDS on Siren's feat/apps at 6d2abd936a
- * (frontend/src/platform/saas/apps/apps.ts) except `customEvent`, which
- * Siren never sends. Siren's contract file,
- * test/fixtures/apps-feature-contracts/requests.json, holds one request of
- * each, and test/apps-dx-kinds.test.ts holds this list equal to it and to
- * the CLI's names. The PHP and Python SDKs hold the same list.
+ * Each kind Siren sends a request for, with the name Siren's screens show:
+ * every kind Siren's registry snapshot (src/app-kinds.json, Siren's
+ * docs/api/app-kinds.json copied byte for byte) marks `tell` or `ask`. That
+ * leaves out `customEvent`, which Siren receives and never sends. Siren's
+ * contract file, test/fixtures/apps-feature-contracts/requests.json, holds
+ * one request of each, and test/apps-dx-kinds.test.ts holds this list equal
+ * to it. The PHP and Python SDKs read the same snapshot.
  */
-export const FEATURE_KIND_NAMES: Readonly<Record<keyof AppFeatureFunctions, string>> = {
-  postConversionAction: 'Post-conversion action',
-  postAllocationAction: 'Post-allocation action',
-  payoutMethod: 'Payout method',
-  distributionResolver: 'Distribution resolver',
-  incentiveResolver: 'Attribution model',
-  incentiveType: 'Incentive structure',
-  metricCalculation: 'Metric calculation',
-  metricFilter: 'Customer filter for distributors',
-  transactionFilter: 'Transaction filter',
-  engagementCalculation: 'Engagement calculation',
-  engagementFilter: 'Customer filter for programs',
-  programGroupSorter: 'Program group structure',
-  collaboratorGroupStructure: 'Collaborator group structure',
-};
+export const FEATURE_KIND_NAMES: Readonly<Record<keyof AppFeatureFunctions, string>> = Object.fromEntries(
+  (APP_KINDS as readonly SnapshotKind[]).filter((entry) => entry.mode === 'tell' || entry.mode === 'ask').map((entry) => [entry.kind, entry.name]),
+) as Record<keyof AppFeatureFunctions, string>;
 
 const KINDS: readonly string[] = Object.keys(FEATURE_KIND_NAMES);
 
@@ -59,7 +58,7 @@ export function featureKindProblem(kind: string, extra: ReadonlySet<string>): st
   const named = (Object.entries(FEATURE_KIND_NAMES) as Array<[string, string]>).find(([, name]) => squash(name) === loose);
   if (named !== undefined) {
     const [known, name] = named;
-    return name.endsWith('s') ? `The kind for ${name} is ${known}.` : `${name}'s kind is ${known}.`;
+    return `The kind for ${name} is ${known}.`;
   }
 
   const near = KINDS.map((known) => [known, distance(kind, known)] as const)

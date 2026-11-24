@@ -40,15 +40,16 @@ function body(response: HttpResponse | unknown): unknown {
 /**
  * The app fake in the shape Siren answered before an app owned its parts:
  * `apiKeyId` and `webhookSubscriptionId` in place of `source`, `apiKey`,
- * `address` and `eventsAccess`, and no plan fields on an item. Every capture
- * here predates Siren's int/preview-apps (a22547327), so each is held against
- * this shape. No Cloud run has captured the new shape yet, and
+ * `address` and `eventsAccess`, no plan fields on a feature, and the
+ * features under `items`, the name Siren used before the feature rename.
+ * Every capture here predates Siren's int/preview-apps (a22547327), so each
+ * is held against this shape. No Cloud run has captured the new shape yet, and
  * test/apps-siren-answers.ts names the Siren tests the new fake copies.
  */
 function beforeOwnParts(overrides: Record<string, unknown> = {}) {
-  const { source: _s, apiKey: _k, address: _a, eventsAccess: _e, items, ...rest } = appRecord(overrides);
-  const oldItems = (items as Array<Record<string, unknown>>).map(
-    ({ entitled: _en, requiredCapability: _rc, requiredPlan: _rp, ...item }) => item,
+  const { source: _s, apiKey: _k, address: _a, eventsAccess: _e, features, ...rest } = appRecord(overrides);
+  const oldItems = (features as Array<Record<string, unknown>>).map(
+    ({ entitled: _en, requiredCapability: _rc, requiredPlan: _rp, ...feature }) => feature,
   );
   return { ...rest, webhookSubscriptionId: 31, apiKeyId: 52, items: oldItems };
 }

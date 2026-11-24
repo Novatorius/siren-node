@@ -1,5 +1,5 @@
 import type {
-  AppItemKind,
+  FeatureKind,
   AppRequestMode,
   AppRequestStatus,
   AppSource,
@@ -972,16 +972,16 @@ export interface FulfillmentListParams extends RecordListParams {
 export type AppConversionType = 'sale' | 'lead' | 'renewal';
 
 /**
- * One feature an app declares, as `apps.declare()` and `apps.items.create()`
- * send it. The code calls a feature an item. Its `kind` and `key` lock once
+ * One feature an app declares, as `apps.declare()` and `apps.features.create()`
+ * send it. Its `kind` and `key` lock once
  * Siren makes it: a record selects it by id and a file names it by kind and
  * key.
  */
-export interface AppItemDeclaration {
-  kind: AppItemKind;
+export interface AppFeatureDeclaration {
+  kind: FeatureKind;
   /** Lowercase letters and digits joined by single dashes, at most 64. Unique within the app and kind. */
   key: string;
-  /** At most 100 characters. Siren shows it as "{App name}: {item name}" in pickers. */
+  /** At most 100 characters. Siren shows it as "{App name}: {feature name}" in pickers. */
   name: string;
   /** At most 500 characters. */
   description?: string;
@@ -1047,7 +1047,7 @@ export interface DeclareAppParams {
    * keeps the app's own, and `[]` leaves none.
    */
   contacts?: string[];
-  items?: AppItemDeclaration[];
+  features?: AppFeatureDeclaration[];
 }
 
 /**
@@ -1063,13 +1063,13 @@ export interface AppPlanAccess {
   requiredPlan: string | null;
 }
 
-/** An app item, a feature, as Siren answers it. A record selects it by `ref`. */
-export interface AppItem extends AppPlanAccess {
+/** A feature of an app, as Siren answers it. A record selects it by `ref`. */
+export interface AppFeature extends AppPlanAccess {
   id: number;
   /** `app:{id}`, the value a program, distributor or autofulfiller stores. */
   ref: string;
   appId: number;
-  kind: AppItemKind | (string & {});
+  kind: FeatureKind | (string & {});
   key: string;
   name: string;
   description: string;
@@ -1088,35 +1088,35 @@ export interface AppItem extends AppPlanAccess {
 }
 
 /** One record that selects a feature: a program or distributor by id, an autofulfiller by its currency code. */
-export interface AppItemUse {
+export interface AppFeatureUse {
   record: 'program' | 'distributor' | 'autofulfiller' | (string & {});
   id: number | string;
 }
 
-/** One feature as its own routes answer it: the item, how many records select it, and up to 100 of them. */
-export interface AppItemPage extends AppItem {
+/** One feature as its own routes answer it: the feature, how many records select it, and up to 100 of them. */
+export interface AppFeaturePage extends AppFeature {
   uses: number;
-  usedBy: AppItemUse[];
+  usedBy: AppFeatureUse[];
 }
 
-/** What `apps.items.delete()` answers: archived while a record selects it, with the item, or deleted, with `item` null. */
-export interface RemovedAppItem {
+/** What `apps.features.delete()` answers: archived while a record selects it, with the feature, or deleted, with `feature` null. */
+export interface RemovedAppFeature {
   archived: boolean;
-  item: AppItemPage | null;
+  feature: AppFeaturePage | null;
 }
 
 /**
- * A new feature, as `apps.items.create()` takes it: a declaration whose
+ * A new feature, as `apps.features.create()` takes it: a declaration whose
  * `key` may be left out. Siren then makes the key from the name, adding
  * `-2`, `-3` when the app already holds it.
  */
-export type CreateAppItemParams = Omit<AppItemDeclaration, 'key'> & {
+export type CreateAppFeatureParams = Omit<AppFeatureDeclaration, 'key'> & {
   /** Lowercase letters and digits joined by single dashes, at most 64. Left out, Siren makes it from `name`. */
   key?: string;
 };
 
-/** The fields `apps.items.update()` changes. A feature's kind and key never change. */
-export interface UpdateAppItemParams {
+/** The fields `apps.features.update()` changes. A feature's kind and key never change. */
+export interface UpdateAppFeatureParams {
   name?: string;
   description?: string;
   currencies?: string[];
@@ -1189,7 +1189,7 @@ export interface App {
   apiKey: AppApiKey | null;
   /** The address, or null when the app holds none. */
   address: AppAddress | null;
-  items: AppItem[];
+  features: AppFeature[];
   /** Whether the plan lets Siren send events to the app's address. Events go out of Siren and need Pro. */
   eventsAccess: AppPlanAccess;
   /** How many of the app's requests need a person now, as Siren's AppAttention counts them. */
@@ -1266,7 +1266,7 @@ export interface UpdateAppParams {
 export type UpdatedApp = App & { signingSecret?: string };
 
 /** One settings field a feature's kind takes, as the kinds catalog describes it. */
-export interface AppItemKindSetting {
+export interface AppFeatureKindSetting {
   field: string;
   label: string;
   /** `integer`, `boolean`, or `currencies`, a list of currency codes Siren knows for the org. */
@@ -1279,8 +1279,8 @@ export interface AppItemKindSetting {
 }
 
 /** One kind of feature an app may add, from `GET /apps/kinds` (AppItemKindCatalog::catalog() and AppPlanAccess). */
-export interface AppItemKindEntry extends AppPlanAccess {
-  kind: AppItemKind | (string & {});
+export interface AppFeatureKindEntry extends AppPlanAccess {
+  kind: FeatureKind | (string & {});
   /** The documentation's term, such as `payout method`. */
   term: string;
   /** The readable name, such as `Payout method`. */
@@ -1294,7 +1294,7 @@ export interface AppItemKindEntry extends AppPlanAccess {
   aliases: string[];
   /** The documentation page that uses the term, or null. */
   docs: string | null;
-  settings: AppItemKindSetting[];
+  settings: AppFeatureKindSetting[];
   [field: string]: unknown;
 }
 
@@ -1303,9 +1303,9 @@ export interface AppRequestRecord {
   /** The request key, `apr_` and 32 hex characters, the same on every send. */
   id: string;
   appId: number;
-  /** `app:{id}` of the item Siren acted for. */
-  item: string;
-  kind: AppItemKind | (string & {});
+  /** `app:{id}` of the feature Siren acted for. */
+  feature: string;
+  kind: FeatureKind | (string & {});
   mode: AppRequestMode | (string & {});
   subject: { type: string; id: string };
   status: AppRequestStatus | (string & {});
@@ -1339,7 +1339,7 @@ export interface AppRequestListParams {
 }
 
 /**
- * An app's answer to an ask: a JSON object with an `outcome` the item's kind
+ * An app's answer to an ask: a JSON object with an `outcome` the feature's kind
  * reads, such as `{ outcome: 'paid', reference: 'TX-88213' }` for a
  * fulfillment method. At most 16384 bytes as JSON.
  */
@@ -1363,7 +1363,7 @@ interface AppRequestBase<D = Record<string, unknown>> {
   /**
    * The request's id, `apr_` and 32 hex characters. It is the dedupe id:
    * the same on every send of this request, so write once by `id`. The
-   * signature covers it. `item.id` names the feature, and `deliveryId`
+   * signature covers it. `feature.id` names the feature, and `deliveryId`
    * names one delivery, so neither drops a repeat.
    */
   id: string;
@@ -1372,12 +1372,12 @@ interface AppRequestBase<D = Record<string, unknown>> {
   app: string;
   /**
    * The feature the request is for: its `kind`, its `key` in the app, and
-   * `item.id`, which names the feature in Siren, such as `app:12`. `item.id`
+   * `feature.id`, which names the feature in Siren, such as `app:12`. `feature.id`
    * names the feature, not the request.
    */
-  item: { kind: AppItemKind | (string & {}); key: string; id: string };
+  feature: { kind: FeatureKind | (string & {}); key: string; id: string };
   createdAt: string;
-  /** The kind's payload. Its fields belong to the item's kind. */
+  /** The kind's payload. Its fields belong to the feature's kind. */
   data: D;
   /** The signed `t` of `X-Siren-Signature-V2`, in Unix seconds. */
   timestamp: number;

@@ -5,7 +5,7 @@ import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
 import type { AppFunctionFor } from '../src/resources/app-request-handler';
 import type { AppGroupOrderAnswer, AppGroupOrderQuestion } from '../src/record-types';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
 import { APP_KEY, APP_REQUEST_ID } from './apps-siren-answers';
@@ -51,8 +51,8 @@ function refusalOf(question: AppGroupOrderQuestion, answer: Record<string, unkno
   return null;
 }
 
-function file(items: Record<string, unknown>, url: string | null = URL_): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
+function file(declared: Record<string, unknown>, url: string | null = URL_): string {
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: declared } } });
 }
 
 /** The sample's function, as README and test/answer-samples/program-group-sorter.js write it, typed as on('programGroupSorter', ...) takes it. */
@@ -68,14 +68,14 @@ function ask(data: AppGroupOrderQuestion): Parameters<typeof sample>[0] {
 
 describe('apps-c16-5: the program group structure kind', () => {
   it('names the kind with the value Siren stores and the name its catalog gives', () => {
-    expect(AppItemKind.ProgramGroupSorter).toBe('programGroupSorter');
+    expect(FeatureKind.ProgramGroupSorter).toBe('programGroupSorter');
     expect(kindLabel('programGroupSorter')).toBe('Program group structure (programGroupSorter)');
   });
 
   it('reads an app file with a program group structure and its answer window', () => {
     const parsed = parseAppFile(file({ pick: { kind: 'programGroupSorter', name: 'Pick the program', answerWindowMinutes: 30 } }), {});
     expect(parsed.problems).toEqual([]);
-    expect(declarationFor(parsed.file!).params.items).toEqual([{ kind: 'programGroupSorter', key: 'pick', name: 'Pick the program', answerWindowMinutes: 30 }]);
+    expect(declarationFor(parsed.file!).params.features).toEqual([{ kind: 'programGroupSorter', key: 'pick', name: 'Pick the program', answerWindowMinutes: 30 }]);
   });
 
   it('refuses a program group structure with no url, since Siren asks the app at its address', () => {

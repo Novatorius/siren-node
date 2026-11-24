@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Siren } from '../src/client';
 import { AppErrorCode, ConflictError, SirenError, UnexpectedResponseError, appErrorCode } from '../src/errors';
-import { AppItemKind } from '../src/taxonomy';
+import { FeatureKind } from '../src/taxonomy';
 import { AppsResource, RESERVED_APP_KEYS } from '../src/resources/apps';
 import type { DeclareAppParams } from '../src/record-types';
 import { FakeHttpClient, reply } from './http-fakes';
@@ -21,7 +21,7 @@ const KEY = APP_KEY;
 const RAW_KEY = `sk_test_${'1b'.repeat(32)}`;
 const SECRET = '9c'.repeat(32);
 const app = appRecord();
-const keyOnly = appRecord({ url: null, events: [], address: null, items: [] });
+const keyOnly = appRecord({ url: null, events: [], address: null, features: [] });
 
 function apps(replies: Parameters<typeof transportOver>[0]) {
   const over = transportOver(replies);
@@ -54,12 +54,13 @@ describe('apps-sdk-container: declaring from a file', () => {
     expect(declared.signingSecret).toBe(SECRET);
   });
 
-  it('refuses features with no url, the old payout kind, and a reserved key, before sending', async () => {
-    const feature = { kind: AppItemKind.PayoutMethod, key: 'ledger', name: 'Ledger', currencies: ['USD'] };
+  it('refuses features with no url, the old payout kind, items in place of features, and a reserved key, before sending', async () => {
+    const feature = { kind: FeatureKind.PayoutMethod, key: 'ledger', name: 'Ledger', currencies: ['USD'] };
     const cases: Array<[string, DeclareAppParams, RegExp]> = [
-      [KEY, { name: 'Acme', items: [feature] }, /needs a url for an app with features/],
-      [KEY, { name: 'Acme', url: null, items: [feature] }, /needs a url for an app with features/],
-      [KEY, { name: 'Acme', url: 'https://acme.example', items: [{ ...feature, kind: 'fulfillmentMethod' as never }] }, /payoutMethod/],
+      [KEY, { name: 'Acme', features: [feature] }, /needs a url for an app with features/],
+      [KEY, { name: 'Acme', url: null, features: [feature] }, /needs a url for an app with features/],
+      [KEY, { name: 'Acme', url: 'https://acme.example', features: [{ ...feature, kind: 'fulfillmentMethod' as never }] }, /payoutMethod/],
+      [KEY, { name: 'Acme', url: 'https://acme.example', items: [feature] } as never, /does not take items\. Siren calls an app's features "features" now\. Send them under features\./],
       ...RESERVED_APP_KEYS.map((reserved): [string, DeclareAppParams, RegExp] => [reserved, { name: 'Acme' }, /never requests, events, scopes, kinds/]),
     ];
     for (const [key, params, message] of cases) {
@@ -71,12 +72,12 @@ describe('apps-sdk-container: declaring from a file', () => {
     }
   });
 
-  it('sends AppItemKind.PayoutMethod as payoutMethod, the value Siren stores, and has no old alias', async () => {
-    expect(AppItemKind.PayoutMethod).toBe('payoutMethod');
-    expect(Object.keys(AppItemKind)).not.toContain('FulfillmentMethod');
+  it('sends FeatureKind.PayoutMethod as payoutMethod, the value Siren stores, and has no old alias', async () => {
+    expect(FeatureKind.PayoutMethod).toBe('payoutMethod');
+    expect(Object.keys(FeatureKind)).not.toContain('FulfillmentMethod');
     const { http, apps: resource } = apps([reply(200, app)]);
-    await resource.declare(KEY, { name: 'Acme', url: 'https://acme.example', items: [{ kind: AppItemKind.PayoutMethod, key: 'l', name: 'L', currencies: ['USD'] }] });
-    expect((bodyOf(http.requests[0]) as { items: Array<{ kind: string }> }).items[0]?.kind).toBe('payoutMethod');
+    await resource.declare(KEY, { name: 'Acme', url: 'https://acme.example', features: [{ kind: FeatureKind.PayoutMethod, key: 'l', name: 'L', currencies: ['USD'] }] });
+    expect((bodyOf(http.requests[0]) as { features: Array<{ kind: string }> }).features[0]?.kind).toBe('payoutMethod');
   });
 });
 
@@ -91,9 +92,9 @@ describe('apps-sdk-container: the dashboard doors', () => {
     await expectSentOnce((transport) => new AppsResource(transport).create({ name: 'A', scopes: [] }), reply(201, { ...keyOnly, rawKey: RAW_KEY }));
   });
 
-  it('refuses items, an unknown field and a missing name on create, before sending', async () => {
+  it('refuses features, an unknown field and a missing name on create, before sending', async () => {
     for (const params of [
-      { name: 'A', scopes: [], items: [] },
+      { name: 'A', scopes: [], features: [] },
       { name: 'A', scopes: [], key: 'acme' },
       { scopes: [] },
     ]) {
@@ -103,10 +104,10 @@ describe('apps-sdk-container: the dashboard doors', () => {
       expect(http.requests).toHaveLength(0);
     }
     const { apps: resource } = apps([reply(201, app)]);
-    expect(((await refused(() => resource.create({ name: 'A', items: [] } as never))) as Error).message).toContain('apps.items.create()');
+    expect(((await refused(() => resource.create({ name: 'A', features: [] } as never))) as Error).message).toContain('apps.features.create()');
   });
 
-  it('changes only the fields sent with PATCH once, carries url: null, and refuses items before sending', async () => {
+  it('changes only the fields sent with PATCH once, carries url: null, and refuses features before sending', async () => {
     const { http, apps: resource } = apps([reply(200, { ...app, description: 'Changed.' })]);
     expect((await resource.update(KEY, { description: 'Changed.', url: null })).description).toBe('Changed.');
     expect(http.requests[0]?.method).toBe('PATCH');
@@ -115,7 +116,7 @@ describe('apps-sdk-container: the dashboard doors', () => {
     await expectSentOnce((transport) => new AppsResource(transport).update(KEY, { name: 'B' }), reply(200, app));
 
     const bad = apps([reply(200, app)]);
-    expect(await refused(() => bad.apps.update(KEY, { items: [] } as never))).toBeInstanceOf(SirenError);
+    expect(await refused(() => bad.apps.update(KEY, { features: [] } as never))).toBeInstanceOf(SirenError);
     expect(bad.http.requests).toHaveLength(0);
   });
 });
@@ -163,7 +164,7 @@ describe('apps-sdk-container: the key and the signing secret', () => {
   });
 
   it('revokes the key once with DELETE and answers the address-only app', async () => {
-    const addressOnly = appRecord({ apiKey: null, apiKeyPrefix: null, scopes: [], items: [] });
+    const addressOnly = appRecord({ apiKey: null, apiKeyPrefix: null, scopes: [], features: [] });
     const { http, apps: resource } = apps([reply(200, addressOnly)]);
     expect((await resource.revokeKey(KEY)).apiKey).toBeNull();
     expect(http.requests[0]?.method).toBe('DELETE');
@@ -195,27 +196,27 @@ describe('apps-sdk-container: one feature', () => {
       reply(201, page),
       reply(200, page),
       reply(200, { ...page, name: 'Ledger' }),
-      reply(200, { archived: true, item: page }),
-      reply(200, { archived: false, item: null }),
+      reply(200, { archived: true, feature: page }),
+      reply(200, { archived: false, feature: null }),
     ]);
-    const made = await resource.items.create(KEY, { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] });
+    const made = await resource.features.create(KEY, { kind: 'payoutMethod', key: 'acme-ledger', name: 'Acme ledger', currencies: ['USD'] });
     expect(made.usedBy).toEqual([{ record: 'autofulfiller', id: 'USD' }]);
-    expect((await resource.items.retrieve(KEY, 12)).uses).toBe(1);
-    expect((await resource.items.update(KEY, 12, { name: 'Ledger' })).name).toBe('Ledger');
-    expect(await resource.items.delete(KEY, 12)).toEqual({ archived: true, item: page });
-    expect(await resource.items.delete(KEY, 12)).toEqual({ archived: false, item: null });
+    expect((await resource.features.retrieve(KEY, 12)).uses).toBe(1);
+    expect((await resource.features.update(KEY, 12, { name: 'Ledger' })).name).toBe('Ledger');
+    expect(await resource.features.delete(KEY, 12)).toEqual({ archived: true, feature: page });
+    expect(await resource.features.delete(KEY, 12)).toEqual({ archived: false, feature: null });
     expect(http.requests.map((request) => `${request.method} ${pathOf(request)}`)).toEqual([
-      `POST /apps/${KEY}/items`,
-      `GET /apps/${KEY}/items/12`,
-      `PATCH /apps/${KEY}/items/12`,
-      `DELETE /apps/${KEY}/items/12`,
-      `DELETE /apps/${KEY}/items/12`,
+      `POST /apps/${KEY}/features`,
+      `GET /apps/${KEY}/features/12`,
+      `PATCH /apps/${KEY}/features/12`,
+      `DELETE /apps/${KEY}/features/12`,
+      `DELETE /apps/${KEY}/features/12`,
     ]);
     expect(bodyOf(http.requests[2])).toEqual({ name: 'Ledger' });
-    await expectSentOnce((transport) => new AppsResource(transport).items.create(KEY, { kind: 'payoutMethod', key: 'l', name: 'L', currencies: ['USD'] }), reply(201, page));
-    await expectRetried((transport) => new AppsResource(transport).items.retrieve(KEY, 12), reply(200, page));
-    await expectSentOnce((transport) => new AppsResource(transport).items.update(KEY, 12, { name: 'L' }), reply(200, page));
-    await expectSentOnce((transport) => new AppsResource(transport).items.delete(KEY, 12), reply(200, { archived: false, item: null }));
+    await expectSentOnce((transport) => new AppsResource(transport).features.create(KEY, { kind: 'payoutMethod', key: 'l', name: 'L', currencies: ['USD'] }), reply(201, page));
+    await expectRetried((transport) => new AppsResource(transport).features.retrieve(KEY, 12), reply(200, page));
+    await expectSentOnce((transport) => new AppsResource(transport).features.update(KEY, 12, { name: 'L' }), reply(200, page));
+    await expectSentOnce((transport) => new AppsResource(transport).features.delete(KEY, 12), reply(200, { archived: false, feature: null }));
   });
 
   it('creates a feature with no key, sending no key field, so Siren makes it from the name (AP-R76)', async () => {
@@ -224,9 +225,9 @@ describe('apps-sdk-container: one feature', () => {
       { kind: 'postConversionAction' as const, key: undefined, name: 'Tell the CRM' },
     ]) {
       const { http, apps: resource } = apps([reply(201, itemPage({ kind: 'postConversionAction', key: 'tell-the-crm-2', name: 'Tell the CRM' }))]);
-      const made = await resource.items.create(KEY, params);
+      const made = await resource.features.create(KEY, params);
       expect(made.key).toBe('tell-the-crm-2');
-      expect(http.requests.map((request) => `${request.method} ${pathOf(request)}`)).toEqual([`POST /apps/${KEY}/items`]);
+      expect(http.requests.map((request) => `${request.method} ${pathOf(request)}`)).toEqual([`POST /apps/${KEY}/features`]);
       expect(bodyOf(http.requests[0])).toEqual({ kind: 'postConversionAction', name: 'Tell the CRM' });
       expect(Object.keys(bodyOf(http.requests[0]) as object)).not.toContain('key');
     }
@@ -234,12 +235,12 @@ describe('apps-sdk-container: one feature', () => {
 
   it("refuses a change to a feature's kind or key, the old payout kind, and a bad id, before sending", async () => {
     const runs: Array<[(resource: AppsResource) => Promise<unknown>, RegExp]> = [
-      [(resource) => resource.items.update(KEY, 12, { kind: 'postConversionAction' } as never), /never change/],
-      [(resource) => resource.items.update(KEY, 12, { key: 'other' } as never), /never change/],
-      [(resource) => resource.items.create(KEY, { kind: 'fulfillmentMethod' as never, key: 'l', name: 'L' }), /payoutMethod/],
-      [(resource) => resource.items.create(KEY, { kind: 'payoutMethod', key: 'l' } as never), /needs a name/],
-      [(resource) => resource.items.retrieve(KEY, 0), /id/],
-      [(resource) => resource.items.delete('kinds', 12), /never requests/],
+      [(resource) => resource.features.update(KEY, 12, { kind: 'postConversionAction' } as never), /never change/],
+      [(resource) => resource.features.update(KEY, 12, { key: 'other' } as never), /never change/],
+      [(resource) => resource.features.create(KEY, { kind: 'fulfillmentMethod' as never, key: 'l', name: 'L' }), /payoutMethod/],
+      [(resource) => resource.features.create(KEY, { kind: 'payoutMethod', key: 'l' } as never), /needs a name/],
+      [(resource) => resource.features.retrieve(KEY, 0), /id/],
+      [(resource) => resource.features.delete('kinds', 12), /never requests/],
     ];
     for (const [run, message] of runs) {
       const { http, apps: resource } = apps([reply(200, itemPage())]);
@@ -252,16 +253,16 @@ describe('apps-sdk-container: one feature', () => {
 
   it("raises Siren's refusal of a first feature on an app that lacks a part with its code and the part", async () => {
     const { apps: resource } = apps([PartAnswers.itemsNeedKeyAndAddress()]);
-    const error = await refused(() => resource.items.create(KEY, { kind: 'postConversionAction', key: 'n', name: 'N' }));
+    const error = await refused(() => resource.features.create(KEY, { kind: 'postConversionAction', key: 'n', name: 'N' }));
     expect(error).toBeInstanceOf(ConflictError);
-    expect(appErrorCode(error)).toBe(AppErrorCode.ItemsNeedKeyAndAddress);
+    expect(appErrorCode(error)).toBe(AppErrorCode.FeaturesNeedKeyAndAddress);
     expect((error as ConflictError).data).toMatchObject({ missing: ['address'] });
   });
 
   it('throws UnexpectedResponseError for a feature answer of the wrong shape', async () => {
-    const { apps: resource } = apps([reply(201, { ok: true }), reply(200, { archived: 'yes', item: null })]);
-    expect(await refused(() => resource.items.create(KEY, { kind: 'postConversionAction', key: 'n', name: 'N' }))).toBeInstanceOf(UnexpectedResponseError);
-    expect(await refused(() => resource.items.delete(KEY, 12))).toBeInstanceOf(UnexpectedResponseError);
+    const { apps: resource } = apps([reply(201, { ok: true }), reply(200, { archived: 'yes', feature: null })]);
+    expect(await refused(() => resource.features.create(KEY, { kind: 'postConversionAction', key: 'n', name: 'N' }))).toBeInstanceOf(UnexpectedResponseError);
+    expect(await refused(() => resource.features.delete(KEY, 12))).toBeInstanceOf(UnexpectedResponseError);
   });
 });
 
@@ -287,13 +288,13 @@ describe('apps-sdk-container: the catalogs and the plan fields', () => {
   it('reads an app and the kinds as Siren answers them on Plus: an outward feature and the events need Pro', async () => {
     const onPlus = appRecord({
       events: ['obligation.approved'],
-      items: appRecord().items.map((item) => ({ ...item, ...PlanFields.needsPro() })),
+      features: appRecord().features.map((feature) => ({ ...feature, ...PlanFields.needsPro() })),
       eventsAccess: PlanFields.needsPro(),
     });
     const http = new FakeHttpClient([reply(200, onPlus), reply(200, [payoutKind()])]);
     const siren = new Siren({ accessToken: 'session-token', baseUrl: 'https://siren.invalid/siren/v1', httpClient: http });
     const read = await siren.apps.retrieve(KEY);
-    expect(read.items.map((item) => [item.kind, item.entitled, item.requiredCapability, item.requiredPlan])).toEqual([
+    expect(read.features.map((feature) => [feature.kind, feature.entitled, feature.requiredCapability, feature.requiredPlan])).toEqual([
       ['postConversionAction', false, 'outbound-apps', 'pro'],
       ['payoutMethod', false, 'outbound-apps', 'pro'],
     ]);

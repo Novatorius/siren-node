@@ -6,15 +6,15 @@ import { answerAppRequest, listAppRequests, resendAppRequest, retrieveAppRequest
 import type {
   App,
   AppCurrency,
-  AppItemKindEntry,
-  AppItemPage,
+  AppFeatureKindEntry,
+  AppFeaturePage,
   AppWithRawKey,
   AppWithSigningSecret,
-  CreateAppItemParams,
+  CreateAppFeatureParams,
   CreateAppParams,
   CreatedApp,
-  RemovedAppItem,
-  UpdateAppItemParams,
+  RemovedAppFeature,
+  UpdateAppFeatureParams,
   UpdateAppParams,
   UpdatedApp,
   AppAnswer,
@@ -31,7 +31,7 @@ import type {
   VerifyAppRequestOptions,
 } from '../record-types';
 import type { AppStatus } from '../taxonomy';
-import { AppItemKind } from '../taxonomy';
+import { FeatureKind } from '../taxonomy';
 import type { ApiKeyScopeGroups, WebhookCatalogEntry, WebhookDelivery, WebhookHeaders, WebhookTestResult } from '../types';
 import { SirenError, UnexpectedResponseError } from '../errors';
 import { pickFields } from './create-fields';
@@ -181,10 +181,10 @@ function appPath(key: unknown, method: string): string {
 
 /**
  * Why `body` is not an app as `AppSerializer::toArray()` gives one, or
- * `undefined` when it is: an object with a text `key` and an `items` list.
+ * `undefined` when it is: an object with a text `key` and a `features` list.
  */
 function appProblem(body: unknown, route: string): string | undefined {
-  return isJsonObject(body) && typeof body.key === 'string' && Array.isArray(body.items) ? undefined :
+  return isJsonObject(body) && typeof body.key === 'string' && Array.isArray(body.features) ? undefined :
     `Siren answered ${route} with a body that is not an app.`;
 }
 
@@ -245,23 +245,23 @@ async function writeWithSecret<T extends App>(
 }
 
 /**
- * One app's features, the code's items, through their own routes
- * (`/apps/{app}/items`), so the dashboard and code can add one without
+ * One app's features, through their own routes
+ * (`/apps/{app}/features`), so the dashboard and code can add one without
  * declaring the whole app. A feature's kind and key lock once Siren makes
  * it. Every route takes a signed-in admin's session, and a member limited
  * to some stores gets 403 `org_access_required`, reads included, since a
  * feature's page names the records that select it.
  */
-export class AppItemsResource {
-  /** The fields `create()` sends, those `POST /apps/{app}/items` reads (AddAppItem.php). */
+export class AppFeaturesResource {
+  /** The fields `create()` sends, those `POST /apps/{app}/features` reads (AddAppItem.php). */
   static readonly CREATE_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains'] as const;
-  /** The fields `update()` sends. `PATCH /apps/{app}/items/{id}` refuses a changed kind or key with 422. */
+  /** The fields `update()` sends. `PATCH /apps/{app}/features/{id}` refuses a changed kind or key with 422. */
   static readonly UPDATE_FIELDS = ['name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains'] as const;
 
   constructor(private readonly http: HttpTransport) {}
 
   /**
-   * Adds one feature to the app with `POST /apps/{app}/items`, sent once,
+   * Adds one feature to the app with `POST /apps/{app}/features`, sent once,
    * and answers it with `uses` and `usedBy`. Siren answers 201, or 200 when
    * an archived feature of the same kind and key came back with the new
    * fields. The feature is checked by the rules a declaration's feature
@@ -271,82 +271,82 @@ export class AppItemsResource {
    * not an object, any field but {@link CREATE_FIELDS}, no `kind` or `name`,
    * and the old kind `fulfillmentMethod`. With no `key`, the body carries
    * none and Siren makes it from the name, unique within the app. Siren answers 422 with the
-   * field for the rest, 409 `app_items_need_key_and_address` with
+   * field for the rest, 409 `app_features_need_key_and_address` with
    * `data.missing` when the app lacks a key or an address, and 404 for an
    * app the organization lacks. Throws `UnexpectedResponseError` when the
    * 2xx body is not a feature.
    */
-  async create(appKey: string, params: CreateAppItemParams): Promise<AppItemPage> {
-    const path = `${appPath(appKey, 'apps.items.create()')}/items`;
-    if (!isJsonObject(params)) throw new SirenError('Siren: apps.items.create() needs the feature as an object.');
-    const sent = pickFields(params, AppItemsResource.CREATE_FIELDS, (field) => `Siren: apps.items.create() does not take ${field}.`);
+  async create(appKey: string, params: CreateAppFeatureParams): Promise<AppFeaturePage> {
+    const path = `${appPath(appKey, 'apps.features.create()')}/features`;
+    if (!isJsonObject(params)) throw new SirenError('Siren: apps.features.create() needs the feature as an object.');
+    const sent = pickFields(params, AppFeaturesResource.CREATE_FIELDS, (field) => `Siren: apps.features.create() does not take ${field}.`);
     for (const field of ['kind', 'name']) {
-      if (sent[field] == null) throw new SirenError(`Siren: apps.items.create() needs a ${field}.`);
+      if (sent[field] == null) throw new SirenError(`Siren: apps.features.create() needs a ${field}.`);
     }
-    checkKind(sent.kind, 'apps.items.create()', '');
-    const item = await writeRecord<Record<string, unknown>>(this.http, 'POST', path, sent);
-    return checkedItem(item, `POST ${path}`);
+    checkKind(sent.kind, 'apps.features.create()', '');
+    const feature = await writeRecord<Record<string, unknown>>(this.http, 'POST', path, sent);
+    return checkedFeature(feature, `POST ${path}`);
   }
 
   /**
    * One feature by its id, with `uses`, how many records select it, and
-   * `usedBy`, up to 100 of them, from `GET /apps/{app}/items/{id}`. Retries
+   * `usedBy`, up to 100 of them, from `GET /apps/{app}/features/{id}`. Retries
    * as a read. Siren answers 404 for a feature another app holds. Refuses a
    * bad app key or id with `SirenError` before sending.
    */
-  async retrieve(appKey: string, id: number): Promise<AppItemPage> {
-    const path = `${appPath(appKey, 'apps.items.retrieve()')}/items/${recordId(id, 'apps.items.retrieve')}`;
-    return readObject<AppItemPage>(this.http, path, {}, (body) => itemProblem(body, `GET ${path}`));
+  async retrieve(appKey: string, id: number): Promise<AppFeaturePage> {
+    const path = `${appPath(appKey, 'apps.features.retrieve()')}/features/${recordId(id, 'apps.features.retrieve')}`;
+    return readObject<AppFeaturePage>(this.http, path, {}, (body) => featureProblem(body, `GET ${path}`));
   }
 
   /**
    * Changes a feature's name, description or settings with
-   * `PATCH /apps/{app}/items/{id}`, sent once, and answers it. A field left
+   * `PATCH /apps/{app}/features/{id}`, sent once, and answers it. A field left
    * out keeps its value. Refuses with `SirenError` before sending: a bad app
    * key or id, params that are not an object, and any field but
    * {@link UPDATE_FIELDS}, `kind` and `key` included, since a feature's kind
    * and key never change.
    */
-  async update(appKey: string, id: number, params: UpdateAppItemParams): Promise<AppItemPage> {
-    const path = `${appPath(appKey, 'apps.items.update()')}/items/${recordId(id, 'apps.items.update')}`;
-    if (!isJsonObject(params)) throw new SirenError('Siren: apps.items.update() needs the change as an object.');
-    const sent = pickFields(params, AppItemsResource.UPDATE_FIELDS, (field) =>
+  async update(appKey: string, id: number, params: UpdateAppFeatureParams): Promise<AppFeaturePage> {
+    const path = `${appPath(appKey, 'apps.features.update()')}/features/${recordId(id, 'apps.features.update')}`;
+    if (!isJsonObject(params)) throw new SirenError('Siren: apps.features.update() needs the change as an object.');
+    const sent = pickFields(params, AppFeaturesResource.UPDATE_FIELDS, (field) =>
       field === 'kind' || field === 'key'
-        ? `Siren: apps.items.update() cannot change ${field}. A feature's kind and key never change once Siren makes it.`
-        : `Siren: apps.items.update() does not take ${field}.`,
+        ? `Siren: apps.features.update() cannot change ${field}. A feature's kind and key never change once Siren makes it.`
+        : `Siren: apps.features.update() does not take ${field}.`,
     );
-    const item = await writeRecord<Record<string, unknown>>(this.http, 'PATCH', path, sent);
-    return checkedItem(item, `PATCH ${path}`);
+    const feature = await writeRecord<Record<string, unknown>>(this.http, 'PATCH', path, sent);
+    return checkedFeature(feature, `PATCH ${path}`);
   }
 
   /**
-   * Removes a feature with `DELETE /apps/{app}/items/{id}`, sent once.
+   * Removes a feature with `DELETE /apps/{app}/features/{id}`, sent once.
    * Siren archives it while a record selects it and answers
-   * `{ archived: true, item }`, and deletes it otherwise and answers
-   * `{ archived: false, item: null }`. Refuses a bad app key or id with
+   * `{ archived: true, feature }`, and deletes it otherwise and answers
+   * `{ archived: false, feature: null }`. Refuses a bad app key or id with
    * `SirenError` before sending. Throws `UnexpectedResponseError` for any
    * other 2xx body.
    */
-  async delete(appKey: string, id: number): Promise<RemovedAppItem> {
-    const path = `${appPath(appKey, 'apps.items.delete()')}/items/${recordId(id, 'apps.items.delete')}`;
+  async delete(appKey: string, id: number): Promise<RemovedAppFeature> {
+    const path = `${appPath(appKey, 'apps.features.delete()')}/features/${recordId(id, 'apps.features.delete')}`;
     const body = await deleteRecord<Record<string, unknown>>(this.http, path);
-    const fits = body !== null && typeof body.archived === 'boolean' && (body.item === null || itemProblem(body.item, '') === undefined);
-    if (!fits) throw new UnexpectedResponseError(`Siren answered DELETE ${path} with a body that is not { archived, item }.`, { data: body });
-    return body as unknown as RemovedAppItem;
+    const fits = body !== null && typeof body.archived === 'boolean' && (body.feature === null || featureProblem(body.feature, '') === undefined);
+    if (!fits) throw new UnexpectedResponseError(`Siren answered DELETE ${path} with a body that is not { archived, feature }.`, { data: body });
+    return body as unknown as RemovedAppFeature;
   }
 }
 
 /** Why `body` is not a feature with a numeric `id`, a text `kind` and `key`, or `undefined` when it is. */
-function itemProblem(body: unknown, route: string): string | undefined {
+function featureProblem(body: unknown, route: string): string | undefined {
   return isJsonObject(body) && typeof body.id === 'number' && typeof body.kind === 'string' && typeof body.key === 'string'
     ? undefined
     : `Siren answered ${route} with a body that is not a feature.`;
 }
 
-function checkedItem(body: Record<string, unknown>, route: string): AppItemPage {
-  const problem = itemProblem(body, route);
+function checkedFeature(body: Record<string, unknown>, route: string): AppFeaturePage {
+  const problem = featureProblem(body, route);
   if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: body });
-  return body as unknown as AppItemPage;
+  return body as unknown as AppFeaturePage;
 }
 
 /**
@@ -367,22 +367,22 @@ function checkedItem(body: Record<string, unknown>, route: string): AppItemPage 
  */
 export class AppsResource {
   /** The fields `declare()` sends, the seven `PUT /apps/{key}` reads (DeclareApp.php). */
-  static readonly DECLARE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'items'] as const;
-  /** The fields `declare()` sends for each item, those Siren stores (apps-records.md, "Item settings"), a custom event's `fields` and `domains` included. */
-  static readonly ITEM_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains'] as const;
-  /** The fields `create()` sends, those `POST /apps` reads but `items`, which it refuses (CreateApp.php). */
+  static readonly DECLARE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'features'] as const;
+  /** The fields `declare()` sends for each feature, those Siren stores (apps-records.md, "Item settings"), a custom event's `fields` and `domains` included. */
+  static readonly FEATURE_FIELDS = ['kind', 'key', 'name', 'description', 'currencies', 'answerWindowMinutes', 'scoresMoney', 'conversionTypes', 'fields', 'domains'] as const;
+  /** The fields `create()` sends, those `POST /apps` reads but `features`, which it refuses (CreateApp.php). */
   static readonly CREATE_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts'] as const;
-  /** The fields `update()` sends, those `PATCH /apps/{key}` reads but `items`, which it refuses (EditApp.php). */
+  /** The fields `update()` sends, those `PATCH /apps/{key}` reads but `features`, which it refuses (EditApp.php). */
   static readonly UPDATE_FIELDS = ['name', 'description', 'url', 'events', 'scopes', 'contacts'] as const;
 
   /** The requests Siren sent the org's apps. */
   readonly requests: AppRequestsResource;
   /** One app's features, through their own routes. */
-  readonly items: AppItemsResource;
+  readonly features: AppFeaturesResource;
 
   constructor(private readonly http: HttpTransport) {
     this.requests = new AppRequestsResource(http);
-    this.items = new AppItemsResource(http);
+    this.features = new AppFeaturesResource(http);
   }
 
   /**
@@ -402,19 +402,20 @@ export class AppsResource {
    * declaration again after a lost answer changes nothing, but a lost first
    * answer loses the secrets: rotate to get new ones.
    *
-   * Sends a new object of {@link DECLARE_FIELDS}, and each item as a new
-   * object of {@link ITEM_FIELDS}. Refuses with `SirenError` before sending:
-   * a bad app key, any other field or item field whatever its value, no
-   * `name`, `items` that is not an array, an item that is not an object or
+   * Sends a new object of {@link DECLARE_FIELDS}, and each feature as a new
+   * object of {@link FEATURE_FIELDS}. Refuses with `SirenError` before sending:
+   * a bad app key, any other field or feature field whatever its value,
+   * `items`, the features' name before Siren's rename, no
+   * `name`, `features` that is not an array, a feature that is not an object or
    * lacks `kind`, `key` or `name`, the old kind `fulfillmentMethod`, and
    * features other than custom events with no `url`, which Siren refuses with 422
-   * `app_items_need_key_and_address`, since it asks the app at its address.
+   * `app_features_need_key_and_address`, since it asks the app at its address.
    * Siren checks the rest and answers 400 or 422 with the field, raised as
    * `BadRequestError` or `ValidationError`, and 400 `app_cap_reached` when
    * the organization holds its cap of apps.
    *
    * Throws `UnexpectedResponseError` when a 2xx body is not an app (an object
-   * with a text `key` and an `items` array), or holds `rawKey` or
+   * with a text `key` and a `features` array), or holds `rawKey` or
    * `signingSecret` as anything but text. Its `statusCode` is unset, since
    * `writeRecord` answers the body alone. Siren had accepted the write, so
    * read the app with `retrieve()` before sending it again.
@@ -422,20 +423,24 @@ export class AppsResource {
   async declare(key: string, params: DeclareAppParams): Promise<DeclaredApp> {
     const path = appPath(key, 'apps.declare()');
     if (!isJsonObject(params)) throw new SirenError('Siren: apps.declare() needs the app as an object.');
-    const sent = pickFields(params, AppsResource.DECLARE_FIELDS, (field) => `Siren: apps.declare() does not take ${field}.`);
+    const sent = pickFields(params, AppsResource.DECLARE_FIELDS, (field) =>
+      field === 'items'
+        ? 'Siren: apps.declare() does not take items. Siren calls an app\'s features "features" now. Send them under features.'
+        : `Siren: apps.declare() does not take ${field}.`,
+    );
     if (sent.name == null) throw new SirenError('Siren: apps.declare() needs a name.');
-    if (sent.items !== undefined) {
-      if (!Array.isArray(sent.items)) throw new SirenError('Siren: apps.declare() takes items as a list.');
-      sent.items = (sent.items as unknown[]).map((item, index) => {
-        if (!isJsonObject(item)) throw new SirenError(`Siren: apps.declare() needs item ${index} as an object.`);
-        const copy = pickFields(item, AppsResource.ITEM_FIELDS, (field) => `Siren: apps.declare() does not take ${field} on an item.`);
+    if (sent.features !== undefined) {
+      if (!Array.isArray(sent.features)) throw new SirenError('Siren: apps.declare() takes features as a list.');
+      sent.features = (sent.features as unknown[]).map((feature, index) => {
+        if (!isJsonObject(feature)) throw new SirenError(`Siren: apps.declare() needs feature ${index} as an object.`);
+        const copy = pickFields(feature, AppsResource.FEATURE_FIELDS, (field) => `Siren: apps.declare() does not take ${field} on a feature.`);
         for (const field of ['kind', 'key', 'name']) {
-          if (copy[field] == null) throw new SirenError(`Siren: apps.declare() needs a ${field} on item ${index}.`);
+          if (copy[field] == null) throw new SirenError(`Siren: apps.declare() needs a ${field} on feature ${index}.`);
         }
-        checkKind(copy.kind, 'apps.declare()', ` on item ${index}`);
+        checkKind(copy.kind, 'apps.declare()', ` on feature ${index}`);
         return copy;
       });
-      const needAddress = (sent.items as Record<string, unknown>[]).some((item) => item.kind !== AppItemKind.CustomEvent);
+      const needAddress = (sent.features as Record<string, unknown>[]).some((feature) => feature.kind !== FeatureKind.CustomEvent);
       if (needAddress && sent.url == null) {
         throw new SirenError(
           'Siren: apps.declare() needs a url for an app with features other than custom events. Siren asks the app at its address, so it refuses such features on an app with none.',
@@ -458,10 +463,10 @@ export class AppsResource {
    * even `[]`, and an address when `url` is given, and answers 201 with
    * `rawKey` and `signingSecret` for the parts it made, each shown this
    * once. The app has `source` `dashboard`. Add features with
-   * {@link items}.
+   * {@link features}.
    *
    * Refuses with `SirenError` before sending: params that are not an object,
-   * no `name`, `items`, and any other field but {@link CREATE_FIELDS}. Siren
+   * no `name`, `features`, and any other field but {@link CREATE_FIELDS}. Siren
    * answers 422 `app_needs_a_part` for an app with neither part, 422 on
    * `events` with no `url`, and 400 `app_cap_reached` at the cap. Throws
    * `UnexpectedResponseError` when the 2xx body is not an app or holds a
@@ -470,8 +475,8 @@ export class AppsResource {
   async create(params: CreateAppParams): Promise<CreatedApp> {
     if (!isJsonObject(params)) throw new SirenError('Siren: apps.create() needs the app as an object.');
     const sent = pickFields(params, AppsResource.CREATE_FIELDS, (field) =>
-      field === 'items'
-        ? 'Siren: apps.create() does not take items. Add each feature with apps.items.create() once the app has a key and an address.'
+      field === 'features' || field === 'items'
+        ? `Siren: apps.create() does not take ${field}. Add each feature with apps.features.create() once the app has a key and an address.`
         : `Siren: apps.create() does not take ${field}.`,
     );
     if (sent.name == null) throw new SirenError('Siren: apps.create() needs a name.');
@@ -492,19 +497,19 @@ export class AppsResource {
    * nothing.
    *
    * Refuses with `SirenError` before sending: a bad app key, params that are
-   * not an object, `items`, and any other field but {@link UPDATE_FIELDS}.
+   * not an object, `features`, and any other field but {@link UPDATE_FIELDS}.
    * Siren answers 409 `app_key_missing` for `scopes` on an app with no key,
    * 409 `app_address_missing` for `events` on an app with no address, 409
    * `app_needs_a_part` for a change that would leave neither, and 409
-   * `app_items_need_key_and_address` for a change that would take the
+   * `app_features_need_key_and_address` for a change that would take the
    * address of an app with features.
    */
   async update(key: string, params: UpdateAppParams): Promise<UpdatedApp> {
     const path = appPath(key, 'apps.update()');
     if (!isJsonObject(params)) throw new SirenError('Siren: apps.update() needs the change as an object.');
     const sent = pickFields(params, AppsResource.UPDATE_FIELDS, (field) =>
-      field === 'items'
-        ? 'Siren: apps.update() does not take items. Change each feature with apps.items.update().'
+      field === 'features' || field === 'items'
+        ? `Siren: apps.update() does not take ${field}. Change each feature with apps.features.update().`
         : `Siren: apps.update() does not take ${field}.`,
     );
     const route = `PATCH ${path}`;
@@ -515,10 +520,10 @@ export class AppsResource {
   }
 
   /**
-   * The org's apps, on and off, ordered by id, each with its items, from
+   * The org's apps, on and off, ordered by id, each with its features, from
    * `GET /apps`. Retries on a network error, 429 or 5xx, as a read. Throws
    * `UnexpectedResponseError` when the 2xx body is not an array of apps,
-   * each an object with a text `key` and an `items` array.
+   * each an object with a text `key` and a `features` array.
    */
   async list(): Promise<App[]> {
     return readList<App>(this.http, '/apps', (rows) =>
@@ -543,7 +548,7 @@ export class AppsResource {
    * Turns the app on (`active`) or off (`inactive`) with
    * `POST /apps/{key}/status`, sent once, and answers the app. Refuses a bad
    * app key or any other status with `SirenError` before sending. An off
-   * app's items leave every picker, its address is paused, and Siren sends
+   * app's features leave every picker, its address is paused, and Siren sends
    * it nothing. Throws `UnexpectedResponseError` when the 2xx body is not an
    * app.
    */
@@ -596,7 +601,7 @@ export class AppsResource {
    * answers the app, which keeps its address. Refuses a bad app key with
    * `SirenError` before sending. Siren answers 409 `app_key_missing` for an
    * app with no key, 409 `app_needs_a_part` for an app with no address, and
-   * 409 `app_items_need_key_and_address` for an app with features. Throws
+   * 409 `app_features_need_key_and_address` for an app with features. Throws
    * `UnexpectedResponseError` when the 2xx body is not an app.
    */
   async revokeKey(key: string): Promise<App> {
@@ -696,8 +701,8 @@ export class AppsResource {
    * read. Throws `UnexpectedResponseError` when the body is not a list of
    * objects, each with a text `kind`.
    */
-  async kinds(): Promise<AppItemKindEntry[]> {
-    return readList<AppItemKindEntry>(this.http, '/apps/kinds', (rows) =>
+  async kinds(): Promise<AppFeatureKindEntry[]> {
+    return readList<AppFeatureKindEntry>(this.http, '/apps/kinds', (rows) =>
       rows.every((row) => isJsonObject(row) && typeof row.kind === 'string')
         ? undefined
         : 'Siren answered GET /apps/kinds with a body that is not a list of kinds.',
@@ -707,10 +712,10 @@ export class AppsResource {
   /**
    * Deletes an app no record selects and with no open ask, with
    * `DELETE /apps/{key}`, sent once. Siren revokes its key and deletes its
-   * items, its address and its delivery log. Its requests stay readable.
+   * features, its address and its delivery log. Its requests stay readable.
    * Refuses a bad app key with `SirenError` before sending. Siren answers
    * 409, raised as `ConflictError` with `data.reason` `app_in_use` and
-   * `data.uses`, while a record selects one of its items or an ask is open,
+   * `data.uses`, while a record selects one of its features or an ask is open,
    * and 404 for a key the org lacks, raised as `NotFoundError`. Read the
    * code with `appErrorCode()`.
    */

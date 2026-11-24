@@ -378,7 +378,7 @@ export function createAppRequestHandler<X extends string = never>(
       if (error instanceof SignatureVerificationError) return reply(400, { error: error.message });
       throw error;
     }
-    const { kind, key } = request.item;
+    const { kind, key } = request.feature;
     const fn = features.get(featureKey(kind, key)) ?? kinds.get(kind);
     if (fn === undefined) return reply(404, { error: `No function handles ${kind} ${key}.` });
 
@@ -428,7 +428,7 @@ export function createAppRequestHandler<X extends string = never>(
   const simulatedAnswer = (answer: unknown, asked: AppAsk): void => {
     const copy = checkedAnswer(answer, settings.maxAnswerBytes, 'answers.simulate()');
     const sent = JSON.parse(JSON.stringify(copy)) as Record<string, unknown>;
-    const problem = sirenAnswerProblem(asked.item.kind, isJsonObject(asked.data) ? asked.data : {}, sent);
+    const problem = sirenAnswerProblem(asked.feature.kind, isJsonObject(asked.data) ? asked.data : {}, sent);
     if (problem !== undefined) throw new ValidationError(problem, { code: 'app_answer_invalid', statusCode: 422 });
   };
 
@@ -604,7 +604,7 @@ export function createAppRequestHandler<X extends string = never>(
 function givenAnswer(answer: unknown, asked: AppAsk): unknown {
   if (answer !== undefined && answer !== null) return answer;
   throw new SirenError(
-    `The function for ${asked.item.kind} ${asked.item.key} returned nothing. ` +
+    `The function for ${asked.feature.kind} ${asked.feature.key} returned nothing. ` +
       'Return the answer, or return answers.later() when you will answer with apps.requests.answer().',
   );
 }
@@ -619,7 +619,7 @@ function givenAnswer(answer: unknown, asked: AppAsk): unknown {
  */
 function defaultOnError(error: unknown, request: AppRequest | WebhookEvent | undefined, afterReply: boolean): void {
   const line = `Siren request handler${describeRequest(request)}:`;
-  if (afterReply && request !== undefined && 'item' in request && request.mode === 'ask' && !settled(error)) {
+  if (afterReply && request !== undefined && 'feature' in request && request.mode === 'ask' && !settled(error)) {
     console.error(line, error, nextSend(request));
   } else {
     console.error(line, error);
@@ -659,7 +659,7 @@ function nextSend(request: AppAsk): string {
 /** ` (<kind> <key> <id>)` for an app request, ` (<type> <delivery id>)` for an event, and nothing without one. */
 function describeRequest(request: AppRequest | WebhookEvent | undefined): string {
   if (request === undefined) return '';
-  if ('item' in request) return ` (${request.item.kind} ${request.item.key} ${request.id})`;
+  if ('feature' in request) return ` (${request.feature.kind} ${request.feature.key} ${request.id})`;
   return ` (${[request.type, request.deliveryId].filter((part) => part !== undefined).join(' ')})`;
 }
 

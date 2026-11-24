@@ -351,10 +351,10 @@ const NODE_ONLY = [
   'siren.apps.requests.list()',
   'siren.apps.requests.resend()',
   'siren.apps.requests.answer()',
-  'siren.apps.items.create()',
-  'siren.apps.items.retrieve()',
-  'siren.apps.items.update()',
-  'siren.apps.items.delete()',
+  'siren.apps.features.create()',
+  'siren.apps.features.retrieve()',
+  'siren.apps.features.update()',
+  'siren.apps.features.delete()',
 ];
 
 /**
