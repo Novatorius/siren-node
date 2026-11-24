@@ -37,6 +37,22 @@ export interface StoredSession {
    * the new pair to the same file. Holds paths only, never a key.
    */
   envFiles?: Record<string, string>;
+  /**
+   * Every organization the person belongs to, as Siren listed them at login.
+   * The tokens act in `orgId`, and a command that needs another of these
+   * switches with `POST /auth/switch-org`. Absent in a file written before
+   * login logged in the person rather than one organization, which counts
+   * as that one organization alone.
+   */
+  memberships?: StoredMembership[];
+}
+
+/** One organization the person belongs to. */
+export interface StoredMembership {
+  orgId: number;
+  orgName: string;
+  orgSlug: string;
+  role: string;
 }
 
 /** The file's whole shape. `sessions` is keyed by the base URL with no trailing slash. */
@@ -172,7 +188,8 @@ function isCredentialsFile(value: unknown): value is CredentialsFile {
       typeof s.refreshToken === 'string' &&
       typeof s.accessExpiresAt === 'number' &&
       typeof s.orgId === 'number' &&
-      (s.envFiles === undefined || (typeof s.envFiles === 'object' && s.envFiles !== null && !Array.isArray(s.envFiles)))
+      (s.envFiles === undefined || (typeof s.envFiles === 'object' && s.envFiles !== null && !Array.isArray(s.envFiles))) &&
+      (s.memberships === undefined || (Array.isArray(s.memberships) && s.memberships.every((m: unknown) => typeof m === 'object' && m !== null && typeof (m as { orgId?: unknown }).orgId === 'number')))
     );
   });
 }

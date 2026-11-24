@@ -87,7 +87,7 @@ describe('apps-cli: siren signup, login and the session', () => {
 
   it('refuses a live Siren without --live, before asking for the password', async () => {
     for (const edition of ['production', 'none'] as const) {
-      for (const argv of [['login', '--email', EMAIL], ['signup', '--org-name', 'Acme', '--email', EMAIL, '--accept-terms']]) {
+      for (const argv of [['login', '--password', '--email', EMAIL], ['signup', '--org-name', 'Acme', '--email', EMAIL, '--accept-terms']]) {
         const h = harness([], { edition, interactive: true, secrets: [PASSWORD], typed: ['y'] });
         expect(await h.run(argv)).toBe(1);
         expect(h.editionReads).toHaveLength(1);
@@ -148,7 +148,7 @@ describe('apps-cli: siren signup, login and the session', () => {
 
   it('logs in to a person with one organization and keeps its session', async () => {
     const h = harness([AuthAnswers.oneOrg()], { interactive: true, typed: [EMAIL], secrets: [PASSWORD] });
-    expect(await h.run(['login']), h.err()).toBe(0);
+    expect(await h.run(['login', '--password']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['POST /auth/login']);
     expect(bodyOf(h.http.requests[0])).toEqual({ email: EMAIL, password: PASSWORD });
     expect(h.secretPrompts).toHaveLength(1);
@@ -166,10 +166,10 @@ describe('apps-cli: siren signup, login and the session', () => {
       expect(h.credentialsText()).not.toContain('verification-token');
     }
 
-    const unchosen = harness([AuthAnswers.severalOrgs(), AuthAnswers.tokens()], { stdin: PASSWORD });
-    expect(await unchosen.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(unchosen.paths()).not.toContain('POST /auth/select-org');
-    expect(unchosen.err()).toContain('acme-two');
+    // Login logs in the person: with no --org it starts in the first organization, and each command picks its own.
+    const unchosen = harness([AuthAnswers.severalOrgs(), AuthAnswers.tokens(ACCESS_1)], { stdin: PASSWORD });
+    expect(await unchosen.run(['login', '--email', EMAIL, '--password-stdin']), unchosen.err()).toBe(0);
+    expect(bodyOf(unchosen.http.requests[1])).toEqual({ verificationToken: 'verification-token', orgId: 3 });
   });
 
   it("answers a wrong password with Siren's message and keeps nothing", async () => {
@@ -298,20 +298,14 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(live.credentials().sessions).toEqual({});
   });
 
-  it('lists the organizations and switches to another', async () => {
+  it('lists the organizations, marking none, since each command picks its own', async () => {
     const list = harness([AuthAnswers.memberships()]);
     list.signedIn();
     expect(await list.run(['orgs']), list.err()).toBe(0);
     expect(list.paths()).toEqual(['GET /auth/memberships']);
-    expect(list.out()).toMatch(/\*.*acme\b/);
+    expect(list.out()).not.toContain('*');
+    expect(list.out()).toMatch(/acme\s+Acme\s+admin/);
     expect(list.out()).toContain('acme-two');
-
-    const use = harness([AuthAnswers.memberships(), AuthAnswers.tokens()]);
-    use.signedIn();
-    expect(await use.run(['use', 'acme-two']), use.err()).toBe(0);
-    expect(use.paths()).toEqual(['GET /auth/memberships', 'POST /auth/switch-org']);
-    expect(bodyOf(use.http.requests[1])).toEqual({ orgId: 4 });
-    expect(use.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 4, orgName: 'Acme Two', accessToken: ACCESS_2 });
   });
 
   it('lists every command for --help and prints the version for --version', async () => {

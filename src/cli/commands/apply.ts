@@ -9,6 +9,7 @@ import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '..
 import { appChanges, droppedLine } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
+import { askOrg, findOrg, membershipsOf, orgList } from '../org';
 import { styleFor } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError, commandLine } from '../targets';
@@ -72,9 +73,10 @@ export async function appsInit(input: CommandInput): Promise<number> {
   }
   const name = typeof values.name === 'string' && values.name.trim() !== '' ? values.name.trim() : key;
 
+  const org = await orgForInit(input);
   const path = join(io.cwd, APP_FILE_NAME);
   try {
-    await writeFile(path, appFileTemplate(key, name), { flag: 'wx' });
+    await writeFile(path, appFileTemplate(key, name, org), { flag: 'wx' });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CliRefusal(`${path} is already there, so nothing was written.`);
     throw error;
@@ -92,6 +94,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
       headline: `Created ${style.bold(APP_FILE_NAME)}`,
       rows: [
         ['App', key],
+        ...(org === undefined ? [] : [['Org', org] as const]),
         ['Feature', `notify · ${kindName('postConversionAction')}`],
         ...(missing.length > 0 ? [['Ignored', `${missing.join(', ')} (added to .gitignore)`] as const] : []),
       ],
@@ -103,6 +106,32 @@ export async function appsInit(input: CommandInput): Promise<number> {
     }),
   );
   return 0;
+}
+
+/** "Acme (acme), live": the organization a write acts in, and whether it is live, for the question before the write. */
+function orgNamed(session: { orgName: string; orgSlug?: string; orgId: number; edition: string }): string {
+  return `${session.orgName} (${session.orgSlug ?? session.orgId}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
+}
+
+/**
+ * The organization `apps init` writes as "org": the one --org names, else,
+ * for a person in several, the one they pick when asked in a terminal.
+ * None for a person in one organization, for a person not logged in, and
+ * with no terminal to ask in. Reads credentials.json and sends nothing.
+ */
+async function orgForInit(input: CommandInput): Promise<string | undefined> {
+  const flag = typeof input.values.org === 'string' && input.values.org !== '' ? input.values.org : undefined;
+  const session = (await input.kept?.()) ?? null;
+  if (session === null) return flag;
+  const memberships = membershipsOf(session);
+  if (flag !== undefined) {
+    const found = findOrg(memberships, flag);
+    if (found === undefined) throw new CliRefusal(`You are not in an organization named ${flag}. Yours are ${orgList(memberships)}.`);
+    return found.orgSlug || String(found.orgId);
+  }
+  if (memberships.length < 2 || !input.io.interactive) return undefined;
+  const chosen = await askOrg(input.io, memberships);
+  return chosen.orgSlug || String(chosen.orgId);
 }
 
 /**
@@ -186,6 +215,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
     throw new CliRefusal(`${shown} has ${parsed.problems.length === 1 ? 'a problem' : `${parsed.problems.length} problems`}, so nothing was sent.`);
   }
 
+  run.appFilePath = path;
   const session = await run.signedIn();
   const { key, params } = declarationFor(parsed.file);
   if (params.url != null && onThisMachine(params.url)) {
@@ -216,14 +246,9 @@ export async function appsApply(input: CommandInput): Promise<number> {
         `Make one with ${run.command(`apps add-key ${key}`)}, then run ${run.command('apps apply')} again to give it these scopes.`,
     );
   }
-  const uses = await Promise.all(
-    changes.dropped.map(({ item }) =>
-      siren.apps.features.retrieve(key, item.id).then(
-        (page) => page.uses,
-        () => undefined,
-      ),
-    ),
-  );
+  // `GET /apps/{key}` gives each feature its `uses` for a person who may change the app (GetApp.php),
+  // so apply reads no feature route, which a personal access token cannot reach.
+  const uses = changes.dropped.map(({ item }) => (typeof item.uses === 'number' ? item.uses : undefined));
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
   const lines = [...changes.lines, ...removals];
@@ -239,11 +264,10 @@ export async function appsApply(input: CommandInput): Promise<number> {
   for (const line of lines) run.print(`  ${line}`);
   const origin = params.url == null ? undefined : originOf(params.url);
   if (changes.isNew && origin !== undefined) run.print(`  sends its requests to ${origin}`);
-  const org = `${session.orgName}, a ${session.edition === 'production' ? 'live' : 'sandbox'} organization`;
+  const org = orgNamed(session);
   if (input.values.yes !== true) {
-    const question = changes.isNew
-      ? `Make ${key} on ${org}? Type yes to make it: `
-      : `Apply ${lines.length === 1 ? 'this change' : 'these changes'} to ${key} on ${org}? The last write wins, so this replaces anything changed in the dashboard since. Type yes to apply: `;
+    const question = changes.isNew ? `Make ${key} in ${org}? [y/N] ` : `Apply to ${org}? [y/N] `;
+    if (!changes.isNew && io.interactive) run.print('The last write wins, so this replaces anything changed in the dashboard since.');
     if (!io.interactive) {
       throw new CliRefusal(`Nothing was sent. Run ${run.command(input.args[0] === undefined ? 'apps apply --yes' : `apps apply ${shown} --yes`)} to apply ${lines.length === 1 ? 'it' : 'them'} without asking.`);
     }
@@ -454,7 +478,8 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
         ? `Rotating ${key}'s key revokes the old key at once, so anything still using it stops working.`
         : `Rotating ${key}'s signing secret makes Siren sign with the new one at once, so the app refuses requests until it reads the new one.`;
     if (!io.interactive) throw new CliRefusal(`${warning} Nothing was sent. Run ${run.command(`${command} ${key} --yes`)} to rotate it.`);
-    const typed = (await io.prompt(`${warning} Type yes to rotate it: `)).trim().toLowerCase();
+    run.print(warning);
+    const typed = (await io.prompt(`Rotate it in ${orgNamed(run.current())}? [y/N] `)).trim().toLowerCase();
     if (typed !== 'yes' && typed !== 'y') throw new CliRefusal(`Nothing was sent, and ${what} still works.`);
   }
 
