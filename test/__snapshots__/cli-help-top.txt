@@ -5,7 +5,7 @@ USAGE
 
 GETTING STARTED
   signup              Make an organization on Siren
-  login               Log in to Siren
+  login               Log in to Siren in your browser
   apps init           Write siren.app.json in this folder
   apps apply          Declare the app on Siren and save its key
 
@@ -31,12 +31,12 @@ ACCOUNT
   logout              Log out, and forget the session here
   whoami              Show who you are logged in as
   orgs                List your organizations
-  use                 Switch to another organization
 
 FLAGS
   --sandbox           Use Siren's sandbox, whatever you logged in to last
   --live              Log in to or change a live organization
   --base-url <url>    Use another Siren, such as siren.example.com
+  --org <slug>        The organization to act in, when you have several
   -q, --quiet         Skip the logo animation
   --verbose           Show the detail behind an error
   -h, --help          Show help for a command
@@ -44,6 +44,8 @@ FLAGS
 
 ENVIRONMENT
   SIREN_BASE_URL      The Siren to use when no flag names one
+  SIREN_ORG           The organization to act in, when no flag names one
+  SIREN_TOKEN         A personal access token, for scripts and CI
   SIREN_DEBUG=1       The same as --verbose
   NO_COLOR, CI        Plain output, and no logo animation
 

@@ -1,5 +1,6 @@
+import { spawn } from 'node:child_process';
 import { getEventListeners } from 'node:events';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { FetchHttpClient } from '../http';
@@ -49,6 +50,14 @@ export interface CliIo {
   readonly stdoutTty?: boolean;
   /** True when standard error is a terminal. */
   readonly stderrTty?: boolean;
+  /** This machine's name, which the browser sign-in shows on the approval page as "Siren CLI on <machine>". */
+  readonly machine?: string;
+  /**
+   * Opens an http or https address in the person's browser, and answers
+   * true when a browser was started. Absent, or answering false, the tool
+   * prints the address for the person to open.
+   */
+  openUrl?(url: string): Promise<boolean>;
 }
 
 /**
@@ -156,7 +165,35 @@ export function nodeIo(): CliIo {
     screen: nodeScreen(),
     stdoutTty: process.stdout.isTTY === true,
     stderrTty: process.stderr.isTTY === true,
+    machine: hostname(),
+    openUrl: (url) => openInBrowser(url, process.env, process.platform),
   };
+}
+
+/**
+ * Starts the system's opener on `url`, given as one argument and never
+ * through a shell: `open` on macOS, `rundll32` on Windows, `xdg-open`
+ * elsewhere. Opens nothing over SSH or on a Linux machine with no display,
+ * where no browser would reach the person, and answers false.
+ */
+function openInBrowser(url: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): Promise<boolean> {
+  if (!/^https?:\/\//.test(url)) return Promise.resolve(false);
+  if (env.SSH_CONNECTION || env.SSH_TTY) return Promise.resolve(false);
+  if (platform !== 'darwin' && platform !== 'win32' && !env.DISPLAY && !env.WAYLAND_DISPLAY) return Promise.resolve(false);
+  const [command, args] =
+    platform === 'darwin' ? ['open', [url]] : platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
+  return new Promise((resolve) => {
+    try {
+      const child = spawn(command as string, args as string[], { detached: true, stdio: 'ignore', shell: false });
+      child.once('error', () => resolve(false));
+      child.once('spawn', () => {
+        child.unref();
+        resolve(true);
+      });
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 /** The real terminal for the hook, read once when the command starts. */

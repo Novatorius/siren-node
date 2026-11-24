@@ -106,6 +106,7 @@ export function appFileSchema(): Schema {
   const properties: Record<string, Schema> = {
     $schema: TEXT,
     version: { const: 1 },
+    org: { ...TEXT, minLength: 1, description: 'The slug of the organization the app belongs to, for a person in several. --org and SIREN_ORG win over it.' },
     name: { ...TEXT, description: "A recipe's name. The tool sends only the app's own name." },
     description: TEXT,
     apps: {
