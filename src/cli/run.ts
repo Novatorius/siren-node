@@ -3,13 +3,15 @@ import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
 import * as requests from './commands/requests';
 import * as session from './commands/session';
-import { CommandContext } from './context';
+import { CommandContext, shortAddress } from './context';
 import type { CommandHandler } from './context';
 import { CredentialStore } from './credentials';
 import { firstRun, welcome } from './hook';
 import type { HookCard } from './hook';
 import type { CliIo } from './io';
-import { CliUsageError, LIVE_BASE_URL, commandLine, resolveTarget } from './targets';
+import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, resolveTarget } from './targets';
+import { Style, styleFor } from './style';
+import { SirenError } from '../errors';
 import { SANDBOX_BASE_URL } from '../http';
 import type { Target } from './targets';
 
@@ -50,18 +52,23 @@ export type Command = (typeof COMMANDS)[number];
 
 type Options = NonNullable<ParseArgsConfig['options']>;
 
+/** The headings `siren --help` lists the commands under, in order. */
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Account'] as const;
+
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
   /** The command with its arguments and options, as `--help` prints it. */
   usage: string;
   summary: string;
   /** The heading `siren --help` lists it under. */
-  group: 'Your session' | 'Your apps' | 'Requests';
+  group: (typeof GROUPS)[number];
+  /** The few words `siren --help` prints beside it, with no full stop. */
+  short: string;
   options: Options;
   /** Each option as `--help` shows it, such as `--email <address>`, and one line about it. Every key of `options` has one. */
   flags: Readonly<Record<string, readonly [string, string]>>;
-  /** One command line that does something real. */
-  example: string;
+  /** One or two command lines that do something real. */
+  examples: readonly string[];
   /** The fewest and the most arguments after the command words. */
   positionals: readonly [number, number];
   /** True for a command that sends nothing and so needs no Siren address. */
@@ -77,69 +84,78 @@ const GLOBAL: Options = {
   live: { type: 'boolean' },
   'base-url': { type: 'string' },
   quiet: { type: 'boolean', short: 'q' },
+  verbose: { type: 'boolean' },
   help: { type: 'boolean', short: 'h' },
 };
 
 /** The shared options as every command's `--help` shows them. */
 const GLOBAL_FLAGS: ReadonlyArray<readonly [string, string]> = [
-  ['--sandbox', "Talk to Siren's sandbox, whatever you signed in to last."],
-  ['--live', 'Sign in to or change a live organization. Reads of one need no flag.'],
-  ['--base-url <url>', 'Talk to another Siren, such as siren.example.com.'],
-  ['-q, --quiet', 'Skip the logo animation.'],
-  ['-h, --help', 'Show this help.'],
+  ['--sandbox', "Use Siren's sandbox, whatever you logged in to last"],
+  ['--live', 'Log in to or change a live organization'],
+  ['--base-url <url>', 'Use another Siren, such as siren.example.com'],
+  ['-q, --quiet', 'Skip the logo animation'],
+  ['--verbose', 'Show the detail behind an error'],
+  ['-h, --help', 'Show help for a command'],
 ];
 
-const APP_FILE_FLAG = ['--app-file <path>', 'The app file whose folder holds the env file, when apply never saved one.'] as const;
-const YES_FLAG = ['--yes', 'Skip the question. Needed when there is no terminal to ask in.'] as const;
-const JSON_FLAG = ['--json', 'Print JSON for a script, and nothing else.'] as const;
+/** Where `siren --help` sends a person for more. */
+const GUIDE_URL = 'https://github.com/Novatorius/siren-node#command-line-tool';
+
+const APP_FILE_FLAG = ['--app-file <path>', 'The app file beside the env file, if apply saved none'] as const;
+const YES_FLAG = ['--yes', 'Skip the question. Needed with no terminal'] as const;
+const JSON_FLAG = ['--json', 'Print JSON for a script, and nothing else'] as const;
 
 const SPECS: Record<Command, CommandSpec> = {
   signup: {
-    usage: 'signup [--org-name <name>] [--email <address>] [--password-stdin] [--accept-terms]',
-    summary: 'Make an organization on Siren and sign in to it.',
-    group: 'Your session',
+    usage: 'signup [flags]',
+    summary: 'Make an organization on Siren and log in to it.',
+    group: 'Getting started',
+    short: 'Make an organization on Siren',
     options: { 'org-name': { type: 'string' }, email: { type: 'string' }, 'password-stdin': { type: 'boolean' }, 'accept-terms': { type: 'boolean' } },
     flags: {
-      'org-name': ['--org-name <name>', "The new organization's name. Asked when left out."],
-      email: ['--email <address>', 'Your email address. Asked when left out.'],
-      'password-stdin': ['--password-stdin', 'Read the password from standard input, for scripts.'],
-      'accept-terms': ['--accept-terms', "Accept Siren's Terms of Service and Privacy Policy without being asked."],
+      'org-name': ['--org-name <name>', "The new organization's name, asked when left out"],
+      email: ['--email <address>', 'Your email address, asked when left out'],
+      'password-stdin': ['--password-stdin', 'Read the password from standard input'],
+      'accept-terms': ['--accept-terms', "Accept Siren's Terms of Service and Privacy Policy"],
     },
-    example: 'siren signup --org-name "Acme" --email dev@acme.example',
+    examples: ['siren signup', 'siren signup --org-name "Acme" --email dev@acme.example'],
     positionals: [0, 0],
     run: session.signup,
   },
   login: {
-    usage: 'login [--email <address>] [--org <slug or id>] [--password-stdin]',
-    summary: 'Sign in, and use this Siren for the commands after it.',
-    group: 'Your session',
+    usage: 'login [flags]',
+    summary: 'Log in, and use this Siren for the commands after it.',
+    group: 'Getting started',
+    short: 'Log in to Siren',
     options: { email: { type: 'string' }, org: { type: 'string' }, 'password-stdin': { type: 'boolean' } },
     flags: {
-      email: ['--email <address>', 'The email you sign in with. Asked when left out.'],
-      org: ['--org <slug or id>', 'The organization to use, when you belong to several. Asked when left out.'],
-      'password-stdin': ['--password-stdin', 'Read the password from standard input, for scripts.'],
+      email: ['--email <address>', 'The email you log in with, asked when left out'],
+      org: ['--org <slug or id>', 'The organization to use, asked when you have several'],
+      'password-stdin': ['--password-stdin', 'Read the password from standard input'],
     },
-    example: 'siren login --email dev@acme.example',
+    examples: ['siren login', 'siren login --live'],
     positionals: [0, 0],
     run: session.login,
   },
   logout: {
     usage: 'logout',
-    summary: 'Sign out, and forget the session on this machine.',
-    group: 'Your session',
+    summary: 'Log out, and forget the session on this machine.',
+    group: 'Account',
+    short: 'Log out, and forget the session here',
     options: {},
     flags: {},
-    example: 'siren logout',
+    examples: ['siren logout'],
     positionals: [0, 0],
     run: session.logout,
   },
   whoami: {
-    usage: 'whoami [--json]',
-    summary: 'Show who you are signed in as, in which organization, on which Siren. Sends nothing.',
-    group: 'Your session',
+    usage: 'whoami [flags]',
+    summary: 'Show who you are logged in as, in which organization, on which Siren. Sends nothing.',
+    group: 'Account',
+    short: 'Show who you are logged in as',
     options: { json: { type: 'boolean' } },
     flags: { json: JSON_FLAG },
-    example: 'siren whoami',
+    examples: ['siren whoami', 'siren whoami --json'],
     positionals: [0, 0],
     readsOnly: true,
     run: session.whoami,
@@ -147,10 +163,11 @@ const SPECS: Record<Command, CommandSpec> = {
   orgs: {
     usage: 'orgs',
     summary: 'List your organizations, * on the one in use.',
-    group: 'Your session',
+    group: 'Account',
+    short: 'List your organizations',
     options: {},
     flags: {},
-    example: 'siren orgs',
+    examples: ['siren orgs'],
     positionals: [0, 0],
     readsOnly: true,
     run: session.orgs,
@@ -158,71 +175,77 @@ const SPECS: Record<Command, CommandSpec> = {
   use: {
     usage: 'use <slug or id>',
     summary: 'Switch to another of your organizations.',
-    group: 'Your session',
+    group: 'Account',
+    short: 'Switch to another organization',
     options: {},
     flags: {},
-    example: 'siren use acme-two',
+    examples: ['siren use acme-two'],
     positionals: [1, 1],
     readsOnly: true,
     run: session.use,
   },
   'apps init': {
-    usage: 'apps init [--key <app key>] [--name <name>]',
+    usage: 'apps init [flags]',
     summary: 'Write siren.app.json here, and keep the env files apply writes out of git.',
-    group: 'Your apps',
+    group: 'Getting started',
+    short: 'Write siren.app.json in this folder',
     options: { key: { type: 'string' }, name: { type: 'string' } },
     flags: {
-      key: ['--key <app key>', "The app's key, lowercase words joined by dashes. Defaults to this folder's name."],
-      name: ['--name <name>', 'The name the dashboard shows. Defaults to the key.'],
+      key: ['--key <app key>', "The app's key, such as acme-payouts. Default: the folder"],
+      name: ['--name <name>', 'The name the dashboard shows. Default: the key'],
     },
-    example: 'siren apps init --key acme-payouts --name "Acme payouts"',
+    examples: ['siren apps init', 'siren apps init --key acme-payouts --name "Acme payouts"'],
     positionals: [0, 0],
     offline: true,
     run: apply.appsInit,
   },
   'apps apply': {
-    usage: 'apps apply [file] [--yes]',
+    usage: 'apps apply [file] [flags]',
     summary: 'Show what siren.app.json changes, ask, then declare the app and save its key beside the file.',
-    group: 'Your apps',
+    group: 'Getting started',
+    short: 'Declare the app on Siren and save its key',
     options: { yes: { type: 'boolean' } },
     flags: { yes: YES_FLAG },
-    example: 'siren apps apply',
+    examples: ['siren apps apply', 'siren apps apply --live --yes'],
     positionals: [0, 1],
     run: apply.appsApply,
   },
   'apps list': {
-    usage: 'apps list [--json]',
+    usage: 'apps list [flags]',
     summary: 'List the apps and their features.',
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'List the apps',
     options: { json: { type: 'boolean' } },
     flags: { json: JSON_FLAG },
-    example: 'siren apps list',
+    examples: ['siren apps list', 'siren apps list --json'],
     positionals: [0, 0],
     readsOnly: true,
     run: apply.appsList,
   },
   'apps show': {
-    usage: 'apps show <key> [--json]',
+    usage: 'apps show <key> [flags]',
     summary: 'Show one app and its features.',
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'Show one app and its features',
     options: { json: { type: 'boolean' } },
     flags: { json: JSON_FLAG },
-    example: 'siren apps show acme-payouts',
+    examples: ['siren apps show acme-payouts'],
     positionals: [1, 1],
     readsOnly: true,
     run: apply.appsShow,
   },
   'apps requests': {
-    usage: 'apps requests [<request id>] [--app <key>] [--attention] [--follow]',
+    usage: 'apps requests [<request id>] [flags]',
     summary: 'List what Siren sent the apps, or show one request with each send and answer.',
     group: 'Requests',
+    short: 'List what Siren sent, or show one request',
     options: { app: { type: 'string' }, attention: { type: 'boolean' }, follow: { type: 'boolean' } },
     flags: {
-      app: ['--app <key>', "Only this app's requests."],
-      attention: ['--attention', 'Only requests that need a person.'],
-      follow: ['--follow', 'Keep watching, and print each request as it changes. Ctrl-C stops.'],
+      app: ['--app <key>', "Only this app's requests"],
+      attention: ['--attention', 'Only requests that need a person'],
+      follow: ['--follow', 'Keep watching, and print each change. Ctrl-C stops'],
     },
-    example: 'siren apps requests --follow',
+    examples: ['siren apps requests --follow', 'siren apps requests --app acme-payouts --attention'],
     positionals: [0, 1],
     readsOnly: true,
     run: requests.appsRequests,
@@ -231,12 +254,13 @@ const SPECS: Record<Command, CommandSpec> = {
     usage: 'apps answer <request id> (--body <json> | --file <path>)',
     summary: 'Answer an ask by hand, as a signed-in admin.',
     group: 'Requests',
+    short: 'Answer an ask by hand',
     options: { body: { type: 'string' }, file: { type: 'string' } },
     flags: {
-      body: ['--body <json>', 'The answer, as JSON with a text outcome.'],
-      file: ['--file <path>', 'A file that holds the answer as JSON.'],
+      body: ['--body <json>', 'The answer, as JSON with a text outcome'],
+      file: ['--file <path>', 'A file that holds the answer as JSON'],
     },
-    example: 'siren apps answer apr_0123456789abcdef0123456789abcdef --body \'{"outcome":"paid"}\'',
+    examples: ['siren apps answer apr_0123456789abcdef0123456789abcdef --file answer.json'],
     positionals: [1, 1],
     run: requests.appsAnswer,
   },
@@ -244,69 +268,76 @@ const SPECS: Record<Command, CommandSpec> = {
     usage: 'apps resend <request id>',
     summary: 'Send a request again.',
     group: 'Requests',
+    short: 'Send a request again',
     options: {},
     flags: {},
-    example: 'siren apps resend apr_0123456789abcdef0123456789abcdef',
+    examples: ['siren apps resend apr_0123456789abcdef0123456789abcdef'],
     positionals: [1, 1],
     run: requests.appsResend,
   },
   'apps rotate-key': {
-    usage: 'apps rotate-key <key> [--app-file <path>] [--yes]',
+    usage: 'apps rotate-key <key> [flags]',
     summary: 'Give the app a new key, revoke the old one, and save it where apply saved the first.',
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'Replace the app\'s key and revoke the old one',
     options: { 'app-file': { type: 'string' }, yes: { type: 'boolean' } },
     flags: { 'app-file': APP_FILE_FLAG, yes: YES_FLAG },
-    example: 'siren apps rotate-key acme-payouts',
+    examples: ['siren apps rotate-key acme-payouts'],
     positionals: [1, 1],
     run: apply.appsRotateKey,
   },
   'apps rotate-secret': {
-    usage: 'apps rotate-secret <key> [--app-file <path>] [--yes]',
+    usage: 'apps rotate-secret <key> [flags]',
     summary: "Give the app's address a new signing secret, and save it where apply saved the first.",
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'Replace the address\'s signing secret',
     options: { 'app-file': { type: 'string' }, yes: { type: 'boolean' } },
     flags: { 'app-file': APP_FILE_FLAG, yes: YES_FLAG },
-    example: 'siren apps rotate-secret acme-payouts',
+    examples: ['siren apps rotate-secret acme-payouts'],
     positionals: [1, 1],
     run: apply.appsRotateSecret,
   },
   'apps add-key': {
-    usage: 'apps add-key <key> [--app-file <path>]',
+    usage: 'apps add-key <key> [flags]',
     summary: 'Make a key for an app that holds none, and save it where apply saved the first.',
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'Make a key for an app that has none',
     options: { 'app-file': { type: 'string' } },
     flags: { 'app-file': APP_FILE_FLAG },
-    example: 'siren apps add-key acme-payouts --app-file ./siren.app.json',
+    examples: ['siren apps add-key acme-payouts'],
     positionals: [1, 1],
     run: apply.appsAddKey,
   },
   'apps on': {
     usage: 'apps on <key>',
     summary: 'Turn the app on.',
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'Turn the app on',
     options: {},
     flags: {},
-    example: 'siren apps on acme-payouts',
+    examples: ['siren apps on acme-payouts'],
     positionals: [1, 1],
     run: apply.appsOn,
   },
   'apps off': {
     usage: 'apps off <key>',
     summary: 'Turn the app off. Siren stops calling it.',
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'Turn the app off',
     options: {},
     flags: {},
-    example: 'siren apps off acme-payouts',
+    examples: ['siren apps off acme-payouts'],
     positionals: [1, 1],
     run: apply.appsOff,
   },
   'apps delete': {
     usage: 'apps delete <key> --yes',
     summary: 'Delete the app and revoke its key. It cannot be undone.',
-    group: 'Your apps',
+    group: 'Apps',
+    short: 'Delete the app and revoke its key',
     options: { yes: { type: 'boolean' } },
     flags: { yes: ['--yes', 'Say you mean it. The command refuses without it.'] },
-    example: 'siren apps delete acme-payouts --yes',
+    examples: ['siren apps delete acme-payouts --yes'],
     positionals: [1, 1],
     run: apply.appsDelete,
   },
@@ -315,58 +346,111 @@ const SPECS: Record<Command, CommandSpec> = {
 /** Every option any command takes, for the first read of the line, which finds the command. */
 const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, ...Object.values(SPECS).map((spec) => spec.options));
 
-/** The commands of one group, each with its usage and summary, as the top help lists them. */
-function listing(commands: readonly Command[]): string[] {
+/** The widest a help line may be, so nothing wraps in an 80-column terminal. */
+const HELP_WIDTH = 80;
+
+/** `text` broken into lines of at most `width` characters, at spaces. */
+function wrap(text: string, width: number): string[] {
   const lines: string[] = [];
-  for (const group of ['Your session', 'Your apps', 'Requests'] as const) {
-    const members = commands.filter((command) => SPECS[command].group === group);
-    if (members.length === 0) continue;
-    lines.push(`${group}:`, ...members.map((command) => `  siren ${SPECS[command].usage}\n      ${SPECS[command].summary}`), '');
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line !== '' && line.length + 1 + word.length > width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line === '' ? word : `${line} ${word}`;
+    }
   }
-  return lines;
+  return [...lines, line];
 }
 
-/** The text `siren --help` prints. */
-function helpText(): string {
+/**
+ * Two aligned columns under a heading, as gh prints them: the left one
+ * padded to `column`, styled by `name`, and the right one wrapped beneath
+ * itself so no line passes {@link HELP_WIDTH}.
+ */
+function columns(rows: ReadonlyArray<readonly [string, string]>, column: number, name: (text: string) => string): string[] {
+  const at = Math.max(column, ...rows.map(([left]) => left.length + 4));
+  return rows.flatMap(([left, right]) => {
+    const [first = '', ...rest] = wrap(right, HELP_WIDTH - at);
+    return [`  ${name(left)}${' '.repeat(at - 2 - left.length)}${first}`, ...rest.map((line) => `${' '.repeat(at)}${line}`)];
+  });
+}
+
+/** A help section: its heading in capitals, bold in a terminal, then its lines and a blank line. */
+function section(style: Style, heading: string, lines: readonly string[]): string[] {
+  return [style.bold(heading.toUpperCase()), ...lines, ''];
+}
+
+/** The commands of `group` that `commands` holds, one aligned line each. */
+function commandRows(style: Style, commands: readonly Command[]): string[] {
+  return columns(
+    commands.map((command) => [command, SPECS[command].short] as const),
+    22,
+    (text) => style.bold(text),
+  );
+}
+
+/** The lines of LEARN MORE. */
+function learnMore(style: Style, perCommand: boolean): string[] {
   return [
-    'Usage: siren <command> [options]',
+    ...(perCommand ? [`  Run ${style.command('siren <command> --help')} for a command's flags and examples.`] : []),
+    `  Read the guide at ${GUIDE_URL}`,
+  ];
+}
+
+/** The text `siren --help` prints, modeled on gh's help. */
+function helpText(style: Style): string {
+  return [
+    'Declare Siren apps, and watch and answer what Siren sends them.',
     '',
-    ...listing(COMMANDS),
-    'Every command takes --sandbox, --live, --base-url <url>, --quiet and --help.',
-    'With none of them it talks to SIREN_BASE_URL, else the Siren you signed in to, else the sandbox.',
-    'Changing a live organization needs --live. Run siren help <command> for its options and an example.',
-    "Siren's logo animation plays the first time you run the tool. --quiet, NO_COLOR or CI skips it.",
-    '',
+    ...section(style, 'Usage', ['  siren <command> [flags]']),
+    ...GROUPS.flatMap((group) => section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group)))),
+    ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text)),
+    ...section(
+      style,
+      'Environment',
+      columns(
+        [
+          ['SIREN_BASE_URL', 'The Siren to use when no flag names one'],
+          ['SIREN_DEBUG=1', 'The same as --verbose'],
+          ['NO_COLOR, CI', 'Plain output, and no logo animation'],
+        ],
+        22,
+        (text) => text,
+      ),
+    ),
+    ...section(style, 'Examples', ['  $ siren login', '  $ siren apps init', '  $ siren apps apply']),
+    ...section(style, 'Learn more', learnMore(style, true)),
   ].join('\n');
 }
 
-/** The text `siren apps` prints: the apps and requests commands. */
-function appsHelpText(): string {
-  return ['Usage: siren apps <command> [options]', '', ...listing(COMMANDS.filter((command) => command.startsWith('apps '))), 'Run siren help apps <command> for its options and an example.', ''].join('\n');
+/** The text `siren apps` prints: the app and request commands, in the same shape. */
+function appsHelpText(style: Style): string {
+  const apps = COMMANDS.filter((command) => command.startsWith('apps ') && SPECS[command].group !== 'Requests');
+  const requests = COMMANDS.filter((command) => SPECS[command].group === 'Requests');
+  return [
+    'Declare an app, change it, and watch and answer what Siren sends it.',
+    '',
+    ...section(style, 'Usage', ['  siren apps <command> [flags]']),
+    ...section(style, 'Apps', commandRows(style, apps)),
+    ...section(style, 'Requests', commandRows(style, requests)),
+    ...section(style, 'Learn more', learnMore(style, true)),
+  ].join('\n');
 }
 
-/** The text `siren <command> --help` prints: usage, what it does, each option, the shared ones, and an example. */
-function commandHelp(spec: CommandSpec): string {
+/** The text `siren <command> --help` prints: the same shape, with its own flags and examples. */
+function commandHelp(style: Style, spec: CommandSpec): string {
   const own = Object.values(spec.flags);
-  const width = Math.max(...[...own, ...GLOBAL_FLAGS].map(([flag]) => flag.length)) + 2;
-  const row = ([flag, about]: readonly [string, string]) => `  ${flag.padEnd(width)}${about}`;
   return [
-    `Usage: siren ${spec.usage}`,
-    spec.summary,
+    ...wrap(spec.summary, HELP_WIDTH),
     '',
-    ...(own.length > 0 ? ['Options:', ...own.map(row), ''] : []),
-    'Every command also takes:',
-    ...GLOBAL_FLAGS.map(row),
-    '',
-    'Example:',
-    `  ${spec.example}`,
-    '',
+    ...section(style, 'Usage', [`  siren ${spec.usage}`]),
+    ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text)) : []),
+    ...section(style, 'Global flags', columns(GLOBAL_FLAGS, 22, (text) => text)),
+    ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
+    ...section(style, 'Learn more', learnMore(style, false)),
   ].join('\n');
-}
-
-/** A Siren's address without `https://`, and without `/siren/v1` when it ends there, for a line a person reads. */
-function shortAddress(baseUrl: string): string {
-  return baseUrl.replace(/^https:\/\//, '').replace(/\/siren\/v1$/, '');
 }
 
 /** What `siren` alone shows beside the logo: where you stand, and the three commands that come next. */
@@ -424,7 +508,7 @@ function commandNamed(words: readonly string[]): Command {
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
   const guesses = started.length > 0 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
-  throw new CliUsageError(`There is no command "${name}".${guesses.length === 0 ? '' : ` Did you mean ${guesses.map((guess) => `"${guess}"`).join(' or ')}?`}`);
+  throw new CliUsageError(`There is no command "${name}".`, guesses);
 }
 
 /**
@@ -466,7 +550,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
         return 0;
       }
       if (wantsHelp) {
-        io.stdout(helpText());
+        io.stdout(helpText(styleFor(io, 'stdout', {})));
         return 0;
       }
       const flags = targetFlags(values);
@@ -474,14 +558,14 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       return await welcome(io, hookFlags(values), await statusCard(io, target));
     }
     if (words[0] === 'apps' && words.length === 1) {
-      io.stdout(appsHelpText());
+      io.stdout(appsHelpText(styleFor(io, 'stdout', {})));
       return 0;
     }
 
     name = commandNamed(words);
     spec = SPECS[name];
     if (wantsHelp) {
-      io.stdout(commandHelp(spec));
+      io.stdout(commandHelp(styleFor(io, 'stdout', {}), spec));
       return 0;
     }
 
@@ -502,13 +586,36 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     if (!(await firstRun(io, hookFlags(values), CLI_VERSION))) return 130;
     return await spec.run({ context, io, values: values as Record<string, string | boolean | undefined>, args, command });
   } catch (error) {
+    const style = styleFor(io, 'stderr', { json: argv.includes('--json') });
     if (error instanceof CliUsageError) {
-      io.stderr(`siren: ${error.message}\n${spec === undefined ? 'Run siren --help to see the commands.' : `Usage: siren ${spec.usage}`}\n`);
+      const usage = spec === undefined ? 'Run siren --help to see the commands.' : `Usage: siren ${spec.usage}`;
+      const guess =
+        error.guesses.length === 0
+          ? []
+          : [`  ${style.next(`Did you mean ${error.guesses.map((one) => style.command(one.startsWith('-') ? one : `siren ${one}`)).join(' or ')}?`)}`];
+      io.stderr(style.rich ? `${[style.failure(error.headline), ...guess, `  ${style.dim(usage)}`].join('\n')}\n` : `siren: ${error.message}\n${usage}\n`);
       return 2;
     }
-    io.stderr(`siren: ${(error instanceof Error ? error.message : String(error)).replace(/^Siren: /, '')}\n`);
+    const verbose = argv.includes('--verbose') || io.env.SIREN_DEBUG === '1';
+    io.stderr(style.error(asRefusal(error), verbose));
     return 1;
   }
+}
+
+/**
+ * Any error as a refusal the style module prints: a `CliRefusal` as it is,
+ * an error from Siren with its message as the headline and its status and
+ * code as detail, and anything else by its message.
+ */
+function asRefusal(error: unknown): CliRefusal {
+  if (error instanceof CliRefusal) return error;
+  const message = (error instanceof Error ? error.message : String(error)).replace(/^Siren: /, '');
+  if (!(error instanceof SirenError)) return new CliRefusal(message);
+  const detail = [
+    ...(error.statusCode === undefined ? [] : [`HTTP status: ${error.statusCode}`]),
+    ...(error.code === undefined ? [] : [`Error code: ${error.code}`]),
+  ];
+  return new CliRefusal(message, { detail });
 }
 
 /** The flags that choose a Siren, from a strict read. */
@@ -542,7 +649,7 @@ function read(argv: readonly string[], options: Options, line: string, spec?: Co
       const typed = unknown[1]!;
       const names = Object.keys(options).filter((option) => option !== 'version' || spec === undefined).map((option) => `--${option}`);
       const guess = typed.startsWith('--') ? nearest(typed, names) : undefined;
-      throw new CliUsageError(`There is no option ${typed} for ${line}.${guess === undefined ? '' : ` Did you mean ${guess}?`}`);
+      throw new CliUsageError(`There is no option ${typed} for ${line}.`, guess === undefined ? [] : [guess], false);
     }
     const missing = /^Option '(?:-\w, )?(--[\w-]+) <value>' argument missing/.exec(message);
     if (missing) throw new CliUsageError(`${missing[1]} needs a value.`);

@@ -117,11 +117,18 @@ export interface LogoFrame {
   shadow: number;
 }
 
-/** The slide and grip, then the hover. The last is the still logo at rest over its shadow. */
+/**
+ * The slide and grip, then the hover. The last is the still logo at rest
+ * with no shadow, since a shadow left under a still logo reads as a stray
+ * line above whatever prints next.
+ */
 export function hookSequence(): LogoFrame[] {
   const last = HOOK_FRAMES[HOOK_FRAMES.length - 1] ?? [];
   const slide = HOOK_FRAMES.map((frame) => ({ rows: liftFrame(frame, 0), shadow: 0 }));
-  const hover = HOOK_HOVER_LIFTS.map((lift) => ({ rows: liftFrame(last, lift), shadow: shadowWidth(lift) }));
+  const hover = HOOK_HOVER_LIFTS.map((lift, at) => ({
+    rows: liftFrame(last, lift),
+    shadow: at === HOOK_HOVER_LIFTS.length - 1 ? 0 : shadowWidth(lift),
+  }));
   return [...slide, ...hover];
 }
 

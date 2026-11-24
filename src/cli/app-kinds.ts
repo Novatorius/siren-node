@@ -29,6 +29,11 @@ export const APP_KINDS: readonly AppKindEntry[] = snapshot as AppKindEntry[];
 
 const NAMES: ReadonlyMap<string, string> = new Map(APP_KINDS.map((entry) => [entry.kind, entry.name]));
 
+/** A kind's readable name alone, such as "Post-conversion action", or the kind itself when Siren names none. */
+export function kindName(kind: string): string {
+  return NAMES.get(kind) ?? kind;
+}
+
 /**
  * `Attribution model (incentiveResolver)`, or the kind alone when Siren's
  * registry names no such kind, since the tool never invents a name.

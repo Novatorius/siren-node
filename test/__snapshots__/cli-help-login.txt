@@ -1,0 +1,24 @@
+Log in, and use this Siren for the commands after it.
+
+USAGE
+  siren login [flags]
+
+FLAGS
+  --email <address>   The email you log in with, asked when left out
+  --org <slug or id>  The organization to use, asked when you have several
+  --password-stdin    Read the password from standard input
+
+GLOBAL FLAGS
+  --sandbox           Use Siren's sandbox, whatever you logged in to last
+  --live              Log in to or change a live organization
+  --base-url <url>    Use another Siren, such as siren.example.com
+  -q, --quiet         Skip the logo animation
+  --verbose           Show the detail behind an error
+  -h, --help          Show help for a command
+
+EXAMPLES
+  $ siren login
+  $ siren login --live
+
+LEARN MORE
+  Read the guide at https://github.com/Novatorius/siren-node#command-line-tool

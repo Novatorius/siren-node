@@ -39,14 +39,16 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     const h = harness([AuthAnswers.oneOrg()], { edition: 'production', stdin: PASSWORD });
     await signInLive(h);
     expect(await h.run(['orgs', '--sandbox'])).toBe(1);
-    expect(h.err()).toContain(`You are not signed in to ${SANDBOX_BASE_URL}`);
-    expect(h.err()).toContain(`You are signed in to Acme on ${UAT}`);
+    // Alex after the demo: "Not logged in." in plain words, the API address only where it helps.
+    expect(h.err()).toContain('siren: Not logged in.');
+    expect(h.err()).toContain(`You are logged in to Acme on ${UAT}.`);
     expect(h.err()).toContain(`--base-url ${UAT}`);
 
     const other = harness([], { env: { SIREN_BASE_URL: 'https://other.example.com/siren/v1' } });
     other.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
     expect(await other.run(['whoami'])).toBe(1);
-    expect(other.err()).toContain('You are not signed in to https://other.example.com/siren/v1');
+    expect(other.err()).toContain('siren: Not logged in.');
+    expect(other.err()).toContain('\nSiren: other.example.com\n');
   });
 
   it('reads a live organization without --live, and still asks for --live before a write', async () => {
@@ -85,7 +87,7 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
   it('siren whoami exits 1 when signed out', async () => {
     const h = harness([]);
     expect(await h.run(['whoami'])).toBe(1);
-    expect(h.err()).toContain(`You are not signed in to ${SANDBOX_BASE_URL}. Run siren login first.`);
+    expect(h.err()).toBe('siren: Not logged in. Run siren login to log in.\n');
   });
 });
 
@@ -115,19 +117,19 @@ describe('cli pass 1, finding 3: bare siren, the apps group, help and typos', ()
     for (const argv of [['apps'], ['apps', '--help'], ['help', 'apps']]) {
       const h = harness([]);
       expect(await h.run(argv), argv.join(' ')).toBe(0);
-      expect(h.out()).toContain('siren apps apply');
-      expect(h.out()).toContain('siren apps requests');
-      expect(h.out()).not.toContain('siren login');
+      expect(h.out()).toContain('  apps apply ');
+      expect(h.out()).toContain('  apps requests ');
+      expect(h.out()).not.toContain('  login ');
     }
   });
 
   it('takes siren help, siren help <command>, siren version and -v', async () => {
     const help = harness([]);
     expect(await help.run(['help'])).toBe(0);
-    expect(help.out()).toContain('Usage: siren <command>');
+    expect(help.out()).toContain('USAGE\n  siren <command> [flags]');
     const one = harness([]);
     expect(await one.run(['help', 'apps', 'apply'])).toBe(0);
-    expect(one.out()).toContain('Usage: siren apps apply');
+    expect(one.out()).toContain('USAGE\n  siren apps apply [file] [flags]');
     for (const argv of [['-v'], ['version']]) {
       const h = harness([]);
       expect(await h.run(argv)).toBe(0);
@@ -161,8 +163,8 @@ describe('cli pass 1, finding 7: each command explains its options and shows an 
       const h = harness([]);
       expect(await h.run([...command.split(' '), '--help']), command).toBe(0);
       const text = h.out();
-      expect(text, command).toContain(`Usage: siren ${command}`);
-      expect(text, command).toContain('Example:');
+      expect(text, command).toContain(`USAGE\n  siren ${command}`);
+      expect(text, command).toContain('EXAMPLES\n  $ siren ');
       for (const flag of ['--sandbox', '--live', '--base-url', '--quiet']) expect(text, `${command} ${flag}`).toContain(flag);
     }
     const login = harness([]);
@@ -180,7 +182,7 @@ describe('cli pass 1, finding 8: apps rotate is gone', () => {
     expect(h.err()).toContain('There is no command "apps rotate".');
     const help = harness([]);
     await help.run(['--help']);
-    expect(help.out()).not.toMatch(/siren apps rotate[ \n]/);
+    expect(help.out()).not.toMatch(/apps rotate[ \n]/);
   });
 });
 
@@ -206,7 +208,7 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     expect(features.map((feature) => feature.kind)).toEqual(['postConversionAction']);
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);
     expect(h.out()).toContain('.env');
-    expect(h.out()).toContain('Feature kinds');
+    expect(h.out()).toContain('Your editor completes them.');
     expect(h.out()).toMatch(/tunnel/);
   });
 

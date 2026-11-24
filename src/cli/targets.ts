@@ -189,16 +189,49 @@ export function assertEditionAllowed(target: Target, edition: Edition, action = 
 
 /** A command line the tool cannot run. `runCli` prints the message and the usage line and answers exit code 2. */
 export class CliUsageError extends Error {
-  constructor(message: string) {
-    super(message);
+  /** The message without its guess, for the styled form, which shows the guess on its own line. */
+  readonly headline: string;
+  /** What the person likely meant, such as `siren apps apply` or `--email`. */
+  readonly guesses: readonly string[];
+
+  /** `message` alone, or a headline and guesses, which the plain form joins as "<headline> Did you mean "<guess>"?". */
+  constructor(message: string, guesses: readonly string[] = [], quoted = true) {
+    const mark = (guess: string) => (quoted ? `"${guess}"` : guess);
+    super(guesses.length === 0 ? message : `${message} Did you mean ${guesses.map(mark).join(' or ')}?`);
     this.name = 'CliUsageError';
+    this.headline = message;
+    this.guesses = guesses;
   }
 }
 
-/** A command the tool refuses or that Siren refused. `runCli` prints the message and answers exit code 1. */
+/**
+ * The parts of a refusal beyond its headline (Alex's ruling M108): why it
+ * happened, the command that fixes it with the words after it, a dim note
+ * that always shows, and detail that shows only with --verbose.
+ */
+export interface RefusalParts {
+  why?: string;
+  /** A command to run, such as `siren login`, printed as "Run siren login <fixWords>." */
+  fix?: string;
+  fixWords?: string;
+  note?: string;
+  detail?: readonly string[];
+}
+
+/**
+ * A command the tool refuses or that Siren refused. `runCli` prints it
+ * through the style module and answers exit code 1. `message` is the plain
+ * one-line form: the headline, the why, and "Run <fix> <fixWords>."
+ */
 export class CliRefusal extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly headline: string;
+  readonly parts: RefusalParts;
+
+  constructor(headline: string, parts: RefusalParts = {}) {
+    const fix = parts.fix === undefined ? [] : [`Run ${parts.fix}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`];
+    super([headline, ...(parts.why === undefined ? [] : [parts.why]), ...fix].join(' '));
     this.name = 'CliRefusal';
+    this.headline = headline;
+    this.parts = parts;
   }
 }

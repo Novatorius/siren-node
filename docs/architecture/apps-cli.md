@@ -272,12 +272,41 @@ When the reader of the tool's output goes away, as `siren apps list | head` does
 Node reports EPIPE on standard output. The bin entry ends the command with exit code 0 there and
 prints nothing, as gh and git do (src/cli/pipe.ts). Any other stream error still ends the process.
 
+## How the tool prints
+
+Every line the tool prints goes through one module, src/cli/style.ts (Alex's ruling M108, "I would
+expect much cleaner error messages and more styled responses. across the board on this."). No
+command writes its own escape codes.
+
+- Siren green (#00FFB9, or color 49 of 256) marks success and the wordmark. Red marks an error,
+  amber a warning, and dim the detail around it. Bold marks the one thing a line is about, and a
+  command a person can run.
+- ✓ means done, ✗ failed, ! a warning and › a next step or a tip.
+- A command's success output has one shape, which `siren apps init` set: a ✓ headline with the
+  thing in bold, a short block of dim labels and their values, a numbered Next with the commands
+  in bold, and one or two dim tips. A file in the working folder is named, not given as a path.
+- An error is three parts at most: a ✗ headline, the why under it, and the fix as a command to run.
+  `--verbose` or `SIREN_DEBUG=1` adds the detail under it, dim, such as the HTTP status and the
+  error code. With no session, every command says "Not logged in. Run siren login to log in.", and
+  names the Siren on a dim line only when it is not the default sandbox or live one.
+- Long work shows a spinner that turns into one ✓ or ✗ line.
+- Help follows gh's: a one-line description, USAGE, the commands under Getting started, Apps,
+  Requests and Account with one aligned line each, FLAGS, ENVIRONMENT, EXAMPLES and LEARN MORE.
+  `siren <command> --help` has the same shape with its own flags and one or two examples. No help
+  line passes 80 columns.
+
+Output is plain when the stream is not a terminal, under `NO_COLOR` (any value but empty), when
+`TERM` is `dumb`, under `CI`, and with `--json`. Plain output carries no symbol and no escape code.
+It keeps the same layout, and an error keeps its old one-line form, `siren: ` and the headline,
+why and fix in one sentence. `--json` output is never styled. Exit codes do not change.
+
 ## The hook on first run
 
 The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts). The
 two halves of the logo slide in and grip, 39 frames 50 milliseconds apart, about 1.9 seconds. Then
 the logo floats: it lifts up to one braille row (4 dots) into a blank row above it and settles,
-over a dim shadow that narrows as it rises, 20 frames more. The whole run takes 2.95 seconds.
+over a dim shadow that narrows as it rises, 20 frames more. The shadow goes when the logo
+settles, so no stray line sits above the next output. The whole run takes 2.95 seconds.
 
 The text never waits for the logo. Every line is printed with the first frame, and each later frame
 redraws only the logo's columns in place. In a terminal wide enough for the logo and the longest
