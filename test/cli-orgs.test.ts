@@ -5,7 +5,7 @@ import { SANDBOX_BASE_URL } from '../src/http';
 import { COMMANDS } from '../src/cli/run';
 import { parseAppFile } from '../src/cli/app-file';
 import { APP_KEY, appRecord } from './apps-siren-answers';
-import { ACCESS_1, ACCESS_2, AuthAnswers, EMAIL, PASSWORD, REFRESH_2, harness, membershipAcme, membershipTwo, session } from './cli-fakes';
+import { ACCESS_1, ACCESS_2, AuthAnswers, EMAIL, PASSWORD, REFRESH_1, REFRESH_2, harness, membershipAcme, membershipTwo, session } from './cli-fakes';
 import { reply } from './http-fakes';
 
 /*
@@ -50,7 +50,32 @@ describe('orgs: each command picks its organization', () => {
     expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /apps']);
     expect(JSON.parse(h.http.requests[0]!.body!)).toEqual({ orgId: 4 });
     expect(h.http.requests[1]!.headers.Authorization).toBe(`Bearer ${ACCESS_2}`);
-    expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 4, orgName: 'Acme Two', accessToken: ACCESS_2, memberships: both });
+    // The switched tokens last for this run only, so a command in another folder still starts from the session login kept.
+    expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 3, accessToken: ACCESS_1, memberships: both });
+    expect(h.credentialsText()).not.toContain(ACCESS_2);
+    expect(h.credentialsText()).not.toContain(REFRESH_2);
+  });
+
+  it('refreshes the switched tokens in memory, and never writes them', async () => {
+    const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(401, {}), AuthAnswers.tokens('access-three', 'refresh-three'), reply(200, [appRecord()])]);
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    expect(await h.run(['apps', 'list', '--org', 'acme-two']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /apps', 'POST /auth/refresh', 'GET /apps']);
+    expect(JSON.parse(h.http.requests[2]!.body!)).toEqual({ refreshToken: REFRESH_2 });
+    expect(h.http.requests[3]!.headers.Authorization).toBe('Bearer access-three');
+    expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 3, accessToken: ACCESS_1, refreshToken: REFRESH_1 });
+  });
+
+  it('acts in the session\'s own organization for a session from before this release, and asks Siren for any other', async () => {
+    const own = harness([reply(200, [appRecord()])]);
+    own.signedIn({ [SANDBOX_BASE_URL]: session() });
+    expect(await own.run(['apps', 'list']), own.err()).toBe(0);
+    expect(own.paths()).toEqual(['GET /apps']);
+
+    const other = harness([AuthAnswers.memberships(), AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, [appRecord()])]);
+    other.signedIn({ [SANDBOX_BASE_URL]: session() });
+    expect(await other.run(['apps', 'list', '--org', 'acme-two']), other.err()).toBe(0);
+    expect(other.paths()).toEqual(['GET /auth/memberships', 'POST /auth/switch-org', 'GET /apps']);
   });
 
   it('takes SIREN_ORG next, and sends no switch when the tokens already act there', async () => {
@@ -94,12 +119,12 @@ describe('orgs: each command picks its organization', () => {
     expect(h.sent()).toEqual([]);
   });
 
-  it('refuses an organization the person is not in, with the list', async () => {
-    const h = harness([]);
+  it('asks Siren again before it refuses an organization the login did not list, since the person may have joined it since', async () => {
+    const h = harness([AuthAnswers.memberships()]);
     h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
     expect(await h.run(['apps', 'list', '--org', 'other'])).toBe(1);
     expect(h.err()).toContain('You are not in an organization named other. Yours are acme (Acme) and acme-two (Acme Two).');
-    expect(h.sent()).toEqual([]);
+    expect(h.paths()).toEqual(['GET /auth/memberships']);
   });
 });
 

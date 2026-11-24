@@ -3,9 +3,10 @@ import { Siren } from '../client';
 import { ApiError, ConnectionError, SirenError } from '../errors';
 import { CredentialStore } from './credentials';
 import type { StoredMembership, StoredSession } from './credentials';
-import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { APP_FILE_NAME } from './app-file';
+import { findOrg, membershipsOf, orgFrom, orgWanted, settleOrg } from './org';
+import type { OrgChoice, OrgWanted } from './org';
 import type { CliIo } from './io';
 import { SessionAuthClient } from './session-auth';
 import type { Edition, Membership, PersonalToken, SessionTokens } from './session-auth';
@@ -215,73 +216,69 @@ export class CommandContext {
       });
     }
     if (session === null) throw await notSignedIn(this.store, this.target, this.command('login'));
-    // Which organization is decided before anything is sent, so a refusal sends nothing.
-    const org = pick ? await this.pickOrg(membershipsOf(session)) : undefined;
+    // The organization is settled from the memberships login kept before anything is sent, so a refusal sends nothing.
+    const wanted = pick ? await this.wanted() : undefined;
+    // A session from before login kept memberships knows only its own organization.
+    const kept = orgFrom(membershipsOf(session), wanted);
+    if (pick && kept === 'several') this.orgChoice = await settleOrg(this.io, membershipsOf(session), undefined, this.command('orgs'));
+    else if (pick && typeof kept === 'object') this.orgChoice = kept;
     const edition = await this.targetEdition();
     assertSessionMatches(this.target, session, edition);
     if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition);
     this.adopt(session);
-    if (org !== undefined && org.orgId !== session.orgId) return this.switchTo(org);
-    return session;
+    // A name the kept list lacks, which the person may have joined since login: ask Siren.
+    if (pick && this.orgChoice === undefined) this.orgChoice = await settleOrg(this.io, await this.memberships(), wanted, this.command('orgs'));
+    if (this.orgChoice !== undefined && this.orgChoice.org.orgId !== session.orgId) await this.borrow(this.orgChoice.org);
+    return this.current();
   }
 
   /**
-   * What names the organization this command acts in, and where it came
-   * from: --org, then SIREN_ORG, then "org" in the app file. Undefined when
-   * none of them names one.
+   * The organization this run acts in, once {@link signedIn} settled it, and
+   * where its name came from. Undefined before, and for a command that acts
+   * in no organization, such as `orgs`.
    */
-  private async wantedOrg(): Promise<{ value: string; from: string } | undefined> {
-    if (this.orgFlag !== undefined && this.orgFlag !== '') return { value: this.orgFlag, from: '--org' };
-    const env = this.io.env.SIREN_ORG;
-    if (env !== undefined && env !== '') return { value: env, from: 'SIREN_ORG' };
-    const fromFile = await orgInFile(this.appFilePath);
-    return fromFile === undefined ? undefined : { value: fromFile, from: basename(this.appFilePath) };
+  orgChoice: OrgChoice | undefined;
+
+  /** What names the organization for this run: --org, SIREN_ORG, then "org" in the app file. */
+  private wanted(): Promise<OrgWanted | undefined> {
+    return orgWanted(this.orgFlag, this.io.env, { path: this.appFilePath, shown: basename(this.appFilePath) });
   }
 
-  /**
-   * The organization this command acts in, from {@link wantedOrg}, else the
-   * person's only one. With neither it asks in a terminal and refuses
-   * elsewhere, naming each organization. Sends nothing.
-   */
-  async pickOrg(memberships: readonly StoredMembership[]): Promise<StoredMembership> {
-    const wanted = await this.wantedOrg();
-    if (wanted !== undefined) {
-      const found = findOrg(memberships, wanted.value);
-      if (found === undefined) {
-        throw new CliRefusal(`You are not in an organization named ${wanted.value}. Yours are ${orgList(memberships)}.`, {
-          fix: this.command('orgs'),
-          fixWords: 'to list them',
-        });
-      }
-      return found;
-    }
-    if (memberships.length === 1) return memberships[0]!;
-    if (!this.io.interactive) {
-      throw new CliRefusal(
-        `You belong to ${memberships.length} organizations: ${orgList(memberships)}. Pick one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.`,
-      );
-    }
-    return askOrg(this.io, memberships);
+  /** Settles the organization for a session already in use, as {@link signedIn} does. `list` is the command a refusal names. */
+  async chooseOrg(list: string): Promise<OrgChoice> {
+    const session = this.current();
+    const wanted = await this.wanted();
+    const kept = orgFrom(membershipsOf(session), wanted);
+    this.orgChoice = typeof kept === 'object' ? kept : await settleOrg(this.io, kept === 'several' ? membershipsOf(session) : await this.memberships(), wanted, list);
+    return this.orgChoice;
+  }
+
+  /** The person's organizations as Siren lists them now, with `GET /auth/memberships`. */
+  async memberships(): Promise<StoredMembership[]> {
+    const listed = await this.withAccessToken((accessToken) => this.auth.memberships(accessToken));
+    return listed.map(({ orgId, orgName, orgSlug, role }) => ({ orgId, orgName, orgSlug, role }));
   }
 
   /** Refuses a SIREN_TOKEN run when --org, SIREN_ORG or the app file names another organization than the token's. */
   private async checkTokenOrg(session: StoredSession): Promise<void> {
-    const wanted = await this.wantedOrg();
-    if (wanted === undefined) return;
+    const wanted = await this.wanted();
     const own = { orgId: session.orgId, orgName: session.orgName, orgSlug: session.orgSlug ?? '', role: session.role };
-    if (findOrg([own], wanted.value) !== undefined) return;
-    throw new CliRefusal(`SIREN_TOKEN acts in ${session.orgName} (${session.orgSlug ?? session.orgId}), and ${wanted.from} names ${wanted.value}.`, {
+    if (wanted === undefined || findOrg([own], wanted.name) !== undefined) {
+      this.orgChoice = { org: own, source: wanted?.source ?? 'only' };
+      return;
+    }
+    throw new CliRefusal(`SIREN_TOKEN acts in ${session.orgName} (${session.orgSlug ?? session.orgId}), and ${wanted.from} names ${wanted.name}.`, {
       why: 'A personal access token works only in the organization it was made in.',
     });
   }
 
   /**
-   * Moves the session in use to `org` with `POST /auth/switch-org` and saves
-   * the new pair, which acts there. The person's other organizations stay
-   * kept, so a later command can switch again.
+   * Acts in `org` for the rest of this run, on a pair `POST /auth/switch-org`
+   * issues now. The pair and its refreshes stay in memory, so the stored
+   * session keeps its own organization and another folder can act in
+   * another organization at the same time.
    */
-  private async switchTo(org: StoredMembership): Promise<StoredSession> {
-    const session = this.current();
+  private async borrow(org: StoredMembership): Promise<void> {
     let tokens: SessionTokens;
     try {
       tokens = await this.withAccessToken((accessToken) => this.auth.switchOrg(accessToken, org.orgId));
@@ -289,7 +286,7 @@ export class CommandContext {
       const plan = planLine(error instanceof SirenError ? error.code : undefined, this.command('login'));
       throw plan === undefined ? error : new CliRefusal(plan);
     }
-    const moved: StoredSession = {
+    this.session = {
       ...this.current(),
       orgId: org.orgId,
       orgName: org.orgName,
@@ -298,13 +295,12 @@ export class CommandContext {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       accessExpiresAt: this.expiryOf(tokens.accessToken),
-      memberships: membershipsOf(session),
     };
-    this.session = moved;
-    await this.store.put(this.target.baseUrl, moved);
-    return moved;
+    this.borrowed = true;
   }
 
+  /** True once {@link borrow} put this run in another organization than the stored session's. */
+  private borrowed = false;
 
   /**
    * The SIREN_TOKEN path of {@link signedIn}: the edition read and the
@@ -402,7 +398,8 @@ export class CommandContext {
       throw refreshRefusal(error, this.command('login'));
     }
     this.session = { ...session, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, accessExpiresAt: this.expiryOf(tokens.accessToken) };
-    await this.store.put(this.target.baseUrl, this.session);
+    // A pair borrowed for another organization lives in memory only.
+    if (!this.borrowed) await this.store.put(this.target.baseUrl, this.session);
     return tokens.accessToken;
   }
 
@@ -517,40 +514,7 @@ function refreshRefusal(error: unknown, login: string): CliRefusal {
   return new CliRefusal(`Your session has ended. Run ${login} to sign in again.`);
 }
 
-/** The person's organizations from a stored session: those kept at login, else the session's own one. */
-export function membershipsOf(session: StoredSession): StoredMembership[] {
-  if (session.memberships !== undefined && session.memberships.length > 0) return [...session.memberships];
-  return [{ orgId: session.orgId, orgName: session.orgName, orgSlug: session.orgSlug ?? '', role: session.role }];
-}
 
-/** The membership whose slug or id is `wanted`. */
-export function findOrg<T extends { orgId: number; orgSlug: string }>(memberships: readonly T[], wanted: string): T | undefined {
-  return memberships.find((membership) => (membership.orgSlug !== '' && membership.orgSlug === wanted) || String(membership.orgId) === wanted);
-}
 
-/** "acme (Acme) and acme-two (Acme Two)". */
-export function orgList(memberships: readonly StoredMembership[]): string {
-  const names = memberships.map((membership) => `${membership.orgSlug || membership.orgId} (${membership.orgName})`);
-  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-}
 
-/** The "org" an app file names at its top, or undefined when it names none or cannot be read. */
-export async function orgInFile(path: string): Promise<string | undefined> {
-  try {
-    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
-    const org = typeof parsed === 'object' && parsed !== null ? (parsed as { org?: unknown }).org : undefined;
-    return typeof org === 'string' && org !== '' ? org : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
-/** Lists the person's organizations on standard error, asks which one, and answers it, or refuses one they are not in. */
-export async function askOrg(io: CliIo, memberships: readonly StoredMembership[]): Promise<StoredMembership> {
-  io.stderr(`You belong to ${memberships.length} organizations:\n`);
-  for (const membership of memberships) io.stderr(`  ${membership.orgSlug}  ${membership.orgName}\n`);
-  const typed = (await io.prompt('Organization (slug): ')).trim();
-  const chosen = findOrg(memberships, typed);
-  if (chosen === undefined) throw new CliRefusal(`You are not in an organization named ${typed}. Yours are ${orgList(memberships)}.`);
-  return chosen;
-}

@@ -8,7 +8,8 @@ import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types'
 import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
 import { appChanges, droppedLine } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
-import { askOrg, contextOf, findOrg, membershipsOf, orgList } from '../context';
+import { contextOf } from '../context';
+import { askOrg, findOrg, membershipsOf, orgList } from '../org';
 import { styleFor } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError, commandLine } from '../targets';

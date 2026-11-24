@@ -209,7 +209,9 @@ membership, and each command picks its organization in this order: `--org <slug>
 `org` in siren.app.json, then the person's only organization. With none of those it asks in a
 terminal and refuses elsewhere with the list (`CommandContext.wantedOrg` and `pickOrg` in
 src/cli/context.ts). When the chosen organization differs from the one the tokens act in, the tool
-calls `POST /auth/switch-org` and keeps the new tokens, so one session per Siren stays on disk.
+calls `POST /auth/switch-org` and holds the new pair in memory for that run, refreshes included
+(src/cli/org.ts). The stored session never changes, so two folders can act in two organizations
+at once.
 A personal access token acts in the organization it was made in, and the tool refuses when a flag,
 the variable or the file names another. Every question before a write names the organization, as
 `Apply to Acme (acme), live? [y/N]`.

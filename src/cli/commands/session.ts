@@ -1,7 +1,8 @@
 import { SirenError } from '../../errors';
-import { contextOf, findOrg, jwtClaim, orgList, notSignedIn, planLine, tokenFrom, tokenRefusal } from '../context';
+import { contextOf, jwtClaim, notSignedIn, planLine, tokenFrom, tokenRefusal } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
+import { findOrg, orgList } from '../org';
 import { styleFor } from '../style';
 import { loginView } from '../login-view';
 import type { LoginView } from '../login-view';
