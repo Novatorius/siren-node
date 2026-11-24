@@ -53,7 +53,8 @@ secret or the request body.
 | No body bytes it can check, because a parser already turned them into an object | 500 | `onError` gets a `SirenError` that says to mount the handler before the JSON body parser, or to give the route a raw body. The reply carries the same words, which Siren's delivery history shows. |
 | A body past 1 MiB, read by the handler itself | 413 | Nothing. Siren sends far less, since an answer is 16 KB and a question holds at most 500 metrics. |
 | `X-Siren-Signature-V2` missing or wrong, `X-Siren-Timestamp` other than the signed time, or the time more than `toleranceSeconds` from the clock | 401 with `verifyRequest`'s words | The checks are `checkSignedDelivery()`, in `verifyRequest`'s order. |
-| The signed body is not JSON, or `X-Siren-Event` is `app.request` (or missing) and the body is not an envelope of version 1 | 400 | Nothing. |
+| The signed body is not JSON, or `X-Siren-Event` is `app.request` (or missing) and the body is not an envelope of version 1 | 400, naming the first field that breaks its rule | Nothing. |
+| An ask whose `answerUrl` origin is another Siren than the client's base | 500 | `onError` gets a `SirenError` with both addresses and the `baseUrl` to set. The function does not run and nothing is posted. |
 | A tell with a function | 200 `{}` once the function returns, 500 when it throws | `onError` gets a thrown error and the request. |
 | An ask with a function | 200 `{}` at once | The function runs after the reply. Its answer is posted as below. `undefined` posts nothing. |
 | An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
@@ -161,6 +162,34 @@ id given twice, and a weight that is negative, not finite or not a number.
 test/fixtures/apps-feature-contracts/requests.json is Siren's fixture copied
 byte for byte from pkt/apps-c16-2 at f97b42820. Copy it again when that
 branch's fixture changes.
+
+## First contact, DX pass 1
+
+The SDK developer-experience review of 2026-11-24 (review/sdk-dx/pass-1-review.md
+and pass-1-builder-spec.md in the apps run folder) changed these:
+
+- The handler compares an ask's signed `answerUrl` origin with the client's
+  base origin before it runs the function, in `otherSiren()` in
+  app-request-handler.ts. Siren Cloud's `api.` and `app.` hosts over https
+  count as one Siren, with the reason beside `CLOUD_ORIGINS`. The answer
+  still goes only to the client's base, so a leaked signing secret cannot
+  send the key elsewhere. A tell carries no `answerUrl` and gets no check.
+- `appRequestFrom()` names the first envelope field that fails, through
+  `envelopeProblem()` in app-requests.ts. The status stays 400.
+- `answers.simulate(request)` runs `respond()` with a collector in place of
+  `onError` and of the answer post. An ask's function runs at once, and its
+  answer gets `checkedAnswer()`, the check `answerAppRequest()` runs.
+- `@novatorius/siren/testing` (src/testing/) holds `appRequest()` and
+  `sampleData()`. src/testing/sample-data.ts is the `data` of Siren's
+  request fixture, and test/apps-dx-first-contact.test.ts holds the two
+  equal. The README's samples are signed with `appRequest()`.
+- `new Siren()` reads `SIREN_API_KEY` when no `apiKey` or `accessToken` is
+  passed, and `requestHandler()` reads `SIREN_SIGNING_SECRET` when no
+  `signingSecret` is passed, through `readEnvironment()` in
+  src/environment.ts. An empty variable reads as unset.
+- `prepare` runs scripts/prepare.mjs, which builds with tsup when it is
+  installed, keeps a built `dist` when it is not, and otherwise says to run
+  `npm ci` first, so an install from a local folder works.
 
 ## Left open
 

@@ -2820,12 +2820,24 @@ paths:
     post:
       tags: [OAuth]
       operationId: requestOAuthToken
-      summary: Exchange a code or refresh a token
+      summary: Exchange a code, refresh a token, or trade an app's key for a token
       description: |
         RFC 6749 token route. With `grant_type: authorization_code` it
         exchanges the callback's single-use code and the PKCE verifier for a
         token pair. With `grant_type: refresh_token` it spends the refresh
         token for a new pair, and Cloud rotates the refresh token every time.
+
+        With `grant_type: client_credentials` an app trades its own key,
+        sent as `client_secret` or as HTTP Basic, for a short-lived token
+        and no refresh token. No `scope` gets a server token that lasts 1200
+        seconds. `scope: browser:{eventKey}` gets a browser token for that
+        one custom event of the app, which lasts 600 seconds and is refused
+        with `invalid_scope` while the event allows no domain. A key that is
+        no app's gets 400 `unauthorized_client`, "Only an app's key can get
+        an access token.". An unknown or revoked key, or a `client_id` other
+        than the app's key word, gets 401 `invalid_client`. Cloud answers 503
+        `temporarily_unavailable` when it cannot read the key or the app.
+        App grants have their own limit, 600 an hour.
 
         Cloud answers a repeat of a rotated refresh token for 30 seconds. A
         repeat that carries the same `attempt_id` gets the pair Cloud already
@@ -2844,10 +2856,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [grant_type, client_id]
+              required: [grant_type]
               properties:
-                grant_type: { type: string, enum: [authorization_code, refresh_token] }
-                client_id: { type: string }
+                grant_type: { type: string, enum: [authorization_code, refresh_token, client_credentials] }
+                client_id: { type: string, description: Required for `authorization_code` and `refresh_token`. For `client_credentials` it is the app's key word, or left out. }
+                client_secret: { type: string, description: "The app's API key, for `client_credentials`. HTTP Basic may carry it instead." }
+                scope: { type: string, description: "For `client_credentials`, none for a server token or `browser:{eventKey}` for a browser token." }
                 code: { type: string, description: The callback's code. Single use. Required for `authorization_code`. }
                 redirect_uri: { type: string, format: uri, description: The redirect URI the authorization request named. Required for `authorization_code`. }
                 code_verifier: { type: string, description: The PKCE verifier whose S256 challenge the authorization request carried. Required for `authorization_code`. }
@@ -2855,13 +2869,17 @@ paths:
                 attempt_id: { type: string, description: A random id for one refresh, sent again unchanged on each try of it. }
       responses:
         '200':
-          description: A new token pair.
+          description: A new token pair, or for `client_credentials` an app's token with no refresh token.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OAuthToken' }
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OAuthToken'
+                  - $ref: '#/components/schemas/AppAccessToken'
         '400': { $ref: '#/components/responses/OAuthRefused' }
         '401': { $ref: '#/components/responses/OAuthRefused' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/OAuthRefused' }
   /connect/plan:
     get:
       tags: [Connected sites]
@@ -3442,7 +3460,9 @@ paths:
         app_answer_forbidden, 409 app_request_already_answered for a
         different answer after one was accepted, 409
         app_request_not_needing_attention for a person's answer to an ask
-        that does not need attention, 422 app_answer_invalid, and
+        that does not need attention, 409 app_request_dropped for an answer
+        after Siren stopped waiting, 24 hours on, and used none of it, 422
+        app_answer_invalid, and
         404 app_request_not_found, which an org key that is no app's also
         gets. A missing or unknown bearer gets 401 from the key check every
         route shares, with no code, and the SDK reads it as
@@ -4739,6 +4759,15 @@ components:
         refresh_token:
           type: string
           description: The next refresh token. Cloud rotates it on every refresh, so the one sent is spent.
+    AppAccessToken:
+      type: object
+      description: An app's token from the `client_credentials` grant. It has no refresh token, so the app asks again before it runs out.
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, description: 1200 for a server token, 600 for a browser token. }
+        scope: { type: string, description: "`browser:{eventKey}` for a browser token. Absent for a server token." }
     OAuthError:
       type: object
       description: |

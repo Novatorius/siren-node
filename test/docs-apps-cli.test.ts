@@ -129,13 +129,14 @@ describe('apps-cli docs', () => {
     expect(body.error.context).toMatchObject({ reason: 'app_request_not_resendable' });
   });
 
-  it("the README's request handler hands each request to the example's tested handler, and passes a failure to Express", () => {
+  it("the README's Check a request shows the SDK calls first, then points to the example's tested handler", () => {
     const check = section(read('README.md'), '### Check a request');
     const code = check.slice(check.indexOf('```ts'), check.indexOf('```', check.indexOf('```ts') + 5));
-    expect(code).toContain('examples/apps/acme/handler.mjs');
-    expect(code).toMatch(/createAcmeApp\(/);
-    expect(code).toMatch(/\.handle\(req\.body, req\.headers\)/);
-    expect(code).toMatch(/\.then\([\s\S]*,\s*next\)/);
+    // DX pass 1: the by-hand path shows verifyRequest itself, and the example app follows in words.
+    expect(code).toMatch(/\.apps\.verifyRequest\(req\.body, req\.headers/);
+    expect(code).toContain('SignatureVerificationError');
+    expect(check.slice(check.indexOf('```', check.indexOf('```ts') + 5))).toContain('examples/apps/acme/handler.mjs');
+    expect(check).toMatch(/`createAcmeApp`/);
     // The answer, its repeat and its failure belong to the handler, which test/apps-example.test.ts drives.
     expect(code).not.toContain('requests.answer(');
     expect(code).not.toMatch(/\bawait\b/);
