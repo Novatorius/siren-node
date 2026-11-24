@@ -61,7 +61,7 @@ describe('apps-sdk-container item 3: a key-only app from the file', () => {
   it('refuses a file with features and no url before anything is sent', async () => {
     const h = harness([reply(201, keyOnly)]);
     h.signedIn();
-    h.write('siren.app.json', appFile({ name: 'Acme', items: { notify: { kind: 'postConversionAction', name: 'Tell me' } } }));
+    h.write('siren.app.json', appFile({ name: 'Acme', features: { notify: { kind: 'postConversionAction', name: 'Tell me' } } }));
     expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
     expect(h.http.requests).toHaveLength(0);
     expect(h.err()).toContain('has features and no url');
@@ -80,7 +80,7 @@ const exampleFile = JSON.stringify({
       url: '${SIREN_APP_URL}',
       scopes: [],
       events: [],
-      items: {
+      features: {
         'notify-crm': { kind: 'postConversionAction', name: 'Tell the CRM' },
         'acme-ledger': { kind: 'payoutMethod', name: 'Acme ledger', currencies: ['usd'], answerWindowMinutes: 1 },
       },

@@ -9,7 +9,7 @@
       "url": "${SIREN_APP_URL}",
       "scopes": ["event:site-visited", "event:sale"],
       "events": [],
-      "items": {
+      "features": {
         "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
         "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"], "answerWindowMinutes": 1 },
         "acme-split": { "kind": "distributionResolver", "name": "Acme split", "answerWindowMinutes": 1 }

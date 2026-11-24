@@ -75,7 +75,7 @@ const CHAIN: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape
 const TREE: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'tree', parents: { '42': 57, '57': 63, '63': null } };
 
 function file(items: Record<string, unknown>, url: string | null = SITE): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), items } } });
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
 }
 
 function ask(key: string, data: Record<string, unknown>): string {
@@ -111,7 +111,7 @@ describe('apps-c16-7: the collaborator group structure kind', () => {
 
   it('refuses a group structure with no url, since Siren asks the app at its address', () => {
     const parsed = parseAppFile(file({ shape: { kind: 'collaboratorGroupStructure', name: 'Team shape' } }, null), {});
-    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.items`]);
+    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features`]);
   });
 
   it("types on('collaboratorGroupStructure') by its question and answer, and posts a chain and a tree", async () => {

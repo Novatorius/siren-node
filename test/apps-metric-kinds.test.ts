@@ -26,7 +26,7 @@ import { APP_KEY, APP_REQUEST_ID, appRecord } from './apps-siren-answers';
 const URL = 'https://acme.example/siren';
 
 function file(items: Record<string, unknown>): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: URL, items } } });
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', url: URL, features: items } } });
 }
 
 describe('apps-c16-1: the metric kinds', () => {
@@ -54,21 +54,21 @@ describe('apps-c16-1: the metric kinds', () => {
 
   it('refuses a scoresMoney that is not true or false', () => {
     const parsed = parseAppFile(file({ score: { kind: 'metricCalculation', name: 'Score', scoresMoney: 'yes' } }), {});
-    expect(parsed.problems.map((problem) => problem.message)).toEqual([`apps.${APP_KEY}.items.score.scoresMoney must be true or false.`]);
+    expect(parsed.problems.map((problem) => problem.message)).toEqual([`apps.${APP_KEY}.features.score.scoresMoney must be true or false.`]);
   });
 
   it('refuses scoresMoney on any kind but a metric calculation', () => {
     for (const kind of ['metricFilter', 'distributionResolver', 'postConversionAction']) {
       const parsed = parseAppFile(file({ other: { kind, name: 'Other', scoresMoney: false } }), {});
       expect(parsed.problems.map((problem) => problem.message), kind).toEqual([
-        `apps.${APP_KEY}.items.other.scoresMoney is only for a Metric calculation (metricCalculation).`,
+        `apps.${APP_KEY}.features.other.scoresMoney is only for a Metric calculation (metricCalculation).`,
       ]);
     }
   });
 
   it('refuses a metric kind with no url, since Siren asks the app at its address', () => {
-    const text = JSON.stringify({ version: 1, name: 'A', description: '', apps: { [APP_KEY]: { name: 'A', items: { owned: { kind: 'metricFilter', name: 'Owned' } } } } });
-    expect(parseAppFile(text, {}).problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.items`]);
+    const text = JSON.stringify({ version: 1, name: 'A', description: '', apps: { [APP_KEY]: { name: 'A', features: { owned: { kind: 'metricFilter', name: 'Owned' } } } } });
+    expect(parseAppFile(text, {}).problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features`]);
   });
 
   it('declare sends scoresMoney on a feature, and apply shows a changed one', async () => {

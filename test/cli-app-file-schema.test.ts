@@ -19,13 +19,13 @@ const validate = new Ajv({ allErrors: true, strict: false }).compile(appFileSche
 function file(app: Record<string, unknown>, top: Record<string, unknown> = {}): string {
   return JSON.stringify({ version: 1, ...top, apps: { 'acme-payouts': { name: 'Acme', url: '${SIREN_APP_URL}', ...app } } });
 }
-const item = (fields: Record<string, unknown>) => ({ items: { thing: { name: 'Thing', ...fields } } });
+const item = (fields: Record<string, unknown>) => ({ features: { thing: { name: 'Thing', ...fields } } });
 
 /** Files both must accept. */
 const GOOD: Record<string, string> = {
   'the init template': appFileTemplate('acme-payouts', 'Acme'),
   'the example app': readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8'),
-  'a key-only app of custom events': JSON.stringify({ version: 1, apps: { 'acme-events': { name: 'Events', items: { signup: { kind: 'customEvent', name: 'Signup', domains: ['example.com'], fields: { list: { type: 'string', required: true } } } } } } }),
+  'a key-only app of custom events': JSON.stringify({ version: 1, apps: { 'acme-events': { name: 'Events', features: { signup: { kind: 'customEvent', name: 'Signup', domains: ['example.com'], fields: { list: { type: 'string', required: true } } } } } } }),
   'an app with no features': JSON.stringify({ version: 1, apps: { acme: { name: 'Acme' } } }),
   'a recipe name and description': file({}, { name: 'Acme', description: '' }),
   'a metric calculation scoring money': file(item({ kind: 'metricCalculation', scoresMoney: true })),
@@ -50,12 +50,12 @@ const BAD: Record<string, string> = {
   'an app key in capitals': JSON.stringify({ version: 1, apps: { Acme: { name: 'A' } } }),
   'an app with no name': JSON.stringify({ version: 1, apps: { acme: { url: 'https://acme.example' } } }),
   'an unknown app field': file({ colour: 'green' }),
-  'features with no url': JSON.stringify({ version: 1, apps: { acme: { name: 'A', items: { n: { kind: 'postConversionAction', name: 'N' } } } } }),
+  'features with no url': JSON.stringify({ version: 1, apps: { acme: { name: 'A', features: { n: { kind: 'postConversionAction', name: 'N' } } } } }),
   'an unknown kind': file(item({ kind: 'paymentThing' })),
   'the old payout word': file(item({ kind: 'fulfillmentMethod', currencies: ['USD'] })),
-  'a feature with no name': file({ items: { thing: { kind: 'postConversionAction' } } }),
+  'a feature with no name': file({ features: { thing: { kind: 'postConversionAction' } } }),
   'an unknown feature field': file(item({ kind: 'postConversionAction', colour: 'green' })),
-  'a feature key with a space': file({ items: { 'a b': { kind: 'postConversionAction', name: 'N' } } }),
+  'a feature key with a space': file({ features: { 'a b': { kind: 'postConversionAction', name: 'N' } } }),
   'a payout method with no currencies': file(item({ kind: 'payoutMethod' })),
   'currencies on another kind': file(item({ kind: 'postConversionAction', currencies: ['USD'] })),
   'an incentive type with no conversions': file(item({ kind: 'incentiveType' })),

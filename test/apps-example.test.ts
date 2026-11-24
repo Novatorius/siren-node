@@ -191,13 +191,13 @@ describe('apps-cli: the example app', () => {
 
   it('declares the scopes a sale needs and the shortest answer window on each ask', () => {
     const file = JSON.parse(readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8')) as {
-      apps: Record<string, { scopes: string[]; items: Record<string, { answerWindowMinutes?: number }> }>;
+      apps: Record<string, { scopes: string[]; features: Record<string, { answerWindowMinutes?: number }> }>;
     };
     const scopes = readFileSync(new URL('./fixtures/api-key-scopes.json', import.meta.url), 'utf8');
     const app = file.apps['acme-payouts']!;
     expect(app.scopes).toEqual(expect.arrayContaining(['event:site-visited', 'event:sale']));
     for (const scope of app.scopes) expect(scopes, scope).toContain(`"scope": "${scope}"`);
-    expect(app.items['acme-ledger']!.answerWindowMinutes).toBe(1);
-    expect(app.items['acme-split']!.answerWindowMinutes).toBe(1);
+    expect(app.features['acme-ledger']!.answerWindowMinutes).toBe(1);
+    expect(app.features['acme-split']!.answerWindowMinutes).toBe(1);
   });
 });

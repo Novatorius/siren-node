@@ -79,13 +79,14 @@
             },
             "description": "Email addresses Siren tells when something is wrong with the app."
           },
-          "items": {
+          "features": {
             "type": "object",
             "propertyNames": {
               "type": "string",
               "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
               "maxLength": 64
             },
+            "maxProperties": 50,
             "additionalProperties": {
               "type": "object",
               "required": [
@@ -294,10 +295,10 @@
         },
         "if": {
           "required": [
-            "items"
+            "features"
           ],
           "properties": {
-            "items": {
+            "features": {
               "not": {
                 "additionalProperties": {
                   "required": [

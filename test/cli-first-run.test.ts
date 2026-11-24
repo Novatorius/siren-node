@@ -196,8 +196,8 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     expect(file.$schema).toMatch(/^https:\/\/unpkg\.com\/@novatorius\/siren@[\d.]+\/siren\.app\.schema\.json$/);
     expect(file.name).toBeUndefined();
     expect(file.description).toBeUndefined();
-    const items = Object.values(file.apps[APP_KEY].items) as Array<{ kind: string }>;
-    expect(items.map((item) => item.kind)).toEqual(['postConversionAction']);
+    const features = Object.values(file.apps[APP_KEY].features) as Array<{ kind: string }>;
+    expect(features.map((feature) => feature.kind)).toEqual(['postConversionAction']);
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);
     expect(h.out()).toContain('.env');
     expect(h.out()).toContain('Feature kinds');

@@ -17,7 +17,7 @@ import { kindLabel } from './app-kinds';
  *         "scopes": [],
  *         "events": [],
  *         "contacts": ["ops@example.com"],
- *         "items": {
+ *         "features": {
  *           "notify-crm": { "kind": "postConversionAction", "name": "Tell the CRM" },
  *           "acme-ledger": { "kind": "payoutMethod", "name": "Acme ledger", "currencies": ["USD"] },
  *           "signup": {
@@ -76,7 +76,8 @@ export interface AppFileApp {
    * admins hear instead.
    */
   contacts?: string[];
-  items?: Record<string, AppFileItem>;
+  /** The app's features, each under its feature key. */
+  features?: Record<string, AppFileItem>;
 }
 
 /** A checked app file, with every `${NAME}` already filled from the environment. */
@@ -94,7 +95,7 @@ export interface AppFile {
 
 /**
  * One problem with the file. `path` is the dotted key it sits at, such as
- * `apps.acme-payouts.items.notify-crm.kind`, or empty for the whole file.
+ * `apps.acme-payouts.features.notify-crm.kind`, or empty for the whole file.
  * `line` and `column` count from 1 and point at that key in the text, or at
  * the character JSON could not read.
  */
@@ -150,9 +151,9 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
   if (app.scopes !== undefined) params.scopes = [...app.scopes];
   if (app.events !== undefined) params.events = [...app.events];
   if (app.contacts !== undefined) params.contacts = storedContacts(app.contacts);
-  if (app.items !== undefined) {
-    params.items = Object.entries(app.items).map(([itemKey, item]) => {
-      const declared: AppItemDeclaration = { kind: item.kind, key: itemKey, name: item.name };
+  if (app.features !== undefined) {
+    params.items = Object.entries(app.features).map(([featureKey, item]) => {
+      const declared: AppItemDeclaration = { kind: item.kind, key: featureKey, name: item.name };
       if (item.description !== undefined) declared.description = item.description;
       if (item.currencies !== undefined) declared.currencies = [...item.currencies];
       if (item.answerWindowMinutes !== undefined) declared.answerWindowMinutes = item.answerWindowMinutes;
@@ -188,7 +189,7 @@ export function appFileTemplate(key: string, name: string): string {
       [key]: {
         name,
         url: '${SIREN_APP_URL}',
-        items: {
+        features: {
           notify: { kind: 'postConversionAction', name: 'Tell my service about each approved conversion' },
         },
       },
@@ -224,8 +225,14 @@ const RECIPE_KEYS = [
 /** The keys an app file holds at its top. */
 export const TOP_FIELDS = ['$schema', 'version', 'name', 'description', 'apps'];
 
-/** The fields `PUT /apps/{key}` reads (DeclareApp.php). */
-export const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'items'];
+/** The fields `PUT /apps/{key}` reads (DeclareApp.php), with the features under `features` (contract/feature-rename.md, section 4). */
+export const APP_FIELDS = ['name', 'description', 'url', 'scopes', 'events', 'contacts', 'features'];
+
+/** The word an app's features went under before Alex's ruling M104, which a file may still hold and the tool refuses by name. */
+const OLD_FEATURES_FIELD = 'items';
+
+/** The most features an app may hold, `AppService::MAX_ITEMS`. */
+export const MAX_FEATURES = 50;
 
 /** The most problem contacts an app may hold, `AppService::MAX_CONTACTS`. */
 export const MAX_CONTACTS = 10;
@@ -593,7 +600,9 @@ class AppFileCheck {
       return;
     }
     for (const field of Object.keys(app)) {
-      if (!APP_FIELDS.includes(field)) {
+      if (field === OLD_FEATURES_FIELD) {
+        this.problem(`${path}.${field}`, this.where(`${path}.${field}`), `${path}.${field}: Siren calls an app's features "features" now. Write them under features.`);
+      } else if (!APP_FIELDS.includes(field)) {
         this.problem(`${path}.${field}`, this.where(`${path}.${field}`), `${path}.${field} is not an app field. An app takes ${APP_FIELDS.join(', ')}.`);
       }
     }
@@ -617,20 +626,25 @@ class AppFileCheck {
       }
     }
     if (app.contacts !== undefined) this.checkContacts(`${path}.contacts`, app.contacts);
-    if (app.items === undefined) return;
-    if (!isObject(app.items)) {
-      this.problem(`${path}.items`, this.where(`${path}.items`), `${path}.items must be an object that holds each feature under its feature key.`);
+    const features = app.features;
+    if (features === undefined) return;
+    if (!isObject(features)) {
+      this.problem(`${path}.features`, this.where(`${path}.features`), `${path}.features must be an object that holds each feature under its feature key.`);
       return;
     }
-    const needAddress = Object.values(app.items).some((item) => !isObject(item) || item.kind !== AppItemKind.CustomEvent);
+    const count = Object.keys(features).length;
+    if (count > MAX_FEATURES) {
+      this.problem(`${path}.features`, this.where(`${path}.features`), `${path}.features holds ${count} features, and an app may hold at most ${MAX_FEATURES}.`);
+    }
+    const needAddress = Object.values(features).some((item) => !isObject(item) || item.kind !== AppItemKind.CustomEvent);
     if (app.url === undefined && needAddress) {
       this.problem(
-        `${path}.items`,
-        this.where(`${path}.items`),
+        `${path}.features`,
+        this.where(`${path}.features`),
         `${path} has features and no url. Siren sends a feature its requests at the app's address, so add a url, or keep only custom events for a key-only app.`,
       );
     }
-    for (const [itemKey, item] of Object.entries(app.items)) this.checkItem(`${path}.items.${itemKey}`, itemKey, item);
+    for (const [featureKey, feature] of Object.entries(features)) this.checkItem(`${path}.features.${featureKey}`, featureKey, feature);
   }
 
   /** The problem contacts: a list of at most {@link MAX_CONTACTS} email addresses, counted once each. */

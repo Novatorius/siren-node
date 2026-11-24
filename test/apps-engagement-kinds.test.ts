@@ -46,7 +46,7 @@ const FILTER: AppEngagementFilterQuestion = {
 };
 
 function file(items: Record<string, unknown>, url: string | null = URL): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), items } } });
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
 }
 
 describe('apps-c16-4: the engagement kinds', () => {
@@ -74,13 +74,13 @@ describe('apps-c16-4: the engagement kinds', () => {
 
   it('refuses an engagement kind with no url, since Siren asks the app at its address', () => {
     const parsed = parseAppFile(file({ staff: { kind: 'engagementFilter', name: 'Staff' } }, null), {});
-    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.items`]);
+    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features`]);
   });
 
   it('refuses scoresMoney on an engagement calculation, which only a metric calculation takes', () => {
     const parsed = parseAppFile(file({ weight: { kind: 'engagementCalculation', name: 'Weight', scoresMoney: true } }), {});
     expect(parsed.problems.map((problem) => problem.message)).toEqual([
-      `apps.${APP_KEY}.items.weight.scoresMoney is only for a Metric calculation (metricCalculation).`,
+      `apps.${APP_KEY}.features.weight.scoresMoney is only for a Metric calculation (metricCalculation).`,
     ]);
   });
 

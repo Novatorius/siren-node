@@ -34,7 +34,7 @@ const QUESTION: AppRewardQuestion = {
 };
 
 function file(items: Record<string, unknown>, url: string | null = URL): string {
-  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), items } } });
+  return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: items } } });
 }
 
 describe('apps-c16-2: the incentive resolver kind', () => {
@@ -51,7 +51,7 @@ describe('apps-c16-2: the incentive resolver kind', () => {
 
   it('refuses an incentive resolver with no url, since Siren asks the app at its address', () => {
     const parsed = parseAppFile(file({ split: { kind: 'incentiveResolver', name: 'Split' } }, null), {});
-    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.items`]);
+    expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features`]);
   });
 
   it('answers the reward ask with the typed answer, through the one answer route', async () => {
