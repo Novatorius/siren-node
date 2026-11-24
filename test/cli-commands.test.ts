@@ -188,10 +188,11 @@ describe('apps-cli: siren signup, login and the session', () => {
 
     const live = harness([reply(200, [app])], { edition: 'production' });
     live.signedIn({ [BASE]: session({ edition: 'production' }) });
-    expect(await live.run(['apps', 'list', '--base-url', BASE])).toBe(1);
+    // A change needs --live. A read needs none since CLI pass 1 (finding 2).
+    expect(await live.run(['apps', 'off', KEY, '--base-url', BASE])).toBe(1);
     expect(live.http.requests).toHaveLength(0);
     expect(live.err()).toContain('--live');
-    expect(await live.run(['apps', 'list', '--base-url', BASE, '--live']), live.err()).toBe(0);
+    expect(await live.run(['apps', 'list', '--base-url', BASE]), live.err()).toBe(0);
     expect(live.paths()).toEqual(['GET /apps']);
   });
 
@@ -331,7 +332,8 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     const h = harness([]);
     expect(await h.run(['apps', 'init', '--key', KEY, '--name', 'Acme']), h.err()).toBe(0);
     expect(h.file('siren.app.json')).toContain(`"${KEY}"`);
-    expect(h.file('.gitignore').split('\n')).toContain('.env.*');
+    // The env files by name since CLI pass 1 (finding 5), so a committed .env.example stays in git.
+    expect(h.file('.gitignore').split('\n')).toEqual(expect.arrayContaining(['.env.sandbox', '.env.live', '.env.*.tmp']));
     expect(h.http.requests).toHaveLength(0);
 
     h.write('siren.app.json', '{"mine": true}');
@@ -372,7 +374,8 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
       h.write('siren.app.json', exampleFile);
       expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
       expect(h.err(), url).toBe(NOTE);
-      expect(h.printed(), url).not.toContain(url);
+      // A new app's plan shows the address's scheme and host since CLI pass 1 (finding 6), and nothing after them.
+      expect(h.printed().replaceAll(new URL(url).origin, ''), url).not.toContain(url);
     }
     for (const url of ['https://acme.example/siren', 'http://host.docker.internal:8787', 'https://localhost.acme.example']) {
       const h = harness([appMissing(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: { SIREN_APP_URL: url } });

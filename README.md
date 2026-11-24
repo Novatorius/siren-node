@@ -1936,7 +1936,14 @@ local Siren works.
 
 The package ships a `siren` command. It signs in with your Siren password, keeps the session on
 your machine, and declares an app from a file, so you never handle a session token. Install the
-package globally, or run it with `npx siren`.
+package globally with `npm install -g @novatorius/siren` for the `siren` command, or run one command
+with `npx @novatorius/siren <command>`. npx finds a package by its name, not by the command it
+ships, and the unscoped `siren` on npm is an unrelated project, so leave out the scope and npx runs
+that one.
+
+`siren` alone shows whether you are signed in, to which Siren, and the commands that come next.
+`siren apps` lists the apps commands, `siren help <command>` shows a command's options and an
+example, and a mistyped command or option names the nearest real one.
 
 ```sh
 siren signup                         # make an organization, or: siren login
@@ -1948,12 +1955,13 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | Command | What it does |
 |---|---|
 | `siren signup` | Makes an organization and signs in. It asks for the organization's name, your email, the terms and a password, or takes `--org-name`, `--email`, `--accept-terms` and `--password-stdin`. |
-| `siren login` | Signs in. `--org <slug or id>` picks one of your organizations. |
+| `siren login` | Signs in. `--org <slug or id>` picks one of your organizations. The commands after it talk to the Siren it signed in to, unless `--base-url`, `--sandbox` or `SIREN_BASE_URL` names another. |
+| `siren whoami` | Prints who you are signed in as, the organization and role, the Siren and whether it is live, and where the session is kept. Sends nothing, and exits 1 when you are signed out. `--json` prints the same for a script. |
 | `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. A session made when the Siren was the other edition is forgotten here and its tokens are not sent. |
 | `siren orgs` | Lists your organizations, `*` on the one in use. |
 | `siren use <slug or id>` | Switches to another of your organizations. |
-| `siren apps init` | Writes siren.app.json, adds `.env.*` to .gitignore, and never overwrites a file. |
-| `siren apps apply [file] [--yes]` | Reads the app on Siren first and prints each change the file would make: name, description, the address added, moved or removed (never its url), events, the key's scopes, and each feature added, changed, brought back or removed, with how many records select a removed one. It then asks before it writes, since the last write wins. `--yes` skips the question, and with no terminal and no `--yes` it sends nothing. With nothing to change it says so and writes nothing. It declares the app, then prints each feature's `app:{id}`. A feature the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the feature and says that naming it in the file again brings it back. On the first apply it saves the key, and the signing secret when the file names a `url`, in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
+| `siren apps init` | Writes siren.app.json with one Post-conversion action and a `$schema` your editor completes from, adds `.env.sandbox`, `.env.live` and `.env.*.tmp` to .gitignore, and never overwrites a file. |
+| `siren apps apply [file] [--yes]` | Reads the app on Siren first and prints each change the file would make: name, description, the address added, moved or removed (never its url), events, the key's scopes, and each feature added, changed, brought back or removed, with how many records select a removed one. It then asks before it writes, since the last write wins. `--yes` skips the question, and with no terminal and no `--yes` it sends nothing. With nothing to change it says so and writes nothing. It declares the app, then prints each feature's `app:{id}`, the id a program, distributor or autofulfiller stores to select it. For a new app it shows the scheme and host Siren sends requests to, asks `Make <key> on <org>?`, and ends with how to run your handler with the key and watch its requests. A feature the file no longer names while a record still selects it is archived: Siren keeps it, never calls it, and deletes it once nothing selects it. The command marks it beside the feature and says that naming it in the file again brings it back. On the first apply it saves the key, and the signing secret when the file names a `url`, in `.env.sandbox`, or `.env.live`, beside the file, and prints only the key's first 16 characters. |
 | `siren apps list` | Lists the apps, their features and their events, and under an app with requests that need attention, how many and the `siren apps requests --app <key> --attention` that lists them. `--json` prints what Siren sent. |
 | `siren apps show <key>` | Shows one app, its features and its events, with each archived feature marked beside it, and how many of its requests need attention when any do. |
 | `siren apps requests` | Lists the requests, oldest first. `--app <key>` and `--attention` narrow the list, and `--follow` asks again every 2 seconds until Ctrl-C, and stops when the Siren becomes live or becomes a sandbox. With a request id, it shows each send with its HTTP status and the app's answer, and the body Siren sent. |
@@ -1963,7 +1971,6 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps rotate-key <key>` | Gives the app a new key, which revokes the old one at once, and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. It asks first, and `--yes` skips the question. |
 | `siren apps rotate-secret <key>` | Gives the app's address a new signing secret and writes it as `SIREN_SIGNING_SECRET` the same way. Siren signs with it at once. It asks first, and `--yes` skips the question. |
 | `siren apps add-key <key>` | Makes a key for an app that holds none and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. The key holds no scopes until the next `siren apps apply`. |
-| `siren apps rotate [<key>]` | Sends nothing, names `rotate-key` and `rotate-secret`, which replace it, and exits 1, with or without a key. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
 
@@ -1972,18 +1979,23 @@ events the organization's plan cannot use, and say only that the plan cannot use
 no plan. They read this from what Siren sends and never guess a plan. When the file names scopes
 and the app holds no key, `apply` says so and names `siren apps add-key <key>`.
 
-siren.app.json is a Siren recipe that holds one app, keyed by its app key, with its features in
-`items`, keyed by feature key. `${SIREN_APP_URL}` in the app's `url` is filled from the environment,
-from a variable whose name starts with `SIREN_APP_`, and only there. `url` is optional: a file with
+siren.app.json holds one app, keyed by its app key, with its features in
+`items`, keyed by feature key. `${SIREN_APP_URL}` in the app's `url` is filled from a variable whose
+name starts with `SIREN_APP_`, and only there: from your shell, else from `.env` beside the file.
+The package ships siren.app.schema.json, which `$schema` points at, so an editor completes kinds and
+fields. A top-level `name` and `description` are optional, and the dashboard shows the app's own. `url` is optional: a file with
 no `url` declares a key-only app, which holds no features. A file with features and no `url` is
 refused. A feature's kind and key lock once Siren makes it, so renaming a key makes a new feature
 and archives or deletes the old one. The Payout method kind is `payoutMethod`, and the old
 `fulfillmentMethod` is refused with a message that names it. A mistake in the file is printed with
 its line and column, and nothing is sent.
 
-The tool talks to `SIREN_BASE_URL`, else the sandbox. `--base-url <url>` names another Siren, and
-takes plain http only for `localhost`, `127.0.0.1` and `host.docker.internal`. A live organization
-needs `--live` on every command but `siren logout`, and `--live` against a sandbox is refused. Every
+The tool talks to `SIREN_BASE_URL`, else the Siren you last signed in to, else the sandbox.
+`--base-url <url>` names another Siren, and takes plain http only for `localhost`, `127.0.0.1` and
+`host.docker.internal`. A bare host such as `siren.example.com` gets `https://` and `/siren/v1`.
+Signing in to a live organization and changing one need `--live`. Reading one (`orgs`, `use`,
+`whoami`, `apps list`, `apps show`, `apps requests`) does not, and `--live` against a sandbox is
+refused. Every
 command that sends anything first asks the Siren whether it is a sandbox or live, and refuses a
 session made when it was the other, so a sandbox session never reaches a Siren that became live.
 The session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,

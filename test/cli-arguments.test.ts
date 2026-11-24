@@ -27,7 +27,6 @@ const CASES: Array<{ argv: string[]; says: string }> = [
   { argv: ['apps', 'show', 'Acme_Payouts'], says: 'An app key is lowercase letters and digits joined by single dashes, at most 64 characters and never requests, events, scopes or kinds, and "Acme_Payouts" is not one.' },
   { argv: ['apps', 'on', 'requests'], says: '"requests" is not one.' },
   { argv: ['apps', 'off', 'acme--payouts'], says: '"acme--payouts" is not one.' },
-  { argv: ['apps', 'rotate', 'ACME'], says: '"ACME" is not one.' },
   { argv: ['apps', 'delete', 'a'.repeat(65), '--yes'], says: 'is not one.' },
   { argv: ['apps', 'requests', '--app', 'Acme'], says: '"Acme" is not one.' },
 ];

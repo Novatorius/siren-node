@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { HOOK_FRAMES, HOOK_FRAME_MS, HOOK_WIDTH } from './hook-frames';
 import type { CliIo, CliScreen } from './io';
@@ -132,38 +132,25 @@ async function rememberPlayed(io: CliIo): Promise<void> {
   }
 }
 
-/** True when any Siren session is kept on this machine, read without refusing anything. */
-async function signedInSomewhere(io: CliIo): Promise<boolean> {
-  try {
-    const file = JSON.parse(await readFile(join(io.configDir, 'credentials.json'), 'utf8')) as { sessions?: Record<string, unknown> };
-    return Object.keys(file.sessions ?? {}).length > 0;
-  } catch {
-    return false;
-  }
-}
-
-/** The wordmark line and the next step under it, in green when the hook played. */
-function wordmark(version: string, nextStep: string, color: string | null): string {
+/** The wordmark line and the lines under it, the name in green when the hook played. */
+function wordmark(version: string, lines: readonly string[], color: string | null): string {
   const name = color === null ? 'Siren' : `${color}${BOLD}Siren${RESET}`;
-  return `\n${INDENT}${name} ${version}\n${INDENT}${nextStep}\n\n`;
+  return `\n${INDENT}${name} ${version}\n${lines.map((line) => (line === '' ? '\n' : `${INDENT}${line}\n`)).join('')}\n`;
 }
 
 /**
  * What `siren` with nothing after it does: plays the hook when it may, then
- * prints the wordmark and the next step, to sign in or to declare an app.
- * Answers the exit code, 0, or 130 after Ctrl-C.
+ * prints the wordmark and `status`, the lines that say where you stand and
+ * what comes next. Answers the exit code, 0, or 130 after Ctrl-C.
  */
-export async function welcome(io: CliIo, flags: HookFlags, version: string): Promise<number> {
+export async function welcome(io: CliIo, flags: HookFlags, version: string, status: readonly string[]): Promise<number> {
   const plays = hookSkip(io.screen, io.env, flags) === null && io.screen !== undefined;
   if (plays) {
     const end = await playHook(io.screen!, io.env);
     await rememberPlayed(io);
     if (end === 'interrupted') return 130;
   }
-  const next = (await signedInSomewhere(io))
-    ? 'Next: run siren apps init in your app\'s folder. Run siren --help to see every command.'
-    : 'Next: run siren login, or siren signup for a new organization. Run siren --help to see every command.';
-  io.stdout(wordmark(version, next, plays ? greenFor(io.env) : null));
+  io.stdout(wordmark(version, status, plays ? greenFor(io.env) : null));
   return 0;
 }
 
@@ -179,6 +166,6 @@ export async function firstRun(io: CliIo, flags: HookFlags, version: string): Pr
   const end = await playHook(io.screen, io.env);
   await rememberPlayed(io);
   if (end === 'interrupted') return false;
-  io.stdout(wordmark(version, 'Run siren --help any time to see every command.', greenFor(io.env)));
+  io.stdout(wordmark(version, ['Run siren --help any time to see every command.'], greenFor(io.env)));
   return true;
 }
