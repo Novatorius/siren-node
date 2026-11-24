@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -192,7 +193,7 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     const h = harness([]);
     expect(await h.run(['apps', 'init', '--key', APP_KEY, '--name', 'Acme']), h.err()).toBe(0);
     const file = JSON.parse(h.file('siren.app.json')) as Record<string, any>;
-    expect(file.$schema).toBe('./node_modules/@novatorius/siren/siren.app.schema.json');
+    expect(file.$schema).toMatch(/^https:\/\/unpkg\.com\/@novatorius\/siren@[\d.]+\/siren\.app\.schema\.json$/);
     expect(file.name).toBeUndefined();
     expect(file.description).toBeUndefined();
     const items = Object.values(file.apps[APP_KEY].items) as Array<{ kind: string }>;
@@ -257,5 +258,55 @@ describe('cli pass 1, finding 1: the README never says npx siren', () => {
     const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8');
     expect(readme).not.toMatch(/npx siren\b/);
     expect(readme).toContain('npx @novatorius/siren');
+  });
+});
+
+describe("cli pass 1 re-check: the reviewer's small points", () => {
+  it('suggests each command a cut-off name starts, as for apps rotate', async () => {
+    const h = harness([]);
+    expect(await h.run(['apps', 'rotate', APP_KEY])).toBe(2);
+    expect(h.err()).toContain('There is no command "apps rotate". Did you mean "apps rotate-key" or "apps rotate-secret"?');
+  });
+
+  it('prints the follow hint after a live first apply with no --live, since reads need none', async () => {
+    const h = harness([appMissing(), reply(201, { ...app, rawKey: `sk_live_${'0a'.repeat(32)}`, signingSecret: SIGNING_SECRET })], {
+      edition: 'production',
+      env: { SIREN_APP_URL: 'https://acme.example/siren' },
+    });
+    h.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
+    await h.run(['apps', 'init', '--key', APP_KEY]);
+    expect(await h.run(['apps', 'apply', '--yes', '--live', '--base-url', UAT]), h.err()).toBe(0);
+    expect(h.out()).toContain(`Watch what Siren sends it: siren apps requests --follow --base-url ${UAT}\n`);
+  });
+
+  it('points $schema at the versioned schema on unpkg, which resolves with or without a local install, and the package ships that file', async () => {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { name: string; version: string };
+    const h = harness([]);
+    await h.run(['apps', 'init', '--key', APP_KEY]);
+    const schema = (JSON.parse(h.file('siren.app.json')) as { $schema: string }).$schema;
+    expect(schema).toBe(`https://unpkg.com/${pkg.name}@${pkg.version}/siren.app.schema.json`);
+    const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: join(__dirname, '..'), encoding: 'utf8' })) as Array<{
+      files: Array<{ path: string }>;
+    }>;
+    expect(packed[0]?.files.map((file) => file.path)).toContain(schema.split(`${pkg.version}/`)[1]);
+  }, 60_000);
+
+  it('says sign in to, not change, when login meets a live Siren without --live', async () => {
+    const h = harness([], { edition: 'production', stdin: PASSWORD });
+    expect(await h.run(['login', '--base-url', UAT, '--email', EMAIL, '--password-stdin'])).toBe(1);
+    expect(h.err()).toContain(`${UAT} is a live Siren. Add --live to sign in to a live organization.`);
+    const help = harness([]);
+    await help.run(['login', '--help']);
+    expect(help.out()).not.toMatch(/--live\s+Change a live organization/);
+  });
+
+  it('calls it the logo animation in help and the README, never the hook', async () => {
+    const help = harness([]);
+    await help.run(['--help']);
+    const login = harness([]);
+    await login.run(['login', '--help']);
+    const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8');
+    for (const text of [help.out(), login.out(), readme]) expect(text).not.toMatch(/Siren hook|Siren's hook|the hook/i);
+    expect(help.out()).toContain('logo animation');
   });
 });

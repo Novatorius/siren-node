@@ -378,7 +378,9 @@ once, and sends nothing.
   5). The tool never sends them, and Siren's recipe schema (lib/Recipes/Core/recipe.schema.json on
   feat/apps at 6d2abd936a) has no `apps` stanza to read them with yet. The dashboard shows the
   app's own name. `$schema` is allowed and ignored. `apps init` writes it as
-  `./node_modules/@novatorius/siren/siren.app.schema.json`.
+  `https://unpkg.com/@novatorius/siren@<version>/siren.app.schema.json`, which resolves from any
+  folder with a global install, a local one or npx (pass 1 re-check). The help text calls the hook
+  "Siren's logo animation", since a newcomer reads "hook" as a webhook.
 - siren.app.schema.json ships in the package. `appFileSchema()` in src/cli/app-file-schema.ts
   builds it from the lists and limits the checks use (`TOP_FIELDS`, `APP_FIELDS`, `ITEM_FIELDS`,
   `KINDS`, `CONVERSION_TYPES` and the rest), and test/cli-app-file-schema.test.ts holds the file to
@@ -710,7 +712,7 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | # | The person runs | The person sees | Made true by |
 | --- | --- | --- | --- |
 | 1 | `npm i -g ./novatorius-siren-0.3.0.tgz`, the tarball attached to the siren-node pull request, then `siren --version` | `0.3.0` | cli-session (bin and build tests) |
-| 2 | `siren signup`, answering the prompts: organization name, email, the terms, and the password at a hidden prompt | `Made <org> (<slug>) on <address>, and signed in as <email>.` On a live edition: `<address> is a live Siren. Add --live to act on a live organization.` With sign-up off: `Sign-up is turned off on <address>. Ask its owner, or use siren login.` | cli-session |
+| 2 | `siren signup`, answering the prompts: organization name, email, the terms, and the password at a hidden prompt | `Made <org> (<slug>) on <address>, and signed in as <email>.` On a live edition: `<address> is a live Siren. Add --live to sign up on a live Siren.` With sign-up off: `Sign-up is turned off on <address>. Ask its owner, or use siren login.` | cli-session |
 | 3 | In the checkout: `npm ci && npm run build`, then `cd examples/apps/acme && npm install` | npm's usual output | example-app |
 | 4 | In a second terminal: `cloudflared tunnel --url http://localhost:8787`. Back in the first: `export SIREN_APP_URL=<the https address it printed>` | A `https://<words>.trycloudflare.com` address | none, cloudflared |
 | 5 | `siren apps apply` | `Declared acme-payouts on <address>.`, the app line, one line per item with its `app:{id}`, `Its url came from SIREN_APP_URL.`, and `Key sk_test_<8 hex> and its signing secret are in <folder>/.env.sandbox.` No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |

@@ -166,8 +166,13 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
   return { key, params };
 }
 
-/** Where `apps init` points `$schema`: the schema the package ships, as npm installs it beside the app. */
-export const APP_FILE_SCHEMA_PATH = './node_modules/@novatorius/siren/siren.app.schema.json';
+/**
+ * Where `apps init` points `$schema`: the schema this version of the package
+ * ships, on unpkg, which serves every npm package's files. It resolves from
+ * any folder, with the tool installed globally, locally or run through npx.
+ * Keep the version in step with package.json, as `CLI_VERSION` is.
+ */
+export const APP_FILE_SCHEMA_PATH = 'https://unpkg.com/@novatorius/siren@0.3.0/siren.app.schema.json';
 
 /**
  * The text `apps init` writes: a file that passes {@link parseAppFile} once

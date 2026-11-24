@@ -175,12 +175,12 @@ function fullAddress(given: string): string {
  * - An `edition` of `sandbox` with `target.live` is refused, so `--live`
  *   always means a live organization.
  *
- * Throws {@link CliRefusal} with a message that names the address and the
- * edition.
+ * Throws {@link CliRefusal} with a message that names the address, the
+ * edition, and `action`, what `--live` would let the command do.
  */
-export function assertEditionAllowed(target: Target, edition: Edition): void {
+export function assertEditionAllowed(target: Target, edition: Edition, action = 'change a live organization'): void {
   if (edition === 'production' && !target.live) {
-    throw new CliRefusal(`${target.baseUrl} is a live Siren. Add --live to change a live organization.`);
+    throw new CliRefusal(`${target.baseUrl} is a live Siren. Add --live to ${action}.`);
   }
   if (edition === 'sandbox' && target.live) {
     throw new CliRefusal(`${target.baseUrl} is a sandbox Siren, and --live is only for a live one. Leave --live out.`);

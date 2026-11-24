@@ -34,7 +34,7 @@ export async function signup(input: CommandInput): Promise<number> {
   await run.store.get(run.target.baseUrl);
 
   const edition = await run.targetEdition();
-  assertEditionAllowed(run.target, edition);
+  assertEditionAllowed(run.target, edition, 'sign up on a live Siren');
 
   const orgName = text(values['org-name']) ?? (await askLine(io, 'Organization name: ', '--org-name'));
   const email = text(values.email) ?? (await askLine(io, 'Email: ', '--email'));
@@ -93,7 +93,7 @@ export async function login(input: CommandInput): Promise<number> {
   await run.store.get(run.target.baseUrl);
 
   const edition = await run.targetEdition();
-  assertEditionAllowed(run.target, edition);
+  assertEditionAllowed(run.target, edition, 'sign in to a live organization');
 
   let result: LoginResult;
   try {

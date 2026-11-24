@@ -81,9 +81,9 @@ const GLOBAL: Options = {
 /** The shared options as every command's `--help` shows them. */
 const GLOBAL_FLAGS: ReadonlyArray<readonly [string, string]> = [
   ['--sandbox', "Talk to Siren's sandbox, whatever you signed in to last."],
-  ['--live', 'Change a live organization. Reads of a live one need no flag.'],
+  ['--live', 'Sign in to or change a live organization. Reads of one need no flag.'],
   ['--base-url <url>', 'Talk to another Siren, such as siren.example.com.'],
-  ['-q, --quiet', 'Skip the Siren hook.'],
+  ['-q, --quiet', 'Skip the logo animation.'],
   ['-h, --help', 'Show this help.'],
 ];
 
@@ -333,7 +333,7 @@ function helpText(): string {
     'Every command takes --sandbox, --live, --base-url <url>, --quiet and --help.',
     'With none of them it talks to SIREN_BASE_URL, else the Siren you signed in to, else the sandbox.',
     'Changing a live organization needs --live. Run siren help <command> for its options and an example.',
-    'The Siren hook plays the first time you run the tool. --quiet, NO_COLOR or CI skips it.',
+    "Siren's logo animation plays the first time you run the tool. --quiet, NO_COLOR or CI skips it.",
     '',
   ].join('\n');
 }
@@ -417,8 +417,10 @@ function editDistance(a: string, b: string): number {
 function commandNamed(words: readonly string[]): Command {
   const name = words[0] === 'apps' ? `apps ${words[1] ?? ''}`.trim() : (words[0] ?? '');
   if ((COMMANDS as readonly string[]).includes(name)) return name as Command;
-  const guess = nearest(name, COMMANDS);
-  throw new CliUsageError(`There is no command "${name}".${guess === undefined ? '' : ` Did you mean "${guess}"?`}`);
+  // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
+  const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
+  const guesses = started.length > 0 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
+  throw new CliUsageError(`There is no command "${name}".${guesses.length === 0 ? '' : ` Did you mean ${guesses.map((guess) => `"${guess}"`).join(' or ')}?`}`);
 }
 
 /**

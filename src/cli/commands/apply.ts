@@ -10,7 +10,7 @@ import { appChanges, droppedLine } from '../app-changes';
 import { kindLabel } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
-import { CliRefusal, CliUsageError } from '../targets';
+import { CliRefusal, CliUsageError, commandLine } from '../targets';
 
 /*
  * `siren apps init`, `apply`, `list`, `show`, `on`, `off`, `rotate-key`,
@@ -263,7 +263,8 @@ export async function appsApply(input: CommandInput): Promise<number> {
     const envName = basename(envPath);
     run.print('Next:');
     run.print(`  Run your handler with its key: node --env-file=${envName} server.js, or load ${envName} as your framework does.`);
-    run.print(`  Watch what Siren sends it: ${run.command('apps requests --follow')}`);
+    // A read, which needs no --live.
+    run.print(`  Watch what Siren sends it: ${commandLine(run.target, 'apps requests --follow', false)}`);
     return 0;
   }
   await run.remember(key, envPath);
