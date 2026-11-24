@@ -2,8 +2,10 @@ import { CallbackAccessTokenSource } from '../../auth/callback-access-token-sour
 import { createHttpTransport } from '../../client';
 import { ConnectionError, SirenError, appErrorCode } from '../../errors';
 import { parseJsonBody } from '../../http';
+import type { HttpTransport } from '../../http';
 import { appKeyArgument } from './apply';
 import { contextOf } from '../context';
+import { orgScope } from '../org';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { styleFor } from '../style';
@@ -98,6 +100,8 @@ export interface LogQuery {
 
 /** What {@link followFeed} needs. */
 export interface FollowOptions {
+  /** The client for the organization the command acts in. Without one, the run's own session. */
+  http?: Pick<HttpTransport, 'request'>;
   query: LogQuery;
   /** Stop after this many entries, with exit code 0. */
   limit?: number;
@@ -117,12 +121,14 @@ export async function logsTail(input: CommandInput): Promise<number> {
   const limit = limitOf(values.limit);
   const run = contextOf(input);
   const session = await run.signedIn();
+  // The organization signedIn() settled: --org, SIREN_ORG, "org" in siren.app.json, the only one, or the one asked for.
+  const org = await orgScope(run, input, session, 'logs tail');
   const style = styleFor(io, 'stdout', { json });
 
   if (!json) {
     run.print(
       style.report({
-        headline: `Tailing ${style.bold(session.orgName)}, ${scopeWords(query)}`,
+        headline: `Tailing ${style.bold(org.orgName)}, ${scopeWords(query)}`,
         rows: [
           ['Showing', showingWords(query)],
           ['Since', typeof values.since === 'string' ? values.since : 'now'],
@@ -133,11 +139,12 @@ export async function logsTail(input: CommandInput): Promise<number> {
   }
 
   return followFeed(run, io, {
+    http: org.http,
     query,
     limit,
     onEntry: (entry) => {
       if (json) return io.stdout(`${JSON.stringify(entry)}\n`);
-      for (const line of entryLines(style, entry, run.command.bind(run))) run.print(line);
+      for (const line of entryLines(style, entry, (words) => run.command(`${words}${org.flag}`))) run.print(line);
     },
   });
 }
@@ -151,15 +158,16 @@ export async function logsTail(input: CommandInput): Promise<number> {
  * ends it at once.
  */
 export async function followFeed(run: CommandContext, io: CliIo, options: FollowOptions): Promise<number> {
-  const http = createHttpTransport({
-    accessToken: new CallbackAccessTokenSource(
-      () => run.accessToken(),
-      () => run.refresh(),
-    ),
-    httpClient: io.httpClient,
-    baseUrl: run.target.baseUrl,
-    maxRetries: 0,
-  });
+  const http =
+    options.http ??
+    createHttpTransport({
+      accessToken: new CallbackAccessTokenSource(
+        () => run.accessToken(),
+        () => run.refresh(),
+      ),
+      httpClient: io.httpClient,
+      baseUrl: run.target.baseUrl,
+    });
   const { query, limit } = options;
   const stop = () => undefined;
   io.signal?.addEventListener('abort', stop);
@@ -208,7 +216,7 @@ export async function followFeed(run: CommandContext, io: CliIo, options: Follow
 }
 
 /** One read of `GET /logs`, checked enough that a page always has entries and a cursor. */
-async function readPage(http: ReturnType<typeof createHttpTransport>, query: LogQuery & { cursor?: string }): Promise<LogPage> {
+async function readPage(http: Pick<HttpTransport, 'request'>, query: LogQuery & { cursor?: string }): Promise<LogPage> {
   const response = await http.request({
     method: 'GET',
     path: '/logs',
@@ -334,7 +342,11 @@ export function entryLines(style: Style, entry: LogEntry, command: (words: strin
 
   if (bad && entry.reason) lines.push(`${INDENT}${style.red(cut(entry.reason, LINE_WIDTH - INDENT.length))}`);
   const look = lookCloser(entry);
-  if (bad && look !== undefined) lines.push(`${INDENT}${style.dim(`› ${cut(command(look), LINE_WIDTH - INDENT.length - 2)}`)}`);
+  if (bad && look !== undefined) {
+    // A command is never cut, since a cut one cannot be run. When it would pass 80 columns under the type, it moves left.
+    const hint = `› ${command(look)}`;
+    lines.push(`${INDENT.length + hint.length <= LINE_WIDTH ? INDENT : '  '}${style.dim(hint)}`);
+  }
   if (bad && look === undefined && typeof entry.requestId === 'string') lines.push(`${INDENT}${style.dim(`Request id ${entry.requestId}`)}`);
   if (entry.body !== undefined) {
     for (const line of JSON.stringify(entry.body, null, 2).split('\n')) lines.push(`${INDENT}${style.dim(line)}`);

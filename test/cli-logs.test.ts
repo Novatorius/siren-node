@@ -5,7 +5,8 @@ import { entryLines, sinceOf } from '../src/cli/commands/logs';
 import type { LogEntry } from '../src/cli/commands/logs';
 import { Style } from '../src/cli/style';
 import { reply } from './http-fakes';
-import { NOW_MS, harness } from './cli-fakes';
+import { ACCESS_2, AuthAnswers, NOW_MS, REFRESH_2, harness, membershipAcme, membershipTwo, session } from './cli-fakes';
+import { SANDBOX_BASE_URL } from '../src/http';
 import { APP_REQUEST_ID, appRecord, requestRow } from './apps-siren-answers';
 
 /*
@@ -123,6 +124,28 @@ describe('siren logs tail', () => {
 
     const lines = h.out().trimEnd().split('\n');
     expect(lines.map((line) => (JSON.parse(line) as LogEntry).id)).toEqual(['api_9', 'api_10', 'api_11']);
+  });
+
+  it('tails the organization the resolver settles, switching for --org and naming it in the headline and the hints', async () => {
+    const failed = entry({ id: 'delivery_4_1', type: 'delivery', status: 'failed', summary: 'ask payout-method', reason: 'The address answered 500.', request: APP_REQUEST_ID });
+    const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), page([failed], CURSOR_1)], { onSleep: (count, abort) => count === 1 && abort() });
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme', memberships: [membershipAcme, membershipTwo] }) });
+
+    expect(await h.run(['logs', 'tail', '--org', 'acme-two']), h.err()).toBe(130);
+
+    expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /logs']);
+    expect(h.http.requests[1]!.headers.Authorization).toBe(`Bearer ${ACCESS_2}`);
+    expect(h.out()).toContain('Tailing Acme Two, all apps');
+    expect(h.out()).toContain(`siren apps requests ${APP_REQUEST_ID} --org acme-two`);
+  });
+
+  it('refuses to guess among several organizations with no terminal to ask in, and sends nothing', async () => {
+    const h = harness([page([], CURSOR_1)]);
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme', memberships: [membershipAcme, membershipTwo] }) });
+
+    expect(await h.run(['logs', 'tail'])).toBe(1);
+    expect(h.err()).toContain('Pick one with --org <slug>');
+    expect(h.paths()).toEqual([]);
   });
 
   it('refuses a bad flag with 2 before sending anything', async () => {
