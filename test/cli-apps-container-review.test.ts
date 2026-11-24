@@ -186,6 +186,20 @@ const SIREN_KIND_NAMES = {
   collaboratorGroupStructure: 'Collaborator group structure',
 };
 
+/*
+ * Each kind's readable name as Siren's dashboard and kinds catalog give it
+ * now: `name` in AppItemKindCatalog::entries() and APP_KINDS in
+ * frontend/src/platform/saas/apps/apps.ts, on Siren's feat/apps at
+ * 6d2abd936a. Three of them differ from the tool's own copy above, which
+ * the README follows the dashboard in.
+ */
+const DASHBOARD_KIND_NAMES = {
+  ...SIREN_KIND_NAMES,
+  postConversionAction: 'Post-conversion action',
+  postAllocationAction: 'Post-allocation action',
+  incentiveResolver: 'Attribution model',
+};
+
 describe('apps-sdk-container review fix 4: a kind shows its readable name beside its technical one', () => {
   it("labels each kind with Siren's catalog name, and a kind the catalog lacks with its term alone", () => {
     for (const [kind, name] of Object.entries(SIREN_KIND_NAMES)) expect(kindLabel(kind)).toBe(`${name} (${kind})`);
@@ -223,10 +237,13 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     );
   });
 
-  it("the README's feature table and prose name each kind readably beside its term", () => {
+  it("the README's feature table and headings name each kind as the dashboard does, beside its term", () => {
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
-    for (const [kind, name] of Object.entries(SIREN_KIND_NAMES)) expect(readme, kind).toContain(`| ${name} (\`${kind}\`) |`);
-    expect(readme).toContain('An Action after a conversion (`postConversionAction`) gets');
+    for (const [kind, name] of Object.entries(DASHBOARD_KIND_NAMES)) {
+      expect(readme, kind).toContain(`| ${name} (\`${kind}\`) |`);
+      const level = kind === 'payoutMethod' ? '##' : '###';
+      expect(readme, kind).toContain(`\n${level} ${name} (\`${kind}\`)\n`);
+    }
     expect(readme).toContain('The Payout method kind is `payoutMethod`');
   });
 });

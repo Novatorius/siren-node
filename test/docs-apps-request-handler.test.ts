@@ -16,6 +16,23 @@ function read(name: string): string {
   return raw(name).replace(/\s+/g, ' ');
 }
 
+/** Every kind's sample, in the order the README shows them: 5.1's whole file first. */
+const SAMPLES = [
+  'post-conversion-action',
+  'post-allocation-action',
+  'distribution-resolver',
+  'incentive-resolver',
+  'incentive-type',
+  'metric-calculation',
+  'metric-filter',
+  'transaction-filter',
+  'engagement-calculation',
+  'engagement-filter',
+  'program-group-sorter',
+  'collaborator-group-structure',
+  'payout-method',
+];
+
 /** A sample's function, from `answers.on(` to the line before the server line. */
 function fn(sample: string): string {
   const text = raw(`test/answer-samples/${sample}.js`);
@@ -25,22 +42,26 @@ function fn(sample: string): string {
 describe('apps-answer-handler: the records', () => {
   it("lead the README's handler section with the samples the tests run, as written", () => {
     const readme = raw('README.md');
-    const section = readme.slice(readme.indexOf('### Answer Siren in a few lines'), readme.indexOf('### Check and answer by hand'));
+    const section = readme.slice(readme.indexOf('## Answer Siren in a few lines'), readme.indexOf('## Check and answer by hand'));
     expect(section).toContain('```js\n' + raw('test/answer-samples/post-conversion-action.js').trimEnd() + '\n```');
-    for (const sample of ['post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'incentive-type', 'program-group-sorter']) {
+    for (const sample of SAMPLES.slice(1)) {
       expect(section, sample).toContain('```js\n' + fn(sample) + '\n```');
     }
     // Every sample shares 5.1's first lines and server line.
     const head = raw('test/answer-samples/post-conversion-action.js');
-    for (const sample of ['post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'incentive-type', 'program-group-sorter']) {
+    for (const sample of SAMPLES.slice(1)) {
       const text = raw(`test/answer-samples/${sample}.js`);
       expect(text.slice(0, text.indexOf('answers.on('))).toBe(head.slice(0, head.indexOf('answers.on(')));
       expect(text.slice(text.indexOf('\nexpress().post'))).toBe(head.slice(head.indexOf('\nexpress().post')));
     }
+    // Each mount sample, which test/apps-mount-samples.test.ts runs, appears whole.
+    for (const mount of ['answers', 'node-http', 'fastify', 'app/siren/route', 'worker', 'handle']) {
+      expect(section, mount).toContain('```js\n' + raw(`test/mount-samples/${mount}.js`).trimEnd() + '\n```');
+    }
   });
 
   it('keep each sample at 16 lines or fewer, as AP-R80 asks', () => {
-    for (const sample of ['post-conversion-action', 'post-allocation-action', 'distribution-resolver', 'incentive-resolver', 'incentive-type', 'program-group-sorter']) {
+    for (const sample of SAMPLES) {
       expect(raw(`test/answer-samples/${sample}.js`).trimEnd().split('\n').length, sample).toBeLessThanOrEqual(16);
     }
   });
@@ -55,7 +76,7 @@ describe('apps-answer-handler: the records', () => {
       'answers.fastify',
       'export default { fetch: answers }',
       '`runLater: after`',
-      '### Check and answer by hand',
+      '## Check and answer by hand',
       'duplicate: true',
     ]) {
       expect(readme, words).toContain(words);

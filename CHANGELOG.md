@@ -391,6 +391,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AppItemKind.PayoutMethod`, `payoutMethod`, the payout kind's word in Siren and its documentation.
   `AppErrorCode` gains `AppNeedsAPart`, `ItemsNeedKeyAndAddress`, `KeyExists`, `KeyMissing`,
   `AddressMissing` and `AppCapReached`.
+- Custom events go out with short-lived app tokens. A client built with an app's key trades it at
+  `POST /oauth/token` for a 20-minute token the first time `events.ingest()` sends a custom event,
+  keeps it, renews it when fewer than two minutes are left, and after a 401 gets a new one and sends
+  once more. A key of no app sends with the key as before, and sales, refunds and site visits keep
+  the key. `events.browserToken(eventKey)` gets a 10-minute browser token for one event, and
+  `events.browserTokenHandler({ events })` answers a page's request for one in Node's `(req, res)`
+  or as a Web `Request`. `track(eventKey, data, { tokenUrl })` and `createTracker()` in
+  `@novatorius/siren/storefront` send the event from a page with that token. The app file takes a
+  custom event's `fields` and `domains`. examples/apps/signups holds a whole app.
+- An app's problem contacts: `contacts`, at most ten email addresses, in the app file and in
+  `apps.declare()`, `apps.create()` and `apps.update()`, which Siren tells when something is wrong
+  with the app. `siren apps apply` shows a contacts line when the file names them.
+- The README leads with what the SDK can do, the request handler and a mount sample for each
+  server (node:http, Express, Fastify, a Next.js route, a Worker and `handle()`), then one section
+  per feature kind under the dashboard's name with its question, answer and sample. Errors and
+  retries, checking and answering by hand, custom events and the payout method each get a section. Every sample runs
+  in test/apps-answer-samples.test.ts or test/apps-mount-samples.test.ts, and the kinds' samples are
+  the dashboard feature page's own. test/fixtures/apps-feature-contracts/requests.json now holds
+  Siren's question and answer for every kind.
 
 ### Changed
 

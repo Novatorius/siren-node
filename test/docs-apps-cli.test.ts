@@ -83,7 +83,7 @@ describe('apps-cli docs', () => {
     for (const command of COMMANDS) expect(tool, command).toContain(`siren ${command}`);
     expect(tool).toContain('--live');
     expect(tool).toContain('.env.sandbox');
-    const apps = section(readme, '## Siren apps');
+    const apps = section(readme, '## Check and answer by hand');
     expect(apps).toContain('verifyRequest(');
     expect(apps).toContain('requests.answer(');
     expect(apps).toContain('X-Siren-Signature-V2');

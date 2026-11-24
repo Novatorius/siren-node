@@ -15,17 +15,31 @@ course completions — and computes rewards from flexible rules you define. Affi
 referral programs, partner and reseller commissions, creator royalties, sales commissions, and
 loyalty rewards all run on the same engine.
 
-## What this SDK does
+## What you can do
 
-This SDK is the Node.js and TypeScript integration point for Siren. In a few lines you can:
-
+- **Answer Siren from your own app.** One handler, `apps.requestHandler()`, checks each signed
+  request, hands it to your function for that feature, and replies the way Siren expects. It mounts
+  on node:http, Express, Fastify, a Next.js route, a Worker or any other server.
+- **Build every kind of app feature.** Each kind has a typed question and answer: post-conversion and
+  post-allocation actions, the distribution resolver, the attribution model, the incentive
+  structure, metric and engagement calculations, the customer filters, the transaction filter, the
+  program group structure, the collaborator group structure and the payout method.
+- **Split a pool in whole currency steps** with `apps.splitPool()`, and read stored amounts as a
+  person reads them with `apps.shownAmount()`.
+- **Send custom events** with `events.ingest`, which trades the app's key for a short-lived token,
+  and let a page send them with a browser token from `events.browserTokenHandler()`.
+- **Check and answer by hand** with `apps.verifyRequest()` and `apps.requests.answer()`, and list,
+  read and resend requests with `apps.requests`.
+- **Declare and run apps** with `apps.declare()`, the calls that change one part at a time, and the
+  `siren` command-line tool.
 - **Record events** (`events.sale`, `events.refund`, `events.siteVisited`) so conversions and
   payouts compute.
 - **Verify signed webhooks** (`webhooks.constructEvent`) so you can trust inbound deliveries.
-- **Read the ledger** (`conversions`, `transactions`, `obligations`, `payouts`, `fulfillments`) and
-  **manage webhook subscriptions** with an API key that holds the ledger and webhook scopes.
-- **Build a Siren app** (`apps`, `apps.requestHandler`, `apps.verifyRequest`, `apps.requests.answer`) that acts as part of
-  Siren's engine, and declare it with the `siren` command-line tool.
+- **Read the ledger and the records** (`conversions`, `transactions`, `obligations`, `payouts`,
+  `fulfillments`, collaborators, programs, store credit and more) with an API key that holds their
+  scopes.
+- **Run a storefront in the browser** with `@novatorius/siren/storefront`, and **connect a store as
+  a site** with `@novatorius/siren/connect`.
 
 It runs on Node 18.3+ with zero runtime dependencies (it uses the global `fetch`), and ships ESM,
 CJS, and full type declarations.
@@ -39,6 +53,731 @@ npm install @novatorius/siren
 npm 11 may warn that the package has an install script not covered by `allowScripts`. It names
 `prepare: tsup`, the build that a Git install of this package needs. npm does not run it for a
 registry or tarball install, so you can ignore the warning.
+
+## Answer Siren in a few lines
+
+A Siren app is a service you host that acts as part of Siren's engine. Siren sends it signed
+requests at its address, and the app tells Siren what to do. [Siren apps](#siren-apps) below shows
+how to declare one and get its API key and signing secret.
+
+`apps.requestHandler()` answers Siren for you. Register a function for each feature by its kind and
+key, and mount the handler at the app's address. It checks each request's signature, hands the
+request to the function, and sends the reply Siren expects. For an ask, it replies 200 at once and
+posts the answer the function returns.
+
+```js
+import express from 'express'
+import { Siren } from '@novatorius/siren'
+
+const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: 'https://cloud.example.com/siren/v1' })
+const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+
+answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
+  // Siren may send it twice, so add it once, keyed by id.
+  await addToCrm(id, data.conversion, data.reward)
+})
+
+express().post('/siren', express.raw({ type: 'application/json' }), answers).listen(3000)
+```
+
+The client must be built with the app's own key, since the handler posts answers with it.
+
+### Mount it on your server
+
+None of these servers is a dependency of this package. Keep the handler in its own module:
+
+```js
+import { Siren } from '@novatorius/siren'
+
+const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: 'https://cloud.example.com/siren/v1' })
+export const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
+
+answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
+  // Siren may send it twice, so add it once, keyed by id.
+  await addToCrm(id, data.conversion, data.reward)
+})
+answers.on('distributionResolver', 'split-by-score', ({ data }) => ({
+  outcome: 'allocated',
+  units: data.pool.units,
+  shares: siren.apps.splitPool(data.pool, data.metrics.map((metric) => [metric.metricId, metric.score])),
+}))
+```
+
+Then mount it in one or two lines:
+
+```js
+import http from 'node:http'
+import { answers } from './answers.js'
+
+http.createServer(answers).listen(3000)
+```
+
+```js
+import Fastify from 'fastify'
+import { answers } from './answers.js'
+
+const app = Fastify()
+app.register(answers.fastify, { path: '/siren' })
+await app.listen({ port: 3000 })
+```
+
+```js
+// app/siren/route.js in a Next.js app
+import { answers } from '../../answers.js'
+
+export const POST = answers
+```
+
+```js
+// A Cloudflare Worker. Bun, Deno and Hono take the same fetch handler.
+import { answers } from './answers.js'
+
+export default { fetch: answers }
+```
+
+```js
+import { answers } from './answers.js'
+
+// Any other server: hand handle() the method, headers and raw bytes, send its reply, then run after().
+export async function serve(method, headers, rawBody, send) {
+  const reply = await answers.handle({ method, headers, rawBody })
+  send(reply.status, reply.headers, reply.body)
+  if (reply.after) await reply.after()
+}
+```
+
+Express takes it as `app.post('/siren', express.raw({ type: 'application/json' }), answers)`, as
+the first sample shows. Fastify's plugin, `answers.fastify`, brings its own raw body parser, scoped
+to the plugin.
+
+With Node's `(req, res)` the handler reads a Buffer or string a raw parser left in `req.body`, or
+reads the stream itself, up to 1 MiB. With a Web `Request` it answers a `Response`. An ask's work
+runs in the process after the reply on a Node server, goes to `ctx.waitUntil` when a Worker passes
+it as the third argument, and otherwise runs as a promise nothing awaits. A function host such as
+Vercel may stop that promise, so pass `runLater: after` from `next/server` there, or any function
+that takes the work, such as a queue's. From `handle()`, send the reply and then run `after()`. In
+TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 15 accept
+`export const POST = answers`.
+
+### Options and functions
+
+`apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError })` takes:
+
+- `signingSecret`, the app's signing secret, which Siren showed once when it made the app's
+  address. The handler refuses an empty or missing one when it is made.
+- `toleranceSeconds`, how far a request's signed time may be from this machine's clock, either way.
+  A whole number from 1 to 3600, 300 by default.
+- `runLater`, a function handed an ask's work after the reply, such as Next.js's `after`.
+- `onError`, a function of the error and the request that gets every error Siren does not see: a
+  function that threw, an answer that broke the rules, Siren's refusal of an answer, and a body a
+  parser already read. By default it writes one `console.error` line with the kind, key and request
+  id, or an event's type and delivery id, and the error. It never writes the request's data or
+  headers.
+
+`on(kind, key, fn)` takes one feature. `on(kind, fn)` takes every feature of a kind that no
+`on(kind, key, fn)` names, and `onEvent(type, fn)` takes a webhook event sent to the same address,
+such as `conversion.approved`. Each is chainable and refuses a feature or event it already has.
+Each function's request is typed by its kind, as [Feature kinds](#feature-kinds) lists:
+`on('distributionResolver', ...)` gets `AppAsk<AppDistributionQuestion>` and returns
+`AppDistributionAnswer`. A tell's function returns nothing. An ask's function returns the answer,
+or `undefined` when the app answers later with `apps.requests.answer()`.
+
+`apps.splitPool(pool, weights)` divides a pool for the two kinds that share one out. On Siren's
+sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
+`{ '41': 6000, '43': 4000 }`. Each share is a whole number of the currency's smallest shown unit,
+`10 ** (scale - decimalPlaces)` stored units, so a yen pool splits in multiples of 100. Every share
+is rounded down, so the shares never add up to more than the pool. When every weight is 0, each id
+gets the same. A negative or non-finite weight throws `SirenError`. `weights` is an object of id to
+weight or a list of `[id, weight]` pairs.
+
+### What the handler replies
+
+Every reply is JSON with `Cache-Control: no-store`.
+
+| Request | Reply | What happens next |
+|---|---|---|
+| A method other than POST | 405 | Nothing. |
+| A body over 1 MiB | 413 | Nothing. |
+| A body a parser already turned into an object | 500 | `onError` gets a `SirenError` that says to mount the handler before the JSON parser, or to give the route a raw body. |
+| A missing or wrong `X-Siren-Signature-V2`, another `X-Siren-Timestamp`, or a time more than `toleranceSeconds` (default 300) from the clock | 401 | The checks are `verifyRequest`'s own. |
+| A signed body that is not JSON, or an app request that is not an envelope of version 1 | 400 | Nothing. |
+| A tell with a function | 200 once the function returns, 500 when it throws | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. The function has Siren's 8 seconds. |
+| An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `undefined`, answer later with `apps.requests.answer()`. |
+| An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
+| Another event with an `onEvent` function | 200 once it returns, 500 when it throws | Nothing more. |
+| Another event with no function | 200 | Nothing. |
+
+[Errors and retries](#errors-and-retries) says what happens to the answer the handler posts.
+
+## Feature kinds
+
+Each feature joins one of Siren's pickers, so an organization chooses it as it chooses a built-in
+one. A tell tells the app something happened. An ask waits for the app's answer.
+
+| Feature kind | Picked on | Siren sends |
+|---|---|---|
+| Post-conversion action (`postConversionAction`) | a program | A tell after each approved conversion. |
+| Post-allocation action (`postAllocationAction`) | a distributor | A tell after each completed allocation. |
+| Payout method (`payoutMethod`) | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
+| Distribution resolver (`distributionResolver`) | a distributor | An ask to divide each pool. |
+| Custom event (`customEvent`) | a program or a distributor | Nothing. The app sends Siren the event. |
+| Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
+| Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
+| Attribution model (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
+| Incentive structure (`incentiveType`) | a program, as its incentive type | An ask which engagements each sale, lead or renewal converts and the pool, answered `{ outcome: 'award', units, pool, engagementIds }` or `{ outcome: 'none' }`. |
+| Engagement calculation (`engagementCalculation`) | a program's engagement type | An ask who earns each engagement, answered `{ outcome: 'engagements', results }`. |
+| Customer filter for programs (`engagementFilter`) | a program | An ask whether each engagement may be made, answered `allow` or `suppress`. |
+| Program group structure (`programGroupSorter`) | a program group | An ask for the order to try the group's programs in, answered `{ outcome: 'sorted', programIds }`. |
+| Transaction filter (`transactionFilter`) | a program or a distributor | An ask for which of each sale's lines count, answered `{ outcome: 'filtered', include }`. |
+| Collaborator group structure (`collaboratorGroupStructure`) | a collaborator group | An ask for the group's shape on each cascade trigger, answered a chain or a tree. |
+
+Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads
+and the dashboard shows. The code calls a feature an item, so the routes are `/apps/{app}/items`
+and the types are `AppItem` and `AppItemKind`. `AppItemKind.FulfillmentMethod` is an old name for
+`payoutMethod`, and Siren refuses the string `fulfillmentMethod`.
+
+Each sample below is the function for one feature, registered on the `answers` of the first sample.
+
+### Post-conversion action (`postConversionAction`)
+
+A tell, sent after a conversion is approved in a program that picks this action. Its `data` is
+`AppConversionApprovedData`: the `conversion`, its `reward` as `{ value, units, currency }` or
+`null` when it has none, and the `program`. The first sample on this page handles it.
+
+`value` is not the amount a person reads. It is the integer Siren stores, and the shown amount is
+`value / 10^currency.scale`. Siren stores yen in hundredths, so a `value` of 10000 in yen is 100
+yen, and a points currency an organization defines usually has scale 0, so 10000 is 10,000 points.
+`units` is the currency code. Read an amount with `apps.shownAmount(value, currency)`, which answers
+`{ amount, decimal, text }` the way Siren's dashboard reads it: `{ amount: 15, decimal: '15.00',
+text: '$15.00' }` for 1500 in dollars, `{ amount: 100, decimal: '100', text: '¥100' }` for 10000 in
+yen.
+
+### Post-allocation action (`postAllocationAction`)
+
+A tell, sent after an allocation completes for a distributor that picks this action. Its `data` is
+`AppAllocationCompletedData`: the `allocation`, with `value`, `units` and `currency`, and the
+`distributor`.
+
+```js
+answers.on('postAllocationAction', 'note-the-share', async ({ id, data }) => {
+  // Siren may send it twice, so note it once, keyed by id.
+  await noteShare(id, data.allocation)
+})
+```
+
+### Distribution resolver (`distributionResolver`)
+
+An ask, sent when a distributor that picks this resolver divides a period's pool. The question is
+`AppDistributionQuestion`: the `distribution` period, the `distributor`, the `pool` and the
+`metrics`, one per collaborator who scored, each with its `metricId`, `score` and `triggerCount`.
+`pool.value` is what this ask offers, `pool.total` the whole pool and `pool.paid` what
+collaborators already hold from it. The answer is `AppDistributionAnswer`:
+`{ outcome: 'allocated', units, shares }`, where `shares` holds every `metricId` of the question as
+text, each a whole step of the currency, adding up to `pool.value` at most.
+
+```js
+answers.on('distributionResolver', 'split-by-score', ({ data }) => ({
+  outcome: 'allocated',
+  units: data.pool.units,
+  // Whole currency steps, never more than the pool, split evenly when every score is 0.
+  shares: siren.apps.splitPool(data.pool, data.metrics.map((metric) => [metric.metricId, metric.score])),
+}))
+```
+
+### Attribution model (`incentiveResolver`)
+
+Siren's code calls this an incentive resolver. An ask, sent when a sale, renewal or lead converts in
+a program that picks it. The question is `AppRewardQuestion`: the `program`, the `conversionType`,
+the `transaction` (null for a lead), the reward `pool` as a stored whole number, and the
+`conversions`, one per collaborator with their engagement `score`. `reason` is `sale` while the
+rewards are not made yet, and `refund` when a partial refund asks again about rewards already made.
+The answer is `AppRewardAnswer`: the pool's `units`, and in `rewards` every `conversionId` of the
+question as text, each a whole number of 0 or more or null for a collaborator who earns nothing.
+The rewards may add up to more than the pool. Siren refuses any other key, a missing one, or a
+negative or fractional reward with 422 `app_answer_invalid`.
+
+```js
+answers.on('incentiveResolver', 'split-the-reward', ({ data }) => ({
+  outcome: 'rewards',
+  units: data.pool.units,
+  rewards: siren.apps.splitPool(data.pool, data.conversions.map((conversion) => [conversion.conversionId, conversion.score])),
+}))
+```
+
+On Siren's sample question, a pool of 1500 with scores 60 and 40, this answers
+`{ '1042': 900, '1043': 600 }`. The rewards wait for the answer, and Siren waits at most 24 hours
+from when the sale's reward began to wait, or from the refund for a refund's ask. Then a sale's
+collaborators get no reward, and a refund cuts the rewards already made by the share refunded.
+
+### Incentive structure (`incentiveType`)
+
+Siren's code calls this an incentive type. An ask, sent when a sale, renewal or lead reaches a
+program whose incentive type picks it, for a conversion its `conversionTypes` setting lists. The
+question is `AppIncentiveTypeQuestion`: the `program` with its `units`, the `conversionType`, the
+`opportunity`, the `transaction` (null for a lead, which names its `binding` instead) with its
+`total` and `lines` as stored whole numbers, and the `engagements` the program holds on the
+opportunity, each with its `score`. The answer is `AppIncentiveTypeAnswer`:
+`{ outcome: 'award', units, pool, engagementIds }`, where `units` is the program's, `pool` a whole
+number of 0 or more, and `engagementIds` a list of the question's engagements, each once. Those
+engagements convert, and the program's attribution model divides the pool among them.
+`{ outcome: 'none' }` awards nothing on the program. Siren refuses any other shape, an engagement
+the question lacks, or one named twice with 422 `app_answer_invalid`.
+
+```js
+answers.on('incentiveType', 'pay-on-closed-deals', ({ data }) => {
+  // A tenth of the sale, shared by every engagement. A lead earns nothing here.
+  const sale = data.transaction
+  if (!sale || sale.units !== data.program.units) return { outcome: 'none' }
+  return { outcome: 'award', units: sale.units, pool: Math.floor(sale.total / 10), engagementIds: data.engagements.map((e) => e.engagementId) }
+})
+```
+
+`reason` is `sale` until the award is made. A partial refund of a sale the app already awarded
+asks again with `reason` `refund`, the transaction as it stands now and the award's `conversions`.
+The rewards stay as they are until that answer, which keeps the same conversions and changes only
+the pool. Siren waits 24 hours from the first ask at most.
+
+A feature of this kind needs `conversionTypes`, the conversions it pays, each once, from `sale`,
+`lead` and `renewal`. A program offers it only for those. The app file refuses it with none, or
+with a repeated or unknown one, and refuses `conversionTypes` on any other kind. `siren apps apply`
+shows a change to it as "conversions it pays".
+
+### Metric calculation (`metricCalculation`)
+
+Siren's code calls this a calculation strategy. An ask, sent each time a metric triggers for a
+distributor whose metric type picks it. The question is `AppMetricCalculationQuestion`: the
+`distributor`, the `distribution` period with its `periodEnd`, the `metricType`, the
+`triggeringCollaborator`, the `opportunityId` and `points` (either may be null), the `cause` and the
+`sale`, which is null when no sale caused the metric. The answer is `AppMetricCalculationAnswer`,
+`{ outcome: 'scores', results }`, a score for each collaborator. Siren takes at most 50 results,
+each collaborator once and each in the organization and not in the trash, and each score a whole
+number of 0 or more. An empty list scores nobody.
+
+```js
+answers.on('metricCalculation', 'visit-score', ({ data }) => ({
+  outcome: 'scores',
+  // Score the collaborator who triggered it, more for a sale.
+  results: [{ collaboratorId: data.triggeringCollaborator.id, score: data.metricType === 'awardedSale' ? 10 : 1 }],
+}))
+```
+
+Set `scoresMoney: true` on the feature when the score is an amount of money in the distributor's
+currency. Only a metric calculation takes `scoresMoney`, and the app file refuses it on any other
+kind.
+
+### Customer filter for distributors (`metricFilter`)
+
+Siren's code calls this a metric filter. An ask, sent each time a metric triggers for a distributor
+that picks it. The question is `AppMetricFilterQuestion`, which names the `collaborator` whose
+metric Siren is about to count, with the `distributor`, the `metricType`, the `cause` and the
+`sale`. The answer is `AppMetricFilterAnswer`: `{ outcome: 'allow' }` counts the metric, and
+`{ outcome: 'suppress', reason }` drops it, with a plain text reason of 1 to 200 characters.
+
+```js
+answers.on('metricFilter', 'refund-check', ({ data }) => {
+  // Suppress a sale the CRM knows was refunded. Allow everything else.
+  if (data.sale && isRefunded(data.sale.transactionId)) {
+    return { outcome: 'suppress', reason: 'The order was refunded within 30 days.' }
+  }
+  return { outcome: 'allow' }
+})
+```
+
+### Transaction filter (`transactionFilter`)
+
+Siren's code calls this a transaction compiler. An ask, sent when a sale lands on a program or a
+distributor that picks it, once per sale for each. The question is `AppTransactionFilterQuestion`:
+what the filter is `for` (a program or a distributor), the `transaction` with its `units` and
+`currency`, and the sale's own `lines`. Each line has its `id`, its `type` (`lineItem`,
+`discount`, `fee`, `shipping` or `tax`), its `name`, a whole `quantity`, its unit `value` as a
+stored whole number in the transaction's units, and a `productId` or null. `distribution` is null
+for a program, and for a distributor the period the sale's value lands in. `refundDistribution` is
+null, or the later period a refund came in while the ask was open.
+
+The answer is `AppTransactionFilterAnswer`: `outcome` `filtered`, and in `include` the ids of the
+lines that count, each at most once. An empty list includes nothing. When a record picks more than
+one filter, a line counts when any of them includes it. Siren refuses an id the question lacks with
+422 `app_answer_invalid`. A refund reuses the stored answer, so Siren never sends refund lines. This
+filter counts only the sale's `lineItem` lines:
+
+```js
+answers.on('transactionFilter', 'plan-lines', ({ data }) => ({
+  outcome: 'filtered',
+  include: data.lines.filter((line) => line.type === 'lineItem').map((line) => line.id),
+}))
+```
+
+### Engagement calculation (`engagementCalculation`)
+
+Siren's code calls this a calculation strategy. An ask, sent each time an engagement triggers for a
+program whose engagement type picks it. The question is `AppEngagementCalculationQuestion`: the
+`program`, the `engagementType`, the `programEngagementTypeId`, the `args` a person gave that
+engagement type, the `opportunity` with the `customerId` Siren matched it to (or null), the
+`triggeringCollaborator` and the `cause`. The cause's `id` is the trigger's own random id, its
+`event` the engagement type that fired, and its `occurredAt` the time the engagements the answer
+makes are dated. The answer is `AppEngagementCalculationAnswer`, `{ outcome: 'engagements',
+results }`, with at most 50 results, each collaborator once and each in the organization and not in
+the trash, and each score a whole number of 0 or more. An empty list makes no engagement.
+
+```js
+answers.on('engagementCalculation', 'visit-weight', ({ data }) => ({
+  outcome: 'engagements',
+  // Credit the collaborator who triggered it, more when Siren knows the customer.
+  results: [{ collaboratorId: data.triggeringCollaborator.id, score: data.opportunity.customerId ? 10 : 1 }],
+}))
+```
+
+Siren makes no engagement until the answer, and a sale on that program and opportunity waits for it
+before it earns a reward. Siren waits at most 24 hours from when it asked. When a sale waits on the
+answer, the ask ends with that sale's wait, 24 hours after the sale reached Siren, which can be
+sooner, even for a calculation a filter's allow asked later.
+
+### Customer filter for programs (`engagementFilter`)
+
+Siren's code calls this an engagement filter. An ask, sent each time an engagement triggers for a
+program that picks it. The question is `AppEngagementFilterQuestion`, which names the
+`collaborator` the engagement would credit, with the `program`, the `opportunity`, the
+`engagementType` and the `cause`. The answer is `AppEngagementFilterAnswer`: `{ outcome: 'allow' }`
+makes the engagement, and `{ outcome: 'suppress', reason }` stops it, with a plain text reason of 1
+to 200 characters, which Siren notes on the opportunity. It waits as an engagement calculation
+waits.
+
+```js
+answers.on('engagementFilter', 'staff-check', ({ data }) => {
+  // Suppress a visit from someone who works for the partner. Allow everything else.
+  if (isStaff(data.collaborator.id, data.opportunity.customerId)) {
+    return { outcome: 'suppress', reason: 'The visitor works for the partner.' }
+  }
+  return { outcome: 'allow' }
+})
+```
+
+### Program group structure (`programGroupSorter`)
+
+Siren's code calls this a group sorter. An ask, sent when a sale or lead reaches a program group
+that picks it. The question is `AppGroupOrderQuestion`: the `group`, the `conversionType`, the
+`opportunity`, the `transaction` (null for a lead) with its `total` as a stored whole number, and
+the `programs` of the group that take the conversion, in the group's order, each with its active
+`engagements` on the opportunity, oldest first. The answer is `AppGroupOrderAnswer`:
+`{ outcome: 'sorted', programIds }`, every program id of the question exactly once, in the order
+Siren tries them. The first program that converts wins the group. Siren refuses a missing,
+repeated or unknown id with 422 `app_answer_invalid`.
+
+```js
+answers.on('programGroupSorter', 'pick-the-program', ({ data }) => {
+  // Try the program whose best engagement scores highest first.
+  const best = (program) => Math.max(0, ...program.engagements.map((engagement) => engagement.score))
+  const programs = [...data.programs].sort((a, b) => best(b) - best(a))
+  return { outcome: 'sorted', programIds: programs.map((program) => program.id) }
+})
+```
+
+No program in the group is awarded until the answer, and later sales on the group wait behind it.
+Siren asks about each sale when it happens, even one that waits behind another, and waits 24 hours
+from the sale at most. A renewal doesn't ask. It goes to the program in the group whose engagement
+is oldest.
+
+### Collaborator group structure (`collaboratorGroupStructure`)
+
+An ask, sent once per cascade trigger on a collaborator group that picks it. The question is
+`AppCollaboratorGroupStructureQuestion`: the `group`, its `members` with each one's
+`collaboratorId`, `name`, `status` at the trigger and `metadata`, what the cascade is `for` (a
+program for an engagement cascade, a distributor for a metric cascade), the
+`triggeringCollaborator` and the `cause`, whose `id` is the trigger's own random id of 16 hex
+characters. It also carries the fields of the trigger it interrupts. A distributor's ask carries a
+metric calculation's fields, typed as `AppCollaboratorGroupStructureDistributorQuestion`. A
+program's ask carries an engagement calculation's fields (`program`, `engagementType`,
+`programEngagementTypeId`, `args`, `opportunity`) and an engagement's `cause`, typed as
+`AppCollaboratorGroupStructureProgramQuestion`.
+
+The answer is `AppCollaboratorGroupStructureAnswer`, a chain or a tree. A chain,
+`{ outcome: 'structure', shape: 'chain', order }`, lists every member's `collaboratorId` once, top
+of the chain first, and Siren reads it as its built-in linear chain. A tree,
+`{ outcome: 'structure', shape: 'tree', parents }`, holds every member's `collaboratorId` as text
+once, each mapped to another member's id or to null for a top member, with no cycle, and Siren reads
+it as its parent and child structure. Siren refuses an answer that breaks these rules with 422
+`app_answer_invalid`.
+
+```js
+answers.on('collaboratorGroupStructure', 'team-tree', ({ data }) => ({
+  outcome: 'structure',
+  shape: 'chain',
+  // Top first, by the rank your CRM keeps on each member.
+  order: [...data.members].sort((a, b) => Number(a.metadata.rank) - Number(b.metadata.rank)).map((member) => member.collaboratorId),
+}))
+```
+
+## Payout method (`payoutMethod`)
+
+A Payout method moves money out of Siren, so it needs Pro. An ask, sent when Siren pays one payout
+through an autofulfiller that names the app's payout method. The question is `AppPayoutQuestion`:
+the `payout` (`id`, `fulfillmentId` and `attempt`), the `amount` to pay as a stored whole number in
+the currency's smallest unit, and the `collaborator` (`id`, `name` and `email`, which is null when
+the collaborator has none). `attempt` starts at 1 and rises when Siren asks again about the same
+payout, such as after a failed answer and a retry. The answer is `AppPayoutAnswer`, one of two
+shapes. `{ outcome: 'paid', reference }` has a `reference` of 1 to 191 characters, the payment's id
+in the app's own system. `{ outcome: 'failed', reason }` has a `reason` of 1 to 500 characters.
+
+```js
+answers.on('payoutMethod', 'acme-ledger', async ({ data }) => {
+  // Pay each payout once, keyed by its id, and answer with your reference.
+  const paid = await payOnce(data.payout.id, data.collaborator, data.amount)
+  return paid.ok ? { outcome: 'paid', reference: paid.id } : { outcome: 'failed', reason: paid.error }
+})
+```
+
+The app pays each payout id at most once. When Siren asks again about a payout the app already
+paid, the app answers `paid` with the first reference and pays nothing more. Siren drops an ask
+after 24 hours with no answer and marks the payout failed. The Payout method kind is `payoutMethod`
+in the app file, and a feature of this kind needs `currencies`, the currency codes it pays.
+
+## Custom events with short-lived tokens
+
+A custom event (`customEvent`) is an event of the app's own, such as a newsletter signup, that
+programs and distributors credit. Siren doesn't call the app for it. The app sends it. It declares
+the fields each send carries and its allowed domains, the websites whose pages may send it from a
+visitor's browser:
+
+```json
+"newsletter-signup": {
+  "kind": "customEvent",
+  "name": "Newsletter signup",
+  "fields": { "list": { "type": "string", "required": true } },
+  "domains": ["example.com", "*.example.com"]
+}
+```
+
+A domain is a host, such as `shop.example.com`, or `*.example.com` for every host under it. Siren
+refuses a bare `*`, a scheme, a port and a path. With no domains, only the app's server can send the
+event.
+
+Siren takes only a short-lived token of the owning app at the event's address, never the key itself.
+The SDK hides that. On the app's server, build the client with the app's key and send:
+
+```js
+const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: process.env.SIREN_BASE_URL });
+
+// A send from the app's server. The SDK trades the key for a short-lived
+// token, keeps it and renews it, so this is all the code it takes.
+export function recordSignup(collaboratorId, list) {
+  return siren.events.ingest('newsletter-signup', { collaboratorId, list });
+}
+
+// The route a page asks for a browser token. Mount it at /siren/token.
+export const browserTokens = siren.events.browserTokenHandler({ events: ['newsletter-signup'] });
+```
+
+`events.ingest` trades the key for a token that lasts 20 minutes at `POST /oauth/token`, keeps it,
+gets a new one when fewer than two minutes are left, and after a 401 gets a new one and sends once
+more. Sends at the same moment share one request. A key that belongs to no app sends with the key as
+before. Sales, refunds and site visits keep sending the key.
+
+A page sends the event with a browser token, which works for one event, lasts 10 minutes, and is
+taken only from a page on the event's allowed domains. `browserTokenHandler()` answers a page's
+request for one. It takes Node's `(req, res)` and a Web `Request`, so it mounts in one line:
+
+```ts
+app.post('/siren/token', browserTokens);       // Express
+export const POST = browserTokens;              // Next.js app route, app/siren/token/route.ts
+export default browserTokens;                   // Next.js pages route, pages/api/siren/token.ts
+```
+
+It reads the event from a JSON body `{"event": "newsletter-signup"}` or `?event=`, answers 200
+`{token, expiresIn, url}`, 400 `{error}` for an event it doesn't offer or Siren refuses, and 502
+when Siren can't be reached. `events.browserToken(eventKey)` answers the same object, for a server
+that builds its own route. It keeps one token per event until fewer than 60 seconds are left.
+
+On the page, `track` from the storefront module asks `/siren/token` for the token, keeps it until 30
+seconds before it ends, and sends:
+
+```js
+import { track } from '@novatorius/siren/storefront';
+
+export function wireSignupForm(form) {
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const collaboratorId = Number(form.dataset.collaboratorId);
+    // track asks /siren/token for a browser token, keeps it, and sends.
+    await track('newsletter-signup', { collaboratorId, list: 'weekly' });
+  });
+}
+```
+
+`track(eventKey, data, { tokenUrl })` resolves to Siren's answer, or `null` when the server gave no
+token or Siren refused the send, and rejects on a network failure. `createTracker({ tokenUrl, fetch })`
+gives a `track` with its own settings. Each send goes to Siren with the token in the query
+(`?access_token=`) and no cookies.
+
+Allowed domains stop another website's pages from sending the event, and a browser token from
+sending any other event. They don't stop a program outside a browser that
+asks your `/siren/token` for a token and claims an allowed `Origin`, or a visitor on an allowed page
+who sends made-up data, so credit only what the event's fields can't fake. The examples/apps/signups folder holds a
+whole app.
+
+## Check and answer by hand
+
+The handler runs the same checks and the same answer post as `apps.verifyRequest()` and
+`apps.requests.answer()` below. Call them yourself when the app queues the work or answers after a
+person decides. An ask's function that returns `undefined` leaves its answer to this path.
+
+### Check a request
+
+Siren sends each request as a `POST` to the app's `url`, signed with the app's signing secret in
+`X-Siren-Signature-V2: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">`.
+`apps.verifyRequest(rawBody, headers, secret)` checks it against the exact bytes received and
+answers the parsed request. It refuses a signature that does not match, a time more than 300
+seconds from the receiver's clock either way, an `X-Siren-Event` other than `app.request`, and a
+body that is not a request of version 1, each with `SignatureVerificationError`. It never falls back
+to the older `X-Siren-Signature`, which signs no time.
+
+The request is the envelope Siren signed: `version` 1, its `id`, `type` `app.request`, its `mode`
+(`tell` or `ask`), the `app` key, the `item` with the feature's `kind` and `key`, `createdAt`, and
+the kind's `data`. An ask also carries `answerBy` and `answerUrl`.
+
+```ts
+// createAcmeApp is the example app's handler, examples/apps/acme/handler.mjs. Copy it, or write your own in its shape.
+import { createAcmeApp } from './handler.mjs';
+
+const appSiren = new Siren({ apiKey: process.env.SIREN_API_KEY! }); // the app's own key
+const acme = createAcmeApp({ siren: appSiren, signingSecret: process.env.SIREN_SIGNING_SECRET!, log: console.log });
+
+app.post('/siren', express.raw({ type: 'application/json' }), (req, res, next) => {
+  acme.handle(req.body, req.headers).then((reply) => res.status(reply.status).type('application/json').send(reply.body), next);
+});
+```
+
+Answer 200 as soon as the request checks out. Siren may deliver one request more than once. Drop a
+repeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a
+repeat.
+
+The example's handler, which test/apps-example.test.ts drives with Siren's signed fixture, does the
+parts that are easy to get wrong. It answers an ask after the 200, outside the request, and catches
+an answer that fails, so a 5xx or a dropped connection is logged and never ends the process. It counts
+an ask as handled only once Siren accepts the answer, so the next delivery answers again. A repeat that
+arrives while the first answer is in flight waits for that answer, so two deliveries close together
+answer once. An ask it cannot answer, such as a pool with no metrics, gets 500 and a logged line
+that says why, never a guessed answer, so Siren sends it again on its deadline and then shows it as
+needing attention. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
+
+A tell's `data` is typed by its kind, as [Feature kinds](#feature-kinds) lists, and reads the same
+by hand:
+
+```ts
+import type { AppConversionApprovedData } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'tell' && request.item.kind === 'postConversionAction') {
+  const { conversion, reward } = request.data as unknown as AppConversionApprovedData;
+  if (reward !== null) {
+    const shown = siren.apps.shownAmount(reward.value, reward.currency);
+    crm.note(conversion.collaboratorId, `Earned ${shown.text}`); // "Earned ¥100", never "Earned 10000"
+  }
+}
+```
+
+### Answer an ask
+
+`apps.requests.answer(id, answer)` posts the answer with `POST /apps/requests/{id}/answer`, from a
+`Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand,
+but only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses
+a person's answer to any other ask with 409 `app_request_not_needing_attention`, since the app may
+still answer it. The app's own key answers its own ask at any time before it is applied and before
+Siren stops waiting for it. The answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
+`{ status: 'accepted', duplicate }`.
+
+```ts
+import type { AppCollaboratorGroupStructureAnswer } from '@novatorius/siren';
+
+const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
+if (request.mode === 'ask' && request.item.kind === 'collaboratorGroupStructure') {
+  const chain: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'chain', order: [63, 57, 42] };
+  await appSiren.apps.requests.answer(request.id, chain);
+}
+```
+
+The answer is sent once. When it is lost to a dropped connection or a 5xx, send the same answer
+again. Siren takes each answer once, so `duplicate: true` means the first had already landed and
+nothing more was applied. A different answer after an accepted one gets 409
+`app_request_already_answered`, and the first one stands.
+
+### See what Siren sent
+
+`apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
+`pending`, `sent`, `delivered` (a tell the app received), `answered`, `applied` (an ask whose answer
+did its work), `needs_attention` or `dropped`. `apps.requests.retrieve(id)` reads one request, however old,
+with `GET /apps/requests/{requestKey}`: the list's fields, the `data` Siren sent the app, the
+`answer` Siren took or `null`, and `answeredByUser`, `{ id, email }` of the person who answered by
+hand or `null`. It is a read, retried like one, and an admin's session only. Siren answers 404
+`app_request_not_found` for a request the organization does not have. `apps.requests.resend(id)` sends a request again under the same
+id with a new answer window. A request that holds an answer Siren has not applied, in
+`needs_attention` after its apply ran out of tries or still `answered` because the wake after the
+answer was lost, is not sent to the app again. Siren applies the stored answer instead, even while
+the app is off. Siren refuses an `applied` request, and one it would have to send while its app is
+off, with 409 `app_request_not_resendable`.
+
+## Errors and retries
+
+The handler checks an ask's answer as `apps.requests.answer()` checks it, then posts it to
+`POST /apps/requests/{id}/answer`. A lost connection, 429 or 5xx sends the same answer again within
+the client's `maxRetries`, which is safe because Siren takes the same answer again as
+`duplicate: true`. Siren's refusals go to `onError` as the SDK's typed errors and are not sent
+again: 422 `app_answer_invalid`, 409 `app_request_already_answered` and `app_request_dropped`, 403
+and 404. The handler keeps no state, and Siren may deliver one request twice, so a tell's function
+writes once by `id`.
+
+Siren sends an unanswered ask again each time its window closes, at `answerBy`, three sends in all,
+then marks it `needs_attention`, where a person can answer or resend it. A feature's
+`answerWindowMinutes` sets the window, from 1 to 43200 minutes. Every ask waits an hour per send
+when the feature sets none. A tell whose delivery fails is sent again about 1, 2,
+4 and 8 minutes later, then needs attention too.
+
+An ask may hold a sale's reward, an engagement, a period's pool or a payout for at most 24 hours.
+After that Siren drops it, as if the app answered with nothing: a dropped reward ask pays no reward,
+a dropped engagement ask makes no engagement, a dropped payout fails, and distributors pay on their
+own schedule. An answer that comes later gets 409 `app_request_dropped` (`AppErrorCode.Dropped`)
+as `ConflictError`, and Siren uses none of it. While an app's asks wait too long, the app's problem
+contacts, or the admins when it names none, get an email about twice a week.
+
+The app codes are in `AppErrorCode`, apart from `ErrorCode`, which holds Siren's shared list.
+`appErrorCode(error)` reads the code from any app call's error.
+
+```ts
+import { AppErrorCode, appErrorCode, ConflictError } from '@novatorius/siren';
+
+try {
+  await siren.apps.delete('acme-payouts');
+} catch (err) {
+  if (err instanceof ConflictError && appErrorCode(err) === AppErrorCode.AppInUse) {
+    await siren.apps.setStatus('acme-payouts', 'inactive');
+  } else {
+    throw err;
+  }
+}
+```
+
+| Code | Status | What to do |
+|---|---|---|
+| `app_limit_reached` | 403 | Turn another app off, or move to a plan with room. |
+| `app_cap_reached` | 400 | The organization holds 250 apps, on or off. Delete one first. |
+| `app_needs_a_part` | 422, 409 | Give the app a key, an address or both. |
+| `app_items_need_key_and_address` | 422, 409 | An app with features needs a key and an address. `missing` names the part it lacks. |
+| `app_key_exists` | 409 | Rotate the key instead of making one. |
+| `app_key_missing` | 409 | Make a key with `apps.createKey()` first. |
+| `app_address_missing` | 409 | Give the app a `url` first. |
+| `org_access_required` | 403 | Ask an admin who sees every store. |
+| `app_change_in_progress` | 409 | Send it again in a moment. |
+| `app_in_use` | 409 | Turn the app off instead, or move the records in `uses` first. |
+| `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
+| `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
+| `app_request_dropped` | 409 | Stop. Siren stopped waiting after 24 hours and used none of the answer. |
+| `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
+| `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
+| `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
+| `app_answer_invalid` | 422 | Fix the answer for the feature's kind. |
+| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate-key <app key>` when the app's key is lost, and `siren apps add-key <app key>` when the app holds no key, as after a revoke. |
+
+Every other failure throws a typed subclass of `SirenError`, as [Error handling](#error-handling)
+lists.
 
 ## Quickstart: record a sale
 
@@ -1101,32 +1840,8 @@ header.
 
 A Siren app is a service you host that acts as part of Siren's engine. An app holds three parts:
 its API key, its address (where Siren sends requests and events, signed with its signing secret)
-and its features. Each feature joins one of Siren's pickers, so an organization chooses it as it
-chooses a built-in one:
-
-| Feature kind | Picked on | Siren sends |
-|---|---|---|
-| Action after a conversion (`postConversionAction`) | a program | A tell after each approved conversion. |
-| Action after an allocation (`postAllocationAction`) | a distributor | A tell after each completed allocation. |
-| Payout method (`payoutMethod`) | an autofulfiller | An ask to pay each payout, answered `{ outcome: 'paid', reference }`. |
-| Distribution resolver (`distributionResolver`) | a distributor | An ask to divide each pool. |
-| Custom event (`customEvent`) | a program or a distributor | Nothing. The app sends Siren the event. |
-| Metric calculation (`metricCalculation`) | a distributor's metric type | An ask to score each metric, answered `{ outcome: 'scores', results }`. |
-| Customer filter for distributors (`metricFilter`) | a distributor | An ask whether each collaborator's metric counts, answered `allow` or `suppress`. |
-| Incentive resolver (`incentiveResolver`) | a program | An ask to split each sale's reward, answered `{ outcome: 'rewards', units, rewards }`. |
-| Incentive structure (`incentiveType`) | a program, as its incentive type | An ask which engagements each sale, lead or renewal converts and the pool, answered `{ outcome: 'award', units, pool, engagementIds }` or `{ outcome: 'none' }`. |
-| Engagement calculation (`engagementCalculation`) | a program's engagement type | An ask who earns each engagement, answered `{ outcome: 'engagements', results }`. |
-| Customer filter for programs (`engagementFilter`) | a program | An ask whether each engagement may be made, answered `allow` or `suppress`. |
-| Program group structure (`programGroupSorter`) | a program group | An ask for the order to try the group's programs in, answered `{ outcome: 'sorted', programIds }`. |
-| Transaction filter (`transactionFilter`) | a program or a distributor | An ask for which of each sale's lines count, answered `{ outcome: 'filtered', include }`. |
-| Collaborator group structure (`collaboratorGroupStructure`) | a collaborator group | An ask for the group's shape on each cascade trigger, answered a chain or a tree. |
-
-Each kind's readable name is the `name` Siren's kinds catalog gives it, which `apps.kinds()` reads.
-The tool prints it beside the kind, as Payout method (payoutMethod).
-
-The code calls a feature an item, so the routes are `/apps/{app}/items` and the types are
-`AppItem` and `AppItemKind`. `AppItemKind.FulfillmentMethod` is an old name for `payoutMethod`,
-and Siren refuses the string `fulfillmentMethod`.
+and its features. [Feature kinds](#feature-kinds) lists the features an app can offer, and
+[Answer Siren in a few lines](#answer-siren-in-a-few-lines) shows how to answer them.
 
 Apps are a Siren Cloud feature. The app routes take a signed-in admin's session token as
 `accessToken`, and refuse an API key with `ApiKeyNotAcceptedError`. The `siren` command below signs
@@ -1140,6 +1855,9 @@ with `rawKey`, and `signingSecret` when it made an address. Siren shows each sec
 keep them. Each later call updates the app in place and answers `created: false`. A later call
 never makes or revokes a key. It makes an address when the `url` is new, and answers its
 `signingSecret` once, and it removes the address and its delivery log when the `url` is gone.
+
+An app may name `contacts`, at most ten email addresses Siren tells when something is wrong with
+it, such as asks that wait too long. When it names none, Siren tells the organization's admins.
 
 An app with no `url` is a key-only app, for a script that reads Siren or sends custom events. An
 app with any other feature needs a `url`, since Siren asks the app at its address, so `declare`
@@ -1206,633 +1924,6 @@ for a key, `apps.update()` for an address's url and events, `apps.deliveries()` 
 and `apps.test()` for a test. Siren already refuses the webhook routes for an address an app owns.
 These calls go when Siren removes their routes. `siren.webhooks.constructEvent()` and
 `verifySignature()` stay, since an app's address receives events signed the same way.
-
-### Answer Siren in a few lines
-
-`apps.requestHandler()` answers Siren for you. Register a function for each feature by its kind and
-key, and mount the handler at the app's address. It checks each request's signature, hands the
-request to the function, and sends the reply Siren expects. For an ask, it replies 200 at once and
-posts the answer the function returns.
-
-```js
-import express from 'express'
-import { Siren } from '@novatorius/siren'
-
-const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: 'https://cloud.example.com/siren/v1' })
-const answers = siren.apps.requestHandler({ signingSecret: process.env.SIREN_SIGNING_SECRET })
-
-answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
-  // Siren may send it twice, so add it once, keyed by id.
-  await addToCrm(id, data.conversion, data.reward)
-})
-
-express().post('/siren', express.raw({ type: 'application/json' }), answers).listen(3000)
-```
-
-Only the function changes for the other kinds. An Action after an allocation (`postAllocationAction`)
-is a tell too:
-
-```js
-answers.on('postAllocationAction', 'note-the-share', async ({ id, data }) => {
-  // Siren may send it twice, so note it once, keyed by id.
-  await noteShare(id, data.allocation)
-})
-```
-
-A Distribution resolver (`distributionResolver`) and an Incentive resolver (`incentiveResolver`) are
-asks. The function returns the answer, and `apps.splitPool()` works out each share:
-
-```js
-answers.on('distributionResolver', 'split-by-score', ({ data }) => ({
-  outcome: 'allocated',
-  units: data.pool.units,
-  // Whole currency steps, never more than the pool, split evenly when every score is 0.
-  shares: siren.apps.splitPool(data.pool, data.metrics.map((metric) => [metric.metricId, metric.score])),
-}))
-```
-
-```js
-answers.on('incentiveResolver', 'split-the-reward', ({ data }) => ({
-  outcome: 'rewards',
-  units: data.pool.units,
-  rewards: siren.apps.splitPool(data.pool, data.conversions.map((conversion) => [conversion.conversionId, conversion.score])),
-}))
-```
-
-An Incentive structure (`incentiveType`) is an ask too. The function chooses the engagements that
-convert and the pool the program's resolver divides among them, or returns `{ outcome: 'none' }`:
-
-```js
-answers.on('incentiveType', 'pay-on-closed-deals', ({ data }) => {
-  // A tenth of the sale, shared by every engagement. A lead earns nothing here.
-  const sale = data.transaction
-  if (!sale || sale.units !== data.program.units) return { outcome: 'none' }
-  return { outcome: 'award', units: sale.units, pool: Math.floor(sale.total / 10), engagementIds: data.engagements.map((e) => e.engagementId) }
-})
-```
-
-A Program group structure (`programGroupSorter`) is an ask too. The function returns every
-program id of the question once, in the order Siren tries them:
-
-```js
-answers.on('programGroupSorter', 'pick-the-program', ({ data }) => {
-  // Try the program whose best engagement scores highest first.
-  const best = (program) => Math.max(0, ...program.engagements.map((engagement) => engagement.score))
-  const programs = [...data.programs].sort((a, b) => best(b) - best(a))
-  return { outcome: 'sorted', programIds: programs.map((program) => program.id) }
-})
-```
-
-On Siren's sample question, a pool of 10000 with scores 30 and 20, `splitPool` gives
-`{ '41': 6000, '43': 4000 }`. Each share is a whole number of the currency's smallest shown unit,
-`10 ** (scale - decimalPlaces)` stored units, so a yen pool splits in multiples of 100. Every share
-is rounded down, so the shares never add up to more than the pool. When every weight is 0, each id
-gets the same. A negative or non-finite weight throws `SirenError`. `weights` is an object of id to
-weight or a list of `[id, weight]` pairs.
-
-`on(kind, fn)` takes every feature of a kind that no `on(kind, key, fn)` names, and
-`onEvent(type, fn)` takes a webhook event sent to the same address, such as `conversion.approved`.
-Each function's request is typed by its kind: `on('distributionResolver', ...)` gets
-`AppAsk<AppDistributionQuestion>` and returns `AppDistributionAnswer`. The metric kinds are typed the same
-way: `on('metricCalculation', ...)` gets `AppAsk<AppMetricCalculationQuestion>` and returns
-`AppMetricCalculationAnswer`, and `on('metricFilter', ...)` returns `AppMetricFilterAnswer`. `on('incentiveType', ...)` gets
-`AppAsk<AppIncentiveTypeQuestion>` and returns `AppIncentiveTypeAnswer`. `on('engagementCalculation', ...)`
-returns `AppEngagementCalculationAnswer` and `on('engagementFilter', ...)` returns `AppEngagementFilterAnswer`.
-`on('programGroupSorter', ...)` gets `AppAsk<AppGroupOrderQuestion>` and returns `AppGroupOrderAnswer`.
-`on('transactionFilter', ...)` gets `AppAsk<AppTransactionFilterQuestion>` and returns
-`AppTransactionFilterAnswer`, the lines to include. `on('collaboratorGroupStructure', ...)` gets
-`AppAsk<AppCollaboratorGroupStructureQuestion>` and returns `AppCollaboratorGroupStructureAnswer`, a chain or a
-tree. The client must be built with
-the app's own key, since the handler posts answers with it.
-
-What the handler replies, always JSON with `Cache-Control: no-store`:
-
-| Request | Reply | What happens next |
-|---|---|---|
-| A method other than POST | 405 | Nothing. |
-| A body a parser already turned into an object | 500 | `onError` gets a `SirenError` that says to mount the handler before the JSON parser, or to give the route a raw body. |
-| A missing or wrong `X-Siren-Signature-V2`, another `X-Siren-Timestamp`, or a time more than `toleranceSeconds` (default 300) from the clock | 401 | The checks are `verifyRequest`'s own. |
-| A signed body that is not JSON, or an app request that is not an envelope of version 1 | 400 | Nothing. |
-| A tell with a function | 200 once the function returns, 500 when it throws | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. The function has Siren's 8 seconds. |
-| An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `undefined`, answer later with `apps.requests.answer()`. |
-| An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
-| Another event with an `onEvent` function | 200 once it returns, 500 when it throws | Nothing more. |
-| Another event with no function | 200 | Nothing. |
-
-The answer goes to `POST /apps/requests/{id}/answer`, checked first as `apps.requests.answer()`
-checks it. A lost connection, 429 or 5xx sends the same answer again within the client's
-`maxRetries`, which is safe because Siren takes the same answer again as `duplicate: true`. Siren's
-refusals go to `onError` as the SDK's typed errors and are not sent again: 422
-`app_answer_invalid`, 409 `app_request_already_answered` and `app_request_dropped`, 403 and 404.
-When the function throws or no answer lands, Siren asks again after `answerBy`. The handler keeps
-no state, and Siren may deliver one request twice, so a tell's function writes once by `id`.
-
-Mount it on any server. None is a dependency of this package.
-
-```ts
-http.createServer(answers)                                              // node:http
-app.post('/siren', express.raw({ type: 'application/json' }), answers)  // Express, Connect
-fastify.register(answers.fastify, { path: '/siren' })                   // Fastify, with its own raw body parser
-export const POST = answers                                             // Next.js app route
-export default { fetch: answers }                                       // Workers, Bun, Deno, Hono
-const reply = await answers.handle({ method, headers, rawBody })        // anything else: { status, headers, body, after }
-```
-
-With Node's `(req, res)` it reads a Buffer or string a raw parser left in `req.body`, or reads the
-stream itself, up to 1 MiB. With a Web `Request` it answers a `Response`. An ask's work runs in the
-process after the reply on a Node server, goes to `ctx.waitUntil` when a Worker passes it as the
-third argument, and otherwise runs as a promise nothing awaits. A function host such as Vercel may
-stop that promise, so pass `runLater: after` from `next/server` there, or any function that takes
-the work, such as a queue's. From `handle()`, send the reply and then run `after()`. By default
-`onError` writes one `console.error` line with the kind, key and request id, or an event's type and
-delivery id, and the error. It never writes the request's data or headers. In TypeScript, the Web
-`Request` signature is the handler's last, so Next.js 13 to 15 accept `export const POST = answers`.
-
-### Check and answer by hand
-
-The handler above runs the same checks and the same answer post as `apps.verifyRequest()` and
-`apps.requests.answer()` below. Call them yourself when the app queues the work or answers after a
-person decides. An ask's function that returns `undefined` leaves its answer to this path.
-
-### Check a request
-
-Siren sends each request as a `POST` to the app's `url`, signed with the app's signing secret in
-`X-Siren-Signature-V2: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">`.
-`apps.verifyRequest(rawBody, headers, secret)` checks it against the exact bytes received and
-answers the parsed request. It refuses a signature that does not match, a time more than 300
-seconds from the receiver's clock either way, an `X-Siren-Event` other than `app.request`, and a
-body that is not a request of version 1, each with `SignatureVerificationError`. It never falls back
-to the older `X-Siren-Signature`, which signs no time.
-
-```ts
-// createAcmeApp is the example app's handler, examples/apps/acme/handler.mjs. Copy it, or write your own in its shape.
-import { createAcmeApp } from './handler.mjs';
-
-const appSiren = new Siren({ apiKey: process.env.SIREN_API_KEY! }); // the app's own key
-const acme = createAcmeApp({ siren: appSiren, signingSecret: process.env.SIREN_SIGNING_SECRET!, log: console.log });
-
-app.post('/siren', express.raw({ type: 'application/json' }), (req, res, next) => {
-  acme.handle(req.body, req.headers).then((reply) => res.status(reply.status).type('application/json').send(reply.body), next);
-});
-```
-
-Answer 200 as soon as the request checks out. Siren may deliver one request more than once. Drop a
-repeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a
-repeat.
-
-The example's handler, which test/apps-example.test.ts drives with Siren's signed fixture, does the
-parts that are easy to get wrong. It answers an ask after the 200, outside the request, and catches
-an answer that fails, so a 5xx or a dropped connection is logged and never ends the process. It counts
-an ask as handled only once Siren accepts the answer, so the next delivery answers again. A repeat that
-arrives while the first answer is in flight waits for that answer, so two deliveries close together
-answer once. An ask it cannot answer, such as a pool with no metrics, gets 500 and a logged line
-that says why, never a guessed answer, so Siren sends it again on its deadline and then shows it as
-needing attention. The route passes anything else that throws to `next`, so Express answers 500 and the process keeps running.
-
-### Read what a tell says
-
-A tell's `data` belongs to the feature's kind. An Action after a conversion (`postConversionAction`) gets
-`AppConversionApprovedData`: the `conversion`, its `reward` as `{ value, units, currency }` or
-`null` when it has none, and the `program`. An Action after an allocation (`postAllocationAction`) gets
-`AppAllocationCompletedData`: the `allocation`, with `value`, `units` and `currency`, and the
-`distributor`.
-
-`value` is not the amount a person reads. It is the integer Siren stores, and the shown amount is
-`value / 10^currency.scale`. Siren stores yen in hundredths, so a `value` of 10000 in yen is 100
-yen, and a points currency an organization defines usually has scale 0, so 10000 is 10,000 points.
-`units` is the currency code. Read an amount with `apps.shownAmount(value, currency)`, which answers
-`{ amount, decimal, text }` the way Siren's dashboard reads it: `{ amount: 15, decimal: '15.00',
-text: '$15.00' }` for 1500 in dollars, `{ amount: 100, decimal: '100', text: '¥100' }` for 10000 in
-yen.
-
-```ts
-import type { AppConversionApprovedData } from '@novatorius/siren';
-
-const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
-if (request.mode === 'tell' && request.item.kind === 'postConversionAction') {
-  const { conversion, reward } = request.data as unknown as AppConversionApprovedData;
-  if (reward !== null) {
-    const shown = siren.apps.shownAmount(reward.value, reward.currency);
-    crm.note(conversion.collaboratorId, `Earned ${shown.text}`); // "Earned ¥100", never "Earned 10000"
-  }
-}
-```
-
-### Answer an ask
-
-`apps.requests.answer(id, answer)` posts the answer with `POST /apps/requests/{id}/answer`, from a
-`Siren` built with the app's own key, as `appSiren` is above. An admin's session may answer by hand,
-but only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses
-a person's answer to any other ask with 409 `app_request_not_needing_attention`, since the app may
-still answer it. The app's own key answers its own ask at any time before it is applied and before
-Siren stops waiting for it. The answer is a plain object with a text `outcome`, at most 16384 bytes as JSON. The call answers
-`{ status: 'accepted', duplicate }`.
-
-The answer is sent once. When it is lost to a dropped connection or a 5xx, send the same answer
-again. Siren takes each answer once, so `duplicate: true` means the first had already landed and
-nothing more was applied. A different answer after an accepted one gets 409
-`app_request_already_answered`, and the first one stands.
-
-An ask carries `answerBy`. Siren sends an unanswered ask again when its window closes, three sends
-in all, then marks it `needs_attention`. A feature's `answerWindowMinutes` sets the window, from 1
-to 43200 minutes. A payout method waits a day and a distribution resolver an hour when the feature
-sets none.
-
-### Answer a reward ask
-
-An Incentive resolver (`incentiveResolver`) gets `AppRewardQuestion` when a sale, renewal or lead
-converts in a program that picks it: the `program`, the `conversionType`, the `transaction` (null
-for a lead), the reward `pool` as a stored whole number, and the `conversions`, one per collaborator
-with their engagement `score`. `reason` is `sale` while the rewards are not made yet, and `refund`
-when a partial refund asks again about rewards already made. It answers `AppRewardAnswer`: the
-pool's `units`, and in `rewards` every `conversionId` of the question as text, each a whole number of
-0 or more or null for a collaborator who earns nothing. The rewards may add up to more than the
-pool. Siren refuses any other key, a missing one, or a negative or fractional reward with 422
-`app_answer_invalid`.
-
-The rewards wait for the answer, and an incentive resolver waits an hour per send when the feature
-sets no window. Siren waits at most 24 hours from when the sale's reward began to wait, or from the
-refund for a refund's ask. Then it stops waiting: a sale's collaborators get no reward, and a refund cuts the rewards already made by the share
-refunded. An answer after that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as
-`ConflictError`. While asks wait too long, the app's problem contacts, or the admins when it names
-none, get an email about twice a week.
-
-```ts
-import type { AppRewardAnswer, AppRewardQuestion } from '@novatorius/siren';
-
-const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
-if (request.mode === 'ask' && request.item.kind === 'incentiveResolver') {
-  const { pool, conversions } = request.data as unknown as AppRewardQuestion;
-  const total = conversions.reduce((sum, conversion) => sum + conversion.score, 0);
-  const rewards: AppRewardAnswer['rewards'] = {};
-  for (const conversion of conversions) {
-    rewards[String(conversion.conversionId)] = total > 0 ? Math.floor((pool.value * conversion.score) / total) : null;
-  }
-  const answer: AppRewardAnswer = { outcome: 'rewards', units: pool.units, rewards };
-  await appSiren.apps.requests.answer(request.id, answer);
-}
-```
-
-### Answer an award ask
-
-An Incentive structure (`incentiveType`) gets `AppIncentiveTypeQuestion` when a sale, renewal or
-lead reaches a program whose incentive type picks it, for a conversion its `conversionTypes`
-setting lists: the `program` with its `units`, the `conversionType`, the `opportunity`, the
-`transaction` (null for a lead, which names its `binding` instead) with its `total` and `lines` as
-stored whole numbers, and the `engagements` the program holds on the opportunity, each with its
-`score`. It answers `AppIncentiveTypeAnswer`: `{ outcome: 'award', units, pool, engagementIds }`,
-where `units` is the program's, `pool` a whole number of 0 or more, and `engagementIds` a list of
-the question's engagements, each once. Those engagements convert, and the program's resolver
-divides the pool among them. `{ outcome: 'none' }` awards nothing on the program. Siren refuses
-any other shape, an engagement the question lacks, or one named twice with 422
-`app_answer_invalid`.
-
-`reason` is `sale` until the award is made. A partial refund of a sale the app already awarded
-asks again with `reason` `refund`, the transaction as it stands now and the award's `conversions`.
-The rewards stay as they are until that answer, which keeps the same conversions and changes only
-the pool. The program awards nothing until the answer. Siren waits 24 hours from the first ask at
-most. Then it stops waiting: a sale awards nothing on the program, and a refund cuts the rewards
-already made by the share refunded. An answer after that gets 409 `app_request_dropped`
-(`AppErrorCode.Dropped`) as `ConflictError`.
-
-A feature of this kind needs `conversionTypes`, the conversions it pays, each once, from `sale`,
-`lead` and `renewal`. A program offers it only for those. The app file refuses it with none, or
-with a repeated or unknown one, and refuses `conversionTypes` on any other kind. `siren apps apply`
-shows a change to it as "conversions it pays".
-
-### Answer a group order ask
-
-A Program group structure (`programGroupSorter`) gets `AppGroupOrderQuestion` when a sale or lead
-reaches a program group that picks it: the `group`, the `conversionType`, the `opportunity`, the
-`transaction` (null for a lead) with its `total` as a stored whole number, and the `programs` of the
-group that take the conversion, in the group's order, each with its active `engagements` on the
-opportunity, oldest first. It answers `AppGroupOrderAnswer`: `programIds`, every program id of the
-question exactly once, in the order Siren tries them. The first program that converts wins the
-group. Siren refuses a missing, repeated or unknown id with 422 `app_answer_invalid`.
-
-No program in the group is awarded until the answer, and later sales on the group wait behind it.
-Siren asks about each sale when it happens, even one that waits behind another, and waits 24 hours
-from the sale at most. Then it stops waiting, no program in the group is awarded for that sale, and
-an answer after that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`. A
-renewal doesn't ask. It goes to the program in the group whose engagement is oldest.
-### Answer a metric ask
-
-A Metric calculation (`metricCalculation`) gets `AppMetricCalculationQuestion`: the `distributor`,
-the `distribution` period with its `periodEnd`, the `metricType`, the `triggeringCollaborator`, the
-`opportunityId` and `points` (either may be null), the `cause` and the `sale`, which is null when no
-sale caused the metric. It answers `AppMetricCalculationAnswer`, a score for each collaborator. Siren
-takes at most 50 results, each collaborator once and each in the organization and not in the trash,
-and each score a whole number of 0 or more. An empty list scores nobody. Set `scoresMoney: true` on
-the feature when the score is an amount of money in the distributor's currency. Only a metric
-calculation takes `scoresMoney`, and the app file refuses it on any other kind.
-
-A Customer filter for distributors (`metricFilter`) gets `AppMetricFilterQuestion`, which names the
-`collaborator` whose metric Siren is about to count. It answers `AppMetricFilterAnswer`: allow the
-metric, or suppress it with a plain text reason of 1 to 200 characters.
-
-```ts
-import type { AppMetricCalculationAnswer, AppMetricFilterAnswer, AppMetricFilterQuestion } from '@novatorius/siren';
-
-const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
-if (request.mode === 'ask' && request.item.kind === 'metricCalculation') {
-  const answer: AppMetricCalculationAnswer = { outcome: 'scores', results: [{ collaboratorId: 7, score: 10 }] };
-  await appSiren.apps.requests.answer(request.id, answer);
-}
-if (request.mode === 'ask' && request.item.kind === 'metricFilter') {
-  const { collaborator } = request.data as unknown as AppMetricFilterQuestion;
-  const answer: AppMetricFilterAnswer = crm.ownsCustomer(collaborator.id)
-    ? { outcome: 'suppress', reason: 'Customer already owned by a partner' }
-    : { outcome: 'allow' };
-  await appSiren.apps.requests.answer(request.id, answer);
-}
-```
-
-### Answer a payout ask
-
-A Payout method (`payoutMethod`) gets `AppPayoutQuestion` when Siren pays one payout through an
-autofulfiller that names the app's payout method: the `payout` (`id`, `fulfillmentId` and
-`attempt`), the `amount` to pay as a stored whole number in the currency's smallest unit, and the
-`collaborator` (`id`, `name` and `email`). `attempt` starts at 1 and rises when Siren asks again
-about the same payout, such as after a failed answer and a retry. The answer is `AppPayoutAnswer`,
-one of two shapes. `{ outcome: 'paid', reference }` has a `reference` of 1 to 191 characters, the
-payment's id in the app's own system. `{ outcome: 'failed', reason }` has a `reason` of 1 to 500
-characters.
-
-This moves money, so the app pays each payout id at most once. When Siren asks again about a
-payout the app already paid, the app answers `paid` with the first reference and pays nothing
-more. Siren drops an ask after 24 hours with no answer and marks the payout failed. An answer after
-that gets 409 `app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
-
-```ts
-import type { AppPayoutAnswer, AppPayoutQuestion } from '@novatorius/siren';
-
-const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
-if (request.mode === 'ask' && request.item.kind === 'payoutMethod') {
-  const { payout, amount, collaborator } = request.data as unknown as AppPayoutQuestion;
-  const reference = await ledger.payOnce(String(payout.id), amount.value, collaborator.email);
-  const answer: AppPayoutAnswer = reference
-    ? { outcome: 'paid', reference }
-    : { outcome: 'failed', reason: 'The account is closed.' };
-  await appSiren.apps.requests.answer(request.id, answer);
-}
-```
-
-With the request handler, the `payoutMethod` function gets the question typed and returns the
-`AppPayoutAnswer`, which the handler posts.
-
-### Answer an engagement ask
-
-An Engagement calculation (`engagementCalculation`) gets `AppEngagementCalculationQuestion` each time
-an engagement triggers for a program whose engagement type picks it: the `program`, the
-`engagementType`, the `programEngagementTypeId`, the `args` a person gave that engagement type, the
-`opportunity` with the `customerId` Siren matched it to (or null), the `triggeringCollaborator` and
-the `cause`. The cause's `id` is the trigger's own random id, its `event` the engagement type that
-fired, and its `occurredAt` the time the engagements the answer makes are dated. It answers
-`AppEngagementCalculationAnswer`, `{ outcome: 'engagements', results }`, with at most 50 results,
-each collaborator once and each in the organization and not in the trash, and each score a whole
-number of 0 or more. An empty list makes no engagement.
-
-A Customer filter for programs (`engagementFilter`) gets `AppEngagementFilterQuestion`, which names
-the `collaborator` the engagement would credit. It answers `AppEngagementFilterAnswer`: allow the
-engagement, or suppress it with a plain text reason of 1 to 200 characters, which Siren notes on the
-opportunity.
-
-Siren makes no engagement until the answer, and a sale on that program and opportunity waits for it
-before it earns a reward. Siren waits at most 24 hours from when it asked. When a sale waits on the
-answer, the ask ends with that sale's wait, 24 hours after the sale reached Siren, which can be
-sooner, even for a calculation a filter's allow asked later. Then it stops waiting, the trigger makes
-no engagement, the sales that waited award without it, and an answer after that gets 409
-`app_request_dropped` (`AppErrorCode.Dropped`) as `ConflictError`.
-
-```ts
-const answers = appSiren.apps.requestHandler({ signingSecret });
-answers.on('engagementCalculation', 'visit-weight', ({ data }) => ({
-  outcome: 'engagements',
-  results: [{ collaboratorId: data.triggeringCollaborator.id, score: data.opportunity.customerId ? 10 : 1 }],
-}));
-answers.on('engagementFilter', 'staff-check', ({ data }) =>
-  crm.isStaff(data.collaborator.id) ? { outcome: 'suppress', reason: 'The visitor works for the partner.' } : { outcome: 'allow' },
-);
-```
-
-### Answer a transaction filter ask
-
-A Transaction filter (`transactionFilter`) gets `AppTransactionFilterQuestion` when a sale lands on
-a program or a distributor that picks it, once per sale for each. Siren's catalog calls it a
-transaction compiler. The question names what the filter is `for` (a program or a distributor), the
-`transaction` with its `units` and `currency`, and the sale's own `lines`. Each line has its `id`,
-its `type` (`lineItem`, `discount`, `fee`, `shipping` or `tax`), its `name`, a whole `quantity`, its
-unit `value` as a stored whole number in the transaction's units, and a `productId` or null.
-`distribution` is null for a program, and for a distributor the period the sale's value lands in.
-`refundDistribution` is null, or the later period a refund came in while the ask was open.
-
-```json
-{"for": {"type": "program", "id": 3, "name": "Partner program"},
- "transaction": {"id": 3307, "units": "USD", "currency": {"id": "USD", "symbol": "$", "position": "before",
-                 "name": "US Dollar", "scale": 2, "decimalPlaces": 2, "type": "monetary"}},
- "lines": [{"id": 5501, "type": "lineItem", "name": "Annual plan", "quantity": 1, "value": 12000, "productId": "prod_annual"},
-           {"id": 5502, "type": "shipping", "name": "Shipping", "quantity": 1, "value": 800, "productId": null}],
- "distribution": null, "refundDistribution": null}
-```
-
-It answers `AppTransactionFilterAnswer`: `outcome` `filtered`, and in `include` the ids of the lines
-that count, each at most once. An empty list includes nothing. When a record picks more than one
-filter, a line counts when any of them includes it. Siren refuses an id the question lacks with 422
-`app_answer_invalid`. A refund reuses the stored answer, so Siren never sends refund lines.
-
-This filter counts only the sale's `lineItem` lines:
-
-```js
-answers.on('transactionFilter', 'plan-lines', ({ data }) => ({
-  outcome: 'filtered',
-  include: data.lines.filter((line) => line.type === 'lineItem').map((line) => line.id),
-}))
-```
-
-### Answer a group structure ask
-
-A Collaborator group structure (`collaboratorGroupStructure`) gets
-`AppCollaboratorGroupStructureQuestion` once per cascade trigger on a group that picks it. The
-question names the `group`, its `members` with each one's `collaboratorId`, `name`, `status` at the trigger and `metadata`,
-what the cascade is `for` (a program for an engagement cascade, a distributor for a metric cascade),
-the `triggeringCollaborator` and the `cause`, whose `id` is the trigger's own random id of 16 hex
-characters. It also carries the fields of the trigger it interrupts. A distributor's ask carries a
-metric calculation's fields, typed as `AppCollaboratorGroupStructureDistributorQuestion`. A program's
-ask carries an engagement calculation's fields (`program`, `engagementType`, `programEngagementTypeId`, `args`,
-`opportunity`) and an engagement's `cause`, typed as `AppCollaboratorGroupStructureProgramQuestion`. A
-distributor's looks like this:
-
-```json
-{"group": {"id": 4, "name": "Northeast team"},
- "members": [{"collaboratorId": 42, "name": "Riley Rep", "status": "active", "metadata": {"rank": 3}},
-             {"collaboratorId": 57, "name": "Sam Lead", "status": "active", "metadata": {"rank": 2}},
-             {"collaboratorId": 63, "name": "Jo Manager", "status": "active", "metadata": {"rank": 1}}],
- "for": {"type": "distributor", "id": 2},
- "triggeringCollaborator": {"id": 42, "name": "Riley Rep"},
- "cause": {"id": "9f2c4e1a7b3d5c60", "type": null, "causeId": null},
- "distributor": {"id": 2, "name": "Partner leaderboard"},
- "distribution": {"id": 21, "periodEnd": "2026-12-01T00:00:00+00:00"},
- "metricType": "referredSiteVisit", "distributorMetricTypeId": 55,
- "opportunityId": 615, "points": null, "sale": null}
-```
-
-It answers `AppCollaboratorGroupStructureAnswer`, a chain or a tree. A chain's `order` lists every
-member's `collaboratorId` once, top of the chain first, and Siren reads it as its built-in linear
-chain. A tree's `parents` holds every member's `collaboratorId` as text once, each mapped to another
-member's id or to null for a top member, with no cycle, and Siren reads it as its parent and child
-structure. Siren refuses an answer that breaks these rules with 422 `app_answer_invalid`.
-
-```ts
-import type { AppCollaboratorGroupStructureAnswer } from '@novatorius/siren';
-
-const chain: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'chain', order: [63, 57, 42] };
-const tree: AppCollaboratorGroupStructureAnswer = {
-  outcome: 'structure',
-  shape: 'tree',
-  parents: { '42': 57, '57': 63, '63': null },
-};
-
-const request = siren.apps.verifyRequest(rawBody, headers, signingSecret);
-if (request.mode === 'ask' && request.item.kind === 'collaboratorGroupStructure') {
-  await appSiren.apps.requests.answer(request.id, useTree ? tree : chain);
-}
-```
-
-### Send a custom event
-
-A custom event (`customEvent`) is an event of the app's own, such as a newsletter signup, that
-programs and distributors credit. It declares the fields each send carries and its allowed domains,
-the websites whose pages may send it from a visitor's browser:
-
-```json
-"newsletter-signup": {
-  "kind": "customEvent",
-  "name": "Newsletter signup",
-  "fields": { "list": { "type": "string", "required": true } },
-  "domains": ["example.com", "*.example.com"]
-}
-```
-
-A domain is a host, such as `shop.example.com`, or `*.example.com` for every host under it. Siren
-refuses a bare `*`, a scheme, a port and a path. With no domains, only the app's server can send the
-event.
-
-Siren takes only a short-lived token of the owning app at the event's address, never the key itself.
-The SDK hides that. On the app's server, build the client with the app's key and send:
-
-```js
-const siren = new Siren({ apiKey: process.env.SIREN_API_KEY, baseUrl: process.env.SIREN_BASE_URL });
-
-// A send from the app's server. The SDK trades the key for a short-lived
-// token, keeps it and renews it, so this is all the code it takes.
-export function recordSignup(collaboratorId, list) {
-  return siren.events.ingest('newsletter-signup', { collaboratorId, list });
-}
-
-// The route a page asks for a browser token. Mount it at /siren/token.
-export const browserTokens = siren.events.browserTokenHandler({ events: ['newsletter-signup'] });
-```
-
-`events.ingest` trades the key for a token that lasts 20 minutes at `POST /oauth/token`, keeps it,
-gets a new one when fewer than two minutes are left, and after a 401 gets a new one and sends once
-more. Sends at the same moment share one request. A key that belongs to no app sends with the key as
-before. Sales, refunds and site visits keep sending the key.
-
-A page sends the event with a browser token, which works for one event, lasts 10 minutes, and is
-taken only from a page on the event's allowed domains. `browserTokenHandler()` answers a page's
-request for one. It takes Node's `(req, res)` and a Web `Request`, so it mounts in one line:
-
-```ts
-app.post('/siren/token', browserTokens);       // Express
-export const POST = browserTokens;              // Next.js app route, app/siren/token/route.ts
-export default browserTokens;                   // Next.js pages route, pages/api/siren/token.ts
-```
-
-It reads the event from a JSON body `{"event": "newsletter-signup"}` or `?event=`, answers 200
-`{token, expiresIn, url}`, 400 `{error}` for an event it doesn't offer or Siren refuses, and 502
-when Siren can't be reached. `events.browserToken(eventKey)` answers the same object, for a server
-that builds its own route. It keeps one token per event until fewer than 60 seconds are left.
-
-On the page, `track` from the storefront module asks `/siren/token` for the token, keeps it until 30
-seconds before it ends, and sends:
-
-```js
-import { track } from '@novatorius/siren/storefront';
-
-export function wireSignupForm(form) {
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const collaboratorId = Number(form.dataset.collaboratorId);
-    // track asks /siren/token for a browser token, keeps it, and sends.
-    await track('newsletter-signup', { collaboratorId, list: 'weekly' });
-  });
-}
-```
-
-`track(eventKey, data, { tokenUrl })` resolves to Siren's answer, or `null` when the server gave no
-token or Siren refused the send, and rejects on a network failure. `createTracker({ tokenUrl, fetch })`
-gives a `track` with its own settings. Each send goes to Siren with the token in the query
-(`?access_token=`) and no cookies.
-
-Allowed domains stop another website's pages from sending the event, and a browser token from
-sending any other event. They don't stop a program outside a browser that
-asks your `/siren/token` for a token and claims an allowed `Origin`, or a visitor on an allowed page
-who sends made-up data, so credit only what the event's fields can't fake. The examples/apps/signups folder holds a
-whole app.
-
-### See what Siren sent
-
-`apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
-`pending`, `sent`, `delivered` (a tell the app received), `answered`, `applied` (an ask whose answer
-did its work) or `needs_attention`. `apps.requests.retrieve(id)` reads one request, however old,
-with `GET /apps/requests/{requestKey}`: the list's fields, the `data` Siren sent the app, the
-`answer` Siren took or `null`, and `answeredByUser`, `{ id, email }` of the person who answered by
-hand or `null`. It is a read, retried like one, and an admin's session only. Siren answers 404
-`app_request_not_found` for a request the organization does not have. `apps.requests.resend(id)` sends a request again under the same
-id with a new answer window. A request that holds an answer Siren has not applied, in
-`needs_attention` after its apply ran out of tries or still `answered` because the wake after the
-answer was lost, is not sent to the app again. Siren applies the stored answer instead, even while
-the app is off. Siren refuses an `applied` request, and one it would have to send while its app is
-off, with 409 `app_request_not_resendable`.
-
-### Error codes
-
-The app codes are in `AppErrorCode`, apart from `ErrorCode`, which holds Siren's shared list.
-`appErrorCode(error)` reads the code from any app call's error.
-
-```ts
-import { AppErrorCode, appErrorCode, ConflictError } from '@novatorius/siren';
-
-try {
-  await siren.apps.delete('acme-payouts');
-} catch (err) {
-  if (err instanceof ConflictError && appErrorCode(err) === AppErrorCode.AppInUse) {
-    await siren.apps.setStatus('acme-payouts', 'inactive');
-  } else {
-    throw err;
-  }
-}
-```
-
-| Code | Status | What to do |
-|---|---|---|
-| `app_limit_reached` | 403 | Turn another app off, or move to a plan with room. |
-| `app_cap_reached` | 400 | The organization holds 250 apps, on or off. Delete one first. |
-| `app_needs_a_part` | 422, 409 | Give the app a key, an address or both. |
-| `app_items_need_key_and_address` | 422, 409 | An app with features needs a key and an address. `missing` names the part it lacks. |
-| `app_key_exists` | 409 | Rotate the key instead of making one. |
-| `app_key_missing` | 409 | Make a key with `apps.createKey()` first. |
-| `app_address_missing` | 409 | Give the app a `url` first. |
-| `org_access_required` | 403 | Ask an admin who sees every store. |
-| `app_change_in_progress` | 409 | Send it again in a moment. |
-| `app_in_use` | 409 | Turn the app off instead, or move the records in `uses` first. |
-| `app_request_not_resendable` | 409 | Read the request. It is applied, or its app is off. |
-| `app_request_already_answered` | 409 | Stop. A different answer came first, and it stands. |
-| `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
-| `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
-| `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
-| `app_answer_invalid` | 422 | Fix the answer for the feature's kind. |
-| `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate-key <app key>` when the app's key is lost, and `siren apps add-key <app key>` when the app holds no key, as after a revoke. |
 
 ### The sandbox
 

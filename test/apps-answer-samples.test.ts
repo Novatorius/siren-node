@@ -42,6 +42,10 @@ vi.mock('express', async (importOriginal) => {
   return { default: wrapped };
 });
 
+// Each sample loads the SDK from source on its first import, which can pass
+// Vitest's 5 seconds on a busy machine.
+vi.setConfig({ testTimeout: 30_000 });
+
 interface FeatureFixture {
   kinds: Record<string, { request: Record<string, unknown>; answer: Record<string, unknown> | null }>;
 }
@@ -183,5 +187,69 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
       authorization: `Bearer ${TEST_API_KEY}`,
       body: features.kinds.incentiveType!.answer,
     });
+  });
+});
+
+/*
+ * The README's sample for every other kind, the feature page's Node.js tab
+ * (frontend/src/platform/saas/apps/featureContracts.ts on Siren's
+ * feat/apps). Each runs on Siren's own question for its kind. Where the
+ * sample's choice differs from the fixture's example answer, the expected
+ * answer is worked out from the question by hand, and it keeps the
+ * fixture answer's outcome and shape.
+ */
+describe("apps-docs: every other kind's sample, run as written", () => {
+  async function asked(sample: string, kind: string): Promise<unknown> {
+    const url = await load(sample);
+    expect(await sirenSends(url, kind)).toEqual({ status: 200, body: {} });
+    await eventually(() => expect(posted).toHaveLength(1));
+    expect(posted[0]!.url).toBe(`https://cloud.example.com/siren/v1/apps/requests/${ID}/answer`);
+    expect(posted[0]!.authorization).toBe(`Bearer ${TEST_API_KEY}`);
+    const body = posted[0]!.body as Record<string, unknown>;
+    expect(body.outcome).toBe((features.kinds[kind]!.answer as Record<string, unknown>).outcome);
+    return body;
+  }
+
+  it('payoutMethod: pays once and answers paid with the reference, the fixture answer', async () => {
+    const payOnce = vi.fn(async () => ({ ok: true, id: 'acme-ledger-5521' }));
+    vi.stubGlobal('payOnce', payOnce);
+    expect(await asked('payout-method', 'payoutMethod')).toEqual(features.kinds.payoutMethod!.answer);
+    const data = features.kinds.payoutMethod!.request.data as Record<string, { id?: number }>;
+    expect(payOnce).toHaveBeenCalledWith(88, data.collaborator, data.amount);
+  });
+
+  it('metricCalculation: scores the triggering collaborator 1 for a visit', async () => {
+    expect(await asked('metric-calculation', 'metricCalculation')).toEqual({ outcome: 'scores', results: [{ collaboratorId: 42, score: 1 }] });
+  });
+
+  it('metricFilter: suppresses a refunded sale with the fixture answer', async () => {
+    const isRefunded = vi.fn(() => true);
+    vi.stubGlobal('isRefunded', isRefunded);
+    expect(await asked('metric-filter', 'metricFilter')).toEqual(features.kinds.metricFilter!.answer);
+    expect(isRefunded).toHaveBeenCalledWith(3307);
+  });
+
+  it('engagementCalculation: credits the triggering collaborator 10 when Siren knows the customer', async () => {
+    expect(await asked('engagement-calculation', 'engagementCalculation')).toEqual({
+      outcome: 'engagements',
+      results: [{ collaboratorId: 42, score: 10 }],
+    });
+  });
+
+  it('engagementFilter: suppresses a visit from staff with the fixture answer', async () => {
+    const isStaff = vi.fn(() => true);
+    vi.stubGlobal('isStaff', isStaff);
+    expect(await asked('engagement-filter', 'engagementFilter')).toEqual(features.kinds.engagementFilter!.answer);
+    expect(isStaff).toHaveBeenCalledWith(42, 77);
+  });
+
+  it('transactionFilter: includes only the line items, the fixture answer', async () => {
+    expect(await asked('transaction-filter', 'transactionFilter')).toEqual(features.kinds.transactionFilter!.answer);
+  });
+
+  it('collaboratorGroupStructure: a chain by rank, the fixture answer', async () => {
+    expect(await asked('collaborator-group-structure', 'collaboratorGroupStructure')).toEqual(
+      features.kinds.collaboratorGroupStructure!.answer,
+    );
   });
 });
