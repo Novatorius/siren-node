@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { HOOK_FRAMES, HOOK_FRAME_MS, HOOK_WIDTH } from './hook-frames';
 import type { CliIo, CliScreen } from './io';
 import { CliRefusal } from './targets';
+import { visibleLength } from './style';
 
 /**
  * Siren green, the dark theme's `--primary` in Siren's frontend
@@ -186,7 +187,7 @@ export function plainCard(card: HookCard): string {
  */
 export function hookLayout(size: { columns: number; rows: number }, card: HookCard): HookLayout | null {
   const side = sideLines(card);
-  const sideWidth = INDENT.length + HOOK_WIDTH + GAP.length + Math.max(`Siren ${card.version}`.length, ...side.map((line) => line.length));
+  const sideWidth = INDENT.length + HOOK_WIDTH + GAP.length + Math.max(`Siren ${card.version}`.length, ...side.map((line) => visibleLength(line)));
   if (size.columns > sideWidth && size.rows >= Math.max(HOOK_ROWS, side.length + 2) + 2) return 'side';
   if (size.rows >= HOOK_ROWS + 2 + stackedLines(card).length + 2) return 'stacked';
   return null;

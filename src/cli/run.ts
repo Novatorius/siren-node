@@ -3,7 +3,7 @@ import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
 import * as requests from './commands/requests';
 import * as session from './commands/session';
-import { CommandContext, shortAddress, tokenRefusal } from './context';
+import { CommandContext, tokenRefusal } from './context';
 import type { CommandHandler } from './context';
 import { CredentialStore } from './credentials';
 import { firstRun, welcome } from './hook';
@@ -11,7 +11,7 @@ import type { HookCard } from './hook';
 import type { CliIo } from './io';
 import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, hostName, httpDetail, resolveTarget } from './targets';
 import { nearest } from './suggest';
-import { Style, hanging, styleFor, wrapWords } from './style';
+import { Style, clean, hanging, styleFor, wrapWords } from './style';
 import { ConnectionError, NotFoundError, SirenError } from '../errors';
 import { SANDBOX_BASE_URL } from '../http';
 import type { Target } from './targets';
@@ -516,13 +516,15 @@ async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
         ['siren apps init', 'write siren.app.json in this folder'],
         ['siren apps apply', 'declare the app on Siren and save its key'],
       ];
-  const host = shortAddress(target.baseUrl);
+  // CLI pass 3, should-fix 9: the first screen a newcomer sees takes the marks and colors every other screen has.
+  const style = styleFor(io, 'stdout', {});
+  const host = hostName(target.baseUrl);
   const isDefault = target.baseUrl === SANDBOX_BASE_URL || target.baseUrl === LIVE_BASE_URL;
   const where = token
     ? ['SIREN_TOKEN is set, so commands act with it.', ...(isDefault ? [] : [`Siren: ${host}`])]
     : kept
-      ? [`Logged in as ${kept.email}.`, `Siren: ${host}, ${kept.edition === 'production' ? 'live' : 'a sandbox'}.`]
-      : ['Not logged in. Run siren login to log in.', ...(isDefault ? [] : [`Siren: ${host}`])];
+      ? [style.success(`Logged in as ${style.bold(clean(kept.email))}.`), `Siren: ${host}, ${kept.edition === 'production' ? style.amber('live') : 'a sandbox'}.`]
+      : [style.warning('Not logged in. Run siren login to log in.'), ...(isDefault ? [] : [`Siren: ${host}`])];
   return { version: CLI_VERSION, where, next, footer: 'siren --help lists every command.' };
 }
 
@@ -622,11 +624,18 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     targetUrl = context?.target.baseUrl;
-    // A command that sends nothing checks no address, so its hints repeat the flags as typed.
-    const hintTarget = context?.target ?? {
-      live: flags.live,
-      addressFlag: flags.baseUrl !== undefined ? ` --base-url ${flags.baseUrl}` : flags.sandbox ? ' --sandbox' : '',
-    };
+    // A command that sends nothing names the Siren the next command would reach, the one logged in to included,
+    // so init's Next keeps --live after a live login (CLI pass 3, should-fix 11). A target it can't settle keeps the flags as typed.
+    const typedTarget = { live: flags.live, addressFlag: flags.baseUrl !== undefined ? ` --base-url ${flags.baseUrl}` : flags.sandbox ? ' --sandbox' : '' };
+    const hintTarget =
+      context?.target ??
+      (await Promise.resolve()
+        .then(async () => {
+          const kept = await remembered(io);
+          const target = resolveTarget(flags, io.env, kept);
+          return { ...target, live: target.live || (kept?.live === true && kept.baseUrl === target.baseUrl) };
+        })
+        .catch(() => typedTarget));
     const command = (words: string) => commandLine(hintTarget, words);
     hintCommand = context === null ? command : (words: string) => context.command(words);
     login = command('login');

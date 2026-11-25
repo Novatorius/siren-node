@@ -1,4 +1,7 @@
+import { access } from 'node:fs/promises';
+import { join } from 'node:path';
 import { SirenError } from '../../errors';
+import { APP_FILE_NAME } from '../app-file';
 import { contextOf, jwtClaim, notSignedIn, planRefusal, tokenFrom, tokenRefusal } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
@@ -205,6 +208,12 @@ async function keepLogin(input: CommandInput, result: LoginResult, edition: Edit
   if (io.env.SIREN_TOKEN !== undefined && io.env.SIREN_TOKEN !== '') {
     run.warn('SIREN_TOKEN is set, so the other commands use it rather than this session. Unset SIREN_TOKEN to use the session.');
   }
+  // CLI pass 3, should-fix 14: what comes next, as the bare screen says it. A folder with siren.app.json is one step further on.
+  const hasFile = await access(join(io.cwd, APP_FILE_NAME)).then(() => true, () => false);
+  const next = hasFile
+    ? { text: style.command(run.command('apps apply')), aside: 'declare the app on Siren and save its key' }
+    : { text: style.command(run.command('apps init')), aside: 'write siren.app.json in this folder' };
+  io.stdout(style.report({ headline: '', mark: false, next: [next] }).replace(/^\n/, ''));
   return 0;
 }
 

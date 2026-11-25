@@ -146,7 +146,7 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | Command | Sends | Prints |
 | --- | --- | --- |
 | `siren signup [--org-name] [--email] [--password-stdin] [--accept-terms]` | `GET /auth/signup-options`, then `POST /auth/register-org` once | The organization and the address signed in to. See "Confirmation and plan answers" for the other outcomes. |
-| `siren login` | signup-options, `POST /auth/cli/code`, then `POST /auth/cli/token` each interval | The logo with its halves apart beside the code, the link and a spinner while it waits, the halves gripping when the approval lands, then `Logged in as <email> · N organizations`. |
+| `siren login` | signup-options, `POST /auth/cli/code`, then `POST /auth/cli/token` each interval | The logo with its halves apart beside the code, the link and a spinner while it waits, the halves gripping when the approval lands, then `Logged in as <email> · N organizations` and a Next with `siren apps init`, or `siren apps apply` in a folder with siren.app.json (CLI pass 3, should-fix 14). |
 | `siren login --password [--email]`, or `--password-stdin --email` | signup-options, `POST /auth/login`, and `POST /auth/select-org` with the first organization for a person in several | The same line, and the days left to confirm the address when Siren says so. `--email` alone is a usage error. |
 | `siren logout` | `POST /auth/logout` with the access token and the refresh token | That the session is forgotten. It forgets it even when Siren refuses, and it needs no `--live` (AP-A640). |
 | `siren whoami [--json]` | nothing, or with `SIREN_TOKEN` signup-options and `GET /personal-tokens/current` | Which credential is in use, who it acts as, the organization and role, and whether that Siren is live. For a session, the session file's path, and exit 1 when none is kept there (CLI pass 1, finding 2). For a token, its name, last four characters and expiry. |
@@ -408,7 +408,7 @@ after it plays the hook each time with the status card: "Not logged in. Run sire
 or who is logged in to which organization on which Siren, the three commands that come next
 (`login`, `apps init` and `apps apply`, or `apps init`, `apps apply` and `apps requests --follow`
 once logged in), and `siren --help`, and answers 0. It reads credentials.json and sends nothing.
-The signed-out card names the Siren only when it is not the default sandbox or live one.
+The signed-out card names the Siren only when it is not the default sandbox or live one. In a terminal the card takes the marks every screen has: a green ✓ and the email in bold when logged in, an amber ! when not, and "live" in amber. It names a Siren by its host, never its scheme (should-fix 9). A command that sends nothing, such as `apps init`, writes its hints for the Siren the next command would reach, so they keep `--live` after a live login (should-fix 11). The delete question names the organization, as every write question does (should-fix 12).
 
 The frames are braille, 24 characters by 14 lines, in src/cli/hook-frames.ts. They come from the
 website's public/logo-animated-once.svg through scripts/build-hook-frames.mjs with `--slow 1.6`,

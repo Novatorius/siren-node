@@ -1038,8 +1038,16 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
   const key = appKeyArgument(input.args[0] ?? '');
+  // CLI pass 3, should-fix 12: the question names the organization, as every other write question does,
+  // so it asks after the organization is settled, and the warning goes on a line of its own.
+  const asking = values.yes !== true && io.interactive;
+  const session = asking ? await run.signedIn() : undefined;
   if (values.yes !== true) {
-    const typed = io.interactive ? (await io.prompt(`Deleting ${key} revokes its key and cannot be undone. Type ${key} to delete it: `)).trim() : undefined;
+    let typed: string | undefined;
+    if (session !== undefined) {
+      run.print(styleFor(io, 'stdout', values).warning(`Deleting ${key} revokes its key and can't be undone.`));
+      typed = (await io.prompt(`Type ${key} to delete it from ${orgNamed(session)}: `)).trim();
+    }
     if (typed !== key) {
       throw new CliRefusal(io.interactive ? `Nothing deleted: you typed something other than ${key}.` : 'Nothing deleted: deleting needs a yes.', {
         why: 'It revokes the key and cannot be undone.',
@@ -1047,7 +1055,7 @@ export async function appsDelete(input: CommandInput): Promise<number> {
       });
     }
   }
-  await run.signedIn();
+  if (session === undefined) await run.signedIn();
   try {
     await run.siren().apps.delete(key);
   } catch (error) {
