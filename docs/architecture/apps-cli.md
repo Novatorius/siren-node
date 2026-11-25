@@ -243,11 +243,25 @@ M105, contract/cli-signin.md in the run folder). It follows RFC 8628:
   `rundll32` or `xdg-open`), given the address as one argument and never through a shell. It opens
   nothing over SSH, on a Linux machine with no display, or for an address that is not http or
   https. It refuses an answer whose user code holds anything but letters, digits and dashes.
+- Before it opens or prints the page, it checks where the page is. A plain http page must be on
+  this machine, as the API must be. The page must be on the API's own host, or, for a Siren Cloud
+  API, on another `sirenaffiliates.com` host, where the dashboard lives apart from the API. Any
+  other page stops the login before the first poll, so a server that answers for Siren cannot send
+  the person to a look-alike page (`pageProblem`). The view shows the host of the Siren the tool
+  polls beside the code, so the person can match it against the page.
 - It polls `POST /auth/cli/token` every interval: `authorization_pending` waits the interval Siren
   names, `slow_down` waits the longer one it names, and a network fault, a 5xx or a 429 waits and
   polls again until the code's life runs out. `access_denied`, `expired_token` and `invalid_grant`
-  stop with one line. An interval is held between 1 and 60 seconds whatever Siren names.
+  stop with one line. An interval is held between 1 and 60 seconds whatever Siren names, and the
+  wait stops after the code's life or 15 minutes, whichever comes first.
+- Ctrl-C under the logo wins over an approval that lands in the same poll: the tool keeps no
+  session and exits 1.
 - The approval answers the same `LoginResult` a password gives, so the session is kept as before.
+  The store writes credentials.json at mode 0600 and sets its folder to 0700 on every write, also
+  when the folder was already there with looser modes.
+- Every name, email and role Siren sends loses its escape sequences and control characters before
+  the tool keeps or prints it (`clean` in the style module), so no answer can move the cursor,
+  clear the screen or plant a terminal link.
 - The logo animation plays the moment the approval lands, with every skip rule. It counts as the
   first-run animation, which `login` holds back for that moment.
 
@@ -824,7 +838,7 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | 2 | `siren signup`, answering the prompts: organization name, email, the terms, and the password at a hidden prompt | `Made <org> (<slug>) on <address>, and signed in as <email>.` On a live edition: `<address> is a live Siren. Add --live to sign up on a live Siren.` With sign-up off: `Sign-up is turned off on <address>. Ask its owner, or use siren login.` | cli-session |
 | 3 | In the checkout: `npm ci && npm run build`, then `cd examples/apps/acme && npm install` | npm's usual output | example-app |
 | 4 | In a second terminal: `cloudflared tunnel --url http://localhost:8787`. Back in the first: `export SIREN_APP_URL=<the https address it printed>` | A `https://<words>.trycloudflare.com` address | none, cloudflared |
-| 5 | `siren apps apply` | `Declared acme-payouts on <address>.`, the app line, one line per item with its `app:{id}`, `Its url came from SIREN_APP_URL.`, and `Key sk_test_<8 hex> and its signing secret are in <folder>/.env.sandbox.` No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |
+| 5 | `siren apps apply` | The plan, then `✓ Made acme-payouts in <org>` with a `Key` row (`sk_test_<8 hex>… in .env.sandbox, with its signing secret`), one row per feature with its `app:{id}`, `URL from  SIREN_APP_URL`, and two numbered next steps. No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |
 | 6 | `npm start` | `Acme example app on http://localhost:8787, for <address> (<folder>/.env.sandbox).` | example-app |
 | 7 | In the dashboard, signed in with the same email and password: make a program with a sale reward, pick "Acme: Tell the CRM" among its post-conversion actions and "Acme: Acme split" as its distributor's resolver, and add a collaborator with a tracking code. Open Webhooks. | The three Acme features in the pickers, and the app's subscription marked as managed by the app | Siren slices 1, 3 (claim C3), 4 and 11, not this slice |
 | 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: Siren made 1 conversion on opportunity <id>.` A sale no program pays for prints `Siren recorded it on opportunity <id> and made no conversion (no_program).` and Siren's message, which is what step 7 skipped gives (capture events-sale-200-no-program). | example-app |

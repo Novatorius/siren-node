@@ -93,8 +93,8 @@ each once, and with `*` present, `*` and the record scopes only
 line 51, applied by lib/Apps/Service/Services/AppService.php line 1764, both
 on feat/apps at `c8dbb1ab3`). So a file that names `*` beside `event:*`
 matches on the next run. It prints a header that says what applying the
-file changes, then each change, then asks
-"Type yes to apply". `--yes` skips the question. With no terminal and no
+file changes, then each change marked `+`, `~` or `-`, then asks
+"Apply to <org> (<slug>), sandbox? [y/N]". `--yes` skips the question. With no terminal and no
 `--yes` it sends nothing. With nothing to change it says so and writes
 nothing.
 

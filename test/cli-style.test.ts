@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CliRefusal } from '../src/cli/targets';
-import { Style, styleFor } from '../src/cli/style';
+import { Style, styleFor, unbroken, visibleLength } from '../src/cli/style';
 import { harness } from './cli-fakes';
 
 /*
@@ -90,6 +90,34 @@ describe('style: errors are three parts at most', () => {
     const elsewhere = new CliRefusal('Not logged in.', { fix: 'siren login', fixWords: 'to log in', note: 'Siren: uat.example' });
     expect(plain.error(elsewhere, false)).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
     expect(rich.error(elsewhere, false)).toContain(`${ESC}2m  Siren: uat.example`);
+  });
+});
+
+describe('style: a report', () => {
+  const tip = 'acme-payouts holds no key, so .env.sandbox has none. siren apps add-key acme-payouts makes one and saves it there.';
+
+  it('wraps a long tip under itself so no line passes 80 columns, styled or plain', () => {
+    for (const style of [rich, plain]) {
+      const lines = style.report({ headline: 'Updated acme-payouts', tips: [tip] }).trimEnd().split('\n');
+      for (const line of lines) expect(visibleLength(line), line).toBeLessThanOrEqual(80);
+      const tipLines = lines.slice(2);
+      expect(tipLines.length).toBeGreaterThan(1);
+      expect(tipLines.map((line) => line.replace(/\u001b\[[\d;]*m/g, '')).join(' ').replace(/^› /, '').replace(/ {2,}/g, ' ')).toBe(tip);
+    }
+    expect(rich.report({ headline: 'x', tips: [tip] }).split('\n')[3]).toMatch(/^\u001b\[2m {2}\S/);
+  });
+
+  it('never breaks a command that unbroken() marks, and prints it with plain spaces', () => {
+    const command = unbroken('siren apps rotate-key acme-payouts --base-url https://uat.example.com/siren/v1 --live');
+    const text = plain.report({ headline: 'x', tips: [`.env.live holds no key for acme-payouts, which is fine. ${command} would save a new one.`] });
+    expect(text).not.toContain('\u00a0');
+    expect(text.split('\n').some((line) => line.includes('siren apps rotate-key acme-payouts --base-url https://uat.example.com/siren/v1 --live'))).toBe(true);
+  });
+
+  it('wraps a long row value under its own column', () => {
+    const lines = plain.report({ headline: 'x', rows: [['Key', `${'sk_test_0a0a0a0a… and its signing secret, saved in '.repeat(2)}.env.sandbox`]] }).trimEnd().split('\n');
+    for (const line of lines) expect(visibleLength(line)).toBeLessThanOrEqual(80);
+    expect(lines[3]).toMatch(/^ {8}\S/);
   });
 });
 

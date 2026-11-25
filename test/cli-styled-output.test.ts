@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Style } from '../src/cli/style';
 import { harness } from './cli-fakes';
+import { APP_KEY, appMissing, appRecord } from './apps-siren-answers';
+import { reply } from './http-fakes';
 
 /*
  * Alex, after `siren apps init` in the demo kit: "the cli response here is
@@ -101,5 +103,139 @@ describe('siren apps init: the success output', () => {
     expect(text).toContain(`${ESC}1msiren apps apply${ESC}0m`);
     for (const line of strip(text).split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-styled-init.txt');
+  });
+});
+
+describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
+  const RAW_KEY = `sk_test_${'0a'.repeat(32)}`;
+  const SIGNING_SECRET = 'ef'.repeat(32);
+  const URL_ENV = { SIREN_APP_URL: 'https://acme.example/siren' };
+  const made = () => reply(201, { ...appRecord(), rawKey: RAW_KEY, signingSecret: SIGNING_SECRET });
+
+  async function firstApply(options: { tty?: boolean } = {}) {
+    const h = harness([appMissing(), made()], { env: URL_ENV, interactive: true, typed: ['y'] });
+    h.signedIn();
+    await h.run(['apps', 'init', '--key', APP_KEY]);
+    const { runCli } = await import('../src/cli/run');
+    const io = options.tty === true ? { ...h.io, stdoutTty: true, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } } : h.io;
+    const before = h.out().length;
+    expect(await runCli(['apps', 'apply', '--quiet'], io), h.err()).toBe(0);
+    return { h, text: h.out().slice(before) };
+  }
+
+  it('shows the plan with + markers and the organization, then a ✓ report with the key, each feature and two numbered steps', async () => {
+    const { h, text } = await firstApply();
+    expect(text).toBe(
+      [
+        'Plan  acme-payouts → Acme (3), sandbox',
+        '',
+        '  + makes the app with a key, an address and 1 feature',
+        '  + adds feature notify, Post-conversion action (postConversionAction), named Tell my service about each approved conversion',
+        '  → sends its requests to https://acme.example',
+        '',
+        'Made acme-payouts in Acme',
+        '',
+        '  Key           sk_test_0a0a0a0a… in .env.sandbox, with its signing secret',
+        '  notify-crm    app:11 · Post-conversion action',
+        '  acme-ledger   app:12 · Payout method',
+        '  URL from      SIREN_APP_URL',
+        '',
+        'Next',
+        '  1  node --env-file=.env.sandbox server.js   run your handler with its key',
+        '  2  siren apps requests --follow             watch what Siren sends it',
+        '',
+      ].join('\n'),
+    );
+    expect(h.prompts.at(-1)).toBe('Make acme-payouts in Acme (3), sandbox? [y/N] ');
+    expect(h.printed()).not.toContain(RAW_KEY);
+    expect(h.printed()).not.toContain(SIGNING_SECRET);
+    expect(text).not.toContain('autofulfiller');
+    expect(text).not.toContain(h.cwd);
+  });
+
+  it('is styled in a terminal, and fits 80 columns', async () => {
+    const { text } = await firstApply({ tty: true });
+    expect(text).toContain(`${ESC}1mPlan${ESC}0m`);
+    expect(text).toMatch(/\u001b\[[\d;]+m\+\u001b\[0m makes the app/);
+    expect(strip(text)).toContain('✓ Made acme-payouts in Acme');
+    expect(text).toContain(`${ESC}1mnode --env-file=.env.sandbox server.js${ESC}0m`);
+    for (const line of strip(text).split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+    await expect(text).toMatchFileSnapshot('./__snapshots__/cli-styled-apply-new.txt');
+  });
+
+  it('says ✓ and nothing more when the file already matches', async () => {
+    const h = harness([reply(200, appRecord({ name: 'Acme' }))], { env: URL_ENV });
+    h.signedIn();
+    h.write('siren.app.json', JSON.stringify({ version: 1, apps: { [APP_KEY]: { name: 'Acme', description: "Siren's example app.", url: '${SIREN_APP_URL}', features: {} } } }));
+    await h.run(['apps', 'apply']);
+    expect(h.out().split('\n')[0]).toMatch(/^acme-payouts already matches siren\.app\.json\. Nothing to send\.$|^Plan/);
+  });
+
+  it('declining sends nothing and says so in one quiet line, with exit 1', async () => {
+    const h = harness([appMissing()], { env: URL_ENV, interactive: true, typed: ['n'] });
+    h.signedIn();
+    await h.run(['apps', 'init', '--key', APP_KEY]);
+    expect(await h.run(['apps', 'apply'])).toBe(1);
+    expect(h.err()).toBe('siren: Nothing was sent.\n');
+    expect(h.paths()).toEqual([`GET /apps/${APP_KEY}`]);
+  });
+});
+
+describe('siren apps list and show: tables (catalog mockup 2)', () => {
+  const second = appRecord({ key: 'ledger-sync', name: 'Ledger sync', status: 'inactive', url: null, address: null, features: [], needsAttention: 0 });
+
+  it('list: a count line, a table of apps with the host only, and one tip with the command for what needs you', async () => {
+    const h = harness([reply(200, [appRecord({ needsAttention: 2 }), second])]);
+    h.signedIn();
+    expect(await h.run(['apps', 'list']), h.err()).toBe(0);
+    expect(h.out()).toBe(
+      [
+        '2 apps in Acme (3), sandbox',
+        '',
+        'APP           STATE  FEATURES  ATTENTION   ADDRESS',
+        'acme-payouts  on     2         2 requests  acme.example',
+        'ledger-sync   off    0         –           key only',
+        '',
+        'siren apps requests --app acme-payouts --attention lists the 2 that need you.',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('show: the app in a block, then its features as a table, marks in the name column', async () => {
+    const app = appRecord({ needsAttention: 1, features: appRecord().features.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) });
+    const h = harness([reply(200, app)]);
+    h.signedIn();
+    expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
+    expect(h.out()).toBe(
+      [
+        'acme-payouts  Acme',
+        '',
+        '  State     on',
+        '  Address   acme.example',
+        '  Key       sk_test_0a0a0a0a…',
+        '',
+        'ID      KEY          KIND                                           NAME',
+        'app:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM · archived',
+        'app:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger',
+        '',
+        'siren apps requests --app acme-payouts --attention lists the 1 that needs you.',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('is styled in a terminal and fits 80 columns', async () => {
+    const h = harness([reply(200, [appRecord({ needsAttention: 2 }), second]), reply(200, appRecord())]);
+    h.signedIn();
+    const { runCli } = await import('../src/cli/run');
+    const io = { ...h.io, stdoutTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } };
+    expect(await runCli(['apps', 'list', '--quiet'], io), h.err()).toBe(0);
+    expect(await runCli(['apps', 'show', APP_KEY, '--quiet'], io), h.err()).toBe(0);
+    const text = h.out();
+    expect(text).toMatch(/\u001b\[[\d;]+m● on\u001b\[0m/);
+    expect(text).toContain(`${ESC}2m○ off${ESC}0m`);
+    for (const line of strip(text).split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+    await expect(text).toMatchFileSnapshot('./__snapshots__/cli-styled-list-show.txt');
   });
 });

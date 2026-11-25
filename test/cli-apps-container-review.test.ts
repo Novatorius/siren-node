@@ -54,9 +54,7 @@ describe('apps-sdk-container review fix 1: the command for a missing key fits th
       h.write('.env.sandbox', `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
       h.write('siren.app.json', exampleFile(scopes));
       expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-      expect(h.out()).toContain(
-        `${KEY} holds no key, so ${join(h.cwd, '.env.sandbox')} has none. Run siren apps add-key ${KEY} to make one and save it there.`,
-      );
+      expect(h.out().replace(/\n  /g, ' ')).toContain(`${KEY} holds no key, so .env.sandbox has none. siren apps add-key ${KEY} makes one and saves it there.`);
       expect(h.printed(), String(scopes)).not.toContain('rotate-key');
     }
   });
@@ -69,9 +67,9 @@ describe('apps-sdk-container review fix 1: the command for a missing key fits th
     h.write('siren.app.json', exampleFile());
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.out()).not.toContain('to make a new key and save it there');
-    expect(h.out()).toContain(
-      `.env.sandbox holds no key for ${KEY}. That is fine when your service already has one. ` +
-        `siren apps rotate-key ${KEY} would save a new one here and revoke the one in use at once.`,
+    expect(h.out().replace(/\n  /g, ' ')).toContain(
+      `.env.sandbox holds no key for ${KEY}, which is fine when your service has one. ` +
+        `siren apps rotate-key ${KEY} would save a new one here and revoke the one in use.`,
     );
     expect(h.printed()).not.toContain('add-key');
   });
@@ -127,7 +125,7 @@ describe('apps-sdk-container review fix 2: apply says what will change, and clai
     h.signedIn();
     h.write('siren.app.json', exampleFile());
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain(`Applying siren.app.json changes ${KEY} on ${SANDBOX_BASE_URL}:\n  name: Old becomes Acme\n`);
+    expect(h.out()).toContain(`Plan  ${KEY} → Acme (3), sandbox\n\n  ~ name: Old becomes Acme\n`);
     expect(h.out()).not.toContain('made in the dashboard');
   });
 });
@@ -182,7 +180,7 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(kindLabel('futureKind')).toBe('futureKind');
   });
 
-  it('show, list and apply print the readable name beside the kind', async () => {
+  it('show and the apply plan print the readable name beside the kind', async () => {
     const h = harness([reply(200, appRecord()), reply(200, [appRecord()]), reply(200, appRecord({ name: 'Old', features: [appRecord().features[0]] })), reply(200, appRecord())], {
       env: URL_ENV,
     });
@@ -192,9 +190,9 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const out = h.out();
-    expect(out).toContain('  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM\n');
-    expect(out).toContain('  app:12  Payout method (payoutMethod)  acme-ledger  Acme ledger\n');
-    expect(out).toContain('  adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n');
+    expect(out).toContain('\napp:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM\n');
+    expect(out).toContain('\napp:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger\n');
+    expect(out).toContain('  + adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n');
   });
 
   it("the app file's kind messages name each kind readably beside the word the file takes", () => {
@@ -239,7 +237,7 @@ describe('apps-sdk-container review fix 5: scopes compared the way Siren stores 
       h.write('siren.app.json', exampleFile(file));
       expect(await h.run(['apps', 'apply']), `${file.join(',')}: ${h.err()}`).toBe(0);
       expect(h.paths(), file.join(',')).toEqual([`GET /apps/${KEY}`]);
-      expect(h.out(), file.join(',')).toBe(`${KEY} on ${SANDBOX_BASE_URL} already matches siren.app.json, so nothing was sent.\n`);
+      expect(h.out(), file.join(',')).toBe(`${KEY} already matches siren.app.json. Nothing to send.\n`);
     }
   });
 
@@ -248,7 +246,7 @@ describe('apps-sdk-container review fix 5: scopes compared the way Siren stores 
     h.signedIn();
     h.write('siren.app.json', exampleFile(['event:sale', '*', 'records:programs:read']));
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain('  key scopes: adds records:programs:read\n');
+    expect(h.out()).toContain('  ~ key scopes: adds records:programs:read\n');
     expect(h.out()).not.toContain('event:sale');
   });
 });

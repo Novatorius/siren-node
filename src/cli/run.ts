@@ -19,7 +19,7 @@ import { firstRun, welcome } from './hook';
 import type { HookCard } from './hook';
 import type { CliIo } from './io';
 import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, resolveTarget } from './targets';
-import { Style, styleFor } from './style';
+import { Style, styleFor, wrapWords } from './style';
 import { SirenError } from '../errors';
 import { SANDBOX_BASE_URL } from '../http';
 import type { Target } from './targets';
@@ -579,19 +579,7 @@ const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 
 const HELP_WIDTH = 80;
 
 /** `text` broken into lines of at most `width` characters, at spaces. */
-function wrap(text: string, width: number): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.split(' ')) {
-    if (line !== '' && line.length + 1 + word.length > width) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = line === '' ? word : `${line} ${word}`;
-    }
-  }
-  return [...lines, line];
-}
+const wrap = wrapWords;
 
 /**
  * Two aligned columns under a heading, as gh prints them: the left one

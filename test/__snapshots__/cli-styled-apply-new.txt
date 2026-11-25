@@ -1,0 +1,17 @@
+[1mPlan[0m  [1macme-payouts[0m → Acme (3), sandbox
+
+  [38;5;49m+[0m makes the app with a key, an address and 1 feature
+  [38;5;49m+[0m adds feature notify, Post-conversion action (postConversionAction), named
+    Tell my service about each approved conversion
+  [2m→[0m sends its requests to https://acme.example
+
+[38;5;49m✓[0m Made [1macme-payouts[0m in Acme
+
+  [2mKey[0m           sk_test_0a0a0a0a… in .env.sandbox, with its signing secret
+  [2mnotify-crm[0m    app:11 · Post-conversion action
+  [2macme-ledger[0m   app:12 · Payout method
+  [2mURL from[0m      SIREN_APP_URL
+
+[1mNext[0m
+  1  [1mnode --env-file=.env.sandbox server.js[0m   [2mrun your handler with its key[0m
+  2  [1msiren apps requests --follow[0m             [2mwatch what Siren sends it[0m

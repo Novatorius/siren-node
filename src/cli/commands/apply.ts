@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { access, lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import { RESERVED_APP_KEYS } from '../../resources/apps';
 import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types';
@@ -10,7 +10,8 @@ import { appChanges, droppedLine } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
-import { styleFor } from '../style';
+import { REPORT_WIDTH, clean, styleFor, unbroken, wrapWords } from '../style';
+import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError, commandLine } from '../targets';
 
@@ -115,7 +116,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
 
 /** "Acme (acme), live": the organization a write acts in, and whether it is live, for the question before the write. */
 function orgNamed(session: { orgName: string; orgSlug?: string; orgId: number; edition: string }): string {
-  return `${session.orgName} (${session.orgSlug ?? session.orgId}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
+  return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
 /**
@@ -263,75 +264,104 @@ export async function appsApply(input: CommandInput): Promise<number> {
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
   const lines = [...changes.lines, ...removals];
+  const out = styleFor(io, 'stdout', {});
+  const err = styleFor(io, 'stderr', {});
   if (lines.length === 0) {
-    run.print(`${key} on ${run.target.baseUrl} already matches ${shown}, so nothing was sent.`);
+    run.print(out.success(`${out.bold(key)} already matches ${shown}. Nothing to send.`));
     return 0;
   }
-  run.print(
-    changes.isNew
-      ? `${key} is new on ${run.target.baseUrl}. Applying ${shown}:`
-      : `Applying ${shown} changes ${key} on ${run.target.baseUrl}:`,
-  );
-  for (const line of lines) run.print(`  ${line}`);
-  const origin = params.url == null ? undefined : originOf(params.url);
-  if (changes.isNew && origin !== undefined) run.print(`  sends its requests to ${origin}`);
   const org = orgNamed(session);
+  run.print(`${out.bold('Plan')}  ${out.bold(key)} → ${org}`);
+  run.print('');
+  for (const line of lines) {
+    // A terminal gets lines that fit it. A pipe gets each change on one line, for a script to read.
+    const [first = '', ...rest] = out.rich ? wrapWords(line, REPORT_WIDTH - 4) : [line];
+    run.print(`  ${planMarker(out, line)} ${first}`);
+    for (const more of rest) run.print(`    ${more}`);
+  }
+  const origin = params.url == null ? undefined : originOf(params.url);
+  if (changes.isNew && origin !== undefined) run.print(`  ${out.dim('→')} sends its requests to ${origin}`);
+  run.print('');
   if (input.values.yes !== true) {
     const question = changes.isNew ? `Make ${key} in ${org}? [y/N] ` : `Apply to ${org}? [y/N] `;
-    if (!changes.isNew && io.interactive) run.print('The last write wins, so this replaces anything changed in the dashboard since.');
     if (!io.interactive) {
-      throw new CliRefusal(`Nothing was sent. Run ${run.command(input.args[0] === undefined ? 'apps apply --yes' : `apps apply ${shown} --yes`)} to apply ${lines.length === 1 ? 'it' : 'them'} without asking.`);
-    }
-    const typed = (await io.prompt(question)).trim().toLowerCase();
-    if (typed !== 'yes' && typed !== 'y') throw new CliRefusal('Nothing was sent.');
-  }
-
-  const app = await siren.apps.declare(key, params);
-
-  run.print(`Declared ${key} on ${run.target.baseUrl}.`);
-  for (const line of appLines(app, false)) run.print(line);
-  if (app.features.length > 0) {
-    const ref = app.features[0]!.ref;
-    run.print(`${ref} is the id a program, distributor or autofulfiller stores to select that feature.`);
-  }
-  for (const name of parsed.filled) run.print(`Its url came from ${name}${shell(name) ? '' : ' in .env'}.`);
-  if (app.features.some((item) => item.status === 'archived')) {
-    const again = run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`);
-    run.print(
-      `An archived feature is one ${shown} no longer names while a record still selects it. ` +
-        'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
-        `To bring it back, name it in ${shown} again with the same kind and key, and run ${again}.`,
-    );
-  }
-
-  if (app.created) {
-    const saved = await saveSecrets(run, key, envPath, { rawKey: app.rawKey, signingSecret: app.signingSecret }, false);
-    await run.remember(key, envPath);
-    if (!saved) return 1;
-    const envName = basename(envPath);
-    run.print('Next:');
-    run.print(`  Run your handler with its key: node --env-file=${envName} server.js, or load ${envName} as your framework does.`);
-    if (listens) run.print(`  Send Siren's requests to it: ${run.command('listen --forward-to localhost:<port>/<path>')}`);
-    // A read, which needs no --live.
-    run.print(`  Watch what Siren sends it: ${commandLine(run.target, 'apps requests --follow', false)}`);
-    return 0;
-  }
-  await run.remember(key, envPath);
-  // A later declaration that gave the app its first address answers the address's secret once.
-  if (app.signingSecret !== undefined && !(await saveSecrets(run, key, envPath, { signingSecret: app.signingSecret }, false))) return 1;
-  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
-    // An app made in the dashboard may hold no key, and Siren refuses to rotate one it lacks (409 `app_key_missing`).
-    if (app.apiKey === null || app.apiKey === undefined) {
-      run.print(`${key} holds no key, so ${envPath} has none. Run ${run.command(`apps add-key ${key}`)} to make one and save it there.`);
-    } else {
-      // CLI pass 2, finding 2: a running service may hold the key, so never advise rotating it.
-      run.print(
-        `${envPath} holds no key for ${key}. That is fine when your service already has one. ` +
-          `${run.command(`apps rotate-key ${key}`)} would save a new one here and revoke the one in use at once.`,
+      const again = run.command(input.args[0] === undefined ? 'apps apply --yes' : `apps apply ${shown} --yes`);
+      io.stderr(
+        err.rich
+          ? `${err.warning("Nothing sent: there's no terminal to ask in.")}\n${err.next(`${err.command(again)} applies ${lines.length === 1 ? 'it' : 'them'} without asking`)}\n`
+          : `siren: Nothing was sent. Run ${again} to apply ${lines.length === 1 ? 'it' : 'them'} without asking.\n`,
       );
+      return 1;
+    }
+    if (!changes.isNew) run.print(out.dim('The last write wins, so this replaces anything changed in the dashboard since.'));
+    const typed = (await io.prompt(question)).trim().toLowerCase();
+    if (typed !== 'yes' && typed !== 'y') {
+      io.stderr(err.rich ? `${err.dim('Nothing sent.')}\n` : 'siren: Nothing was sent.\n');
+      return 1;
     }
   }
+
+  const spinner = err.rich ? err.spinner(changes.isNew ? `Making ${key}` : `Applying ${shown}`, (text) => io.stderr(text)) : undefined;
+  let app: Awaited<ReturnType<typeof siren.apps.declare>>;
+  try {
+    app = await siren.apps.declare(key, params);
+  } finally {
+    spinner?.cancel();
+  }
+
+  const envName = shortPath(io.cwd, envPath);
+  const rows: Array<readonly [string, string]> = [];
+  const tips: string[] = [];
+  let saved: string | false = '';
+  if (app.created) saved = await saveSecrets(run, key, envPath, { rawKey: app.rawKey, signingSecret: app.signingSecret }, false);
+  // A later declaration that gave the app its first address answers the address's secret once.
+  else if (app.signingSecret !== undefined) saved = await saveSecrets(run, key, envPath, { signingSecret: app.signingSecret }, false);
+  await run.remember(key, envPath);
+  if (saved === false) return 1;
+  if (saved !== '') rows.push([app.created ? 'Key' : 'Secret', saved]);
+  for (const item of app.features) rows.push([clean(item.key), featureRow(item)]);
+  if (Array.isArray(app.events) && app.events.length > 0) rows.push(['Events', `${clean(app.events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`]);
+  for (const name of parsed.filled) rows.push(['URL from', `${name}${shell(name) ? '' : ' in .env'}`]);
+  if (app.features.some((item) => item.status === 'archived')) {
+    const again = unbroken(run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`));
+    tips.push(`Siren keeps an archived feature while a record selects it, and never calls it. Name it in ${shown} again and run ${again} to bring it back.`);
+  }
+  if (!app.created && (await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
+    // An app made in the dashboard may hold no key, and Siren refuses to rotate one it lacks (409 `app_key_missing`).
+    if (app.apiKey === null || app.apiKey === undefined) tips.push(`${key} holds no key, so ${envName} has none. ${unbroken(run.command(`apps add-key ${key}`))} makes one and saves it there.`);
+    // CLI pass 2, finding 2: a running service may hold the key, so never advise rotating it.
+    else tips.push(`${envName} holds no key for ${key}, which is fine when your service has one. ${unbroken(run.command(`apps rotate-key ${key}`))} would save a new one here and revoke the one in use.`);
+  }
+  const next = app.created
+    ? [
+        { text: out.command(`node --env-file=${envName} server.js`), aside: 'run your handler with its key' },
+        // An app with no address on a sandbox gets its requests through siren listen.
+        ...(listens ? [{ text: out.command(run.command('listen --forward-to localhost:<port>/<path>')), aside: "send Siren's requests to it" }] : []),
+        // A read, which needs no --live.
+        { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
+      ]
+    : [];
+  run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${session.orgName}`, rows, next, tips }).replace(/\n$/, ''));
   return 0;
+}
+
+/** `+` for what a plan adds, `-` for what it removes, `~` for what it changes, colored when the terminal takes color. */
+function planMarker(style: Style, line: string): string {
+  if (/^(adds|makes) /.test(line)) return style.green('+');
+  if (/^removes /.test(line)) return style.red('-');
+  return style.amber('~');
+}
+
+/** A feature's row after apply: its `app:{id}`, its kind, and any mark for its state or plan. */
+function featureRow(item: AppFeature): string {
+  const archived = item.status === 'archived' ? ' · archived' : '';
+  return `${clean(item.ref)} · ${clean(kindName(item.kind))}${archived}${planMark(item)}`;
+}
+
+/** `path` relative to `cwd` when it is inside it, such as `.env.sandbox`, else the absolute path. */
+function shortPath(cwd: string, path: string): string {
+  const inside = relative(cwd, path);
+  return inside !== '' && !inside.startsWith('..') && !isAbsolute(inside) ? inside : path;
 }
 
 /**
@@ -362,47 +392,110 @@ function refuseKindChange(item: AppFeature, uses: number | undefined, wanted: re
 }
 
 
-/** `siren apps list [--json]`: one block per app with its features, or the JSON Siren sent. */
+/** `siren apps list [--json]`: a count line and a table of the apps, or the JSON Siren sent. */
 export async function appsList(input: CommandInput): Promise<number> {
   const run = contextOf(input);
-  await run.signedIn();
+  const session = await run.signedIn();
   const apps = await run.siren().apps.list();
   if (input.values.json === true) {
     run.print(JSON.stringify(apps, null, 2));
     return 0;
   }
-  if (apps.length === 0) run.print(`No apps on ${run.target.baseUrl} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
-  for (const app of apps) {
-    for (const line of appLines(app)) run.print(line);
-    attentionLine(run, app);
+  const out = styleFor(input.io, 'stdout', {});
+  if (apps.length === 0) {
+    run.print(`No apps in ${orgNamed(session)} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
+    return 0;
+  }
+  run.print(out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
+  run.print('');
+  const rows = apps.map((app) => {
+    const count = attentionCount(app);
+    return [
+      clean(app.key),
+      stateCell(out, app),
+      String(app.features.length),
+      count === 0 ? out.dim('–') : out.bold(out.amber(`${count} ${count === 1 ? 'request' : 'requests'}`)),
+      addressCell(out, app),
+    ];
+  });
+  for (const line of out.table(['APP', 'STATE', 'FEATURES', 'ATTENTION', 'ADDRESS'], rows, widthOf(input, out))) run.print(line);
+  const waiting = apps.filter((app) => attentionCount(app) > 0);
+  if (waiting.length === 1) attentionTip(run, out, waiting[0]!);
+  else if (waiting.length > 1) {
+    run.print('');
+    run.print(out.next(`${out.command(run.command('apps requests --attention'))} lists the requests that need you.`));
   }
   return 0;
 }
 
-/** `siren apps show <key> [--json]`: the app and its features. */
+/** `siren apps show <key> [--json]`: the app in an aligned block, then its features as a table. */
 export async function appsShow(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const key = appKeyArgument(input.args[0] ?? '');
   await run.signedIn();
   const app = await run.siren().apps.retrieve(key);
-  if (input.values.json === true) run.print(JSON.stringify(app, null, 2));
-  else {
-    for (const line of appLines(app)) run.print(line);
-    attentionLine(run, app);
+  if (input.values.json === true) {
+    run.print(JSON.stringify(app, null, 2));
+    return 0;
   }
+  const out = styleFor(input.io, 'stdout', {});
+  const prefix = app.apiKey?.prefix ?? app.apiKeyPrefix;
+  const events = Array.isArray(app.events) ? app.events : [];
+  const rows: Array<readonly [string, string]> = [
+    ['State', stateCell(out, app)],
+    ['Address', addressCell(out, app)],
+    ...(typeof prefix === 'string' && prefix !== '' ? [['Key', `${prefix}…`] as const] : [['Key', out.dim('none')] as const]),
+    ...(events.length > 0 ? [['Events', `${clean(events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
+  ];
+  const report = out.report({ headline: `${out.bold(clean(app.key))}  ${clean(app.name)}`, rows });
+  // A report leads with ✓, which says something was done. A view has nothing to mark.
+  run.print(report.replace(/^(\S*✓\S* )?/, '').replace(/\n$/, ''));
+  if (app.features.length > 0) {
+    run.print('');
+    const features = app.features.map((item) => [
+      clean(item.ref),
+      clean(item.key),
+      clean(kindLabel(item.kind)),
+      `${clean(item.name)}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
+    ]);
+    for (const line of out.table(['ID', 'KEY', 'KIND', 'NAME'], features, widthOf(input, out))) run.print(line);
+  }
+  if (attentionCount(app) > 0) attentionTip(run, out, app);
   return 0;
 }
 
-/**
- * Under an app with requests that need a person, how many, and the command
- * that lists them. Prints nothing for a count of zero, or for a Siren that
- * sends no count.
- */
-function attentionLine(run: CommandContext, app: App): void {
-  const count = app.needsAttention;
-  if (typeof count !== 'number' || count <= 0) return;
-  const command = run.command(`apps requests --app ${app.key} --attention`);
-  run.print(count === 1 ? `  1 request needs attention. See it with ${command}.` : `  ${count} requests need attention. See them with ${command}.`);
+/** How many of the app's requests need a person, or 0 when Siren sends no count. */
+function attentionCount(app: App): number {
+  return typeof app.needsAttention === 'number' && app.needsAttention > 0 ? app.needsAttention : 0;
+}
+
+/** `● on` green or `○ off` dim in a terminal, `on` or `off` elsewhere. */
+function stateCell(style: Style, app: App): string {
+  if (app.status === 'active') return style.rich ? style.green('● on') : 'on';
+  return style.rich ? style.dim('○ off') : 'off';
+}
+
+/** The host Siren sends the app's requests to, or `key only` for an app with no address. Never the whole url. */
+function addressCell(style: Style, app: App): string {
+  if (typeof app.url !== 'string' || app.url === '') return style.dim('key only');
+  try {
+    return new URL(app.url).host;
+  } catch {
+    return style.dim('an address');
+  }
+}
+
+/** The widest a table may be: the terminal's columns, 80 in a terminal of unknown size, and no limit in a pipe. */
+function widthOf(input: CommandInput, style: Style): number {
+  if (!style.rich) return Number.POSITIVE_INFINITY;
+  return input.io.screen?.size?.columns ?? 80;
+}
+
+/** The tip under an app with requests that need a person: how many, and the command that lists them. */
+function attentionTip(run: CommandContext, out: Style, app: App): void {
+  const count = attentionCount(app);
+  run.print('');
+  run.print(out.next(`${out.command(run.command(`apps requests --app ${app.key} --attention`))} lists the ${count} that ${count === 1 ? 'needs' : 'need'} you.`));
 }
 
 /** `siren apps on <key>`: turns the app on. */
@@ -509,7 +602,8 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
   }
   const saved = await saveSecrets(run, key, envPath, secrets, part !== 'add-key');
   await run.remember(key, envPath);
-  if (saved) {
+  if (saved !== false) {
+    run.print(saved.startsWith('the new') ? `Saved ${saved}.` : `Saved key ${saved}.`);
     run.print(
       part === 'key'
         ? 'Siren revoked the old key. Restart your app so it reads the new key.'
@@ -518,7 +612,7 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
           : `The key holds no scopes yet. Run ${run.command('apps apply')} to give it the scopes your app file names.`,
     );
   }
-  return saved ? 0 : 1;
+  return saved === false ? 1 : 0;
 }
 
 /**
@@ -571,26 +665,6 @@ export async function appsDelete(input: CommandInput): Promise<number> {
 }
 
 /**
- * An app's lines: its key, name, state and, when `showUrl`, its url, then
- * one line per feature with its `app:{id}`, then its events when it has
- * any. A feature Siren archived, because a later declaration left it out
- * while a record still selects it, says so beside it, and a feature or the
- * events the plan cannot use say which plan they need. `apply` leaves the url out, since it may have come from the
- * environment.
- */
-export function appLines(app: App, showUrl = true): string[] {
-  const state = app.status === 'active' ? 'on' : 'off';
-  const lines = [`${app.key}  ${app.name}  ${state}${showUrl && app.url ? `  ${app.url}` : ''}`];
-  for (const item of app.features) {
-    const archived = item.status === 'archived' ? '  archived, so Siren no longer calls it' : '';
-    lines.push(`  ${item.ref}  ${kindLabel(item.kind)}  ${item.key}  ${item.name}${archived}${planMark(item)}`);
-  }
-  const events = Array.isArray(app.events) ? app.events : [];
-  if (events.length > 0) lines.push(`  events  ${events.join(', ')}${planMark(app.eventsAccess, ', so Siren does not send them')}`);
-  return lines;
-}
-
-/**
  * `  requires Pro` beside a feature or the events the plan cannot use, read
  * from Siren's `entitled` and `requiredPlan` (AppPlanAccess on Siren's
  * int/preview-apps). The plan is the one Siren names, never a guess: when
@@ -601,7 +675,8 @@ function planMark(access: { entitled?: unknown; requiredPlan?: unknown } | undef
   if (access === undefined || access === null || access.entitled !== false) return '';
   const plan = typeof access.requiredPlan === 'string' && access.requiredPlan !== '' ? access.requiredPlan : undefined;
   if (plan === undefined) return `  your plan cannot use it${then}`;
-  return `  requires ${plan.charAt(0).toUpperCase()}${plan.slice(1)}${then}`;
+  const named = clean(plan);
+  return `  requires ${named.charAt(0).toUpperCase()}${named.slice(1)}${then}`;
 }
 
 /** Turns the app on or off and prints its new state. */
@@ -662,7 +737,7 @@ interface ShownSecrets {
  * the file is revoked. Never
  * prints either value, and answers false.
  */
-export async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<boolean> {
+export async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<string | false> {
   const { rawKey, signingSecret } = secrets;
   const both = rawKey !== undefined && signingSecret !== undefined;
   try {
@@ -685,10 +760,10 @@ export async function saveSecrets(run: CommandContext, key: string, envPath: str
     );
     return false;
   }
-  if (both) run.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${envPath}.`);
-  else if (rawKey !== undefined) run.print(`Key ${rawKey.slice(0, 16)} is in ${envPath}.`);
-  else run.print(`Its new signing secret is in ${envPath}.`);
-  return true;
+  const where = shortPath(run.io.cwd, envPath);
+  if (both) return `${rawKey.slice(0, 16)}… in ${where}, with its signing secret`;
+  if (rawKey !== undefined) return `${rawKey.slice(0, 16)}… in ${where}`;
+  return `the new signing secret in ${where}`;
 }
 
 /**

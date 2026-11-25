@@ -69,7 +69,7 @@ describe('apps-sdk-followups-1: the records', () => {
 
   it('name needsAttention and where the command shows it', () => {
     expect(read('CHANGELOG.md')).toContain('`App.needsAttention`');
-    expect(read('README.md')).toContain('how many and the `siren apps requests --app <key> --attention` that lists them');
+    expect(read('README.md')).toContain('names the `siren apps requests --app <key> --attention` that lists the requests that need you');
     expect(read('docs/architecture/apps-cli.md')).toContain('### 8. How many requests need attention');
   });
 

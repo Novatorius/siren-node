@@ -159,8 +159,9 @@ export class CredentialStore {
 
   /** Writes the whole file through a temporary file and a rename, mode 0600 in a folder of mode 0700. */
   private async write(file: CredentialsFile): Promise<void> {
-    const made = await mkdir(this.configDir, { recursive: true, mode: 0o700 });
-    if (made !== undefined && POSIX) await chmod(this.configDir, 0o700);
+    await mkdir(this.configDir, { recursive: true, mode: 0o700 });
+    // A folder that was already there, made by another tool or by hand, is tightened too, so only this user can list it.
+    if (POSIX) await chmod(this.configDir, 0o700);
     const temporary = join(this.configDir, `.credentials.${randomBytes(6).toString('hex')}.tmp`);
     try {
       await writeFile(temporary, `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
