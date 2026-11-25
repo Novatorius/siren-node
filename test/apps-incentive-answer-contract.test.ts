@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Siren } from '../src/client';
-import type { AppAsk, AppRewardAnswer, AppRewardQuestion } from '../src/record-types';
+import type { AppAsk, IncentiveResolverAnswer, IncentiveResolverQuestion } from '../src/record-types';
 import type { AppFunctionFor } from '../src/resources/app-request-handler';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient } from './http-fakes';
@@ -29,7 +29,7 @@ const fixture = JSON.parse(
 const siren = new Siren({ apiKey: TEST_API_KEY, baseUrl: BASE, httpClient: new FakeHttpClient([]) });
 
 /** Siren's AppRewardQuestion::validate(): the reason it refuses the answer with 422, or null. */
-function refusalOf(question: AppRewardQuestion, answer: Record<string, unknown>): string | null {
+function refusalOf(question: IncentiveResolverQuestion, answer: Record<string, unknown>): string | null {
   if (answer.outcome !== 'rewards') return 'outcome';
   if (answer.units !== question.pool.units) return 'units';
   const rewards = answer.rewards;
@@ -49,7 +49,7 @@ function refusalOf(question: AppRewardQuestion, answer: Record<string, unknown>)
 describe("C16-2: the incentive resolver sample answer meets Siren's check", () => {
   it("splitPool over Siren's fixture question gives an answer Siren takes", async () => {
     const entry = fixture.kinds.incentiveResolver!;
-    const data = entry.request.data as AppRewardQuestion;
+    const data = entry.request.data as IncentiveResolverQuestion;
 
     // The sample's function, as README and test/answer-samples/incentive-resolver.js
     // write it, typed as on('incentiveResolver', ...) takes it.
@@ -58,7 +58,7 @@ describe("C16-2: the incentive resolver sample answer meets Siren's check", () =
       units: question.pool.units,
       rewards: siren.apps.splitPool(question.pool, question.conversions.map((conversion) => [conversion.conversionId, conversion.score])),
     });
-    const answer = (await sample({ data } as AppAsk<AppRewardQuestion>)) as AppRewardAnswer;
+    const answer = (await sample({ data } as AppAsk<IncentiveResolverQuestion>)) as IncentiveResolverAnswer;
 
     expect(refusalOf(data, answer as unknown as Record<string, unknown>)).toBeNull();
     expect(answer).toEqual(entry.answer);

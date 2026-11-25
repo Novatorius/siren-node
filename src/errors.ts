@@ -683,6 +683,20 @@ export class SignatureVerificationError extends SirenError {
 }
 
 /**
+ * A mistake in the app's own code that uses the request handler: a kind
+ * Siren never sends, a feature registered twice, an ask's function that
+ * returned nothing, or a bad argument to `on()`, `onEvent()`, `handle()` or
+ * `simulate()`. The PHP and Python SDKs throw the same class by the same
+ * name. It is a `SirenError`, so one `catch` still covers every SDK error.
+ */
+export class AppHandlerError extends SirenError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'AppHandlerError';
+  }
+}
+
+/**
  * Extract message/code/data from a Siren error body. The `error` value is
  * polymorphic:
  *   - a plain string  → `{ "error": "something went wrong" }`

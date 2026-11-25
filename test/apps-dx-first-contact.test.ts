@@ -190,7 +190,7 @@ describe('finding 2: answers.simulate()', () => {
       shares: { '41': 6000, '43': 4000 },
     }));
     const result = await answers.simulate(appRequest('distributionResolver', 'split-by-score', { secret: SECRET }));
-    expect(result).toEqual({ status: 200, body: {}, answer: features.kinds.distributionResolver!.answer });
+    expect(result).toEqual({ status: 200, body: {}, answer: features.kinds.distributionResolver!.answer, error: null });
     expect(http.requests).toHaveLength(0);
     expect(errors).toHaveLength(0);
   });
@@ -211,7 +211,7 @@ describe('finding 2: answers.simulate()', () => {
     answers.on('distributionResolver', 'split-by-score', () => 'not an object' as never);
     const result = await answers.simulate(appRequest('distributionResolver', 'split-by-score', { secret: SECRET }));
     expect(result.status).toBe(200);
-    expect(result.answer).toBe('not an object');
+    expect(result.answer).toBeNull();
     expect(result.error).toBeInstanceOf(SirenError);
   });
 

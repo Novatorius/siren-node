@@ -354,10 +354,23 @@ export function appRequestFrom(bytes: Buffer, t: number, headers: WebhookHeaders
     throw new SignatureVerificationError(`The signed body is not an app request of version 1. ${problem}`);
   }
 
-  const request = { ...(parsed as Record<string, unknown>), timestamp: t } as unknown as AppRequest;
+  const body = parsed as Record<string, unknown>;
+  const request = { ...body, data: readData(body.data), isAsk: body.mode === 'ask', timestamp: t } as unknown as AppRequest;
   const delivery = readHeader(headers, 'X-Siren-Delivery');
   if (delivery !== undefined) request.deliveryId = delivery;
   return request;
+}
+
+/**
+ * The request's `data`, with an empty `args` read as `{}`. Siren stores an
+ * engagement type's settings with `json_encode` and no `JSON_FORCE_OBJECT`
+ * (AppEngagementQuestion::args(), AppRequestService), so an engagement type
+ * with no settings arrives as `"args": []` while the types say an object.
+ * Reading it as `{}` keeps `args.weight` safe until Siren sends `{}`.
+ */
+function readData(data: unknown): unknown {
+  if (isJsonObject(data) && Array.isArray(data.args) && data.args.length === 0) return { ...data, args: {} };
+  return data;
 }
 
 /**

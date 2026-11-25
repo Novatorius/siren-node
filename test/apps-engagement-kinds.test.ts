@@ -3,10 +3,10 @@ import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
 import type {
-  AppEngagementCalculationAnswer,
-  AppEngagementCalculationQuestion,
-  AppEngagementFilterAnswer,
-  AppEngagementFilterQuestion,
+  EngagementCalculationAnswer,
+  EngagementCalculationQuestion,
+  EngagementFilterAnswer,
+  EngagementFilterQuestion,
   AppFeatureFunctions,
 } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
@@ -26,7 +26,7 @@ import { APP_KEY, APP_REQUEST_ID } from './apps-siren-answers';
 const URL = 'https://acme.example/siren';
 
 /** Siren's example calculation question, from the feature contracts fixture. */
-const CALCULATION: AppEngagementCalculationQuestion = {
+const CALCULATION: EngagementCalculationQuestion = {
   program: { id: 3, name: 'Partner program' },
   engagementType: 'referredSiteVisit',
   programEngagementTypeId: 55,
@@ -37,7 +37,7 @@ const CALCULATION: AppEngagementCalculationQuestion = {
 };
 
 /** Siren's example filter question, from the feature contracts fixture. */
-const FILTER: AppEngagementFilterQuestion = {
+const FILTER: EngagementFilterQuestion = {
   program: { id: 3, name: 'Partner program' },
   collaborator: { id: 42, name: 'Riley Rep' },
   opportunity: { id: 615, customerId: 77 },
@@ -104,10 +104,10 @@ describe('apps-c16-4: the engagement kinds', () => {
   });
 
   it('answers both asks with the typed answers, through the one answer route', async () => {
-    const engagements: AppEngagementCalculationAnswer = { outcome: 'engagements', results: [{ collaboratorId: 42, score: 10 }, { collaboratorId: 57, score: 2 }] };
-    const nobody: AppEngagementCalculationAnswer = { outcome: 'engagements', results: [] };
-    const suppress: AppEngagementFilterAnswer = { outcome: 'suppress', reason: 'The visitor works for the partner.' };
-    const allow: AppEngagementFilterAnswer = { outcome: 'allow' };
+    const engagements: EngagementCalculationAnswer = { outcome: 'engagements', results: [{ collaboratorId: 42, score: 10 }, { collaboratorId: 57, score: 2 }] };
+    const nobody: EngagementCalculationAnswer = { outcome: 'engagements', results: [] };
+    const suppress: EngagementFilterAnswer = { outcome: 'suppress', reason: 'The visitor works for the partner.' };
+    const allow: EngagementFilterAnswer = { outcome: 'allow' };
 
     const accepted = { status: 'accepted', duplicate: false };
     const over = transportOver([reply(200, accepted), reply(200, accepted), reply(200, accepted), reply(200, accepted)]);

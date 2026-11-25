@@ -6,10 +6,10 @@ import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
 import type {
-  AppCollaboratorGroupStructureAnswer,
-  AppCollaboratorGroupStructureDistributorQuestion,
-  AppCollaboratorGroupStructureProgramQuestion,
-  AppCollaboratorGroupStructureQuestion,
+  CollaboratorGroupStructureAnswer,
+  CollaboratorGroupStructureDistributorQuestion,
+  CollaboratorGroupStructureProgramQuestion,
+  CollaboratorGroupStructureQuestion,
 } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
 import { TEST_API_KEY } from './helpers';
@@ -38,7 +38,7 @@ const SECRET = (
 const SITE = 'https://acme.example/siren';
 
 /** The slice's example question, from the distributor side. */
-const QUESTION: AppCollaboratorGroupStructureDistributorQuestion = {
+const QUESTION: CollaboratorGroupStructureDistributorQuestion = {
   group: { id: 4, name: 'Northeast team' },
   members: [
     { collaboratorId: 42, name: 'Riley Rep', status: 'active', metadata: { rank: 3 } },
@@ -58,7 +58,7 @@ const QUESTION: AppCollaboratorGroupStructureDistributorQuestion = {
 };
 
 /** A program-side ask: the group's fields, and the engagement trigger's beside them. */
-const PROGRAM_QUESTION: AppCollaboratorGroupStructureProgramQuestion = {
+const PROGRAM_QUESTION: CollaboratorGroupStructureProgramQuestion = {
   group: { id: 4, name: 'Northeast team' },
   members: QUESTION.members,
   for: { type: 'program', id: 3 },
@@ -71,8 +71,8 @@ const PROGRAM_QUESTION: AppCollaboratorGroupStructureProgramQuestion = {
   cause: { id: '9f2c4e1a7b3d5c60', event: 'referredSiteVisit', occurredAt: '2026-11-17T12:20:00+00:00' },
 };
 
-const CHAIN: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'chain', order: [63, 57, 42] };
-const TREE: AppCollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'tree', parents: { '42': 57, '57': 63, '63': null } };
+const CHAIN: CollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'chain', order: [63, 57, 42] };
+const TREE: CollaboratorGroupStructureAnswer = { outcome: 'structure', shape: 'tree', parents: { '42': 57, '57': 63, '63': null } };
 
 function file(declared: Record<string, unknown>, url: string | null = SITE): string {
   return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: declared } } });

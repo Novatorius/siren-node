@@ -1,7 +1,8 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { baseUrlForKey } from '../client';
 import { readEnvironment } from '../environment';
-import { SirenError } from '../errors';
+import { AppHandlerError } from '../errors';
+import type { FeatureKind } from '../feature-kind';
 import { DEFAULT_BASE_URL } from '../http';
 import APP_KINDS from '../app-kinds.json';
 import { SAMPLE_DATA } from './sample-data';
@@ -16,8 +17,13 @@ import { SAMPLE_DATA } from './sample-data';
 /** The kinds Siren tells, from its registry snapshot. Every other kind it sends is an ask. */
 const TELL_KINDS: readonly string[] = APP_KINDS.filter((entry) => entry.mode === 'tell').map((entry) => entry.kind);
 
-/** A request as Siren sends it: ready for `answers.simulate()`, `answers.handle()` or `fetch`. */
-export interface AppTestRequest {
+/**
+ * A request as Siren sends it: ready for `answers.simulate()`, `answers.handle()` or `fetch`.
+ * `K` is the feature's kind, which types the answer `answers.simulate()` gives back.
+ */
+export interface AppTestRequest<K extends string = string> {
+  /** The feature's kind, as the body names it. */
+  kind: K;
   method: 'POST';
   /** Siren's headers, signed as `WebhookSignature::headers()` signs them. */
   headers: Record<string, string>;
@@ -48,13 +54,13 @@ export interface AppTestRequestOptions {
 
 /**
  * Siren's example question for `kind`, the `data` its feature page shows,
- * as a fresh copy. Throws `SirenError` for a kind it has no example of,
+ * as a fresh copy. Throws `AppHandlerError` for a kind it has no example of,
  * naming the kinds it has.
  */
 export function sampleData(kind: string): Record<string, unknown> {
   const data = Object.prototype.hasOwnProperty.call(SAMPLE_DATA, kind) ? SAMPLE_DATA[kind] : undefined;
   if (data === undefined) {
-    throw new SirenError(`sampleData() has no example for ${String(kind)}. It has ${Object.keys(SAMPLE_DATA).join(', ')}.`);
+    throw new AppHandlerError(`sampleData() has no example for ${String(kind)}. It has ${Object.keys(SAMPLE_DATA).join(', ')}.`);
   }
   return structuredClone(data) as Record<string, unknown>;
 }
@@ -63,18 +69,19 @@ export function sampleData(kind: string): Record<string, unknown> {
  * A signed app request for the feature `kind` and `key`, as Siren would
  * send it: a tell for `postConversionAction` and `postAllocationAction`,
  * an ask with `answerBy` an hour on and an `answerUrl` for every other
- * kind. Throws `SirenError` when there is no secret, from the options or
- * `SIREN_SIGNING_SECRET`.
+ * kind. Throws `AppHandlerError` when there is no secret, from the options or
+ * `SIREN_SIGNING_SECRET`. The request carries `kind`, so
+ * `answers.simulate()` types its answer by the kind.
  *
  * ```js
  * import { appRequest } from '@novatorius/siren/testing'
  * const { answer } = await answers.simulate(appRequest('distributionResolver', 'split-by-score'))
  * ```
  */
-export function appRequest(kind: string, key: string, options: AppTestRequestOptions = {}): AppTestRequest {
+export function appRequest<K extends FeatureKind | (string & {})>(kind: K, key: string, options: AppTestRequestOptions = {}): AppTestRequest<K> {
   const secret = options.secret ?? readEnvironment('SIREN_SIGNING_SECRET');
   if (typeof secret !== 'string' || secret === '') {
-    throw new SirenError('appRequest() needs the signing secret. Pass it as secret, or set SIREN_SIGNING_SECRET in the environment.');
+    throw new AppHandlerError('appRequest() needs the signing secret. Pass it as secret, or set SIREN_SIGNING_SECRET in the environment.');
   }
   const t = options.timestamp ?? Math.floor(Date.now() / 1000);
   const id = options.id ?? `apr_${randomBytes(16).toString('hex')}`;
@@ -100,6 +107,7 @@ export function appRequest(kind: string, key: string, options: AppTestRequestOpt
   const rawBody = JSON.stringify(body);
   const hmac = (text: string): string => createHmac('sha256', secret).update(text).digest('hex');
   return {
+    kind,
     method: 'POST',
     rawBody,
     headers: {

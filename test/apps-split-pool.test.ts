@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Siren } from '../src/client';
 import { SirenError } from '../src/errors';
-import type { AppCurrency, AppDistributionQuestion, AppRewardQuestion } from '../src/record-types';
+import type { AppCurrency, DistributionResolverQuestion, IncentiveResolverQuestion } from '../src/record-types';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient } from './http-fakes';
 import { BASE } from './record-fakes';
@@ -47,7 +47,7 @@ function refusal(run: () => unknown): SirenError {
 describe('apps-answer-handler: apps.splitPool', () => {
   it("splits the distribution resolver's pool as Siren's fixture answers it", () => {
     const entry = fixture.kinds.distributionResolver!;
-    const data = entry.request.data as AppDistributionQuestion;
+    const data = entry.request.data as DistributionResolverQuestion;
     const shares = siren.apps.splitPool(data.pool, data.metrics.map((metric) => [metric.metricId, metric.score]));
     expect(shares).toEqual((entry.answer as { shares: Record<string, number> }).shares);
     expect(shares).toEqual({ '41': 6000, '43': 4000 });
@@ -56,7 +56,7 @@ describe('apps-answer-handler: apps.splitPool', () => {
 
   it("splits the incentive resolver's pool as Siren's fixture answers it", () => {
     const entry = fixture.kinds.incentiveResolver!;
-    const data = entry.request.data as AppRewardQuestion;
+    const data = entry.request.data as IncentiveResolverQuestion;
     const rewards = siren.apps.splitPool(data.pool, data.conversions.map((conversion) => [conversion.conversionId, conversion.score]));
     expect(rewards).toEqual((entry.answer as { rewards: Record<string, number> }).rewards);
     expect(rewards).toEqual({ '1042': 900, '1043': 600 });

@@ -4,7 +4,7 @@ import { appChanges } from '../src/cli/app-changes';
 import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
-import type { App, AppAsk, AppFeatureFunctions, AppIncentiveTypeAnswer, AppIncentiveTypeQuestion } from '../src/record-types';
+import type { App, AppAsk, AppFeatureFunctions, IncentiveTypeAnswer, IncentiveTypeQuestion } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
@@ -38,7 +38,7 @@ describe('apps-c16-6: the incentive type kind', () => {
   });
 
   it("types Siren's sample question and answer, and the handler's function for the kind", async () => {
-    const question = features.kinds.incentiveType!.request.data as AppIncentiveTypeQuestion;
+    const question = features.kinds.incentiveType!.request.data as IncentiveTypeQuestion;
     expect(question.engagements.map((engagement) => [engagement.engagementId, engagement.createdDate])).toEqual([
       [880, '2026-11-02T09:15:00+00:00'],
       [881, '2026-11-09T16:40:00+00:00'],
@@ -48,8 +48,8 @@ describe('apps-c16-6: the incentive type kind', () => {
       if (sale === null || sale.units !== data.program.units) return { outcome: 'none' };
       return { outcome: 'award', units: sale.units, pool: Math.floor(sale.total / 10), engagementIds: data.engagements.map((e) => e.engagementId) };
     };
-    expect(await decide({ data: question } as AppAsk<AppIncentiveTypeQuestion>)).toEqual(features.kinds.incentiveType!.answer);
-    expect(await decide({ data: { ...question, transaction: null, binding: { type: 'crm_lead', id: 'L-1' } } } as AppAsk<AppIncentiveTypeQuestion>)).toEqual({
+    expect(await decide({ data: question } as AppAsk<IncentiveTypeQuestion>)).toEqual(features.kinds.incentiveType!.answer);
+    expect(await decide({ data: { ...question, transaction: null, binding: { type: 'crm_lead', id: 'L-1' } } } as AppAsk<IncentiveTypeQuestion>)).toEqual({
       outcome: 'none',
     });
   });
@@ -106,8 +106,8 @@ describe('apps-c16-6: the incentive type kind', () => {
   });
 
   it('sends both answers through the one answer route', async () => {
-    const award = features.kinds.incentiveType!.answer as AppIncentiveTypeAnswer;
-    const none: AppIncentiveTypeAnswer = { outcome: 'none' };
+    const award = features.kinds.incentiveType!.answer as IncentiveTypeAnswer;
+    const none: IncentiveTypeAnswer = { outcome: 'none' };
     const accepted = { status: 'accepted', duplicate: false };
     const over = transportOver([reply(200, accepted), reply(200, accepted)]);
     const resource = new AppsResource(over.transport);

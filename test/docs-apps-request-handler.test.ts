@@ -82,7 +82,7 @@ describe('apps-answer-handler: the records', () => {
       expect(readme, words).toContain(words);
     }
     const changelog = read('CHANGELOG.md');
-    for (const words of ['`apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError })`', '`apps.splitPool(pool, weights)`', '`AppDistributionQuestion`', '`AppRequestReply`']) {
+    for (const words of ['`apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError })`', '`apps.splitPool(pool, weights)`', '`DistributionResolverQuestion`', '`AppRequestReply`']) {
       expect(changelog, words).toContain(words);
     }
     const note = read('docs/architecture/apps-request-handler.md');

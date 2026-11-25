@@ -1,7 +1,7 @@
 import type { HttpTransport } from '../http';
 import { shownAmount, splitPool } from './app-amounts';
 import { createAppRequestHandler } from './app-request-handler';
-import type { AppRequestHandler, AppRequestHandlerOptions } from './app-request-handler';
+import type { AppRequestHandler, AppRequestHandlerOptions, AppRequestHandlerWith } from './app-request-handler';
 import { answerAppRequest, listAppRequests, resendAppRequest, retrieveAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
@@ -825,7 +825,12 @@ export class AppsResource {
    * a list of kind names. `on()` refuses a kind Siren never sends unless
    * `extraKinds` names it. It keeps no state.
    */
-  requestHandler<X extends string = never>(options?: AppRequestHandlerOptions<X>): AppRequestHandler<X> {
+  requestHandler(options?: AppRequestHandlerOptions): AppRequestHandler;
+  /** The handler with the kinds `extraKinds` names, which `on()` then takes too. */
+  requestHandler<X extends string>(options: AppRequestHandlerOptions<X> & { extraKinds: readonly X[] }): AppRequestHandlerWith<X>;
+  /** The handler when the options may or may not name `extraKinds`. */
+  requestHandler<X extends string = never>(options?: AppRequestHandlerOptions<X>): AppRequestHandlerWith<X>;
+  requestHandler<X extends string = never>(options?: AppRequestHandlerOptions<X>): AppRequestHandlerWith<X> {
     return createAppRequestHandler<X>(this.http, options, {
       toleranceSeconds: DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,
       maxAnswerBytes: MAX_APP_ANSWER_BYTES,

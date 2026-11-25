@@ -5,7 +5,7 @@ import { Siren } from '../src/client';
 import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
-import type { AppRewardQuestion, AppTransactionFilterAnswer, AppTransactionFilterQuestion } from '../src/record-types';
+import type { IncentiveResolverQuestion, TransactionFilterAnswer, TransactionFilterQuestion } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient, reply } from './http-fakes';
@@ -31,12 +31,12 @@ const features = JSON.parse(
 const SECRET = (
   JSON.parse(readFileSync(new URL('./fixtures/apps-exchange/signed-request.json', import.meta.url), 'utf8')) as { secret: string }
 ).secret;
-const TRANSACTION = (features.kinds.incentiveResolver!.request.data as unknown as AppRewardQuestion).transaction!;
+const TRANSACTION = (features.kinds.incentiveResolver!.request.data as unknown as IncentiveResolverQuestion).transaction!;
 
 const SITE = 'https://acme.example/siren';
 
 /** The slice's example question, from the program side. */
-const QUESTION: AppTransactionFilterQuestion = {
+const QUESTION: TransactionFilterQuestion = {
   for: { type: 'program', id: 3, name: 'Partner program' },
   transaction: TRANSACTION,
   lines: [
@@ -48,15 +48,15 @@ const QUESTION: AppTransactionFilterQuestion = {
 };
 
 /** A distributor's ask: the period the sale lands in, and a later refund's period. */
-const DISTRIBUTOR_QUESTION: AppTransactionFilterQuestion = {
+const DISTRIBUTOR_QUESTION: TransactionFilterQuestion = {
   ...QUESTION,
   for: { type: 'distributor', id: 2, name: 'Partner leaderboard' },
   distribution: { id: 21 },
   refundDistribution: { id: 22 },
 };
 
-const LINE_ITEMS: AppTransactionFilterAnswer = { outcome: 'filtered', include: [5501] };
-const NOTHING: AppTransactionFilterAnswer = { outcome: 'filtered', include: [] };
+const LINE_ITEMS: TransactionFilterAnswer = { outcome: 'filtered', include: [5501] };
+const NOTHING: TransactionFilterAnswer = { outcome: 'filtered', include: [] };
 
 function file(declared: Record<string, unknown>, url: string | null = SITE): string {
   return JSON.stringify({ version: 1, name: 'Acme', description: '', apps: { [APP_KEY]: { name: 'Acme', ...(url ? { url } : {}), features: declared } } });
