@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
   ApiKeyScope,
-  ApiKeysResource,
+  AppsResource,
   AuthenticationError,
   ConnectionError,
   EventsResource,
@@ -12,7 +12,7 @@ import {
   RecordsResource,
   SirenError,
   SiteDisconnectedError,
-  WebhooksResource,
+  UnexpectedResponseError,
 } from '../src/index';
 import { HttpTransport, type HttpResponse, type HttpTransportOptions } from '../src/http';
 import { CloudAnswers, FakeHttpClient, reply, spySource } from './http-fakes';
@@ -94,14 +94,12 @@ const SEND_ONCE: Array<[string, (http: HttpTransport) => Promise<unknown>, unkno
   ],
   ['events.sale with no externalId', (http) => new EventsResource(http).sale({ test: true }), CloudAnswers.eventTokenRefused],
   [
-    'webhooks.subscriptions.create (POST)',
+    'apps.createKey (POST)',
+    // The fakes answer `{ id: 1 }`, which is not an app, so only that refusal is set aside here.
     (http) =>
-      new WebhooksResource(http).subscriptions.create({ targetUrl: 'https://store.test/hook', events: ['*'] }),
-    CloudAnswers.authenticationRequired,
-  ],
-  [
-    'apiKeys.create (POST)',
-    (http) => new ApiKeysResource(http).create({ scopes: [ApiKeyScope.AllEvents] }),
+      new AppsResource(http).createKey('acme', { scopes: [ApiKeyScope.AllEvents] }).catch((error: unknown) => {
+        if (!(error instanceof UnexpectedResponseError)) throw error;
+      }),
     CloudAnswers.authenticationRequired,
   ],
 ];

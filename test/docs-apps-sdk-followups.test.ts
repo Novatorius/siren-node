@@ -59,7 +59,7 @@ describe('apps-sdk-followups-1: the records', () => {
     const note = read('docs/architecture/apps-cli.md');
     expect(note).not.toContain('There is no `GET /apps/requests/{id}`');
     expect(note).toContain('| `siren.apps.requests.retrieve(id)` | `GET /apps/requests/{requestKey}` | admin session |');
-    expect(note).toContain('| `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`');
+    expect(note).toContain('| `siren apps requests <id> [--json]` | `GET /apps/requests/{requestKey}`, `GET /apps`');
     expect(read('README.md')).toContain('| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` |');
     expect(read('CHANGELOG.md')).toContain('`siren.apps.requests.retrieve(id)` reads one request');
     const openapi = read('openapi.yaml');
@@ -71,7 +71,7 @@ describe('apps-sdk-followups-1: the records', () => {
   it('name needsAttention and where the command shows it', () => {
     expect(read('openapi.yaml')).toContain('needsAttention: { type: integer, minimum: 0');
     expect(read('CHANGELOG.md')).toContain('`App.needsAttention`');
-    expect(read('README.md')).toContain('how many and the `siren apps requests --app <key> --attention` that lists them');
+    expect(read('README.md')).toContain('names the `siren apps requests --app <key> --attention` that lists the requests that need you');
     expect(read('docs/architecture/apps-cli.md')).toContain('### 8. How many requests need attention');
   });
 

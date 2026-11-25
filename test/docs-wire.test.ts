@@ -79,9 +79,9 @@ describe('P8: openapi.yaml', () => {
     }
   });
 
-  it('documents GET /webhooks/events and GET /api-keys/scopes', () => {
+  it('documents GET /webhooks/events and GET /apps/scopes', () => {
     expect(openapi).toMatch(/\n {2}\/webhooks\/events:\n {4}get:/);
-    expect(openapi).toMatch(/\n {2}\/api-keys\/scopes:\n {4}get:/);
+    expect(openapi).toMatch(/\n {2}\/apps\/scopes:\n {4}get:/);
   });
 
   it('lists every error code Siren sends in an ErrorCode schema', () => {
@@ -97,7 +97,7 @@ describe('P8: CHANGELOG and README', () => {
     const section = unreleased();
     for (const name of [
       'subscriptions.events()',
-      'apiKeys.scopes()',
+      'apps.scopes()',
       'SiteDisconnectedError',
       'PolicyError',
       'CodeConflictError',
@@ -119,7 +119,7 @@ describe('P8: CHANGELOG and README', () => {
     expect(readme).toMatch(/test:\s*true/);
     expect(readme).toMatch(/lines:\s*\[/);
     expect(readme).toContain('subscriptions.events()');
-    expect(readme).toContain('apiKeys.scopes()');
+    expect(readme).toContain('apps.scopes()');
   });
 });
 

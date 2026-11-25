@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { appLines } from '../src/cli/commands/apply';
 import type { App } from '../src/record-types';
 import { APP_KEY, AppAnswers, appBefore, appRecord } from './apps-siren-answers';
 import { harness } from './cli-fakes';
@@ -23,7 +22,7 @@ import { reply } from './http-fakes';
 const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
 const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
 const DROPPED = 'apps-declare-200-dropped-selected-item';
-const ARCHIVED_LINE = '  app:1  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM  archived, so Siren no longer calls it';
+const ARCHIVED_LINE = /^app:1 +notify-crm +Post-conversion action \(postConversionAction\) +Tell the CRM · archived$/m;
 
 describe('apps-sdk-followups-1: an archived item', () => {
   it('apply marks the archived item beside it, and says once what archiving means and how to bring it back', async () => {
@@ -32,15 +31,14 @@ describe('apps-sdk-followups-1: an archived item', () => {
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const lines = h.out().split('\n');
-    expect(lines).toContain(ARCHIVED_LINE);
+    expect(lines.some((line) => /^  notify-crm +app:1 · Post-conversion action · archived$/.test(line)), h.out()).toBe(true);
     // The capture predates the payout kind's new word, so Siren answered the old one.
-    expect(lines).toContain('  app:2  fulfillmentMethod  acme-ledger  Acme ledger');
-    expect(lines).toContain(
-      'An archived feature is one siren.app.json no longer names while a record still selects it. ' +
-        'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
-        'To bring it back, name it in siren.app.json again with the same kind and key, and run siren apps apply.',
+    expect(lines.some((line) => /^  acme-ledger +app:2 · fulfillmentMethod$/.test(line)), h.out()).toBe(true);
+    expect(h.out().replace(/\n  /g, ' ')).toContain(
+      'Siren keeps an archived feature while a record selects it, and never calls it. ' +
+        'Name it in siren.app.json again and run siren apps apply to bring it back.',
     );
-    expect(h.out().match(/An archived feature is/g)).toHaveLength(1);
+    expect(h.out().match(/keeps an archived feature/g)).toHaveLength(1);
   });
 
   it('keeps the target flags in the apply hint, and names the file as it was given', async () => {
@@ -48,7 +46,7 @@ describe('apps-sdk-followups-1: an archived item', () => {
     h.signedIn();
     h.write('my.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', 'my.app.json', '--sandbox', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain('name it in my.app.json again with the same kind and key, and run siren apps apply my.app.json --sandbox.');
+    expect(h.out().replace(/\n  /g, ' ')).toContain('Name it in my.app.json again and run siren apps apply my.app.json --sandbox to bring it back.');
   });
 
   it('says nothing about archiving when no item is archived', async () => {
@@ -60,17 +58,16 @@ describe('apps-sdk-followups-1: an archived item', () => {
     expect(h.out()).not.toContain('archived');
   });
 
-  it('show and list mark the archived item beside it', async () => {
+  it('show marks the archived feature in its row, and list counts it among the features', async () => {
     const body = renamedBody<App>(DROPPED);
     const h = harness([renamedReply(DROPPED), { status: 200, headers: {}, body: JSON.stringify([body]) }]);
     h.signedIn();
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
-    expect(h.out().split('\n')).toContain(ARCHIVED_LINE);
-    expect(h.out()).not.toContain('An archived feature is');
+    expect(h.out()).toMatch(ARCHIVED_LINE);
+    expect(h.out()).not.toContain('keeps an archived feature');
     const before = h.out().length;
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
-    expect(h.out().slice(before).split('\n')).toContain(ARCHIVED_LINE);
-    expect(appLines(body)).toContain(ARCHIVED_LINE);
+    expect(h.out().slice(before)).toMatch(new RegExp(`\\n${APP_KEY} +on +${body.features.length} `));
   });
 });
 
@@ -78,35 +75,37 @@ const ONE = 'apps-request-one-200-needs-attention';
 const ONE_ID = 'apr_e221f712e2dd08c2daa566d3ac5ce340';
 
 describe('apps-sdk-followups-1: siren apps requests <id> reads the one request', () => {
-  it('reads it with GET /apps/requests/{id}, and shows its line, the data Siren sent, and that no one has answered', async () => {
+  it('reads it with GET /apps/requests/{id}, and shows its state and why, the data Siren sent, and that a tell takes no answer', async () => {
     const h = harness([renamedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
     const out = h.out();
-    expect(out.split('\n')[0]).toBe(
-      `${ONE_ID}  needs_attention  tell Post-conversion action (postConversionAction)  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
-    );
-    expect(out).toContain(`The data Siren sent:\n${JSON.stringify(renamedBody<{ data: unknown }>(ONE).data, null, 2)}\n`);
-    expect(out).toContain('A tell takes no answer.');
+    expect(out.split('\n')[0]).toBe(ONE_ID);
+    expect(out).toContain('  State     needs attention: Could not connect to the host.\n');
+    expect(out).toContain('  Kind      tell · Post-conversion action (postConversionAction)\n');
+    expect(out).toContain('  Answer    a tell takes none\n');
+    expect(out).toContain('\nDATA\n');
+    for (const key of Object.keys(renamedBody<{ data: Record<string, unknown> }>(ONE).data)) expect(out).toContain(`\n  ${key}  `);
     expect(out).not.toContain('not among the latest 50');
   });
 
   it('shows the answer Siren took and the person who gave it, or that the app gave it', async () => {
-    const body = capturedBody<Record<string, unknown>>(ONE);
+    const body = renamedBody<Record<string, unknown>>(ONE);
     const byPerson = { ...body, mode: 'ask', status: 'applied', answer: { outcome: 'paid', reference: 'TX-1' }, answeredBy: 'user:5', answeredAt: '2026-11-17T12:40:00+00:00', answeredByUser: { id: 5, email: 'jane@store.invalid' } };
     const h = harness([reply(200, byPerson), reply(200, []), reply(200, { ...byPerson, answeredBy: 'app:1', answeredByUser: null }), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.out()).toContain('The answer Siren took, from jane@store.invalid (user 5) at 2026-11-17T12:40:00+00:00:\n{\n  "outcome": "paid",\n  "reference": "TX-1"\n}\n');
+    expect(h.out()).toContain('  Answer    {"outcome":"paid","reference":"TX-1"}\n');
+    expect(h.out()).toMatch(/ {2}From {6}jane@store\.invalid at Nov 17 \d\d:40\n/);
     const before = h.out().length;
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.out().slice(before)).toContain('The answer Siren took, from the app at 2026-11-17T12:40:00+00:00:');
+    expect(h.out().slice(before)).toMatch(/ {2}From {6}the app at Nov 17 \d\d:40\n/);
 
     const waiting = harness([reply(200, { ...body, mode: 'ask', status: 'sent' }), reply(200, [])]);
     waiting.signedIn();
     expect(await waiting.run(['apps', 'requests', ONE_ID]), waiting.err()).toBe(0);
-    expect(waiting.out()).toContain('No answer yet.');
+    expect(waiting.out()).toMatch(/ {2}Answer {4}none yet/);
   });
 
   it('shows a request older than the latest 50, since it no longer looks among them', async () => {
@@ -138,11 +137,9 @@ describe('apps-sdk-followups-1: how many of an app\'s requests need attention', 
     const h = harness([renamedReply('apps-list-200-count-1')]);
     h.signedIn();
     expect(await h.run(['apps', 'list', '--sandbox']), h.err()).toBe(0);
-    const lines = h.out().split('\n');
-    const note = '  1 request needs attention. See it with siren apps requests --app acme-payouts --attention --sandbox.';
-    expect(lines).toContain(note);
-    expect(lines.indexOf(note)).toBeLessThan(lines.findIndex((line) => line.startsWith('ledger-sync')));
-    expect(h.out().match(/need(s)? attention/g)).toHaveLength(1);
+    expect(h.out()).toMatch(/\nacme-payouts +on +\d+ +1 request /);
+    expect(h.out()).toMatch(/\nledger-sync +\S+ +\d+ +– /);
+    expect(h.out()).toContain('\nsiren apps requests --app acme-payouts --attention --sandbox lists the 1 that needs you.\n');
   });
 
   it('show says the count when it is above zero, and nothing when it is zero', async () => {
@@ -150,10 +147,10 @@ describe('apps-sdk-followups-1: how many of an app\'s requests need attention', 
     const h = harness([reply(200, { ...body, needsAttention: 2 }), renamedReply('apps-retrieve-200-with-count')]);
     h.signedIn();
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
-    expect(h.out().split('\n')).toContain('  2 requests need attention. See them with siren apps requests --app acme-payouts --attention.');
+    expect(h.out()).toContain('\nsiren apps requests --app acme-payouts --attention lists the 2 that need you.\n');
     const before = h.out().length;
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
-    expect(h.out().slice(before)).not.toContain('attention');
+    expect(h.out().slice(before)).not.toContain('--attention');
   });
 });
 

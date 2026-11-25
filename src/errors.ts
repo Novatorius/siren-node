@@ -55,8 +55,8 @@ export const ErrorCode = {
   /** 401: the organization revoked or deleted the connected site's connection. A {@link SiteDisconnectedError}. */
   SiteDisconnected: 'site_disconnected',
   /**
-   * 401: the route does not accept an API key, such as every `/api-keys`
-   * route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
+   * 401: the route does not accept an API key, such as every `/apps` and
+   * `/webhooks` route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
    */
   ApiKeyNotAccepted: 'api_key_not_accepted',
   /**
@@ -331,7 +331,7 @@ export class AuthenticationError extends SirenError {
 
 /**
  * 401 with `code` `api_key_not_accepted` — the key may be valid, but the route
- * takes a signed-in dashboard session instead, as every `apiKeys` route does.
+ * takes a signed-in dashboard session instead, as every `/apps` and `/webhooks` route does.
  * Retrying with the same key fails again.
  */
 export class ApiKeyNotAcceptedError extends AuthenticationError {
@@ -693,6 +693,20 @@ export class AppHandlerError extends SirenError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, details);
     this.name = 'AppHandlerError';
+  }
+}
+
+/**
+ * A tell's or a webhook event's function took longer than Siren waits for
+ * its reply (`TELL_TIME_LIMIT_SECONDS`, 8). The handler still replied 200,
+ * but Siren had stopped waiting, counted a timeout and sends it again, so
+ * the function ran twice. `onError` gets it, and `simulate()` returns it. The
+ * PHP and Python SDKs report the same case.
+ */
+export class AppSlowTellError extends SirenError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'AppSlowTellError';
   }
 }
 

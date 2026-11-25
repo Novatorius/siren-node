@@ -349,6 +349,8 @@ export interface LoginCard {
   link: string;
   /** True when the tool opened the link in the browser itself. */
   opened: boolean;
+  /** The host of the Siren the tool polls, so the person can tell a look-alike page from it. */
+  siren: string;
 }
 
 /** The logo during `siren login`. Build it with {@link startLoginStage}. */
@@ -359,6 +361,8 @@ export interface LoginStage {
   approved(line: string): Promise<void>;
   /** The halves drift away, and the spinner's line clears for the ✗ line the tool prints next. */
   failed(): Promise<void>;
+  /** True once the person pressed Ctrl-C. */
+  stopped(): boolean;
 }
 
 /** The frame the halves float around while login waits: apart, before they meet. */
@@ -378,6 +382,7 @@ function loginLines(card: LoginCard): string[] {
     '',
     `Code   ${card.code}`,
     `Link   ${card.link}`,
+    `Siren  ${card.siren}`,
     '',
     'Waiting for approval',
   ];
@@ -459,6 +464,7 @@ export function startLoginStage(io: CliIo, flags: HookFlags, card: LoginCard): L
         redraw(current);
       }
     },
+    stopped: () => keys.pressed === CTRL_C,
     async approved(line) {
       if (closed) return;
       status = `${color}✓${RESET} ${line}`;
@@ -473,8 +479,9 @@ export function startLoginStage(io: CliIo, flags: HookFlags, card: LoginCard): L
       await rememberPlayed(io);
     },
     async failed() {
-      // Ctrl-C already gave the terminal back.
+      // Ctrl-C already gave the terminal back, or gives it back now with no drift.
       if (closed) return;
+      if (keys.pressed === CTRL_C) return close();
       status = '';
       for (let index = APART; index >= 0 && keys.pressed === null; index--) {
         redraw(frameAt(index));

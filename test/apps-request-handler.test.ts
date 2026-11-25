@@ -215,7 +215,12 @@ describe('apps-answer-handler: table 3.1, one request', () => {
     const other = createHmac('sha256', 'another-secret').update(`${t}.${raw}`).digest('hex');
     expectJsonReply(await answers.handle({ method: 'POST', headers: signed(raw, 'app.request', t, { 'X-Siren-Signature-V2': `t=${t},v1=${other}` }), rawBody: raw }), 401);
     expect(fn).not.toHaveBeenCalled();
-    expect(errors).toHaveLength(0);
+    // DX pass 4: each refusal also reaches onError, typed and coded, so it lands in the app's log.
+    expect(errors).toHaveLength(cases.length + 1);
+    for (const { error, request } of errors) {
+      expect(error).toBeInstanceOf(SignatureVerificationError);
+      expect(request).toBeUndefined();
+    }
   });
 
   it('row 3: checks the time against toleranceSeconds', async () => {
@@ -515,10 +520,10 @@ describe('apps-answer-handler: section 3.2, posting an ask\'s answer', () => {
       const event = JSON.stringify({ conversionId: 1042, email: 'flo@example.com' });
       const eventHeaders = signed(event, 'conversion.approved', now(), { 'X-Siren-Delivery': 'evt_7' });
       expect((await answers.handle({ method: 'POST', headers: eventHeaders, rawBody: event })).status).toBe(500);
-      expect(log.mock.calls).toEqual([
-        [`Siren request handler (postConversionAction tell-the-crm ${ID}):`, failure],
-        ['Siren request handler (conversion.approved evt_7):', failure],
-      ]);
+      // DX pass 4: one string per failure, with the stack only because the app's own function threw.
+      expect(log.mock.calls.map((call) => call.length)).toEqual([1, 1]);
+      expect(String(log.mock.calls[0]![0]).split('\n')[0]).toBe(`Siren request handler (postConversionAction tell-the-crm ${ID}): Error: the CRM is down`);
+      expect(String(log.mock.calls[1]![0]).split('\n')[0]).toBe('Siren request handler (conversion.approved evt_7): Error: the CRM is down');
       const written = JSON.stringify(log.mock.calls.map((call) => call.map(String)));
       for (const secret of ['1042', 'flo@example.com', 'Partner program', SECRET, 'X-Siren-Signature']) {
         expect(written, secret).not.toContain(secret);
@@ -536,7 +541,7 @@ describe('apps-answer-handler: section 3.2, posting an ask\'s answer', () => {
     try {
       const raw = body('postConversionAction');
       await answers.handle({ method: 'POST', headers: signed(raw), rawBody: JSON.parse(raw) as unknown });
-      expect(log.mock.calls).toEqual([['Siren request handler:', expect.any(SirenError)]]);
+      expect(log.mock.calls).toEqual([[expect.stringMatching(/^Siren request handler: SirenError: [^\n]+$/)]]);
     } finally {
       log.mockRestore();
     }

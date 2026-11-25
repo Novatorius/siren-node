@@ -9,8 +9,8 @@ import { CredentialStore } from './credentials';
 import { firstRun, welcome } from './hook';
 import type { HookCard } from './hook';
 import type { CliIo } from './io';
-import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, resolveTarget } from './targets';
-import { Style, styleFor } from './style';
+import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, httpDetail, resolveTarget } from './targets';
+import { Style, styleFor, wrapWords } from './style';
 import { SirenError } from '../errors';
 import { SANDBOX_BASE_URL } from '../http';
 import type { Target } from './targets';
@@ -34,6 +34,7 @@ export const COMMANDS = [
   'orgs',
   'apps init',
   'apps apply',
+  'apps diff',
   'apps list',
   'apps show',
   'apps requests',
@@ -165,13 +166,13 @@ const SPECS: Record<Command, CommandSpec> = {
     run: session.whoami,
   },
   orgs: {
-    usage: 'orgs',
-    summary: 'List your organizations, * on the one in use.',
+    usage: 'orgs [flags]',
+    summary: 'List your organizations, marking the one --org, SIREN_ORG or the app file picks.',
     group: 'Account',
     short: 'List your organizations',
-    options: {},
-    flags: {},
-    examples: ['siren orgs'],
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren orgs', 'siren orgs --json'],
     positionals: [0, 0],
     readsOnly: true,
     sessionOnly: true,
@@ -198,11 +199,23 @@ const SPECS: Record<Command, CommandSpec> = {
     summary: 'Show what siren.app.json changes, ask, then declare the app and save its key beside the file.',
     group: 'Getting started',
     short: 'Declare the app on Siren and save its key',
-    options: { yes: { type: 'boolean' } },
-    flags: { yes: YES_FLAG },
+    options: { yes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: { yes: YES_FLAG, json: ['--json', 'Print the plan and the app as JSON'] },
     examples: ['siren apps apply', 'siren apps apply --live --yes'],
     positionals: [0, 1],
     run: apply.appsApply,
+  },
+  'apps diff': {
+    usage: 'apps diff [file] [flags]',
+    summary: 'Show what apply would change, and send nothing. Exits 0 when the file matches Siren and 3 when it differs.',
+    group: 'Apps',
+    short: 'Show what apply would change',
+    options: { json: { type: 'boolean' } },
+    flags: { json: ['--json', 'Print the plan as JSON, with the same exit codes'] },
+    examples: ['siren apps diff', 'siren apps diff --json'],
+    positionals: [0, 1],
+    readsOnly: true,
+    run: apply.appsDiff,
   },
   'apps list': {
     usage: 'apps list [flags]',
@@ -233,13 +246,14 @@ const SPECS: Record<Command, CommandSpec> = {
     summary: 'List what Siren sent the apps, or show one request with each send and answer.',
     group: 'Requests',
     short: 'List what Siren sent, or show one request',
-    options: { app: { type: 'string' }, attention: { type: 'boolean' }, follow: { type: 'boolean' } },
+    options: { app: { type: 'string' }, attention: { type: 'boolean' }, follow: { type: 'boolean' }, json: { type: 'boolean' } },
     flags: {
       app: ['--app <key>', "Only this app's requests"],
       attention: ['--attention', 'Only requests that need a person'],
       follow: ['--follow', 'Keep watching, and print each change. Ctrl-C stops'],
+      json: ['--json', 'With a request id: the whole request, its app and feature keys, and its sends, as JSON'],
     },
-    examples: ['siren apps requests --follow', 'siren apps requests --app acme-payouts --attention'],
+    examples: ['siren apps requests --follow', 'siren apps requests <id> --json > request.json'],
     positionals: [0, 1],
     readsOnly: true,
     run: requests.appsRequests,
@@ -345,19 +359,7 @@ const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 
 const HELP_WIDTH = 80;
 
 /** `text` broken into lines of at most `width` characters, at spaces. */
-function wrap(text: string, width: number): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.split(' ')) {
-    if (line !== '' && line.length + 1 + word.length > width) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = line === '' ? word : `${line} ${word}`;
-    }
-  }
-  return [...lines, line];
-}
+const wrap = wrapWords;
 
 /**
  * Two aligned columns under a heading, as gh prints them: the left one
@@ -508,7 +510,9 @@ function commandNamed(words: readonly string[]): Command {
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
   const guesses = started.length > 0 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
-  throw new CliUsageError(`There is no command "${name}".`, guesses);
+  const group = words[0] === 'apps' && words.length > 1 ? 'siren apps' : 'siren';
+  const word = group === 'siren apps' ? (words[1] ?? '') : name;
+  throw new CommandUnknown(group, word, guesses);
 }
 
 /**
@@ -535,6 +539,8 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   let spec: CommandSpec | undefined;
   let name: Command | undefined;
   let login = 'siren login';
+  // The Siren a failed command was talking to, for the line --verbose adds.
+  let targetUrl: string | undefined;
   try {
     const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
     let words = loose.positionals;
@@ -581,6 +587,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       ? null
       : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined);
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
+    targetUrl = context?.target.baseUrl;
     // A command that sends nothing checks no address, so its hints repeat the flags as typed.
     const hintTarget = context?.target ?? {
       live: flags.live,
@@ -602,6 +609,19 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     return await spec.run({ context, io, values: values as Record<string, string | boolean | undefined>, args, command, kept });
   } catch (error) {
     const style = styleFor(io, 'stderr', { json: argv.includes('--json') });
+    if (error instanceof CommandUnknown) {
+      // Catalog mockup 5: the word in bold, the nearest command, and where help is. No usage block.
+      const help = error.group === 'siren apps' ? 'siren apps --help lists the app commands.' : 'siren --help lists them.';
+      if (!style.rich) {
+        io.stderr(`siren: ${error.message}\n${help}\n`);
+        return 2;
+      }
+      const lines = [style.failure(`${error.group} has no command ${style.bold(`"${error.word}"`)}.`)];
+      if (error.guesses.length > 0) lines.push(`${style.green('›')} Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`);
+      lines.push(style.dim(`  ${help}`));
+      io.stderr(`${lines.join('\n')}\n`);
+      return 2;
+    }
     if (error instanceof CliUsageError) {
       const usage = spec === undefined ? 'Run siren --help to see the commands.' : `Usage: siren ${spec.usage}`;
       const guess =
@@ -612,7 +632,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       return 2;
     }
     const verbose = argv.includes('--verbose') || io.env.SIREN_DEBUG === '1';
-    io.stderr(style.error(tokenRefusal(error, login) ?? asRefusal(error), verbose));
+    io.stderr(style.error(tokenRefusal(error, login) ?? asRefusal(error, targetUrl), verbose));
     return 1;
   }
 }
@@ -622,15 +642,22 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
  * an error from Siren with its message as the headline and its status and
  * code as detail, and anything else by its message.
  */
-function asRefusal(error: unknown): CliRefusal {
+function asRefusal(error: unknown, baseUrl: string | undefined): CliRefusal {
   if (error instanceof CliRefusal) return error;
   const message = (error instanceof Error ? error.message : String(error)).replace(/^Siren: /, '');
   if (!(error instanceof SirenError)) return new CliRefusal(message);
-  const detail = [
-    ...(error.statusCode === undefined ? [] : [`HTTP status: ${error.statusCode}`]),
-    ...(error.code === undefined ? [] : [`Error code: ${error.code}`]),
-  ];
-  return new CliRefusal(message, { detail });
+  return new CliRefusal(message, { detail: httpDetail(error, baseUrl) });
+}
+
+/** A command name the tool does not know, with the group it was typed in and the nearest real commands. */
+class CommandUnknown extends CliUsageError {
+  constructor(
+    readonly group: 'siren' | 'siren apps',
+    readonly word: string,
+    guesses: readonly string[],
+  ) {
+    super(`${group} has no command "${word}".`, guesses);
+  }
 }
 
 /** The flags that choose a Siren, from a strict read. */

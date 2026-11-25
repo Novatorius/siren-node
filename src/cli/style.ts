@@ -23,6 +23,7 @@ const BOLD = '\u001b[1m';
 const DIM = '\u001b[2m';
 const RED = '\u001b[31m';
 const AMBER = '\u001b[33m';
+const CYAN = '\u001b[36m';
 const CLEAR_LINE = '\u001b[2K';
 const HIDE_CURSOR = '\u001b[?25l';
 const SHOW_CURSOR = '\u001b[?25h';
@@ -45,13 +46,49 @@ export interface NextStep {
  */
 export interface Report {
   headline: string;
+  /** False for a view, whose headline gets no ✓, since nothing was done. */
+  mark?: boolean;
   rows?: ReadonlyArray<readonly [string, string]>;
   next?: readonly NextStep[];
   tips?: readonly string[];
 }
 
 /** The widest a line of a report may be, so nothing wraps in an 80-column terminal. */
-const REPORT_WIDTH = 80;
+export const REPORT_WIDTH = 80;
+
+/**
+ * Text from Siren, such as an organization's name or an email, with every
+ * escape sequence and control character taken out, so nothing a server
+ * sends can move the cursor, clear the screen, recolor the terminal or
+ * plant a link. Run it on every value Siren sends before printing it.
+ */
+export function clean(text: string): string {
+  return text
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '')
+    .replace(/(?:\u001b\[|\u009b)[\d;?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b[@-_]/g, '')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+}
+
+/** `text` that {@link wrapWords} keeps on one line, such as a command a person copies. A report prints it with plain spaces. */
+export function unbroken(text: string): string {
+  return text.replace(/ /g, '\u00a0');
+}
+
+/** `text` broken at spaces into lines of at most `width` visible columns. A word longer than `width` keeps a line of its own. */
+export function wrapWords(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line !== '' && visibleLength(line) + 1 + visibleLength(word) > width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line === '' ? word : `${line} ${word}`;
+    }
+  }
+  return [...lines, line];
+}
 
 /** How many columns `text` takes, without its escape codes. */
 export function visibleLength(text: string): number {
@@ -111,6 +148,10 @@ export class Style {
     return this.paint(AMBER, text);
   }
 
+  cyan(text: string): string {
+    return this.paint(CYAN, text);
+  }
+
   dim(text: string): string {
     return this.paint(DIM, text);
   }
@@ -131,7 +172,7 @@ export class Style {
 
   /** "✗ Not logged in.", the words in bold. */
   failure(line: string): string {
-    return this.rich ? `${this.red('✗')} ${this.bold(line)}` : line;
+    return this.rich ? `${RED}${BOLD}✗ ${line}${RESET}` : line;
   }
 
   /** "! The key is not saved." */
@@ -152,13 +193,13 @@ export class Style {
    * `verbose` adds the detail, dim, in both.
    */
   error(refusal: Pick<CliRefusal, 'message' | 'headline' | 'parts'>, verbose: boolean): string {
-    const { why, fix, fixWords, note, detail } = refusal.parts;
+    const { why, fix, fixLead, fixWords, note, detail } = refusal.parts;
     const extra = [...(note === undefined ? [] : [note]), ...(verbose ? (detail ?? []) : [])];
     if (!this.rich) return `siren: ${refusal.message}\n${extra.map((line) => `${line}\n`).join('')}`;
     const lines = [this.failure(refusal.headline)];
     if (why !== undefined) lines.push(`  ${why}`);
-    if (fix !== undefined) lines.push(`  ${this.next(`Run ${this.command(fix)}${fixWords === undefined ? '' : ` ${fixWords}`}.`)}`);
-    for (const line of extra) lines.push(this.dim(`  ${line}`));
+    if (fix !== undefined) lines.push(`${this.green('›')} ${fixLead ?? 'Run'} ${this.command(fix)}${fixWords === undefined ? '' : ` ${fixWords}`}.`);
+    for (const line of extra) lines.push(this.dim(line));
     return `${lines.join('\n')}\n`;
   }
 
@@ -167,11 +208,15 @@ export class Style {
    * keeps the layout and drops the symbols and escape codes.
    */
   report(report: Report): string {
-    const lines = [this.success(report.headline)];
+    const lines = [report.mark === false ? report.headline : this.success(report.headline)];
     const rows = report.rows ?? [];
     if (rows.length > 0) {
       const width = Math.max(...rows.map(([label]) => label.length)) + 3;
-      lines.push('', ...rows.map(([label, value]) => `  ${this.dim(label)}${' '.repeat(width - label.length)}${value}`));
+      lines.push('');
+      for (const [label, value] of rows) {
+        const [first = '', ...rest] = wrapWords(value, REPORT_WIDTH - 2 - width);
+        lines.push(`  ${this.dim(label)}${' '.repeat(width - label.length)}${first}`, ...rest.map((line) => `${' '.repeat(2 + width)}${line}`));
+      }
     }
     const next = report.next ?? [];
     if (next.length > 0) {
@@ -186,8 +231,14 @@ export class Style {
       });
     }
     const tips = report.tips ?? [];
-    if (tips.length > 0) lines.push('', ...tips.map((tip) => (this.rich ? this.dim(`› ${tip}`) : tip)));
-    return `${lines.join('\n')}\n`;
+    if (tips.length > 0) {
+      lines.push('');
+      for (const tip of tips) {
+        const [first = '', ...rest] = wrapWords(tip, REPORT_WIDTH - 2);
+        lines.push(this.rich ? this.dim(`› ${first}`) : first, ...rest.map((line) => (this.rich ? this.dim(`  ${line}`) : `  ${line}`)));
+      }
+    }
+    return `${lines.join('\n').replace(/\u00a0/g, ' ')}\n`;
   }
 
   /**
@@ -196,15 +247,20 @@ export class Style {
    */
   table(headers: readonly string[], rows: ReadonlyArray<readonly string[]>, width: number): string[] {
     const all = [headers, ...rows];
-    const widths = headers.map((_, column) => Math.max(...all.map((row) => [...(row[column] ?? '')].length)));
+    const widths = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
     const line = (row: readonly string[]) => {
-      const cells = row.map((cell, column) => (column === row.length - 1 ? cell : cell.padEnd(widths[column]!)));
+      const cells = row.map((cell, column) => (column === row.length - 1 ? cell : `${cell}${' '.repeat(widths[column]! - visibleLength(cell))}`));
       const text = cells.join('  ');
-      const chars = [...text];
-      return chars.length > width ? `${chars.slice(0, Math.max(width - 1, 0)).join('')}…` : text;
+      if (visibleLength(text) <= width) return text;
+      // Only the last column is shortened, and it is cut as plain text.
+      const before = cells.slice(0, -1).join('  ');
+      const room = Math.max(width - visibleLength(before) - 3, 0);
+      const last = [...(row.at(-1) ?? '').replace(/\u001b\[[\d;?]*[A-Za-z]/g, '')];
+      return `${before}  ${last.slice(0, room).join('')}…`;
     };
     return [this.dim(line(headers)), ...rows.map(line)];
   }
+
 
   /**
    * A spinner beside `text`, written with `write`. In a terminal it turns

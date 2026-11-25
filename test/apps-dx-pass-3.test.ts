@@ -256,9 +256,10 @@ describe("DX pass 3, finding 2: the README's first test compiles under strict Ty
 describe('DX pass 3, finding 3: the types hold what Siren builds', () => {
   /** Siren's fixture request and answer for each kind, checked with `satisfies` against the SDK's types. */
   function fixtureFile(change: (kind: string, data: Record<string, unknown>) => void = () => undefined): string {
+    // The SDK fills timestamp, isAsk and test (false when Siren leaves it out, as on a real request).
     const lines = [
       "import type { AppFeatureFunctions } from '@novatorius/siren'",
-      "type Req<K extends keyof AppFeatureFunctions> = Omit<Parameters<AppFeatureFunctions[K]>[0], 'timestamp' | 'deliveryId' | 'isAsk'>",
+      "type Req<K extends keyof AppFeatureFunctions> = Omit<Parameters<AppFeatureFunctions[K]>[0], 'timestamp' | 'deliveryId' | 'isAsk' | 'test'>",
       "type Ans<K extends keyof AppFeatureFunctions> = Exclude<Awaited<ReturnType<AppFeatureFunctions[K]>>, void | import('@novatorius/siren').AppAnswerLater>",
     ];
     for (const [kind, { request, answer }] of Object.entries(features.kinds)) {
@@ -404,8 +405,9 @@ describe('DX pass 3, finding 5: one surface across the three SDKs', () => {
       const request = fixtureRequest('distributionResolver');
       const id = (JSON.parse(request.rawBody) as AppRequest).id;
       await (await answers.handle(request)).after!();
-      expect(String(lines[0]![1])).toMatch(new RegExp(`answer window closes\\. Resend it sooner with \`siren apps resend ${id}\`\\.$`));
-      expect(String(lines[0]![1])).not.toContain('Needs attention');
+      // DX pass 4: the line is one string, the resend sentence before the error.
+      expect(String(lines[0]![0])).toMatch(new RegExp(`answer window closes\\. Resend it sooner with \`siren apps resend ${id}\`\\. Error: ledger down`));
+      expect(String(lines[0]![0])).not.toContain('Needs attention');
     } finally {
       console.error = original;
     }

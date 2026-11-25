@@ -51,6 +51,7 @@ export {
   ConnectionError,
   SignatureVerificationError,
   AppHandlerError,
+  AppSlowTellError,
 } from './errors';
 export type { SirenErrorDetails, FailedValidation } from './errors';
 export type {
@@ -74,17 +75,12 @@ export type {
   WebhookEvent,
   WebhookHeaders,
   WebhookSubscription,
-  CreatedWebhookSubscription,
-  CreateWebhookSubscriptionParams,
   WebhookCatalogEntry,
   UpdateWebhookSubscriptionParams,
   WebhookTestResult,
   WebhookDelivery,
-  ApiKey,
   ApiKeyScopeEntry,
   ApiKeyScopeGroups,
-  CreatedApiKey,
-  CreateApiKeyParams,
   ListParams,
   SirenList,
 } from './types';
@@ -93,7 +89,6 @@ export type * from './connect/forwarded-events';
 export { EventsResource } from './resources/events';
 export type { BrowserTokenHandler, NodeRequestLike, NodeResponseLike } from './resources/events';
 export { WebhooksResource, WebhookSubscriptionsResource } from './resources/webhooks';
-export { ApiKeysResource } from './resources/api-keys';
 export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';
 export type { RetrieveParams } from './resources/records';
 
@@ -155,7 +150,9 @@ export type {
   AppFastifyReply,
   AppFunctionFor,
   AppSimulatedAnswer,
+  AppLogger,
 } from './resources/app-request-handler';
+export { TELL_TIME_LIMIT_SECONDS } from './resources/app-request-handler';
 export {
   AppsResource,
   AppFeaturesResource,

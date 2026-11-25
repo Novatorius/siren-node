@@ -145,7 +145,10 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     const t = Math.floor(Date.now() / 1000);
     const result = await answers.handle(ask('distributionResolver', 'split-by-score', { timestamp: t }));
     await result.after!();
-    expect(log.mock.calls).toEqual([[`Siren request handler (distributionResolver split-by-score ${ID}):`, next(t), failure]]);
+    // DX pass 4: one string, with the stack after it because the app's own function threw.
+    expect(log.mock.calls).toHaveLength(1);
+    expect(String(log.mock.calls[0]![0]).split('\n')[0]).toBe(`Siren request handler (distributionResolver split-by-score ${ID}): ${next(t)} Error: ledger down`);
+    void failure;
   });
 
   it('prints when Siren sends it again before the stack trace, so a reader sees it without scrolling', async () => {
@@ -172,10 +175,12 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     await (await answers.handle(ask('distributionResolver', 'split-by-score', { timestamp: t }))).after!();
     await (await answers.handle(ask('distributionResolver', 'another-key', { timestamp: t }))).after!();
     expect(log.mock.calls).toHaveLength(2);
-    expect(log.mock.calls[0]![1]).toBe(next(t));
-    expect((log.mock.calls[0]![2] as Error).message).toBe(NOTHING);
-    expect(log.mock.calls[1]![2]).toBeInstanceOf(ValidationError);
-    expect(log.mock.calls[1]![1]).toBe(next(t));
+    expect(String(log.mock.calls[0]![0])).toContain(`${next(t)} AppHandlerError: ${NOTHING}`);
+    // DX pass 4: after a 422 app_answer_invalid, a resend would give the same answer, so the line
+    // says to reproduce it with simulate() instead of when Siren sends it again.
+    expect(String(log.mock.calls[1]![0])).not.toContain(next(t));
+    expect(String(log.mock.calls[1]![0])).toContain(`Reproduce it with simulate() on this request's data`);
+    expect(String(log.mock.calls[1]![0])).toContain('ValidationError: outcome must be allocated');
   });
 
   it('says nothing of a resend when Siren already holds an answer', async () => {
@@ -185,7 +190,9 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await (await answers.handle(ask('distributionResolver', 'split-by-score'))).after!();
     expect(log.mock.calls).toHaveLength(1);
-    expect(log.mock.calls[0]).toHaveLength(2);
+    expect(log.mock.calls[0]).toHaveLength(1);
+    expect(String(log.mock.calls[0]![0])).not.toContain('Siren sends it again');
+    expect(String(log.mock.calls[0]![0])).toContain('ConflictError: Another answer came first.');
   });
 
   it('leaves the time out when answerBy is not a date', async () => {
@@ -196,7 +203,7 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const body = { ...features.kinds.distributionResolver!.request, answerBy: 'soon', answerUrl: `${BASE}/apps/requests/${ID}/answer` };
     await (await answers.handle(signedBy(body))).after!();
-    expect(log.mock.calls[0]![1]).toBe(
+    expect(String(log.mock.calls[0]![0])).toContain(
       `Siren sends it again when its answer window closes. Resend it sooner with \`siren apps resend ${ID}\`.`,
     );
   });

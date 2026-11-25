@@ -90,7 +90,7 @@ export async function catalogContract(siren: Siren): Promise<void> {
   const first: string | undefined = events[0]?.event;
   void first;
 
-  const scopes: ApiKeyScopeGroups = await siren.apiKeys.scopes();
+  const scopes: ApiKeyScopeGroups = await siren.apps.scopes();
   const ledger: string[] | undefined = scopes.ledger?.map((entry) => entry.scope);
   void ledger;
 }

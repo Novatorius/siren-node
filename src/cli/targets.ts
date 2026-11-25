@@ -213,6 +213,8 @@ export interface RefusalParts {
   why?: string;
   /** A command to run, such as `siren login`, printed as "Run siren login <fixWords>." */
   fix?: string;
+  /** The words before the command in place of "Run", such as "Check your inbox for the set-up email, or run". */
+  fixLead?: string;
   fixWords?: string;
   note?: string;
   detail?: readonly string[];
@@ -228,10 +230,24 @@ export class CliRefusal extends Error {
   readonly parts: RefusalParts;
 
   constructor(headline: string, parts: RefusalParts = {}) {
-    const fix = parts.fix === undefined ? [] : [`Run ${parts.fix}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`];
+    const fix = parts.fix === undefined ? [] : [`${parts.fixLead ?? 'Run'} ${parts.fix}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`];
     super([headline, ...(parts.why === undefined ? [] : [parts.why]), ...fix].join(' '));
     this.name = 'CliRefusal';
     this.headline = headline;
     this.parts = parts;
   }
+}
+
+/**
+ * The one line `--verbose` adds under an error from Siren: its HTTP status,
+ * its code when it names one, and the host it came from, such as
+ * `HTTP 401 · sandbox.sirenaffiliates.com`. Never a token or a body.
+ */
+export function httpDetail(error: { statusCode?: number; code?: string }, baseUrl: string | undefined): string[] {
+  const parts = [
+    ...(error.statusCode === undefined ? [] : [`HTTP ${error.statusCode}`]),
+    ...(error.code === undefined ? [] : [error.code]),
+    ...(baseUrl === undefined ? [] : [new URL(baseUrl).host]),
+  ];
+  return parts.length === 0 ? [] : [parts.join(' · ')];
 }

@@ -172,10 +172,10 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(bodyOf(unchosen.http.requests[1])).toEqual({ verificationToken: 'verification-token', orgId: 3 });
   });
 
-  it("answers a wrong password with Siren's message and keeps nothing", async () => {
+  it('answers a wrong password in its own words, which split what Siren said, and keeps nothing', async () => {
     const h = harness([AuthAnswers.wrongPassword()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain("Invalid email or password. If you haven't set up your login yet, check your email for a link to set it up.");
+    expect(h.err()).toContain("Siren didn't accept that email and password. Either is wrong, or this account has no password yet.");
     expect(h.printed()).not.toContain(PASSWORD);
     expect(() => h.credentialsText()).toThrow();
   });
@@ -394,7 +394,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`, `GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
-    expect(h.printed()).toContain(`siren apps rotate-key ${KEY}`);
+    expect(h.printed().replace(/\n  /g, " ")).toContain(`siren apps rotate-key ${KEY}`);
   });
 
   it('prints each problem in the app file with its line, and sends nothing', async () => {
@@ -439,7 +439,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
       `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`,
     );
     expect(() => h.file('.env.sandbox')).toThrow();
-    expect(h.out()).toContain(envFile);
+    expect(h.out()).toContain(`  Key   ${RAW_KEY_2.slice(0, 16)}… in acme/.env.sandbox\n`);
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
   });
@@ -527,26 +527,28 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     // The plain list reads the latest requests, then those that need attention (demo fix 2).
     const none = () => reply(200, { requests: [] });
     const h = harness([
+      reply(200, [app]),
       reply(200, { requests: [row, other] }),
       none(),
+      reply(200, [app]),
       reply(200, { requests: [row, other] }),
-      reply(200, app),
       none(),
+      reply(200, [app]),
       none(),
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
-    expect(h.out()).toContain(REQUEST);
-    expect(h.out()).toContain(other.id);
+    expect(h.out()).toContain(REQUEST.slice(4, 12));
+    expect(h.out()).toContain(other.id.slice(4, 12));
 
     const before = h.out().length;
     expect(await h.run(['apps', 'requests', '--app', KEY]), h.err()).toBe(0);
-    expect(h.out().slice(before)).toContain(REQUEST);
-    expect(h.out().slice(before)).not.toContain(other.id);
+    expect(h.out().slice(before)).toContain(REQUEST.slice(4, 12));
+    expect(h.out().slice(before)).not.toContain(other.id.slice(4, 12));
 
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', 'GET /apps/requests', `GET /apps/${KEY}`, 'GET /apps/requests', 'GET /apps/requests']);
-    expect(new URL(h.http.requests[5]!.url).searchParams.get('status')).toBe('needs_attention');
+    expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps', 'GET /apps/requests']);
+    expect(new URL(h.http.requests[7]!.url).searchParams.get('status')).toBe('needs_attention');
   });
 
   it('shows one request: the data Siren sent, each send, and what the app answered', async () => {
@@ -578,26 +580,26 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     h.signedIn();
     expect(await h.run(['apps', 'requests', REQUEST]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', `GET /apps/${KEY}/deliveries`]);
-    expect(h.out()).toContain(`${REQUEST}.1`);
+    expect(h.out()).toMatch(/\n1  failed +500  +upstream timeout\n/);
     expect(h.out()).toContain('upstream timeout');
     expect(h.out()).toContain('{"received":true}');
-    expect(h.out()).toContain('"payoutId": 88');
+    expect(h.out()).toContain('  payoutId  88');
     expect(h.out()).not.toContain('someone else');
   });
 
-  it('follows the requests, printing each change once, until Ctrl-C', async () => {
+  it('follows the requests, printing each change once, until Ctrl-C, which exits 130', async () => {
     const h = harness(
-      [row, row, { ...row, status: 'delivered' }].flatMap((polled) => [reply(200, { requests: [polled] }), reply(200, { requests: [] })]),
+      [reply(200, [app]), ...[row, row, { ...row, status: 'answered' }].flatMap((polled) => [reply(200, { requests: [polled] }), reply(200, { requests: [] })])],
       { onSleep: (count, abort) => count === 3 && abort() },
     );
     h.signedIn();
-    expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(0);
-    // Each poll reads the latest requests and those that need attention (demo fix 2).
-    expect(h.http.requests).toHaveLength(6);
-    const lines = h.out().split('\n').filter((line) => line.includes(REQUEST));
+    expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(130);
+    // The apps once, then each poll reads the latest requests and those that need attention (demo fix 2).
+    expect(h.http.requests).toHaveLength(7);
+    const lines = h.out().split('\n').filter((line) => line.includes(REQUEST.slice(4, 12)));
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('sent');
-    expect(lines[1]).toContain('delivered');
+    expect(lines[0]).toContain('waiting');
+    expect(lines[1]).toContain('answered');
   });
 
   it('posts an answer with the session, from --body or --file, and says when Siren already had it', async () => {
@@ -610,7 +612,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`, `POST /apps/requests/${REQUEST}/answer`]);
     expect(bearer(h, 0)).toBe(`Bearer ${ACCESS_1}`);
     expect(bodyOf(h.http.requests[1])).toEqual({ outcome: 'paid', reference: 'acme-88' });
-    expect(h.out()).toMatch(/accepted/i);
+    expect(h.out()).toContain(`Answered ${REQUEST.slice(4, 12)}`);
     expect(h.out()).toMatch(/already/i);
   });
 
@@ -656,6 +658,6 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     h.signedIn();
     expect(await h.run(['apps', 'resend', REQUEST]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/resend`]);
-    expect(h.out()).toContain(REQUEST);
+    expect(h.out()).toContain(`Sent ${REQUEST.slice(4, 12)} again`);
   });
 });

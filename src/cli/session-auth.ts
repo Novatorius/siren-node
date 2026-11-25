@@ -2,6 +2,7 @@ import { ConnectionError, RateLimitError, SirenError, UnexpectedResponseError, e
 import { HttpClientError } from '../http';
 import type { HttpClient, HttpResponse } from '../http';
 import type { CliIo } from './io';
+import { clean } from './style';
 import { CliRefusal, CliUsageError } from './targets';
 
 /*
@@ -157,6 +158,11 @@ const TOKEN_FIELDS: ReadonlySet<string> = new Set(['accesstoken', 'refreshtoken'
 export class SessionAuthClient {
   constructor(private readonly options: { baseUrl: string; httpClient: HttpClient; timeout?: number }) {}
 
+  /** The Siren this client calls, such as `https://sandbox.sirenaffiliates.com/siren/v1`. */
+  get baseUrl(): string {
+    return this.options.baseUrl;
+  }
+
   /**
    * `GET /auth/signup-options`, and its `edition`. An answer with no
    * `edition`, from a Siren older than slice 7, counts as `production`, so
@@ -268,11 +274,16 @@ export class SessionAuthClient {
     }
     return {
       id: body.id,
-      name: body.name,
-      lastFour: body.lastFour,
-      expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : null,
-      user: { id: person.id, email: person.email, role: typeof person.role === 'string' ? person.role : '' },
-      org: { orgId: org.orgId, orgName: org.orgName, orgSlug: typeof org.orgSlug === 'string' ? org.orgSlug : '', role: typeof person.role === 'string' ? person.role : '' },
+      name: clean(body.name),
+      lastFour: clean(body.lastFour),
+      expiresAt: typeof body.expiresAt === 'string' ? clean(body.expiresAt) : null,
+      user: { id: person.id, email: clean(person.email), role: typeof person.role === 'string' ? clean(person.role) : '' },
+      org: {
+        orgId: org.orgId,
+        orgName: clean(org.orgName),
+        orgSlug: typeof org.orgSlug === 'string' ? clean(org.orgSlug) : '',
+        role: typeof person.role === 'string' ? clean(person.role) : '',
+      },
     };
   }
 
@@ -406,7 +417,8 @@ function asMembership(value: unknown): Membership | null {
   if (typeof orgId !== 'number' || !Number.isSafeInteger(orgId) || typeof orgName !== 'string' || typeof orgSlug !== 'string' || typeof role !== 'string') {
     return null;
   }
-  const membership: Membership = { orgId, orgName, orgSlug, role };
+  // Siren's text reaches the terminal and credentials.json, so no escape or control character is kept.
+  const membership: Membership = { orgId, orgName: clean(orgName), orgSlug: clean(orgSlug), role: clean(role) };
   if (typeof value.orgLogoUrl === 'string' || value.orgLogoUrl === null) membership.orgLogoUrl = value.orgLogoUrl;
   return membership;
 }
@@ -425,8 +437,8 @@ function asTokens(body: unknown, path: string): SessionTokens {
   }
   const { id, email, role, status } = body.user;
   if (typeof id !== 'number' || typeof email !== 'string') throw unexpected(path, 200);
-  const user: SessionUser = { id, email };
-  if (typeof role === 'string') user.role = role;
+  const user: SessionUser = { id, email: clean(email) };
+  if (typeof role === 'string') user.role = clean(role);
   if (typeof status === 'string') user.status = status;
   const tokens: SessionTokens = { accessToken: body.accessToken, refreshToken: body.refreshToken, user };
   const window = body.emailConfirmation;
@@ -546,8 +558,10 @@ const MAX_POLL_SECONDS = 60;
  */
 /** What the device login shows while it waits: the code and the link, then the wait, then how it ended. */
 export interface DeviceSignInView {
-  /** Shows the code and the page, and whether the browser opened it. */
-  show(code: DeviceCode, opened: boolean): void;
+  /** True once the person pressed Ctrl-C, which wins over an approval that lands at the same moment. */
+  stopped?(): boolean;
+  /** Shows the code and the page, whether the browser opened it, and the host of the Siren the tool polls. */
+  show(code: DeviceCode, opened: boolean, siren: string): void;
   /** Waits `ms` before the next poll. */
   wait(ms: number): Promise<void>;
   /** The wait ended with no session. The tool prints why next. */
@@ -557,9 +571,9 @@ export interface DeviceSignInView {
 /** Plain lines on standard error, for a caller with no view of its own. */
 function plainView(io: CliIo): DeviceSignInView {
   return {
-    show(code, opened) {
+    show(code, opened, siren) {
       io.stderr(`${opened ? 'Your browser is open. Approve the code there.' : 'Open the link in your browser, and approve the code there.'}\n`);
-      io.stderr(`Code: ${code.userCode}\nLink: ${code.page}\nWaiting for approval...\n`);
+      io.stderr(`Code: ${code.userCode}\nLink: ${code.page}\nSiren: ${siren}\nWaiting for approval...\n`);
     },
     wait: (ms) => io.sleep(ms),
     failed: async () => undefined,
@@ -573,10 +587,12 @@ export class DeviceSignIn implements SignInMethod {
   ) {}
 
   async signIn(auth: SessionAuthClient, io: CliIo): Promise<LoginResult> {
-    const code = await auth.cliCode(io.machine ?? 'this machine');
+    const code = await auth.cliCode(machineName(io.machine));
+    const problem = pageProblem(code.page, auth.baseUrl);
+    if (problem !== undefined) throw problem;
     const opened = io.openUrl === undefined ? false : await io.openUrl(code.page).catch(() => false);
     const view = this.view ?? plainView(io);
-    view.show(code, opened);
+    view.show(code, opened, new URL(auth.baseUrl).host);
     try {
       return await this.poll(auth, io, code, view);
     } catch (error) {
@@ -586,19 +602,26 @@ export class DeviceSignIn implements SignInMethod {
   }
 
   private async poll(auth: SessionAuthClient, io: CliIo, code: DeviceCode, view: DeviceSignInView): Promise<LoginResult> {
-    const deadline = io.now() + code.expiresInSeconds * 1000;
+    // The tool's own limit holds whatever life Siren names for the code.
+    const deadline = io.now() + Math.min(Math.max(code.expiresInSeconds, 0), MAX_WAIT_SECONDS) * 1000;
     let wait = seconds(code.intervalSeconds);
     for (;;) {
       await view.wait(wait * 1000);
-      if (io.signal?.aborted) throw new CliRefusal('Stopped waiting for approval, so nothing was kept.');
+      if (io.signal?.aborted) throw stopped();
       if (io.now() >= deadline) throw this.expired();
+      let result: LoginResult;
       try {
-        return await auth.cliToken(code.deviceCode);
+        result = await auth.cliToken(code.deviceCode);
       } catch (error) {
+        if (view.stopped?.() === true || io.signal?.aborted) throw stopped();
         const next = this.nextWait(error, wait);
         if (next === null) throw this.refusal(error);
         wait = next;
+        continue;
       }
+      // Ctrl-C pressed while the approving poll was on the wire wins: the session is not kept.
+      if (view.stopped?.() === true || io.signal?.aborted) throw stopped();
+      return result;
     }
   }
 
@@ -628,7 +651,66 @@ export class DeviceSignIn implements SignInMethod {
   }
 }
 
+/** The refusal a login gets when the person pressed Ctrl-C while it waited. */
+function stopped(): CliRefusal {
+  return new CliRefusal('Stopped waiting for approval, so nothing was kept.');
+}
+
+/** The longest the tool waits for an approval, whatever life Siren names for the code. */
+const MAX_WAIT_SECONDS = 15 * 60;
+
+/** Siren Cloud's hosts, whose API and dashboard sit on different names under one domain. */
+const CLOUD_DOMAIN = 'sirenaffiliates.com';
+
+/**
+ * Why the tool will not open the approval page Siren named, or undefined
+ * when it will. A page in plain http must be on this machine, as the API
+ * must be. The page must be on the API's own host, or, for a Siren Cloud
+ * API, on a Siren Cloud host, where the dashboard lives apart from the API.
+ * A server that answers for Siren cannot send the person to a look-alike
+ * page this way.
+ */
+export function pageProblem(page: string, apiBase: string): CliRefusal | undefined {
+  const pageUrl = new URL(page);
+  const api = new URL(apiBase);
+  if (pageUrl.protocol === 'http:' && !isThisMachine(pageUrl.hostname)) {
+    return new CliRefusal(`Siren sent an approval page at ${pageUrl.origin}, which is not https.`, {
+      why: 'The tool opens a plain http page only on this machine, so it opened nothing and kept nothing.',
+    });
+  }
+  const sameHost = pageUrl.hostname === api.hostname;
+  const cloud = isCloudHost(api.hostname) && isCloudHost(pageUrl.hostname);
+  if (sameHost || cloud) return undefined;
+  return new CliRefusal(`Siren at ${api.host} sent an approval page on ${pageUrl.host}.`, {
+    why: `The tool opens a page only on ${api.host} itself${isCloudHost(api.hostname) ? ` or another ${CLOUD_DOMAIN} host` : ''}, so it opened nothing and kept nothing.`,
+  });
+}
+
+/** True for `sirenaffiliates.com` and its subdomains. */
+function isCloudHost(host: string): boolean {
+  return host === CLOUD_DOMAIN || host.endsWith(`.${CLOUD_DOMAIN}`);
+}
+
+/** True for a name or address that means this machine. */
+function isThisMachine(host: string): boolean {
+  const bare = host.replace(/^\[|\]$/g, '');
+  return bare === 'localhost' || bare.endsWith('.localhost') || bare === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare);
+}
+
 /** An interval Siren named, held between 1 second and {@link MAX_POLL_SECONDS}. */
 function seconds(value: number): number {
   return Number.isFinite(value) ? Math.min(Math.max(Math.ceil(value), 1), MAX_POLL_SECONDS) : 5;
+}
+
+/**
+ * The host name as Siren takes it for `machine`: 1 to 63 letters, digits,
+ * dots, hyphens or underscores, or `POST /auth/cli/code` answers 422
+ * `invalid_machine_name` (contract/cli-signin.md, 2026-11-24). Any other
+ * character becomes a hyphen, the name is cut to 63 characters, and an
+ * empty one becomes `siren-cli`. The approval page shows it, so the person
+ * can tell their own terminal's request from another.
+ */
+export function machineName(host: string | undefined): string {
+  const name = Array.from(host ?? '', (character) => (/^[A-Za-z0-9._-]$/.test(character) ? character : '-')).join('').slice(0, 63);
+  return name === '' ? 'siren-cli' : name;
 }

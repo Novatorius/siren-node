@@ -34,8 +34,6 @@ describe('API key scopes', () => {
       LedgerTransactionsRead: 'ledger:transactions:read',
       LedgerObligationsRead: 'ledger:obligations:read',
       LedgerPayoutsRead: 'ledger:payouts:read',
-      WebhookSubscriptionsRead: 'webhook-subscriptions:read',
-      WebhookSubscriptionsManage: 'webhook-subscriptions:manage',
     });
     expect(LEDGER_READ_SCOPES).toEqual([
       'ledger:conversions:read',
@@ -50,33 +48,19 @@ describe('API key scopes', () => {
     expect(() => eventScope('')).toThrow(TypeError);
   });
 
-  it('sends the ledger and webhook scopes when creating a key', async () => {
-    const ctx = makeClient([jsonResponse(201, { id: 5, label: '', rawKey: 'sk_live_x' })]);
+  it("sends the ledger scopes when making an app's key", async () => {
+    const ctx = makeClient([jsonResponse(201, {})]);
 
-    await ctx.client.apiKeys.create({
-      label: 'Accounting export',
-      scopes: [
-        ...LEDGER_READ_SCOPES,
-        ApiKeyScope.WebhookSubscriptionsRead,
-        ApiKeyScope.WebhookSubscriptionsManage,
-      ],
-    });
+    await ctx.client.apps.createKey('accounting-export', { scopes: [...LEDGER_READ_SCOPES] }).catch(() => undefined);
 
+    expect(new URL(ctx.lastCall().url).pathname).toBe('/siren/v1/apps/accounting-export/key');
     expect(ctx.lastCall().body).toEqual({
-      label: 'Accounting export',
-      scopes: [
-        'ledger:conversions:read',
-        'ledger:transactions:read',
-        'ledger:obligations:read',
-        'ledger:payouts:read',
-        'webhook-subscriptions:read',
-        'webhook-subscriptions:manage',
-      ],
+      scopes: ['ledger:conversions:read', 'ledger:transactions:read', 'ledger:obligations:read', 'ledger:payouts:read'],
     });
   });
 });
 
-describe('ledger reads and webhook subscriptions with an API key', () => {
+describe('ledger reads with an API key', () => {
   it('reads conversions with the key and narrows to one store', async () => {
     const ctx = makeClient([jsonResponse(200, { items: [{ id: 9 }], total: 1 })]);
 
@@ -103,19 +87,6 @@ describe('ledger reads and webhook subscriptions with an API key', () => {
       '/siren/v1/transactions',
     ]);
   });
-
-  it('manages webhook subscriptions with the key', async () => {
-    const ctx = makeClient([
-      jsonResponse(201, { id: 4, signingSecret: 'whsec_x' }),
-      jsonResponse(200, [{ id: 4 }]),
-    ]);
-
-    await ctx.client.webhooks.subscriptions.create({ targetUrl: 'https://example.com/hook', events: ['*'] });
-    expect(ctx.lastCall().method).toBe('POST');
-    expect(ctx.lastCall().headers.Authorization).toBe(`Bearer ${TEST_API_KEY}`);
-
-    expect(await ctx.client.webhooks.subscriptions.list()).toEqual([{ id: 4 }]);
-  });
 });
 
 describe('API key refusals', () => {
@@ -123,21 +94,21 @@ describe('API key refusals', () => {
     const ctx = makeClient([
       jsonResponse(
         403,
-        coded("This API key does not have the 'webhook-subscriptions:read' scope.", 'missing_scope', {
-          scope: 'webhook-subscriptions:read',
-          anyOf: ['webhook-subscriptions:read', 'webhook-subscriptions:manage'],
+        coded("This API key does not have the 'records:programs:read' scope.", 'missing_scope', {
+          scope: 'records:programs:read',
+          anyOf: ['records:programs:read', 'records:programs:manage'],
         }),
       ),
     ]);
 
-    const err = await ctx.client.webhooks.subscriptions.list().catch((e: unknown) => e);
+    const err = await ctx.client.programs.list().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(MissingScopeError);
     expect(err).toBeInstanceOf(PermissionError);
     const missing = err as MissingScopeError;
     expect(missing.code).toBe(ErrorCode.MissingScope);
     expect(missing.statusCode).toBe(403);
-    expect(missing.scope).toBe('webhook-subscriptions:read');
-    expect(missing.anyOf).toEqual(['webhook-subscriptions:read', 'webhook-subscriptions:manage']);
+    expect(missing.scope).toBe('records:programs:read');
+    expect(missing.anyOf).toEqual(['records:programs:read', 'records:programs:manage']);
   });
 
   it('leaves anyOf empty when Siren lists no scopes', async () => {
@@ -173,7 +144,7 @@ describe('API key refusals', () => {
       jsonResponse(401, coded('This route does not accept API keys.', 'api_key_not_accepted')),
     ]);
 
-    const err = await ctx.client.apiKeys.list().catch((e: unknown) => e);
+    const err = await ctx.client.apps.list().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiKeyNotAcceptedError);
     expect(err).toBeInstanceOf(AuthenticationError);
     expect((err as ApiKeyNotAcceptedError).code).toBe(ErrorCode.ApiKeyNotAccepted);

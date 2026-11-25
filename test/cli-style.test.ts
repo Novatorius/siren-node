@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CliRefusal } from '../src/cli/targets';
-import { Style, styleFor } from '../src/cli/style';
+import { Style, styleFor, unbroken, visibleLength } from '../src/cli/style';
 import { harness } from './cli-fakes';
 
 /*
@@ -42,7 +42,7 @@ describe('style: lines', () => {
   it('marks done, failed, a warning and a next step with a symbol in a terminal', () => {
     expect(rich.success('Applied acme-payouts.')).toMatch(/^\u001b\[[\d;]+m✓\u001b\[0m Applied acme-payouts\.$/);
     expect(rich.failure('Not logged in.')).toContain('✗');
-    expect(rich.failure('Not logged in.')).toContain(`${ESC}1mNot logged in.`);
+    expect(rich.failure('Not logged in.')).toBe(`${ESC}31m${ESC}1m✗ Not logged in.${ESC}0m`);
     expect(rich.warning('The key is not saved.')).toContain('!');
     expect(rich.next('siren apps apply')).toContain('›');
   });
@@ -82,14 +82,42 @@ describe('style: errors are three parts at most', () => {
 
   it('adds the detail, dim, only with --verbose or SIREN_DEBUG', () => {
     expect(rich.error(refusal, false)).not.toContain('uat.example');
-    expect(rich.error(refusal, true)).toContain(`${ESC}2m  Siren: uat.example`);
+    expect(rich.error(refusal, true)).toContain(`${ESC}2mSiren: uat.example`);
     expect(plain.error(refusal, true)).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
   });
 
   it('always shows a dim line that is marked to show, such as a Siren that is not the default', () => {
     const elsewhere = new CliRefusal('Not logged in.', { fix: 'siren login', fixWords: 'to log in', note: 'Siren: uat.example' });
     expect(plain.error(elsewhere, false)).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
-    expect(rich.error(elsewhere, false)).toContain(`${ESC}2m  Siren: uat.example`);
+    expect(rich.error(elsewhere, false)).toContain(`${ESC}2mSiren: uat.example`);
+  });
+});
+
+describe('style: a report', () => {
+  const tip = 'acme-payouts holds no key, so .env.sandbox has none. siren apps add-key acme-payouts makes one and saves it there.';
+
+  it('wraps a long tip under itself so no line passes 80 columns, styled or plain', () => {
+    for (const style of [rich, plain]) {
+      const lines = style.report({ headline: 'Updated acme-payouts', tips: [tip] }).trimEnd().split('\n');
+      for (const line of lines) expect(visibleLength(line), line).toBeLessThanOrEqual(80);
+      const tipLines = lines.slice(2);
+      expect(tipLines.length).toBeGreaterThan(1);
+      expect(tipLines.map((line) => line.replace(/\u001b\[[\d;]*m/g, '')).join(' ').replace(/^› /, '').replace(/ {2,}/g, ' ')).toBe(tip);
+    }
+    expect(rich.report({ headline: 'x', tips: [tip] }).split('\n')[3]).toMatch(/^\u001b\[2m {2}\S/);
+  });
+
+  it('never breaks a command that unbroken() marks, and prints it with plain spaces', () => {
+    const command = unbroken('siren apps rotate-key acme-payouts --base-url https://uat.example.com/siren/v1 --live');
+    const text = plain.report({ headline: 'x', tips: [`.env.live holds no key for acme-payouts, which is fine. ${command} would save a new one.`] });
+    expect(text).not.toContain('\u00a0');
+    expect(text.split('\n').some((line) => line.includes('siren apps rotate-key acme-payouts --base-url https://uat.example.com/siren/v1 --live'))).toBe(true);
+  });
+
+  it('wraps a long row value under its own column', () => {
+    const lines = plain.report({ headline: 'x', rows: [['Key', `${'sk_test_0a0a0a0a… and its signing secret, saved in '.repeat(2)}.env.sandbox`]] }).trimEnd().split('\n');
+    for (const line of lines) expect(visibleLength(line)).toBeLessThanOrEqual(80);
+    expect(lines[3]).toMatch(/^ {8}\S/);
   });
 });
 
@@ -184,15 +212,15 @@ describe('style: a command line the tool cannot read', () => {
     expect(await runCli(['apps', 'aply'], { ...h.io, stderrTty: true, env: { TERM: 'xterm-256color' } })).toBe(2);
     const lines = h.err().split('\n');
     expect(lines[0]).toContain('✗');
-    expect(lines[0]).toContain('There is no command "apps aply".');
+    expect(lines[0]).toContain(`siren apps has no command ${ESC}1m"aply"${ESC}0m.`);
     expect(lines[1]).toContain(`Did you mean ${ESC}1msiren apps apply${ESC}0m?`);
     expect(lines[1]).toContain('›');
-    expect(lines[2]).toBe(`  ${ESC}2mRun siren --help to see the commands.${ESC}0m`);
+    expect(lines[2]).toBe(`${ESC}2m  siren apps --help lists the app commands.${ESC}0m`);
   });
 
   it('keeps the one-line form when plain', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'aply'])).toBe(2);
-    expect(h.err()).toBe('siren: There is no command "apps aply". Did you mean "apps apply"?\nRun siren --help to see the commands.\n');
+    expect(h.err()).toBe('siren: siren apps has no command "aply". Did you mean "apps apply"?\nsiren apps --help lists the app commands.\n');
   });
 });

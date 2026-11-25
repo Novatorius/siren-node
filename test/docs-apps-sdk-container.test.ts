@@ -51,17 +51,12 @@ describe('apps-sdk-container: the note and the mutation list', () => {
 /** Each old key and webhook operation in openapi.yaml, and the app route that replaces it. */
 const REPLACED_ROUTES: Array<[string, string]> = [
   ['listWebhookSubscriptions', 'GET /apps'],
-  ['createWebhookSubscription', 'POST /apps'],
   ['listWebhookEventTypes', 'GET /apps/events'],
   ['getWebhookSubscription', 'GET /apps/{key}'],
   ['updateWebhookSubscription', 'PATCH /apps/{key}'],
   ['deleteWebhookSubscription', 'PATCH /apps/{key}'],
   ['sendWebhookTest', 'POST /apps/{key}/test'],
   ['listWebhookDeliveries', 'GET /apps/{key}/deliveries'],
-  ['listApiKeys', 'GET /apps'],
-  ['createApiKey', 'POST /apps/{key}/key'],
-  ['listApiKeyScopes', 'GET /apps/scopes'],
-  ['revokeApiKey', 'DELETE /apps/{key}/key'],
 ];
 
 /** The text of one operation: from its operationId line to the next operation's. */

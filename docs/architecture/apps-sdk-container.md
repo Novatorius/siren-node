@@ -47,14 +47,15 @@ is gone. It was never released, and `RotatedApp` stays as a deprecated type.
 
 ## The old key and webhook calls
 
-Every method on `siren.apiKeys` and `siren.webhooks.subscriptions` carries
-an `@deprecated` line naming the app call that replaces it. The calls still
-work, since Siren keeps their routes until slice C5 removes them, and they go
-then. `webhooks.constructEvent()` and `webhooks.verifySignature()` stay as
-they are, because an app's address receives events signed the same way.
-openapi.yaml marks each old `/webhooks` and `/api-keys` operation
-`deprecated: true`, with a first description line naming the app route that
-replaces it.
+Slice C5 removed `/api-keys` and `POST /webhooks` from Siren, so
+`siren.apiKeys` and `siren.webhooks.subscriptions.create()` are gone, and
+openapi.yaml drops their operations. Every other method on
+`siren.webhooks.subscriptions` carries an `@deprecated` line naming the app
+call that replaces it. `webhooks.constructEvent()` and
+`webhooks.verifySignature()` stay as they are, because an app's address
+receives events signed the same way. openapi.yaml marks each remaining
+`/webhooks` operation `deprecated: true`, with a first description line naming
+the app route that replaces it.
 
 A malformed answer to a call that made a secret throws
 `UnexpectedResponseError` with the body as `data`, less `rawKey` and
@@ -93,8 +94,8 @@ each once, and with `*` present, `*` and the record scopes only
 line 51, applied by lib/Apps/Service/Services/AppService.php line 1764, both
 on feat/apps at `c8dbb1ab3`). So a file that names `*` beside `event:*`
 matches on the next run. It prints a header that says what applying the
-file changes, then each change, then asks
-"Type yes to apply". `--yes` skips the question. With no terminal and no
+file changes, then each change marked `+`, `~` or `-`, then asks
+"Apply to <org> (<slug>), sandbox? [y/N]". `--yes` skips the question. With no terminal and no
 `--yes` it sends nothing. With nothing to change it says so and writes
 nothing.
 

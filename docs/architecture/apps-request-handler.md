@@ -95,12 +95,60 @@ does not silently drop a function. The handler routes by the envelope's
 The work after the reply never rejects, and an `onError` that throws is
 caught.
 
-The default `onError` writes one `console.error` line, `Siren request handler
-(<kind> <key> <id>):` or `(<type> <delivery id>):`, and the error, as the
-PHP SDK's default does. For an ask's work after its 200 it adds when Siren
-sends the ask again, from `answerBy` in UTC, and how to resend it sooner
-(`nextSend()`), before the error so a stack trace can't hide it, unless Siren refused with 403, 404 or 409, after which it
-sends the ask no more. It never writes the request's data or headers.
+The default `onError` writes one string through `logger`, `Siren request
+handler (<kind> <key> <id>):` or `(<type> <delivery id>):`, then the error's
+class, message and code, with a nested cause folded in as "(cause: ...)". A
+stack trace follows only when the app's own function threw, which the handler
+tracks with a `WeakSet` of the errors its `run()` wrapper caught. For an ask's
+work after its 200 it adds when Siren sends the ask again, from `answerBy` in
+UTC, and how to resend it sooner (`nextSend()`), before the error, unless Siren
+refused with 403, 404 or 409, after which it sends the ask no more. After a 422
+`app_answer_invalid` it says instead to reproduce the answer with `simulate()`
+and resend, since a resend alone repeats the refused answer. It never writes the
+request's data or headers.
+
+## Logging and the two warnings
+
+`logger` takes `debug`, `info`, `warn` and `error`. `respond()` times each
+request and writes one `debug` line with its name, status and milliseconds.
+`simulate()` writes nothing. Left out, the logger drops `debug` and `info` and
+sends `warn` and `error` to the console, so a production log stays quiet. A
+custom `onError` replaces the default line, and the debug lines still go to the
+logger.
+
+A refused signature goes to `onError` as the `SignatureVerificationError`
+that `checkSignedDelivery()` threw, with a code per check, and the reply stays
+the 401. The default writes it at `warn` with a hint by code: the signing
+secret for `signature_mismatch`, a proxy for a missing, unreadable or mismatched
+header. Flood control keeps no timer: the first refusal opens a one-minute
+window, five lines are written in it, and the rest are counted. The next
+refusal after the window first writes the count. Tests drive it with Vitest's
+fake `Date`.
+
+A tell's function is timed. Past `TELL_TIME_LIMIT_SECONDS` (8, the timeout
+Siren's delivery client puts on each post to an app's address), `onError` gets
+an `AppSlowTellError` at `warn`, and `simulate()` returns it. The reply is still
+200, because Siren has already stopped waiting and will send the tell again.
+An ask needs no timer: its reply comes before its function runs.
+
+## Testing helpers
+
+`@novatorius/siren/testing` signs requests as `WebhookSignature::headers()`
+signs them. `appRequest(kind, key)` builds one from Siren's sample question.
+`appRequestFromRecord(record)` signs a stored request again with its id,
+kind, mode, data and `answerBy`, from the file `siren apps requests <id> --json`
+saves: Siren's request detail with `appKey` and `featureKey` beside it. Siren's
+detail names its feature as `app:{id}` only, so the helper takes the key from
+`featureKey`, and `{ key }` covers a request whose app is gone, where both
+keys are null. A missing key throws `AppHandlerError`. `webhookEvent(type, data?)` signs an event with `X-Siren-Event`
+set to the type and an `evt_` delivery id, and no `Idempotency-Key`, which
+Siren sends only for keyed deliveries. Its default data is
+`sampleEventData(type)`, from src/testing/event-samples.ts, which
+scripts/siren-event-samples.mjs builds from the payload tables in Siren's
+docs/api/webhooks-events.md. An event whose payload is "the same fields as"
+another copies that one. Siren documents 60 of its 64 event types, and the
+other four (`credit.issued`, `credit.redeemed`, `currency.created`,
+`currency.deleted`) need their data passed.
 
 ## Mounting it
 
