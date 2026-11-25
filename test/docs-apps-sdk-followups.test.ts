@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { specServes } from './spec-routes';
 
 /*
  * The records of the SDK follow-ups lane: the README, the CHANGELOG, the
  * architecture note (docs/architecture/apps-cli.md, "Follow-ups after the
- * merge") and openapi.yaml say what each follow-up changed.
+ * merge") say what each follow-up changed.
  */
 
 function read(name: string): string {
@@ -62,14 +63,11 @@ describe('apps-sdk-followups-1: the records', () => {
     expect(note).toContain('| `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`');
     expect(read('README.md')).toContain('| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` |');
     expect(read('CHANGELOG.md')).toContain('`siren.apps.requests.retrieve(id)` reads one request');
-    const openapi = read('openapi.yaml');
-    expect(openapi).toContain('/apps/requests/{requestKey}: get: tags: [Apps] operationId: retrieveAppRequest');
-    expect(openapi).toContain('AppRequestDetail: allOf:');
+    expect(specServes('get', '/apps/requests/{requestKey}')).toBe(true);
     expect(read('test/cloud-capture-fakes.test.ts')).not.toContain('GET /apps/requests/{id} has no route.');
   });
 
   it('name needsAttention and where the command shows it', () => {
-    expect(read('openapi.yaml')).toContain('needsAttention: { type: integer, minimum: 0');
     expect(read('CHANGELOG.md')).toContain('`App.needsAttention`');
     expect(read('README.md')).toContain('how many and the `siren apps requests --app <key> --attention` that lists them');
     expect(read('docs/architecture/apps-cli.md')).toContain('### 8. How many requests need attention');

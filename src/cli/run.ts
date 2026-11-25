@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
 import * as requests from './commands/requests';
+import * as records from './commands/resources';
 import * as session from './commands/session';
 import { CommandContext, shortAddress, tokenRefusal } from './context';
 import type { CommandHandler } from './context';
@@ -61,7 +62,7 @@ interface CommandSpec {
   usage: string;
   summary: string;
   /** The heading `siren --help` lists it under. */
-  group: (typeof GROUPS)[number];
+  group: (typeof GROUPS)[number] | 'Records';
   /** The few words `siren --help` prints beside it, with no full stop. */
   short: string;
   options: Options;
@@ -339,7 +340,7 @@ const SPECS: Record<Command, CommandSpec> = {
 };
 
 /** Every option any command takes, for the first read of the line, which finds the command. */
-const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, ...Object.values(SPECS).map((spec) => spec.options));
+const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, records.OPTIONS, ...Object.values(SPECS).map((spec) => spec.options));
 
 /** The widest a help line may be, so nothing wraps in an 80-column terminal. */
 const HELP_WIDTH = 80;
@@ -386,6 +387,20 @@ function commandRows(style: Style, commands: readonly Command[]): string[] {
   );
 }
 
+/** The record commands, generated from Siren's API, as the top help lists them. */
+function recordRows(style: Style): string[] {
+  return columns(
+    [
+      ['<resource> <op>', 'List, get, create, update or delete a record'],
+      ['get <path>', 'Read any route, such as get /programs'],
+      ['post <path>', 'Write to any route, and put, patch and delete'],
+      ['resources', 'List the resources and their operations'],
+    ],
+    22,
+    (text) => style.bold(text),
+  );
+}
+
 /** The lines of LEARN MORE. */
 function learnMore(style: Style, perCommand: boolean): string[] {
   return [
@@ -400,7 +415,10 @@ function helpText(style: Style): string {
     'Declare Siren apps, and watch and answer what Siren sends them.',
     '',
     ...section(style, 'Usage', ['  siren <command> [flags]']),
-    ...GROUPS.flatMap((group) => section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group)))),
+    ...GROUPS.flatMap((group) => [
+      ...section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))),
+      ...(group === 'Requests' ? section(style, 'Records', recordRows(style)) : []),
+    ]),
     ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text)),
     ...section(
       style,
@@ -533,7 +551,7 @@ function commandNamed(words: readonly string[]): Command {
  */
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {
   let spec: CommandSpec | undefined;
-  let name: Command | undefined;
+  let name: string | undefined;
   let login = 'siren login';
   try {
     const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
@@ -563,8 +581,15 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       return 0;
     }
 
-    name = commandNamed(words);
-    spec = SPECS[name];
+    const record = records.commandFor(words);
+    if (record !== undefined) {
+      name = record.name;
+      spec = record.spec;
+    } else {
+      const named = commandNamed(words);
+      name = named;
+      spec = SPECS[named];
+    }
     if (wantsHelp) {
       io.stdout(commandHelp(styleFor(io, 'stdout', {}), spec));
       return 0;

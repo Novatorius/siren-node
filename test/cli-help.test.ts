@@ -28,7 +28,7 @@ describe('help: siren --help', () => {
   it('has the shape of gh help: description, usage, grouped commands, flags, examples and learn more', async () => {
     const text = await helpOf(['--help']);
     expect(text.split('\n')[0]).toMatch(/^[A-Z].+\.$/);
-    expect(sections(text)).toEqual(['USAGE', 'GETTING STARTED', 'APPS', 'REQUESTS', 'ACCOUNT', 'FLAGS', 'ENVIRONMENT', 'EXAMPLES', 'LEARN MORE']);
+    expect(sections(text)).toEqual(['USAGE', 'GETTING STARTED', 'APPS', 'REQUESTS', 'RECORDS', 'ACCOUNT', 'FLAGS', 'ENVIRONMENT', 'EXAMPLES', 'LEARN MORE']);
     expect(text).toContain('https://github.com/Novatorius/siren-node#command-line-tool');
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-help-top.txt');
   });
@@ -37,7 +37,8 @@ describe('help: siren --help', () => {
     const text = await helpOf(['--help']);
     const listed = text.split('\n').filter((line) => /^ {2}(apps )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
     const names = listed.map((line) => line.trim().split(/ {2,}/)[0]);
-    expect([...names].sort()).toEqual([...COMMANDS].sort());
+    // RECORDS adds `resources` beside its lines with arguments, which the pattern skips.
+    expect([...names].sort()).toEqual([...COMMANDS, 'resources'].sort());
     expect(new Set(listed.map((line) => line.search(/ {2,}\S/) + line.slice(line.search(/ {2,}\S/)).search(/\S/))).size).toBe(1);
   });
 

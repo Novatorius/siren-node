@@ -24,6 +24,12 @@ REQUESTS
   apps answer         Answer an ask by hand
   apps resend         Send a request again
 
+RECORDS
+  <resource> <op>     List, get, create, update or delete a record
+  get <path>          Read any route, such as get /programs
+  post <path>         Write to any route, and put, patch and delete
+  resources           List the resources and their operations
+
 ACCOUNT
   logout              Log out, and forget the session here
   whoami              Show who you are logged in as

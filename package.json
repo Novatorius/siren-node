@@ -87,13 +87,15 @@
     "dist",
     "README.md",
     "LICENSE",
-    "openapi.yaml",
+    "openapi.json",
     "scripts/prepare.mjs",
     "siren.app.schema.json"
   ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
+    "generate:cli": "node scripts/generate-cli-resources.mjs",
+    "openapi:copy": "node scripts/copy-openapi.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

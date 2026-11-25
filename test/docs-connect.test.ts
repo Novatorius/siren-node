@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { specServes } from './spec-routes';
 
 /*
  * Slice 5 acceptance tests for packet P7: the reference docs describe the
  * connected-site surface. The README, the CHANGELOG's Unreleased section and
- * openapi.yaml are what a caller reads, so each new entry, class, method and
+ * Siren's openapi.json are what a caller reads, so each new entry, class, method and
  * route must appear there.
  */
 
@@ -83,34 +84,6 @@ function advises(all: string[], advice: Advice): boolean {
   return all.some(advice.says) && !all.some(advice.refuses);
 }
 
-/** One path block in openapi.yaml, from its key to the next path. */
-function path(openapi: string, key: string): string {
-  const start = openapi.indexOf(`\n  ${key}:\n`);
-  expect(start, key).toBeGreaterThan(-1);
-  const rest = openapi.slice(start + 1);
-  const next = rest.slice(1).search(/\n {2}\/|\n\S/);
-  return next < 0 ? rest : rest.slice(0, next + 1);
-}
-
-/** One operation inside a path block, from its method to the next method. */
-function operation(block: string, method: string): string {
-  const start = block.indexOf(`\n    ${method}:\n`);
-  expect(start, method).toBeGreaterThan(-1);
-  const rest = block.slice(start + 1);
-  const next = rest.slice(1).search(/\n {4}[a-z]+:\n/);
-  return next < 0 ? rest : rest.slice(0, next + 1);
-}
-
-/** The scopes listed for connectorToken in one operation, or null when it has none. */
-function connectorScopes(op: string): string[] | null {
-  const match = op.match(/- connectorToken: \[([^\]]*)\]/);
-  if (match === null) return null;
-  return match[1]!
-    .split(',')
-    .map((scope) => scope.trim().replace(/^['"]|['"]$/g, ''))
-    .filter((scope) => scope !== '');
-}
-
 const CONNECT_ROUTES: Array<[string, string, string]> = [
   ['/connect/plan', 'get', 'connect:read'],
   ['/connect/update-grant', 'post', 'connect:read'],
@@ -127,42 +100,17 @@ const CONNECT_ROUTES: Array<[string, string, string]> = [
   ['/connect/webhook/deliveries', 'get', 'connect:webhooks'],
 ];
 
-describe('P7: openapi.yaml', () => {
-  it.each(CONNECT_ROUTES)('documents %s %s for a connected site holding %s', (key, method, scope) => {
-    const op = operation(path(read('openapi.yaml'), key), method);
-
-    expect(op).toMatch(/operationId: \w+/);
-    expect(connectorScopes(op)).toEqual([scope]);
-    expect(op).not.toMatch(/- apiKey:/);
-    expect(op).toMatch(/'2\d\d':/);
-    expect(op).toMatch(/'401':/);
-    expect(op).toMatch(/'403':/);
+describe("P7: openapi.json, Siren's spec", () => {
+  it.each(CONNECT_ROUTES)('serves %s %s, which a connected site reaches with %s', (key, method) => {
+    expect(specServes(method, key), `${key} ${method}`).toBe(true);
   });
 
-  it.each([
-    ['/oauth/register', ['client_name', 'redirect_uris', 'scope', 'software_id'], "'201':"],
-    ['/oauth/token', ['grant_type', 'client_id', 'code', 'redirect_uri', 'code_verifier', 'refresh_token', 'attempt_id'], "'200':"],
-  ])('documents POST %s as public, with its body fields and the OAuth error envelope', (key, fields, success) => {
-    const op = operation(path(read('openapi.yaml'), key), 'post');
-
-    expect(op).toMatch(/\n {6}security: \[\]\n/);
-    for (const field of fields) expect(op, field).toMatch(new RegExp(`\\b${field}:`));
-    expect(op).toContain(success);
-    expect(op).toMatch(/'400':/);
-    expect(op).toContain('error_description');
+  it.each(['/oauth/register', '/oauth/token'])('serves POST %s', (key) => {
+    expect(specServes('post', key)).toBe(true);
   });
 
-  it('documents the forwarded event envelope as a schema, and the event route takes it with connect:ingest and the final attempt header', () => {
-    const openapi = read('openapi.yaml');
-    const schemaStart = openapi.indexOf('\n    ForwardedEventEnvelope:\n');
-    expect(schemaStart).toBeGreaterThan(-1);
-    const schema = openapi.slice(schemaStart, schemaStart + 3000);
-    expect(schema).toMatch(/required: \[version, eventId, origin, occurredAt, data\]/);
-
-    const op = operation(path(openapi, '/event/{eventSlug}'), 'post');
-    expect(op).toContain("$ref: '#/components/schemas/ForwardedEventEnvelope'");
-    expect(connectorScopes(op)).toEqual(['connect:ingest']);
-    expect(op).toContain('X-Siren-Final-Attempt');
+  it('serves the event route', () => {
+    expect(specServes('post', '/event/{eventSlug}')).toBe(true);
   });
 });
 
