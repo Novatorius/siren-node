@@ -108,7 +108,7 @@ describe('apps-cli internals: apply and the app key', () => {
     h.signedIn();
     expect(await h.run(['apps', 'rotate-key', APP_KEY, '--yes', '--app-file', 'siren.app.json'])).toBe(1);
     expect(h.http.requests).toHaveLength(0);
-    expect(h.err()).toContain('There is no app file');
+    expect(h.err()).toContain("There's no siren.app.json here.");
   });
 
   it('deletes in a terminal only when the key is typed', async () => {
@@ -167,8 +167,8 @@ describe('apps-cli internals: the stored files before a secret is sent', () => {
       h.write('.env.sandbox', held);
       expect(await h.run(['apps', 'rotate-key', APP_KEY, '--yes', '--app-file', 'siren.app.json']), other).toBe(1);
       expect(h.http.requests, other).toHaveLength(0);
-      expect(h.err()).toContain(other);
-      expect(h.err()).toContain(SANDBOX_BASE_URL);
+      // CLI pass 3: the refusal names the other Siren by host, and never the whole address.
+      expect(h.err()).toContain(`holds a key for another Siren, ${new URL(other).host}.`);
       expect(h.file('.env.sandbox')).toBe(held);
     }
   });
@@ -184,8 +184,8 @@ describe('apps-cli internals: the stored files before a secret is sent', () => {
       h.write('.env.sandbox', held);
       expect(await h.run(['apps', 'apply']), other).toBe(1);
       expect(h.http.requests, other).toHaveLength(0);
-      expect(h.err()).toContain(other);
-      expect(h.err()).toContain(SANDBOX_BASE_URL);
+      // CLI pass 3: the refusal names the other Siren by host, and never the whole address.
+      expect(h.err()).toContain(`holds a key for another Siren, ${new URL(other).host}.`);
       expect(h.err()).toMatch(/siren apps apply/);
       expect(h.file('.env.sandbox')).toBe(held);
     }

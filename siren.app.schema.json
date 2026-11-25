@@ -66,16 +66,115 @@
           "scopes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "examples": [
+                "event:sale",
+                "event:refund",
+                "event:site-visited",
+                "ledger:conversions:read",
+                "ledger:transactions:read",
+                "ledger:obligations:read",
+                "ledger:payouts:read",
+                "ledger:engagements:read",
+                "ledger:opportunities:read",
+                "ledger:fulfillments:read",
+                "records:products:read",
+                "records:products:manage",
+                "records:coupons:read",
+                "records:coupons:manage",
+                "records:collaborators:read",
+                "records:collaborators:manage",
+                "records:collaborator-groups:read",
+                "records:collaborator-groups:manage",
+                "records:programs:read",
+                "records:programs:manage",
+                "records:program-groups:read",
+                "records:program-groups:manage",
+                "records:distributors:read",
+                "records:distributors:manage",
+                "records:application-forms:read",
+                "records:application-forms:manage",
+                "records:applications:read",
+                "records:applications:manage",
+                "records:notification-rules:read",
+                "records:notification-rules:manage",
+                "records:properties:read"
+              ]
             },
-            "description": "The app key's scopes."
+            "description": "The app key's scopes. siren apps scopes lists the ones your Siren issues, custom event types included."
           },
           "events": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "examples": [
+                "allocation.completed",
+                "collaborator.applied",
+                "collaborator.created",
+                "collaborator.deactivated",
+                "collaborator.declined",
+                "collaborator.deleted",
+                "collaborator_group.created",
+                "collaborator_group.deleted",
+                "collaborator_group.member_added",
+                "collaborator_group.member_removed",
+                "collaborator_group.updated",
+                "collaborator.joined",
+                "collaborator.registered",
+                "collaborator.updated",
+                "conversion.approved",
+                "conversion.created",
+                "conversion.rejected",
+                "conversion.renewed",
+                "coupon.applied",
+                "coupon.linked",
+                "coupon.merged",
+                "coupon.unlinked",
+                "credit.issued",
+                "credit.redeemed",
+                "currency.created",
+                "currency.deleted",
+                "distribution.completed",
+                "distributor.created",
+                "distributor.deleted",
+                "distributor.updated",
+                "engagement.awarded",
+                "engagement.completed",
+                "engagement.created",
+                "fulfillment.created",
+                "fulfillment.updated",
+                "lead.created",
+                "metrics.updated",
+                "obligation.approved",
+                "obligation.completed",
+                "obligation.created",
+                "obligation.rejected",
+                "obligation.superseded",
+                "opportunity.created",
+                "opportunity.invalidated",
+                "payout.created",
+                "payout.failed",
+                "payout.paid",
+                "payout.waiting",
+                "product.merged",
+                "program.created",
+                "program.deleted",
+                "program_group.created",
+                "program_group.deleted",
+                "program_group.updated",
+                "program.status_changed",
+                "program.updated",
+                "refund.created",
+                "refund.recorded",
+                "renewal.created",
+                "sale.created",
+                "store.connected",
+                "store.disconnected",
+                "transaction.completed",
+                "transaction.created"
+              ]
             },
-            "description": "The events Siren tells the app about."
+            "description": "The events Siren tells the app about. siren apps events lists them."
           },
           "contacts": {
             "type": "array",
@@ -325,7 +424,7 @@
           ]
         }
       },
-      "description": "One app, under its app key."
+      "description": "One app under its app key. A Siren recipe maps each key to its record, so apps is a map. It holds one app, since the env file beside siren.app.json keeps that one app's key."
     }
   }
 }

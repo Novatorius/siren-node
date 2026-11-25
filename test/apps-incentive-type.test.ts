@@ -99,7 +99,7 @@ describe('apps-c16-6: the incentive type kind', () => {
       features: [{ ...appRecord().features[0], kind: 'incentiveType', key: 'deals', name: 'Pay on deals', settings: { conversionTypes: ['sale'] } }],
     }) as unknown as App;
     expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: ADDRESS, features: [feature] }).lines).toEqual([
-      'changes feature deals, Incentive structure (incentiveType): conversions it pays',
+      'changes feature deals, Incentive structure (incentiveType): conversions it pays (adds renewal)',
     ]);
     const same = { ...feature, conversionTypes: ['sale' as const] };
     expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: ADDRESS, features: [same] }).lines).toEqual([]);

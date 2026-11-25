@@ -1,20 +1,22 @@
 import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import { RESERVED_APP_KEYS } from '../../resources/apps';
 import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types';
-import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
-import { appChanges, droppedLine } from '../app-changes';
+import { FeatureKind } from '../../taxonomy';
+import { APP_FILE_NAME, APP_FILE_SCHEMA_PATH, RECIPE_NOTE, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
+import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
-import { REPORT_WIDTH, clean, styleFor, unbroken, wrapWords } from '../style';
+import { REPORT_WIDTH, clean, hanging, styleFor, unbroken, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import type { StoredSession } from '../credentials';
-import { CliRefusal, CliUsageError, commandLine } from '../targets';
+import { either, suggestions } from '../suggest';
+import { CliRefusal, CliUsageError, commandLine, hostName } from '../targets';
 
 /*
  * `siren apps init`, `apply`, `list`, `show`, `on`, `off`, `rotate-key`,
@@ -50,7 +52,7 @@ export function appKeyArgument(key: string): string {
 }
 
 /** True for a key Siren can hold: the pattern, at most 64 characters, and none of the words Siren keeps for its own routes. */
-function isAppKey(key: string): boolean {
+export function isAppKey(key: string): boolean {
   return key.length <= 64 && APP_KEY.test(key) && !(RESERVED_APP_KEYS as readonly string[]).includes(key);
 }
 
@@ -80,16 +82,16 @@ export async function appsInit(input: CommandInput): Promise<number> {
   try {
     await writeFile(path, appFileTemplate(key, name, org), { flag: 'wx' });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CliRefusal(`${path} is already there, so nothing was written.`);
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new CliRefusal(`${APP_FILE_NAME} is already here.`, {
+        why: 'init writes a new file only, so it left this one alone.',
+        fix: input.command('apps apply'),
+        fixWords: 'to send the one here',
+      });
+    }
     throw error;
   }
-  const ignorePath = join(io.cwd, '.gitignore');
-  const ignored = await readText(ignorePath);
-  const have = (ignored ?? '').split(/\r?\n/);
-  const missing = IGNORED.filter((line) => !have.includes(line));
-  if (missing.length > 0) {
-    await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
-  }
+  const missing = await keepEnvFilesOutOfGit(io.cwd);
   const style = styleFor(io, 'stdout', {});
   io.stdout(
     style.report({
@@ -110,6 +112,140 @@ export async function appsInit(input: CommandInput): Promise<number> {
   return 0;
 }
 
+/** Adds to `.gitignore` in `folder` each env file line apply writes and it lacks, and answers the lines added. */
+async function keepEnvFilesOutOfGit(folder: string): Promise<string[]> {
+  const ignorePath = join(folder, '.gitignore');
+  const ignored = await readText(ignorePath);
+  const have = (ignored ?? '').split(/\r?\n/);
+  const missing = IGNORED.filter((line) => !have.includes(line));
+  if (missing.length > 0) {
+    await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
+  }
+  return missing;
+}
+
+/**
+ * `siren apps pull <key> [file] [--url-env] [--yes] [--json]`: writes
+ * siren.app.json, or the file named, from the app on Siren, so `siren apps
+ * diff` finds nothing to change straight after (CLI pass 2, finding 6).
+ * It reads `GET /apps/{key}` once. The file holds the name, the
+ * description, the url, the key's scopes as Siren stores them, the
+ * events, the problem contacts and each active feature with the settings
+ * its kind takes. An archived feature is left out, since naming it brings
+ * it back. `--url-env` writes `${SIREN_APP_URL}` in place of the url. The
+ * file names the organization for a person in several, so later commands
+ * act in the same one. It asks before replacing a file, `--yes` skips the
+ * question, and with no terminal and no `--yes` it writes nothing. Like
+ * init, it keeps the env files apply writes out of git. It prints the
+ * url's host, never the url.
+ */
+export async function appsPull(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  const { io, values } = input;
+  const key = appKeyArgument(input.args[0] ?? '');
+  const shown = input.args[1] ?? APP_FILE_NAME;
+  const path = resolve(io.cwd, shown);
+  const session = await run.signedIn();
+  const app = await run.siren().apps.retrieve(key);
+  const urlEnv = values['url-env'] === true;
+  const org = membershipsOf(session).length > 1 ? (run.orgChoice?.org.orgSlug || String(run.orgChoice?.org.orgId ?? session.orgId)) : undefined;
+  const file = pulledFile(app, org, urlEnv);
+  const json = values.json === true;
+
+  if ((await readText(path)) !== undefined && values.yes !== true) {
+    const again = run.command(`apps pull ${key}${input.args[1] === undefined ? '' : ` ${shown}`} --yes`);
+    if (!io.interactive || json) {
+      throw new CliRefusal(`Nothing written: ${shortPath(io.cwd, path)} is already there.`, { why: 'Pulling replaces it with the app on Siren.', fix: again });
+    }
+    const typed = (await io.prompt(`Replace ${shortPath(io.cwd, path)}? [y/N] `)).trim().toLowerCase();
+    if (typed !== 'y' && typed !== 'yes') {
+      const err = styleFor(io, 'stderr', values);
+      io.stderr(err.rich ? `${err.dim('Nothing written.')}\n` : 'siren: Nothing was written.\n');
+      return 1;
+    }
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(file, null, 2)}\n`);
+  const ignored = await keepEnvFilesOutOfGit(io.cwd);
+
+  if (json) {
+    run.print(JSON.stringify({ path: shortPath(io.cwd, path), file }, null, 2));
+    return 0;
+  }
+  const out = styleFor(io, 'stdout', values);
+  const active = app.features.filter((item) => item.status !== 'archived');
+  const archived = app.features.filter((item) => item.status === 'archived');
+  const host = typeof app.url === 'string' && app.url !== '' ? hostOf(app.url) : undefined;
+  const rows: Array<readonly [string, string]> = [
+    ...(org === undefined ? [] : [['Org', clean(org)] as const]),
+    ['Features', active.length === 0 ? out.dim('none') : clean(active.map((item) => item.key).join(', '))],
+    ...(host === undefined ? [] : [['URL', urlEnv ? 'from SIREN_APP_URL' : `${clean(host)}, written in the file`] as const]),
+    ...(archived.length > 0 ? [['Left out', `${clean(archived.map((item) => item.key).join(', '))}, archived`] as const] : []),
+    ...(ignored.length > 0 ? [['Ignored', `${ignored.join(', ')} (added to .gitignore)`] as const] : []),
+  ];
+  const tips = [
+    ...(host !== undefined && urlEnv ? ["Set SIREN_APP_URL to the app's url in .env or your shell before you run apply."] : []),
+    ...(host !== undefined && !urlEnv ? [`${unbroken('--url-env')} writes \${SIREN_APP_URL} in place of the url, for a url that differs per machine.`] : []),
+  ];
+  run.print(
+    out
+      .report({
+        headline: `Wrote ${out.bold(shortPath(io.cwd, path))} from ${out.bold(clean(key))}`,
+        rows,
+        next: [{ text: out.command(run.command(input.args[1] === undefined ? 'apps diff' : `apps diff ${shown}`)), aside: 'check the file matches Siren' }],
+        tips,
+      })
+      .replace(/\n$/, ''),
+  );
+  return 0;
+}
+
+/** The app file for `app` as Siren holds it, in the shape `parseAppFile` reads. */
+function pulledFile(app: App, org: string | undefined, urlEnv: boolean): Record<string, unknown> {
+  const hasAddress = typeof app.url === 'string' && app.url !== '';
+  const scopes = app.apiKey === null || app.apiKey === undefined ? [] : storedScopes(app.apiKey.scopes ?? app.scopes ?? []);
+  const features: Record<string, Record<string, unknown>> = {};
+  for (const item of app.features) {
+    if (item.status === 'archived') continue;
+    features[item.key] = pulledFeature(item);
+  }
+  const body: Record<string, unknown> = {
+    name: app.name,
+    ...(app.description ? { description: app.description } : {}),
+    ...(hasAddress ? { url: urlEnv ? '${SIREN_APP_URL}' : app.url } : {}),
+    ...(scopes.length > 0 ? { scopes } : {}),
+    ...(hasAddress && Array.isArray(app.events) && app.events.length > 0 ? { events: [...app.events] } : {}),
+    ...(Array.isArray(app.contacts) && app.contacts.length > 0 ? { contacts: [...app.contacts] } : {}),
+    ...(Object.keys(features).length > 0 ? { features } : {}),
+  };
+  return { $schema: APP_FILE_SCHEMA_PATH, version: 1, ...(org === undefined ? {} : { org }), description: RECIPE_NOTE, apps: { [app.key]: body } };
+}
+
+/** One feature for the file: its kind and name, its description when it has one, and the settings its kind takes. */
+function pulledFeature(item: AppFeature): Record<string, unknown> {
+  const settings = item.settings ?? {};
+  const feature: Record<string, unknown> = { kind: item.kind, name: item.name };
+  if (item.description) feature.description = item.description;
+  if (item.kind === FeatureKind.PayoutMethod && settings.currencies !== undefined) feature.currencies = [...settings.currencies];
+  if (settings.answerWindowMinutes !== undefined) feature.answerWindowMinutes = settings.answerWindowMinutes;
+  if (item.kind === FeatureKind.MetricCalculation && settings.scoresMoney === true) feature.scoresMoney = true;
+  if (item.kind === FeatureKind.IncentiveType && settings.conversionTypes !== undefined) feature.conversionTypes = [...settings.conversionTypes];
+  if (item.kind === FeatureKind.CustomEvent) {
+    if (settings.fields !== undefined && Object.keys(settings.fields).length > 0) feature.fields = structuredClone(settings.fields);
+    if (settings.domains !== undefined && settings.domains.length > 0) feature.domains = [...settings.domains];
+  }
+  return feature;
+}
+
+/** The host of `url`, or the url's text when it is no url. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
 /** "Acme (acme), live": the organization a write acts in, and whether it is live, for the question before the write. */
 export function orgNamed(session: { orgName: string; orgSlug?: string; orgId: number; edition: string }): string {
   return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
@@ -128,11 +264,13 @@ async function orgForInit(input: CommandInput): Promise<string | undefined> {
   const memberships = membershipsOf(session);
   if (flag !== undefined) {
     const found = findOrg(memberships, flag);
-    if (found === undefined) throw new CliRefusal(`You are not in an organization named ${flag}. Yours are ${orgList(memberships)}.`);
+    if (found === undefined) {
+      throw new CliRefusal(`You're not in an organization named ${flag}.`, { why: `--org names it. Yours: ${orgList(memberships)}.`, fix: input.command('orgs'), fixWords: 'to list them' });
+    }
     return found.orgSlug || String(found.orgId);
   }
   if (memberships.length < 2 || !input.io.interactive) return undefined;
-  const chosen = await askOrg(input.io, memberships);
+  const chosen = await askOrg(input.io, memberships, session.orgId);
   return chosen.orgSlug || String(chosen.orgId);
 }
 
@@ -207,7 +345,10 @@ export async function appsApply(input: CommandInput): Promise<number> {
   const err = styleFor(io, 'stderr', input.values);
   if (lines.length === 0) {
     if (json) run.print(JSON.stringify({ plan: planData(plan), applied: false }, null, 2));
-    else run.print(out.success(`${out.bold(key)} already matches ${shown}. Nothing to send.`));
+    else {
+      run.print(out.success(`${out.bold(key)} already matches ${shown}. Nothing to send.`));
+      offNote(run, out, plan);
+    }
     return 0;
   }
   const org = orgNamed(session);
@@ -298,6 +439,8 @@ interface Plan {
   changes: ReturnType<typeof appChanges>;
   lines: string[];
   envPath: string;
+  /** False when Siren holds the app and it is off, true when it is on, undefined for a new app. */
+  on: boolean | undefined;
 }
 
 /**
@@ -310,18 +453,34 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   const shown = input.args[0] ?? APP_FILE_NAME;
   const path = resolve(io.cwd, shown);
   const text = await readText(path);
-  if (text === undefined) throw new CliRefusal(`There is no app file at ${path}. Write one with ${run.command('apps init')}.`);
+  if (text === undefined) {
+    throw new CliRefusal(`There's no ${shortPath(io.cwd, path)} here.`, {
+      why: `${mode} reads the app from ${shown === APP_FILE_NAME ? APP_FILE_NAME : 'the file named'}, so nothing was sent.`,
+      fix: run.command('apps init'),
+      fixWords: `to write ${APP_FILE_NAME}`,
+    });
+  }
 
   // The shell wins over .env beside the file, as Node's --env-file and dotenv do.
   const fromFile = await appVariablesIn(dirname(path));
   const shell = (name: string) => io.env[name] !== undefined && io.env[name] !== '';
   const parsed = parseAppFile(text, { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) });
   if (parsed.file === null) {
-    for (const problem of parsed.problems) {
-      const at = problem.path === '' || problem.message.startsWith(problem.path) ? '' : `${problem.path}: `;
-      io.stderr(`${shown}:${problem.line}:${problem.column}: ${at}${problem.message}\n`);
-    }
-    throw new CliRefusal(`${shown} has ${parsed.problems.length === 1 ? 'a problem' : `${parsed.problems.length} problems`}, so nothing was sent.`);
+    // CLI pass 3, must-fix 3: the problems print under the ✗ headline, each at its place.
+    const problems = parsed.problems.map((problem) => {
+      // CLI pass 2, finding 11: a message that already starts with its path, or a shorter part of it, names its place once.
+      const segments = problem.path.split('.');
+      const named = segments.some((_, at) => problem.message.startsWith(segments.slice(0, at + 1).join('.')));
+      return { at: `${shown}:${problem.line}:${problem.column}`, message: `${problem.path === '' || named ? '' : `${problem.path}: `}${problem.message}` };
+    });
+    throw new CliRefusal(`${shown} has ${problems.length === 1 ? 'a problem' : `${problems.length} problems`}.`, {
+      why: 'The tool checks the file before it sends anything, so nothing was sent.',
+      problems,
+      // Pass 3 re-check, should-fix 9: a variable that isn't set is fixed in .env, and the file is fine.
+      fixLead: unsetVariables(problems) ?? `Fix ${problems.length === 1 ? 'it' : 'them'} in ${shown}, then run`,
+      fix: run.command(mode === 'apply' ? 'apps apply' : 'apps diff'),
+      fixWords: 'again',
+    });
   }
 
   run.appFilePath = path;
@@ -336,13 +495,23 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   const envPath = join(dirname(path), run.envFileName());
   if (mode === 'apply') {
     const problem = await envFileProblem(envPath);
-    if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent.`);
+    if (problem !== undefined) {
+      throw new CliRefusal(`The tool can't write the key to ${shortPath(io.cwd, envPath)}.`, {
+        why: `${problem.line} Nothing was sent.`,
+        fixLead: 'Fix the file, then run',
+        fix: run.command('apps apply'),
+        fixWords: 'again',
+      });
+    }
     const held = await envValue(envPath, 'SIREN_BASE_URL');
     if (held !== undefined && held !== run.target.baseUrl) {
-      throw new CliRefusal(
-        `${envPath} holds the key for ${held}, and this apply is for ${run.target.baseUrl}, so nothing was sent. ` +
-          `Move that file aside to keep its key, then run ${run.command('apps apply')} again.`,
-      );
+      const file = shortPath(io.cwd, envPath);
+      throw new CliRefusal(`${file} holds a key for another Siren, ${hostName(held)}.`, {
+        why: `Writing this app's key there would lose it, so nothing was sent.`,
+        fixLead: `Move ${file} aside to keep its key, then run`,
+        fix: run.command('apps apply'),
+        fixWords: 'again',
+      });
     }
   }
   const current = await run
@@ -352,6 +521,7 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
       if (error instanceof NotFoundError) return undefined;
       throw error;
     });
+  await checkNames(run, input, shown, current, params);
   const changes = appChanges(current, params);
   if (current !== undefined && (current.apiKey === null || current.apiKey === undefined) && (params.scopes ?? []).length > 0) {
     run.warn(
@@ -364,7 +534,53 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   const uses = changes.dropped.map(({ item }) => (typeof item.uses === 'number' ? item.uses : undefined));
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
-  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath };
+  const on = current === undefined ? undefined : current.status === 'active';
+  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath, on };
+}
+
+/**
+ * CLI pass 2, finding 5: checks each scope and event the file names, and
+ * the app does not hold yet, against the lists the Siren in use serves
+ * (`GET /apps/scopes` and `GET /apps/events`), so a typo is refused before
+ * the plan with the nearest real name, not by Siren after the question.
+ * A list it cannot read, as with a token that may not, leaves the check
+ * to Siren. A wildcard scope such as `*` is Siren's to judge too. Prints
+ * one line per problem, as the file check does, then refuses.
+ */
+async function checkNames(run: CommandContext, input: CommandInput, shown: string, current: App | undefined, params: Plan['params']): Promise<void> {
+  const heldScopes = new Set<string>(current === undefined ? [] : (current.apiKey?.scopes ?? current.scopes ?? []));
+  const heldEvents = new Set<string>(current?.events ?? []);
+  // Compared as Siren stores them, so a scope `*` already covers is not new.
+  const newScopes = storedScopes(params.scopes ?? []).filter((scope) => !heldScopes.has(scope) && !scope.includes('*'));
+  const newEvents = (params.events ?? []).filter((event) => !heldEvents.has(event));
+  const problems: string[] = [];
+  const siren = run.siren();
+  if (newScopes.length > 0) {
+    const groups = await siren.apps.scopes().catch(() => undefined);
+    const known = groups === undefined ? undefined : Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => entry.scope));
+    for (const scope of known === undefined ? [] : newScopes.filter((scope) => !known.includes(scope))) {
+      const offer = suggestions(scope, known!, /:/);
+      problems.push(`scopes: "${clean(scope)}" is not a scope an app's key may hold.${offer.length === 0 ? '' : ` Did you mean ${either(offer)}?`}`);
+    }
+  }
+  if (newEvents.length > 0) {
+    const catalog = await siren.apps.events().catch(() => undefined);
+    const known = catalog?.map((entry) => entry.event);
+    for (const event of known === undefined ? [] : newEvents.filter((event) => !known.includes(event))) {
+      const offer = suggestions(event, known!, /\./);
+      problems.push(`events: Siren sends no event "${clean(event)}".${offer.length === 0 ? '' : ` Did you mean ${either(offer)}?`}`);
+    }
+  }
+  if (problems.length === 0) return;
+  const scopesWrong = problems.some((problem) => problem.startsWith('scopes:'));
+  const eventsWrong = problems.some((problem) => problem.startsWith('events:'));
+  const list = scopesWrong && eventsWrong ? 'apps scopes' : scopesWrong ? 'apps scopes' : 'apps events';
+  throw new CliRefusal(`${shown} has ${problems.length === 1 ? 'a problem' : `${problems.length} problems`}.`, {
+    why: `Siren offers no such ${scopesWrong && eventsWrong ? 'scope or event' : scopesWrong ? 'scope' : 'event'}, so nothing was sent.`,
+    problems: problems.map((problem) => ({ at: shown, message: problem })),
+    fix: run.command(list),
+    fixWords: scopesWrong && eventsWrong ? `and ${run.command('apps events')} to list what Siren offers` : 'to list what Siren offers',
+  });
 }
 
 /** The plan as a person reads it: a header with the app and the organization, then one marked line per change. */
@@ -380,6 +596,17 @@ function printPlan(run: CommandContext, out: Style, plan: Plan): void {
   const origin = plan.params.url == null ? undefined : originOf(plan.params.url);
   if (plan.changes.isNew && origin !== undefined) run.print(`  ${out.dim('→')} sends its requests to ${origin}`);
   run.print('');
+  offNote(run, out, plan);
+}
+
+/**
+ * CLI pass 2, finding 10: a warning that the app is off, so its features
+ * get nothing from Siren whatever the file says, and the command that
+ * turns it on. Nothing for an app that is on or new.
+ */
+function offNote(run: CommandContext, out: Style, plan: Plan): void {
+  if (plan.on !== false) return;
+  run.print(out.warning(`${plan.key} is off, so Siren sends it nothing until ${out.command(run.command(`apps on ${plan.key}`))}.`));
 }
 
 /** The plan as data, for `--json`: the app, the organization, whether it is new or matches, and each change as add, remove or change. */
@@ -392,6 +619,7 @@ function planData(plan: Plan): Record<string, unknown> {
     matches: plan.lines.length === 0,
     changes: plan.lines.map((text) => ({ op: /^(adds|makes) /.test(text) ? 'add' : /^removes /.test(text) ? 'remove' : 'change', text })),
     sendsTo: plan.changes.isNew ? origin : null,
+    on: plan.on ?? null,
   };
 }
 
@@ -414,6 +642,7 @@ export async function appsDiff(input: CommandInput): Promise<number> {
   const out = styleFor(input.io, 'stdout', input.values);
   if (plan.lines.length === 0) {
     run.print(out.success(`${out.bold(plan.key)} already matches ${plan.shown}. Nothing to send.`));
+    offNote(run, out, plan);
     return 0;
   }
   printPlan(run, out, plan);
@@ -453,20 +682,60 @@ function refuseKindChange(item: AppFeature, uses: number | undefined, wanted: re
   const article = (label: string) => (/^[AEIOU]/.test(label) ? 'an' : 'a');
   const was = kindLabel(item.kind);
   const now = kindLabel(next.kind);
-  const replaced = `applying this would replace ${item.ref} with a new feature and a new id`;
   const consequence =
     uses === 0
-      ? `${replaced}. Nothing selects ${item.ref} today.`
+      ? 'Nothing selects it today.'
       : uses === undefined
-        ? `${replaced}, and any record that selects ${item.ref} would keep the old one.`
-        : `${replaced}, and the ${uses === 1 ? 'record that selects' : `${uses} records that select`} ${item.ref} would keep the old one.`;
-  throw new CliRefusal(
-    `${item.key} is ${article(was)} ${was} on Siren, and ${shown} makes it ${article(now)} ${now}. ` +
-      `A feature's kind locks once Siren makes it, so ${consequence} ` +
-      `Nothing was sent. Give the new feature its own key, and keep or remove ${item.key} on its own.`,
-  );
+        ? 'A record that selects it would keep the old one.'
+        : `The ${uses === 1 ? 'record that selects' : `${uses} records that select`} it would keep the old one.`;
+  throw new CliRefusal(`${item.key} can't change kind.`, {
+    why:
+      `Siren holds it, ${item.ref}, as ${article(was)} ${was}, and ${shown} makes it ${article(now)} ${now}. ` +
+      `A kind locks once made, so this would replace it with a new id. ${consequence} Nothing was sent.`,
+    fixText: `Give the ${now} its own key in ${shown}, and keep or remove ${item.key} on its own.`,
+  });
 }
 
+
+/**
+ * `siren apps scopes [--json]`: the scopes an app's key may hold on this
+ * Siren, from `GET /apps/scopes`, one line each with what it allows, or the
+ * JSON Siren sent. CLI pass 2, finding 5.
+ */
+export async function appsScopes(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  await run.signedIn();
+  const groups = await run.siren().apps.scopes();
+  if (input.values.json === true) {
+    run.print(JSON.stringify(groups, null, 2));
+    return 0;
+  }
+  const out = styleFor(input.io, 'stdout', {});
+  // An event scope's label is the event's name, such as Sale, so ALLOWS says what the key may do with it (CLI pass 3).
+  const allows = (entry: { resource: string; label: string }) => (entry.resource === 'events' ? `Send ${clean(entry.label).toLowerCase()} events` : clean(entry.label));
+  const rows = Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => [clean(entry.scope), allows(entry)]));
+  for (const line of out.table(['SCOPE', 'ALLOWS'], rows, widthOf(input, out))) run.print(line);
+  return 0;
+}
+
+/**
+ * `siren apps events [--json]`: the events Siren can send an app's address,
+ * from `GET /apps/events`, one line each with what it means, in the order
+ * the dashboard groups them, or the JSON Siren sent. CLI pass 2, finding 5.
+ */
+export async function appsEvents(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  await run.signedIn();
+  const catalog = await run.siren().apps.events();
+  if (input.values.json === true) {
+    run.print(JSON.stringify(catalog, null, 2));
+    return 0;
+  }
+  const out = styleFor(input.io, 'stdout', {});
+  const rows = catalog.map((entry) => [clean(entry.event), clean(entry.label)]);
+  for (const line of out.table(['EVENT', 'MEANS'], rows, widthOf(input, out))) run.print(line);
+  return 0;
+}
 
 /** `siren apps list [--json]`: a count line and a table of the apps, or the JSON Siren sent. */
 export async function appsList(input: CommandInput): Promise<number> {
@@ -479,7 +748,19 @@ export async function appsList(input: CommandInput): Promise<number> {
   }
   const out = styleFor(input.io, 'stdout', {});
   if (apps.length === 0) {
-    run.print(`No apps in ${orgNamed(session)} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
+    // Pass 3 re-check, must-fix 2: a sentence that wrapped mid-word becomes a headline and a Next.
+    run.print(
+      out
+        .report({
+          headline: `No apps in ${orgNamed(session)} yet.`,
+          mark: false,
+          next: [
+            { text: out.command(run.command('apps init')), aside: 'write siren.app.json in this folder' },
+            { text: out.command(run.command('apps apply')), aside: 'declare the app on Siren and save its key' },
+          ],
+        })
+        .replace(/\n$/, ''),
+    );
     return 0;
   }
   run.print(out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
@@ -505,9 +786,35 @@ export async function appsList(input: CommandInput): Promise<number> {
 }
 
 /** `siren apps show <key> [--json]`: the app in an aligned block, then its features as a table. */
+/**
+ * The app key in the app file at `path` when it holds one app, or
+ * undefined: no file, one the tool can't read, or several apps. The file
+ * is checked properly by apply, so this only reads the key.
+ */
+/** "Set NAME in .env, then run" when every problem is a variable that isn't set, else undefined. */
+function unsetVariables(problems: ReadonlyArray<{ message: string }>): string | undefined {
+  const names = problems.map((problem) => /needs the environment variable (SIREN_APP_[A-Z0-9_]+), which is not set/.exec(problem.message)?.[1]);
+  if (names.some((name) => name === undefined)) return undefined;
+  const unique = [...new Set(names as string[])];
+  return `Set ${unique.length === 1 ? unique[0] : `${unique.slice(0, -1).join(', ')} and ${unique.at(-1)}`} in .env, then run`;
+}
+
+export async function appKeyInFolder(path: string): Promise<string | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as { apps?: unknown };
+    const keys = typeof parsed.apps === 'object' && parsed.apps !== null && !Array.isArray(parsed.apps) ? Object.keys(parsed.apps) : [];
+    return keys.length === 1 && isAppKey(keys[0]!) ? keys[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function appsShow(input: CommandInput): Promise<number> {
   const run = contextOf(input);
-  const key = appKeyArgument(input.args[0] ?? '');
+  // Pass 3 re-check, should-fix 8: in an app's folder, the app is siren.app.json's, as apps requests reads it.
+  const given = input.args[0] ?? (await appKeyInFolder(run.appFilePath));
+  if (given === undefined) throw new CliUsageError(`siren apps show takes 1 argument, and got 0. With no key, it shows the app ${APP_FILE_NAME} names.`);
+  const key = appKeyArgument(given);
   await run.signedIn();
   const app = await run.siren().apps.retrieve(key);
   if (input.values.json === true) {
@@ -523,16 +830,28 @@ export async function appsShow(input: CommandInput): Promise<number> {
     ...(typeof prefix === 'string' && prefix !== '' ? [['Key', `${prefix}…`] as const] : [['Key', out.dim('none')] as const]),
     ...(events.length > 0 ? [['Events', `${clean(events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
   ];
-  run.print(out.report({ headline: `${out.bold(clean(app.key))}  ${clean(app.name)}`, rows, mark: false }).replace(/\n$/, ''));
-  if (app.features.length > 0) {
-    run.print('');
-    const features = app.features.map((item) => [
+  // Each feature's kind reads "Post-conversion action (postConversionAction)" when the line fits.
+  // When it does not, the code name goes before NAME is cut, and a Kinds row above names the code names.
+  const width = widthOf(input, out);
+  const featureRows = (label: (kind: string) => string) =>
+    app.features.map((item) => [
       clean(item.ref),
       clean(item.key),
-      clean(kindLabel(item.kind)),
+      clean(label(item.kind)),
       `${clean(item.name)}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
     ]);
-    for (const line of out.table(['ID', 'KEY', 'KIND', 'NAME'], features, widthOf(input, out))) run.print(line);
+  const HEADERS = ['ID', 'KEY', 'KIND', 'NAME'];
+  const full = featureRows(kindLabel);
+  const fitsFull = out.table(HEADERS, full, Number.POSITIVE_INFINITY).every((line) => visibleLength(line) <= width);
+  const features = fitsFull ? full : featureRows(kindName);
+  if (!fitsFull) rows.push(['Kinds', clean([...new Set(app.features.map((item) => item.kind))].join(', '))]);
+
+  // The demo printed "cli-demo  cli-demo" for an app named after its key, so the name shows only when it differs.
+  const named = clean(app.name) === clean(app.key) || clean(app.name) === '' ? '' : `  ${clean(app.name)}`;
+  run.print(out.report({ headline: `${out.bold(clean(app.key))}${named}`, rows, mark: false }).replace(/\n$/, ''));
+  if (app.features.length > 0) {
+    run.print('');
+    for (const line of out.table(HEADERS, features, width)) run.print(line);
   }
   if (attentionCount(app) > 0) attentionTip(run, out, app);
   return 0;
@@ -631,25 +950,43 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
   let envPath: string | undefined;
   if (typeof values['app-file'] === 'string') {
     const appFile = resolve(io.cwd, values['app-file']);
-    if (!(await isFile(appFile))) throw new CliRefusal(`There is no app file at ${appFile}.`);
+    if (!(await isFile(appFile))) {
+      throw new CliRefusal(`There's no ${shortPath(io.cwd, appFile)} here.`, {
+        why: '--app-file names the app file whose folder holds the key, so nothing was sent.',
+        fix: run.command(`${command} ${key} --app-file <path to siren.app.json>`),
+      });
+    }
     envPath = join(dirname(appFile), run.envFileName());
   } else {
     envPath = session.envFiles?.[key];
   }
   if (envPath === undefined) {
-    throw new CliRefusal(
-      `This machine has no record of where ${key}'s ${part === 'secret' ? 'signing secret' : 'key'} lives, so nothing was sent. Run ${run.command(`${command} ${key} --app-file <path to siren.app.json>`)}, and the new one goes beside that file.`,
-    );
+    throw new CliRefusal(`The tool doesn't know where ${key}'s ${part === 'secret' ? 'signing secret' : 'key'} is kept.`, {
+      why: 'This machine has no record of its env file, so nothing was sent.',
+      fix: run.command(`${command} ${key} --app-file <path to siren.app.json>`),
+      fixWords: 'to put the new one beside that file',
+    });
   }
   const what = part === 'key' ? 'the old key' : part === 'secret' ? 'the old signing secret' : 'the app';
   const problem = await envFileProblem(envPath);
-  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent${part === 'add-key' ? '' : `, and ${what} still works`}.`);
+  const still = part === 'add-key' ? '' : `, and ${what} still works`;
+  if (problem !== undefined) {
+    throw new CliRefusal(`The tool can't write to ${shortPath(io.cwd, envPath)}.`, {
+      why: `${problem.line} Nothing was sent${still}.`,
+      fixLead: 'Fix the file, then run',
+      fix: run.command(`${command} ${key}`),
+      fixWords: 'again',
+    });
+  }
   const held = await envValue(envPath, 'SIREN_BASE_URL');
   if (held !== undefined && held !== run.target.baseUrl) {
-    throw new CliRefusal(
-      `${envPath} holds the key for ${held}, and this ${part === 'add-key' ? 'key' : 'rotation'} is for ${run.target.baseUrl}, so nothing was sent${part === 'add-key' ? '' : ` and ${what} still works`}. ` +
-        `Move that file aside to keep its key, then run ${run.command(`${command} ${key}`)} again.`,
-    );
+    const file = shortPath(io.cwd, envPath);
+    throw new CliRefusal(`${file} holds a key for another Siren, ${hostName(held)}.`, {
+      why: `Writing ${key}'s ${part === 'secret' ? 'secret' : 'key'} there would lose it, so nothing was sent${still}.`,
+      fixLead: `Move ${file} aside to keep its key, then run`,
+      fix: run.command(`${command} ${key}`),
+      fixWords: 'again',
+    });
   }
   const out = styleFor(io, 'stdout', values);
   if (part !== 'add-key' && values.yes !== true) {
@@ -714,15 +1051,19 @@ function partRefusal(run: CommandContext, key: string, error: unknown): CliRefus
   if (!(error instanceof ConflictError)) return undefined;
   switch (appErrorCode(error)) {
     case 'app_key_missing':
-      return new CliRefusal(`${key} holds no key to rotate, so nothing changed. Run ${run.command(`apps add-key ${key}`)} to make one.`);
+      return new CliRefusal(`${key} has no key yet.`, { why: "There's nothing to rotate, so nothing changed.", fix: run.command(`apps add-key ${key}`), fixWords: 'to make one' });
     case 'app_key_exists':
-      return new CliRefusal(
-        `${key} already holds a key, so nothing changed. Run ${run.command(`apps rotate-key ${key}`)} for a new one, which revokes the old one at once.`,
-      );
+      return new CliRefusal(`${key} already has a key.`, {
+        why: 'add-key makes a first key only, so nothing changed.',
+        fix: run.command(`apps rotate-key ${key}`),
+        fixWords: 'to replace it. The old one stops working at once',
+      });
     case 'app_address_missing':
-      return new CliRefusal(
-        `${key} has no address, so it has no signing secret to rotate. Give it a url in its app file, then run ${run.command('apps apply')}.`,
-      );
+      return new CliRefusal(`${key} has no address, so it has no signing secret.`, {
+        why: "Siren signs only what it sends to an app's url, so nothing changed.",
+        fixLead: 'Give it a url in its app file, then run',
+        fix: run.command('apps apply'),
+      });
     default:
       return undefined;
   }
@@ -738,20 +1079,33 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
   const key = appKeyArgument(input.args[0] ?? '');
+  // CLI pass 3, should-fix 12: the question names the organization, as every other write question does,
+  // so it asks after the organization is settled, and the warning goes on a line of its own.
+  const asking = values.yes !== true && io.interactive;
+  const session = asking ? await run.signedIn() : undefined;
   if (values.yes !== true) {
-    const typed = io.interactive ? (await io.prompt(`Deleting ${key} revokes its key and cannot be undone. Type ${key} to delete it: `)).trim() : undefined;
+    let typed: string | undefined;
+    if (session !== undefined) {
+      // Pass 3 re-check, must-fix 2: the question is its own wrapped lines, and the answer goes on a short prompt,
+      // so a long key and organization never push the typed answer past 80 columns.
+      const out = styleFor(io, 'stdout', values);
+      run.print(out.warning(`Deleting ${out.bold(key)} from ${orgNamed(session)} can't be undone.`));
+      run.print(out.rich ? hanging('  ', `It revokes the key. Type ${out.bold(key)} to delete it.`) : `It revokes the key. Type ${key} to delete it.`);
+      typed = (await io.prompt('Key: ')).trim();
+    }
     if (typed !== key) {
       throw new CliRefusal(io.interactive ? `Nothing deleted: you typed something other than ${key}.` : 'Nothing deleted: deleting needs a yes.', {
         why: 'It revokes the key and cannot be undone.',
-        fix: run.command(`apps delete ${key} --yes`),
+        // Pass 3 re-check, should-fix 13: after a wrong answer, ask again, and never skip the check that failed.
+        ...(io.interactive ? { fix: run.command(`apps delete ${key}`), fixWords: 'to be asked again' } : { fix: run.command(`apps delete ${key} --yes`) }),
       });
     }
   }
-  await run.signedIn();
+  if (session === undefined) await run.signedIn();
   try {
     await run.siren().apps.delete(key);
   } catch (error) {
-    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(await inUseLines(run, key, error));
+    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw await inUseRefusal(run, key, error);
     throw error;
   }
   const out = styleFor(io, 'stdout', values);
@@ -786,9 +1140,11 @@ async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Pr
     out.success(
       app.status === 'active'
         ? `${shown} is on. Siren sends it requests again.`
-        : `${shown} is off. Siren sends it nothing until ${out.command(run.command(`apps on ${clean(app.key)}`))}.`,
+        : `${shown} is off. Siren sends it nothing.`,
     ),
   );
+  // Pass 3 re-check, should-fix 12: the command that undoes it goes on a tip, as other commands' do.
+  if (app.status !== 'active') run.print(out.next(`${out.command(run.command(`apps on ${clean(app.key)}`))} turns it back on.`));
   return 0;
 }
 
@@ -798,28 +1154,36 @@ async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Pr
  * told to turn off instead, and one already off is told to change the
  * records. When that read fails, both ways are named.
  */
-async function inUseLines(run: CommandContext, key: string, error: ConflictError): Promise<string> {
+async function inUseRefusal(run: CommandContext, key: string, error: ConflictError): Promise<CliRefusal> {
   const data = (typeof error.data === 'object' && error.data !== null ? error.data : {}) as { uses?: unknown; openRequests?: unknown };
   const uses = typeof data.uses === 'object' && data.uses !== null && !Array.isArray(data.uses) ? Object.entries(data.uses as Record<string, unknown>) : [];
   const open = typeof data.openRequests === 'number' ? data.openRequests : 0;
-  const lines = [`Siren kept ${key}.`];
-  if (uses.length > 0) {
-    lines.push(`Records still select its features: ${uses.map(([ref, count]) => `${ref} (${String(count)})`).join(', ')}.`);
-    const status = await run
-      .siren()
-      .apps.retrieve(key)
-      .then((app) => app.status, () => undefined);
-    const turnOff = `Turn it off instead with ${run.command(`apps off ${key}`)}. Siren then stops calling it and keeps what it already did.`;
-    const change = `To delete it, change each record that selects those features to another choice, then run ${run.command(`apps delete ${key} --yes`)}.`;
-    if (status === 'active') lines.push(turnOff);
-    else if (status !== undefined) lines.push(`It is already off, so Siren no longer calls it. ${change}`);
-    else lines.push(`If it is on, ${turnOff.charAt(0).toLowerCase()}${turnOff.slice(1)} ${change}`);
+  const why: string[] = [];
+  if (uses.length > 0) why.push(`Records still select its features: ${uses.map(([ref, count]) => `${ref} (${String(count)})`).join(', ')}.`);
+  if (open > 0) why.push(`It has ${open} open ${open === 1 ? 'ask' : 'asks'}, which ${run.command(`apps requests --app ${key}`)} lists.`);
+  if (why.length === 0) why.push(error.message);
+  const headline = `${key} is still in use, so Siren kept it.`;
+  if (uses.length === 0) {
+    return new CliRefusal(headline, { why: why.join(' '), fixLead: 'Answer its open asks, or wait for them to end, then run', fix: run.command(`apps delete ${key} --yes`) });
   }
-  if (open > 0) {
-    lines.push(`It has ${open} open ${open === 1 ? 'ask' : 'asks'}. Answer them, or wait for them to end: ${run.command(`apps requests --app ${key}`)}`);
+  const status = await run
+    .siren()
+    .apps.retrieve(key)
+    .then((app) => app.status, () => undefined);
+  const change = 'change each record that selects those features to another choice, then run';
+  if (status === 'active' || status === undefined) {
+    return new CliRefusal(headline, {
+      why: why.join(' '),
+      ...(status === undefined ? { fixLead: 'If it is on, run' } : {}),
+      fix: run.command(`apps off ${key}`),
+      fixWords: `to stop Siren calling it now and keep what it already did. To delete it, ${change} ${run.command(`apps delete ${key} --yes`)}`,
+    });
   }
-  if (uses.length === 0 && open === 0) lines.push(error.message);
-  return lines.join('\n');
+  return new CliRefusal(headline, {
+    why: [...why, 'It is already off, so Siren no longer calls it.'].join(' '),
+    fixLead: `To delete it, ${change}`,
+    fix: run.command(`apps delete ${key} --yes`),
+  });
 }
 
 /** The secrets one answer showed once. An app with no address gets no signing secret. */

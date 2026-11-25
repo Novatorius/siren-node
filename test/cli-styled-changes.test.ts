@@ -36,7 +36,7 @@ describe('siren apps on and off', () => {
     const h = harness([reply(200, appRecord({ status: 'inactive' })), reply(200, appRecord())]);
     h.signedIn();
     expect(await h.run(['apps', 'off', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toBe('acme-payouts is off. Siren sends it nothing until siren apps on acme-payouts.\n');
+    expect(h.out()).toBe('acme-payouts is off. Siren sends it nothing.\nsiren apps on acme-payouts turns it back on.\n');
     const before = h.out().length;
     expect(await h.run(['apps', 'on', APP_KEY]), h.err()).toBe(0);
     expect(h.out().slice(before)).toBe('acme-payouts is on. Siren sends it requests again.\n');
@@ -46,7 +46,7 @@ describe('siren apps on and off', () => {
     const h = harness([reply(200, appRecord({ status: 'inactive' }))]);
     h.signedIn();
     expect(await runCli(['apps', 'off', APP_KEY], tty(h))).toBe(0);
-    expect(strip(h.out())).toBe('✓ acme-payouts is off. Siren sends it nothing until siren apps on acme-payouts.\n');
+    expect(strip(h.out())).toBe('✓ acme-payouts is off. Siren sends it nothing.\n› siren apps on acme-payouts turns it back on.\n');
     expect(h.out()).toContain(`${ESC}1macme-payouts${ESC}0m is off`);
     expect(h.out()).toContain(`${ESC}1msiren apps on acme-payouts${ESC}0m`);
   });

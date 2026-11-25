@@ -64,28 +64,76 @@ function setLine(label: string, have: readonly string[], want: readonly string[]
   return `${label}: ${parts.join(', ')}`;
 }
 
-/** The fields of a feature that differ from what Siren holds, in words. */
+/**
+ * Text for a plan line, in quotes and cut at 40 characters, or `none` when
+ * empty (CLI pass 2, finding 3: old and new values, not only the field).
+ */
+function quoted(text: string | undefined): string {
+  if (text === undefined || text === '') return 'none';
+  const chars = [...text];
+  return `"${chars.length > 40 ? `${chars.slice(0, 39).join('')}…` : text}"`;
+}
+
+/** `(adds a, removes b)` for a set that changed, or undefined when it holds the same values. */
+function setParts(have: readonly string[], want: readonly string[]): string | undefined {
+  const { added, removed } = setChange(have, want);
+  if (added.length === 0 && removed.length === 0) return undefined;
+  return `(${[...(added.length > 0 ? [`adds ${added.join(', ')}`] : []), ...(removed.length > 0 ? [`removes ${removed.join(', ')}`] : [])].join(', ')})`;
+}
+
+/** `5 minutes`, `1 minute` or `none`. */
+function minutes(value: number | undefined): string {
+  return value === undefined ? 'none' : `${value} ${value === 1 ? 'minute' : 'minutes'}`;
+}
+
+/** The fields of a feature that differ from what Siren holds, each with its old and new value. */
 function featureDifferences(have: AppFeature, want: AppFeatureDeclaration): string[] {
   const differences: string[] = [];
-  if (want.name.trim() !== have.name) differences.push('name');
-  if ((want.description ?? '') !== have.description) differences.push('description');
+  if (want.name.trim() !== have.name) differences.push(`name ${quoted(have.name)} becomes ${quoted(want.name.trim())}`);
+  if ((want.description ?? '') !== have.description) differences.push(`description ${quoted(have.description)} becomes ${quoted(want.description)}`);
   const wantCurrencies = (want.currencies ?? []).map((code) => code.toUpperCase());
   const haveCurrencies = have.settings.currencies ?? [];
-  if (wantCurrencies.join(',') !== haveCurrencies.join(',')) differences.push('currencies');
-  if (want.answerWindowMinutes !== have.settings.answerWindowMinutes) differences.push('answer window');
-  if (want.kind === FeatureKind.MetricCalculation && (want.scoresMoney === true) !== (have.settings.scoresMoney === true)) differences.push('scores money');
-  if (want.kind === FeatureKind.IncentiveType && [...(want.conversionTypes ?? [])].sort().join(',') !== [...(have.settings.conversionTypes ?? [])].sort().join(',')) {
-    differences.push('conversions it pays');
+  if (wantCurrencies.join(',') !== haveCurrencies.join(',')) {
+    differences.push(`currencies ${setParts(haveCurrencies, wantCurrencies) ?? `${haveCurrencies.join(', ')} becomes ${wantCurrencies.join(', ')}`}`);
+  }
+  if (want.answerWindowMinutes !== have.settings.answerWindowMinutes) {
+    const was = have.settings.answerWindowMinutes;
+    const now = want.answerWindowMinutes;
+    differences.push(`answer window ${was !== undefined && now !== undefined ? `${was} becomes ${minutes(now)}` : `${minutes(was)} becomes ${minutes(now)}`}`);
+  }
+  if (want.kind === FeatureKind.MetricCalculation && (want.scoresMoney === true) !== (have.settings.scoresMoney === true)) {
+    differences.push(`scores money ${have.settings.scoresMoney === true ? 'yes becomes no' : 'no becomes yes'}`);
+  }
+  if (want.kind === FeatureKind.IncentiveType) {
+    const pays = setParts(have.settings.conversionTypes ?? [], want.conversionTypes ?? []);
+    if (pays !== undefined) differences.push(`conversions it pays ${pays}`);
   }
   if (want.kind === FeatureKind.CustomEvent) {
-    if (fieldsText(want.fields) !== fieldsText(have.settings.fields)) differences.push('fields');
-    const domains = setChange(storedDomains(have.settings.domains ?? []), storedDomains(want.domains ?? []));
-    if (domains.added.length > 0 || domains.removed.length > 0) {
-      const parts = [...(domains.added.length > 0 ? [`adds ${domains.added.join(', ')}`] : []), ...(domains.removed.length > 0 ? [`removes ${domains.removed.join(', ')}`] : [])];
-      differences.push(`allowed domains (${parts.join(', ')})`);
+    if (fieldsText(want.fields) !== fieldsText(have.settings.fields)) {
+      const haveFields = have.settings.fields ?? {};
+      const wantFields = want.fields ?? {};
+      const changed = Object.keys(wantFields).filter((name) => name in haveFields && fieldsText({ [name]: wantFields[name]! }) !== fieldsText({ [name]: haveFields[name]! }));
+      const parts = setChange(Object.keys(haveFields), Object.keys(wantFields));
+      const words = [
+        ...(parts.added.length > 0 ? [`adds ${parts.added.join(', ')}`] : []),
+        ...(parts.removed.length > 0 ? [`removes ${parts.removed.join(', ')}`] : []),
+        ...(changed.length > 0 ? [`changes ${changed.join(', ')}`] : []),
+      ];
+      differences.push(`fields (${words.join(', ')})`);
     }
+    const domains = setParts(storedDomains(have.settings.domains ?? []), storedDomains(want.domains ?? []));
+    if (domains !== undefined) differences.push(`allowed domains ${domains}`);
   }
   return differences;
+}
+
+/** The host of `url`, or `another address` when it is no url. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'another address';
+  }
 }
 
 /** Allowed domains as Siren stores them: trimmed, lowercased, each once. */
@@ -124,7 +172,7 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
 
   const lines: string[] = [];
   if (want.name.trim() !== have.name) lines.push(`name: ${have.name} becomes ${want.name.trim()}`);
-  if ((want.description ?? '') !== have.description) lines.push('description changes');
+  if ((want.description ?? '') !== have.description) lines.push(`description: ${quoted(have.description)} becomes ${quoted(want.description)}`);
 
   const hasAddress = have.address !== null && have.address !== undefined;
   if (want.url == null) {
@@ -132,7 +180,10 @@ export function appChanges(have: App | undefined, want: DeclareAppParams): AppCh
   } else if (!hasAddress) {
     lines.push('adds an address, with a new signing secret');
   } else if (want.url !== have.url) {
-    lines.push('moves the address to a new url, keeping its signing secret');
+    // The hosts only: the url may come from the environment, and the plan never names it.
+    const was = hostOf(have.url ?? '');
+    const now = hostOf(want.url);
+    lines.push(was === now ? `moves the address to another path on ${now}, keeping its signing secret` : `moves the address from ${was} to ${now}, keeping its signing secret`);
   }
   if (want.url != null) {
     const events = setLine('events', hasAddress ? have.events : [], want.events ?? []);

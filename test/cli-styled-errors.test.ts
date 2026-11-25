@@ -54,15 +54,15 @@ describe('mockup 5: an unknown command', () => {
   it('in a terminal: the word that is wrong in bold, the nearest command, and where help is, with no usage block', async () => {
     const h = harness([]);
     expect(await runCli(['apps', 'aply'], tty(h))).toBe(2);
-    expect(strip(h.err())).toBe(['✗ siren apps has no command "aply".', '› Did you mean siren apps apply?', '  siren apps --help lists the app commands.', ''].join('\n'));
+    // CLI pass 3, should-fix 15: the three parts of every error, the fix last, as a flag typo has them.
+    expect(strip(h.err())).toBe(['✗ siren apps has no command "aply".', '  siren apps --help lists the app commands.', '› Did you mean siren apps apply?', ''].join('\n'));
     expect(h.err()).toContain(`${ESC}1m"aply"${ESC}0m`);
-    expect(h.err()).toContain(`${ESC}2m  siren apps --help lists the app commands.${ESC}0m`);
   });
 
   it('with no close match, leaves the guess out, and names the top help for a top-level word', async () => {
     const h = harness([]);
     expect(await runCli(['deploy'], tty(h))).toBe(2);
-    expect(strip(h.err())).toBe(['✗ siren has no command "deploy".', '  siren --help lists them.', ''].join('\n'));
+    expect(strip(h.err())).toBe(['✗ siren has no command "deploy".', '  The tool knows no command by that name.', '› Run siren --help to list them.', ''].join('\n'));
   });
 
   it('plain: one siren: line with the guess, and the help line', async () => {

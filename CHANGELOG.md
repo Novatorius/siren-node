@@ -128,6 +128,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `apps.requests.list()` takes `limit` (1 to 100) and `before` (a request id) to page through every
+  request, as `GET /apps/requests` now reads them.
+- `apps.requests.list({ idPrefix })` finds requests by the start of their id, `apr_` and 4 to 32
+  hex characters in either case, as Siren reads it from feat/apps 76d5bbdf83. It answers the
+  matching requests, at most two, newest first, so two mean the start fits more than one. It
+  refuses status, limit or before beside it, since Siren ignores them.
+- `apps.requests.list({ appId })` keeps the list to one app, by its numeric id, as Siren reads it
+  on the plain list and `needs_attention` from feat/apps 76d5bbdf83.
+- `apps.requests.list({ status: 'needs_attention' })` takes `limit` and `before` too, since Siren
+  pages the attention list from pkt/apps-attention-paging. An older Siren ignores them and answers
+  at most 50.
+
 - `new Siren()` reads `SIREN_BASE_URL` as its default base URL, the way it reads `SIREN_API_KEY`,
   and a `baseUrl` passed in code wins. `siren apps apply` writes the variable beside the key, so a
   sandbox ask's `answerUrl` and the client agree. `appRequest()` signs for that host too.
@@ -303,9 +315,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   marks it as a test, counts it toward nothing and ignores `trackingId`.
 - `SiteVisitedParams.collaboratorId` takes a tracking code as `tracking:{code}`, typed as
   `TrackingCodeReference`, as well as a numeric id.
-- `webhooks.subscriptions.events()` reads `GET /webhooks/events`, the event types Siren delivers,
-  and `apiKeys.scopes()` reads `GET /api-keys/scopes`, the scopes a new key may hold, grouped by
-  resource. Both throw `UnexpectedResponseError` when Siren answers with a body of the wrong shape.
+- `webhooks.subscriptions.events()` reads `GET /webhooks/events`, the event types Siren delivers.
+  It throws `UnexpectedResponseError` when Siren answers with a body of the wrong shape.
+  `apps.scopes()` lists the scopes an app's key may hold.
 - `WebhookEventType` holds all 64 events in Siren's webhook catalog, 30 more than before, such as
   `collaborator.applied`, `payout.failed`, `program.updated` and `store.disconnected`.
 - `ErrorCode` holds every code Siren sends, 26 in all, and `isKnownErrorCode` says whether a code is
@@ -587,11 +599,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   address through `apps.create()`, `apps.update()`, `apps.createKey()`, `apps.rotateKey()` and
   `apps.revokeKey()`, with a signed-in session, and says the other `/webhooks` calls take a session
   too. It calls the `webhook-subscriptions:read` and `webhook-subscriptions:manage` scopes retired,
-  since no API key may use a `/webhooks` route. The methods stay for now.
-- `siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, each method naming the app
-  call that replaces it, since an app holds its key and its address now. They stay until Siren
-  removes their routes. openapi.yaml marks each old `/webhooks` and `/api-keys` operation
-  `deprecated: true` and names the app route that replaces it. `AppErrorCode.AppOwnedSubscription` names Siren's 409
+  since no API key may use a `/webhooks` route. `siren.apiKeys` and
+  `webhooks.subscriptions.create()` are gone, as the Breaking entry above says.
+- The rest of `siren.webhooks.subscriptions` is deprecated, each method naming the app call that
+  replaces it, since an app holds its address now. Those methods stay until Siren removes
+  `/webhooks`. openapi.yaml marks each old `/webhooks` operation `deprecated: true` and names the
+  app route that replaces it. `AppErrorCode.AppOwnedSubscription` names Siren's 409
   `app_owned_subscription` for a webhook call on an address an app owns. The README's apps section
   describes an app's three parts and says "feature", as the code does.
 - The app file's `url` is optional, so it can declare a key-only app. A file with features and no

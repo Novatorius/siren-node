@@ -84,13 +84,39 @@ export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, s
 }
 
 /**
- * A `siren` command line for a hint, with the flags that reach the same
- * Siren: the address flag the person typed, and `--live` when `live`, which
- * is the target's own `--live` unless the caller says otherwise. A hint that
- * names a command a person cannot run as printed is no help, so every hint
- * that names a command is built here.
+ * The commands that change a live organization, so take `--live` there.
+ * Every other command reads, works offline, or, like logout, needs no
+ * `--live` (CLI pass 2, finding 8). A test holds this list to the command
+ * table's `readsOnly` and `offline` marks.
  */
-export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live): string {
+export const LIVE_WRITES = [
+  'signup',
+  'login',
+  'apps apply',
+  'apps answer',
+  'apps resend',
+  'apps rotate-key',
+  'apps rotate-secret',
+  'apps add-key',
+  'apps on',
+  'apps off',
+  'apps delete',
+] as const;
+
+/** True when `words`, a command and its arguments, start with a command of {@link LIVE_WRITES}. */
+function changesLive(words: string): boolean {
+  return LIVE_WRITES.some((command) => words === command || words.startsWith(`${command} `));
+}
+
+/**
+ * A `siren` command line for a hint, with the flags that reach the same
+ * Siren: the address flag the person typed, and `--live` when `live`. That
+ * is the target's own `--live` for a command that changes a live
+ * organization, and never for a read or an offline command, unless the
+ * caller says otherwise. A hint that names a command a person cannot run as
+ * printed is no help, so every hint that names a command is built here.
+ */
+export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live && changesLive(words)): string {
   return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;
 }
 
@@ -116,13 +142,16 @@ function editionName(edition: Edition): string {
 export function assertSessionMatches(target: Target, session: { edition: Edition; baseUrl?: string }, edition: Edition): void {
   const login = commandLine(target, 'login', edition === 'production');
   if (session.baseUrl !== undefined && session.baseUrl !== target.baseUrl) {
-    throw new CliRefusal(`The session stored for ${target.baseUrl} was made for ${session.baseUrl}, so nothing was sent with it. Run ${login} to sign in again.`);
+    throw new CliRefusal('Your session belongs to another Siren.', {
+      why: `It was made for ${hostName(session.baseUrl)}, and this command is for ${hostName(target.baseUrl)}, so nothing was sent with it.`,
+      fix: login,
+    });
   }
   if (session.edition !== edition) {
-    throw new CliRefusal(
-      `${target.baseUrl} is now a ${editionName(edition)} Siren, and your session was made when it was a ${editionName(session.edition)} one, ` +
-        `so nothing was sent with it. Run ${login} to sign in again.`,
-    );
+    throw new CliRefusal(`${hostName(target.baseUrl)} became a ${editionName(edition)} Siren since you logged in.`, {
+      why: `Your session was made when it was a ${editionName(session.edition)} one, so nothing was sent with it.`,
+      fix: login,
+    });
   }
 }
 
@@ -178,12 +207,28 @@ function fullAddress(given: string): string {
  * Throws {@link CliRefusal} with a message that names the address, the
  * edition, and `action`, what `--live` would let the command do.
  */
-export function assertEditionAllowed(target: Target, edition: Edition, action = 'change a live organization'): void {
+export function assertEditionAllowed(target: Target, edition: Edition, words: string, action = 'A change to a live organization'): void {
   if (edition === 'production' && !target.live) {
-    throw new CliRefusal(`${target.baseUrl} is a live Siren. Add --live to ${action}.`);
+    throw new CliRefusal(`${hostName(target.baseUrl)} is a live Siren.`, {
+      why: `${action} needs --live, so none happens by accident.`,
+      fix: commandLine(target, words, true),
+    });
   }
   if (edition === 'sandbox' && target.live) {
-    throw new CliRefusal(`${target.baseUrl} is a sandbox Siren, and --live is only for a live one. Leave --live out.`);
+    throw new CliRefusal(`${hostName(target.baseUrl)} is a sandbox Siren, so --live doesn't apply.`, {
+      why: '--live is only for a live organization.',
+      fix: commandLine(target, words, false),
+      fixWords: 'without it',
+    });
+  }
+}
+
+/** The host of a Siren's address, such as `sandbox.sirenaffiliates.com`, which an error names in place of the whole address. */
+export function hostName(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
   }
 }
 
@@ -209,15 +254,39 @@ export class CliUsageError extends Error {
  * happened, the command that fixes it with the words after it, a dim note
  * that always shows, and detail that shows only with --verbose.
  */
-export interface RefusalParts {
-  why?: string;
-  /** A command to run, such as `siren login`, printed as "Run siren login <fixWords>." */
-  fix?: string;
-  /** The words before the command in place of "Run", such as "Check your inbox for the set-up email, or run". */
-  fixLead?: string;
-  fixWords?: string;
+export type RefusalParts = {
+  /** Why it happened, in a sentence or two. Every refusal has one (CLI pass 3, must-fix 2). */
+  why: string;
+  /**
+   * Problems found in a file, each at its place, such as `siren.app.json:7:7`,
+   * printed under the why: dim place, message wrapped under it. Piped, each is
+   * one `place: message` line, as a compiler prints one (CLI pass 3, must-fix 3).
+   */
+  problems?: ReadonlyArray<{ at: string; message: string }>;
   note?: string;
   detail?: readonly string[];
+} & (
+  | {
+      /** A command to run, such as `siren login`, printed as "Run siren login <fixWords>." */
+      fix: string;
+      /** The words before the command in place of "Run", such as "Check your inbox for the set-up email, or run". */
+      fixLead?: string;
+      fixWords?: string;
+      fixText?: never;
+    }
+  | {
+      /** A fix in words when no command fixes it, such as "Give the feature its own key in siren.app.json." */
+      fixText: string;
+      fix?: never;
+      fixLead?: never;
+      fixWords?: never;
+    }
+);
+
+/** The fix line's words, plain: "Run siren login." or the fix in words. */
+export function fixSentence(parts: RefusalParts): string {
+  if (parts.fix === undefined) return parts.fixText;
+  return `${parts.fixLead ?? 'Run'} ${parts.fix}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`;
 }
 
 /**
@@ -229,9 +298,8 @@ export class CliRefusal extends Error {
   readonly headline: string;
   readonly parts: RefusalParts;
 
-  constructor(headline: string, parts: RefusalParts = {}) {
-    const fix = parts.fix === undefined ? [] : [`${parts.fixLead ?? 'Run'} ${parts.fix}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`];
-    super([headline, ...(parts.why === undefined ? [] : [parts.why]), ...fix].join(' '));
+  constructor(headline: string, parts: RefusalParts) {
+    super([headline, parts.why, fixSentence(parts)].join(' '));
     this.name = 'CliRefusal';
     this.headline = headline;
     this.parts = parts;

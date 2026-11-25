@@ -76,17 +76,19 @@ const ONE_ID = 'apr_e221f712e2dd08c2daa566d3ac5ce340';
 
 describe('apps-sdk-followups-1: siren apps requests <id> reads the one request', () => {
   it('reads it with GET /apps/requests/{id}, and shows its state and why, the data Siren sent, and that a tell takes no answer', async () => {
-    const h = harness([renamedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
+    // The last call is the idPrefix lookup that shows the tip's short id finds it (CLI pass 3, must-fix 1).
+    const h = harness([renamedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, []), reply(200, { requests: [{ id: ONE_ID }], total: 1 })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
+    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries', 'GET /apps/requests']);
     const out = h.out();
     expect(out.split('\n')[0]).toBe(ONE_ID);
     expect(out).toContain('  State     needs attention: Could not connect to the host.\n');
     expect(out).toContain('  Kind      tell · Post-conversion action (postConversionAction)\n');
     expect(out).toContain('  Answer    a tell takes none\n');
     expect(out).toContain('\nDATA\n');
-    for (const key of Object.keys(renamedBody<{ data: Record<string, unknown> }>(ONE).data)) expect(out).toContain(`\n  ${key}  `);
+    // An object's key heads its own entries, which sit two spaces further in.
+    for (const key of Object.keys(renamedBody<{ data: Record<string, unknown> }>(ONE).data)) expect(out).toMatch(new RegExp(`\\n  ${key}( {2}|\\n {4}\\S)`));
     expect(out).not.toContain('not among the latest 50');
   });
 
@@ -112,7 +114,9 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     const h = harness([renamedReply(ONE), reply(200, []), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.paths()).not.toContain('GET /apps/requests');
+    // It reads no list to find it. The one list call is the idPrefix lookup for the tip's id.
+    const lists = h.http.requests.filter((request) => new URL(request.url).pathname.endsWith('/apps/requests'));
+    expect(lists.map((request) => [...new URL(request.url).searchParams.keys()])).toEqual([['idPrefix']]);
   });
 
   it("refuses a request the organization does not have in one line that says where to see the latest, with the target flags", async () => {
@@ -120,7 +124,7 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
       const h = harness([answer]);
       h.signedIn();
       expect(await h.run(['apps', 'requests', ONE_ID, '--sandbox'])).toBe(1);
-      expect(h.err()).toBe(`siren: This organization has no request ${ONE_ID}. See the latest with siren apps requests --sandbox.\n`);
+      expect(h.err()).toBe(`siren: This organization has no request ${ONE_ID}. Siren found none with that id. Run siren apps requests --sandbox to list the latest.\n`);
     }
   });
 });
@@ -163,19 +167,20 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     expect(await on.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
     expect(on.paths()).toEqual(['DELETE /apps/ledger-sync', 'GET /apps/ledger-sync']);
     expect(on.err()).toBe(
-      'siren: Siren kept ledger-sync.\nRecords still select its features: app:4 (1), app:5 (1).\n' +
-        'Turn it off instead with siren apps off ledger-sync --sandbox. Siren then stops calling it and keeps what it already did.\n',
+      'siren: ledger-sync is still in use, so Siren kept it. Records still select its features: app:4 (1), app:5 (1). ' +
+        'Run siren apps off ledger-sync --sandbox to stop Siren calling it now and keep what it already did. ' +
+        'To delete it, change each record that selects those features to another choice, then run siren apps delete ledger-sync --yes --sandbox.\n',
     );
 
     const off = harness([capturedReply('apps-delete-409-in-use'), reply(200, appRecord({ key: 'ledger-sync', status: 'inactive' }))]);
     off.signedIn();
     expect(await off.run(['apps', 'delete', 'ledger-sync', '--yes', '--sandbox'])).toBe(1);
     expect(off.err()).toBe(
-      'siren: Siren kept ledger-sync.\nRecords still select its features: app:4 (1), app:5 (1).\n' +
+      'siren: ledger-sync is still in use, so Siren kept it. Records still select its features: app:4 (1), app:5 (1). ' +
         'It is already off, so Siren no longer calls it. To delete it, change each record that selects those features to another choice, ' +
         'then run siren apps delete ledger-sync --yes --sandbox.\n',
     );
-    expect(off.err()).not.toContain('Turn it off');
+    expect(off.err()).not.toContain('apps off');
   });
 
   it("a resend refused because the app is off says to turn it on, with the command", async () => {
@@ -185,8 +190,8 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     expect(await h.run(['apps', 'resend', RESEND_ID, '--sandbox'])).toBe(1);
     expect(h.paths()).toEqual([`POST /apps/requests/${RESEND_ID}/resend`, `GET /apps/requests/${RESEND_ID}`, 'GET /apps']);
     expect(h.err()).toBe(
-      `siren: Siren sent nothing: ${APP_KEY} is off, and Siren sends nothing to an app that is off. ` +
-        `Turn it on with siren apps on ${APP_KEY} --sandbox, then run siren apps resend ${RESEND_ID} --sandbox.\n`,
+      `siren: ${APP_KEY} is off, so Siren sent nothing. Siren sends nothing to an app that is off. ` +
+        `Run siren apps on ${APP_KEY} --sandbox, then siren apps resend ${RESEND_ID} --sandbox.\n`,
     );
   });
 
@@ -195,7 +200,7 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     h.signedIn();
     expect(await h.run(['apps', 'resend', RESEND_ID])).toBe(1);
     expect(h.paths()).toEqual([`POST /apps/requests/${RESEND_ID}/resend`]);
-    expect(h.err()).toBe(`siren: Siren sent nothing: ${RESEND_ID} is applied, so its answer already did its work.\n`);
+    expect(h.err()).toBe(`siren: ${RESEND_ID.slice(4, 12)} is applied, so Siren sent nothing. Its answer already did its work. Run siren apps requests ${RESEND_ID} to see what it did.\n`);
   });
 
   it("the uncoded 401 on the answer route names siren apps rotate-key, not the API keys screen", async () => {
@@ -216,6 +221,6 @@ describe('apps-sdk-followups-1: hints that send a person the right way', () => {
     const h = harness([capturedReply('apps-answer-401-unknown-key')]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', RESEND_ID, '--body', '{"outcome":"paid"}', '--sandbox'])).toBe(1);
-    expect(h.err()).toBe('siren: Your session has ended. Run siren login --sandbox to sign in again.\n');
+    expect(h.err()).toBe('siren: Your session has ended. Siren no longer accepts it, so nothing was sent. Run siren login --sandbox to log in again.\n');
   });
 });

@@ -1336,9 +1336,33 @@ export interface AppRequestDetail extends AppRequestRecord {
   answeredByUser: { id: number; email: string } | null;
 }
 
-/** Filters for `apps.requests.list()`. */
+/** Filters and paging for `apps.requests.list()`. */
 export interface AppRequestListParams {
   status?: AppRequestStatus;
+  /**
+   * How many requests to answer, 1 to 100. Siren answers 50 without it.
+   * Siren reads it with `needs_attention` from pkt/apps-attention-paging. An
+   * older Siren ignores it there and answers at most 50.
+   */
+  limit?: number;
+  /** Keeps the requests older than this one, a request id, to read the next page. With `needs_attention` too, as `limit`. */
+  before?: string;
+  /**
+   * Finds requests by the start of their id: `apr_` and 4 to 32 hex
+   * characters in either case, as the command-line tool prints an id short.
+   * Siren answers at most two of the organization's matches, newest first,
+   * so one row is the request and two mean the start fits more than one.
+   * It takes no other filter and no paging. Siren reads it from feat/apps
+   * 76d5bbdf83. An older Siren ignores it and answers its latest requests.
+   */
+  idPrefix?: string;
+  /**
+   * Keeps to one app's requests, by the app's numeric id, as `App.id` holds
+   * it. Siren reads it on the plain list, a page of it, and
+   * `needs_attention` (ListAppRequests at feat/apps 76d5bbdf83). Not with
+   * `idPrefix`.
+   */
+  appId?: number;
 }
 
 /**

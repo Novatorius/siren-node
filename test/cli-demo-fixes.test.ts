@@ -50,14 +50,16 @@ describe('demo fix 2: apps requests shows a request that needs attention, howeve
   });
 
   it('shows it in the list for every app too, once', async () => {
-    const h = harness([reply(200, [appRecord()]), reply(200, { requests: [attention, ...recent.slice(0, 2)] }), reply(200, { requests: [attention] })]);
+    // The last is the idPrefix lookup for the newest, which shows the short ids find a request.
+    const h = harness([reply(200, [appRecord()]), reply(200, { requests: [attention, ...recent.slice(0, 2)] }), reply(200, { requests: [attention] }), reply(200, { requests: [recent[1]], total: 1 })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
     expect(h.out().split('\nec16a240')).toHaveLength(2);
   });
 
   it('says in one short line when an app has none there, and names the command that watches for them', async () => {
-    const h = harness([reply(200, [appRecord()]), reply(200, { requests: recent }), reply(200, { requests: [] })]);
+    // Siren keeps both lists to the app with appId, so another app's 50 never reach it (pass 3 re-check, must-fix 1).
+    const h = harness([reply(200, [appRecord()]), reply(200, { requests: [] }), reply(200, { requests: [] })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
     expect(h.out()).toBe(`No requests for ${APP_KEY} yet.\nsiren apps requests --app ${APP_KEY} --follow watches for them.\n`);

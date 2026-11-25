@@ -127,7 +127,7 @@ describe('apps-cli: siren signup, login and the session', () => {
 
     const closed = harness([ConfirmationAnswers.signupOff()], { stdin: PASSWORD });
     expect(await closed.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'])).toBe(1);
-    expect(closed.err()).toContain(`Sign-up is turned off on ${SANDBOX_BASE_URL}. Ask its owner, or use siren login.`);
+    expect(closed.err()).toContain("sandbox.sirenaffiliates.com doesn't take sign-ups. Its owner turned sign-up off. Ask its owner for an invite, then run siren login.");
     expect(closed.err()).not.toMatch(/not found/i);
 
     const unconfirmed = harness(
@@ -336,14 +336,15 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('declares the app on the first apply, writes its key and secret to .env.sandbox, and prints neither', async () => {
-    const h = harness([appMissing(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
+    const h = harness([appMissing(), AppAnswers.scopes(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
 
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
-    expect(bearer(h, 1)).toBe(`Bearer ${ACCESS_1}`);
-    expect(bodyOf(h.http.requests[1])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
+    // The file names event scopes the new app does not hold yet, so apply checks them against Siren's list (CLI pass 2, finding 5).
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
+    expect(bearer(h, 2)).toBe(`Bearer ${ACCESS_1}`);
+    expect(bodyOf(h.http.requests[2])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
     expect(h.file('.env.sandbox').split('\n')).toEqual(
       expect.arrayContaining([`SIREN_BASE_URL=${SANDBOX_BASE_URL}`, `SIREN_API_KEY=${RAW_KEY}`, `SIREN_SIGNING_SECRET=${SIGNING_SECRET}`]),
     );
@@ -381,18 +382,18 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('leaves the env file as it is when a later apply answers no secret, and says when this machine holds no key', async () => {
-    const h = harness([appBefore(), reply(200, app), appBefore(), reply(200, app)], { env: appEnv });
+    const h = harness([appBefore(), AppAnswers.scopes(), reply(200, app), appBefore(), AppAnswers.scopes(), reply(200, app)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     h.write('.env.sandbox', `PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(await h.run(['apps', 'apply', 'siren.app.json', '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe(`PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(h.printed()).not.toContain('siren apps rotate-key');
 
     h.write('.env.sandbox', 'PORT=8787\n');
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`, `GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`, `GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
     expect(h.printed().replace(/\n  /g, " ")).toContain(`siren apps rotate-key ${KEY}`);
   });
@@ -461,7 +462,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(await other.run(['apps', 'rotate-key', KEY, '--yes', '--app-file', 'siren.app.json'])).toBe(1);
     expect(other.http.requests).toHaveLength(0);
     expect(other.file('.env.sandbox')).toBe(held);
-    expect(other.err()).toContain('http://localhost:33918/siren/v1');
+    expect(other.err()).toContain('holds a key for another Siren, localhost:33918.');
 
     const named = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
     named.signedIn();
@@ -522,6 +523,10 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
 });
 
 describe('apps-cli: siren apps requests, answer and resend', () => {
+  // The idPrefix lookup that shows a short id finds the request (CLI pass 3, must-fix 1). A command that prints ids makes it once.
+  const found = () => reply(200, { requests: [row], total: 1 });
+  const LOOKUP = 'GET /apps/requests';
+
   it('lists the latest requests, for one app or those that need attention', async () => {
     const other = { ...row, id: 'apr_0123456789abcdef0123456789abcdef', appId: 9, status: 'delivered' };
     // The plain list reads the latest requests, then those that need attention (demo fix 2).
@@ -530,9 +535,12 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
       reply(200, [app]),
       reply(200, { requests: [row, other] }),
       none(),
+      found(),
       reply(200, [app]),
-      reply(200, { requests: [row, other] }),
+      // Siren keeps the list to the app with appId.
+      reply(200, { requests: [row] }),
       none(),
+      found(),
       reply(200, [app]),
       none(),
     ]);
@@ -547,8 +555,8 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(h.out().slice(before)).not.toContain(other.id.slice(4, 12));
 
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps', 'GET /apps/requests']);
-    expect(new URL(h.http.requests[7]!.url).searchParams.get('status')).toBe('needs_attention');
+    expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', LOOKUP, 'GET /apps', 'GET /apps/requests', 'GET /apps/requests', LOOKUP, 'GET /apps', 'GET /apps/requests']);
+    expect(new URL(h.http.requests[9]!.url).searchParams.get('status')).toBe('needs_attention');
   });
 
   it('shows one request: the data Siren sent, each send, and what the app answered', async () => {
@@ -576,10 +584,11 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
         delivery(`${REQUEST}.2`, 200, '{"received":true}'),
         delivery('apr_0123456789abcdef0123456789abcdef.1', 200, 'someone else'),
       ]),
+      found(),
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', REQUEST]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', `GET /apps/${KEY}/deliveries`]);
+    expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', `GET /apps/${KEY}/deliveries`, LOOKUP]);
     expect(h.out()).toMatch(/\n1  failed +500  +upstream timeout\n/);
     expect(h.out()).toContain('upstream timeout');
     expect(h.out()).toContain('{"received":true}');
@@ -589,13 +598,13 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
 
   it('follows the requests, printing each change once, until Ctrl-C, which exits 130', async () => {
     const h = harness(
-      [reply(200, [app]), ...[row, row, { ...row, status: 'answered' }].flatMap((polled) => [reply(200, { requests: [polled] }), reply(200, { requests: [] })])],
+      [reply(200, [app]), ...[row, row, { ...row, status: 'answered' }].flatMap((polled, at) => [reply(200, { requests: [polled] }), reply(200, { requests: [] }), ...(at === 0 ? [found()] : [])])],
       { onSleep: (count, abort) => count === 3 && abort() },
     );
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(130);
-    // The apps once, then each poll reads the latest requests and those that need attention (demo fix 2).
-    expect(h.http.requests).toHaveLength(7);
+    // The apps once, then each poll reads the latest requests and those that need attention (demo fix 2). The first row brings one lookup.
+    expect(h.http.requests).toHaveLength(8);
     const lines = h.out().split('\n').filter((line) => line.includes(REQUEST.slice(4, 12)));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain('waiting');
@@ -603,15 +612,15 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
   });
 
   it('posts an answer with the session, from --body or --file, and says when Siren already had it', async () => {
-    const h = harness([reply(200, { status: 'accepted' }), reply(200, { status: 'accepted', duplicate: true })]);
+    const h = harness([reply(200, { status: 'accepted' }), found(), reply(200, { status: 'accepted', duplicate: true }), found()]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid","reference":"acme-88"}']), h.err()).toBe(0);
     h.write('answer.json', '{"outcome":"paid","reference":"acme-88"}');
     expect(await h.run(['apps', 'answer', REQUEST, '--file', 'answer.json']), h.err()).toBe(0);
 
-    expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`, `POST /apps/requests/${REQUEST}/answer`]);
+    expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`, LOOKUP, `POST /apps/requests/${REQUEST}/answer`, LOOKUP]);
     expect(bearer(h, 0)).toBe(`Bearer ${ACCESS_1}`);
-    expect(bodyOf(h.http.requests[1])).toEqual({ outcome: 'paid', reference: 'acme-88' });
+    expect(bodyOf(h.http.requests[2])).toEqual({ outcome: 'paid', reference: 'acme-88' });
     expect(h.out()).toContain(`Answered ${REQUEST.slice(4, 12)}`);
     expect(h.out()).toMatch(/already/i);
   });
@@ -641,8 +650,8 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(await early.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
     expect(early.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`]);
     expect(early.err()).toBe(
-      'siren: A person may answer only a request that needs attention. The app may still answer this one. ' +
-        'See the requests that need attention with siren apps requests --attention.\n',
+      "siren: This request doesn't need an answer. A person may answer only a request that needs attention. The app may still answer this one. " +
+        'Run siren apps requests --attention to list the ones that do.\n',
     );
   });
 
@@ -650,14 +659,16 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     const h = harness([AppAnswers.unknownRefusal()]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
-    expect(h.err()).toBe("siren: Siren refused this answer for a reason this SDK does not know. Siren's code: made_up_refusal_code.\n");
+    expect(h.err()).toBe(
+      "siren: Siren refused the answer. Siren refused this answer for a reason this SDK does not know. Siren's code: made_up_refusal_code. Fix what it names, then answer again.\n",
+    );
   });
 
   it('sends a request again', async () => {
-    const h = harness([reply(200, { ...row, sendCount: 2 })]);
+    const h = harness([reply(200, { ...row, sendCount: 2 }), found()]);
     h.signedIn();
     expect(await h.run(['apps', 'resend', REQUEST]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/resend`]);
+    expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/resend`, LOOKUP]);
     expect(h.out()).toContain(`Sent ${REQUEST.slice(4, 12)} again`);
   });
 });
