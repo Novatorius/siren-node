@@ -8,6 +8,8 @@ import * as simulate from './commands/simulate';
 import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
+import * as sandbox from './commands/sandbox';
+import * as seed from './commands/seed';
 import * as session from './commands/session';
 import { CommandContext, shortAddress, tokenRefusal } from './context';
 import type { CommandHandler } from './context';
@@ -57,6 +59,11 @@ export const COMMANDS = [
   'trigger ask',
   'fixtures',
   'simulate',
+  'sandbox create',
+  'sandbox list',
+  'sandbox reset',
+  'sandbox inbox',
+  'seed',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -65,7 +72,7 @@ export type Command = (typeof COMMANDS)[number];
 type Options = NonNullable<ParseArgsConfig['options']>;
 
 /** The headings `siren --help` lists the commands under, in order. */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -120,6 +127,7 @@ const GUIDE_URL = 'https://github.com/Novatorius/siren-node#command-line-tool';
 const APP_FILE_FLAG = ['--app-file <path>', 'The app file beside the env file, if apply saved none'] as const;
 const YES_FLAG = ['--yes', 'Skip the question. Needed with no terminal'] as const;
 const JSON_FLAG = ['--json', 'Print JSON for a script, and nothing else'] as const;
+const ORG_FLAG = ['--org <slug>', 'The organization, if not SIREN_ORG or your only one'] as const;
 
 /** The options `trigger` and `simulate` share. */
 const ACTIVITY_OPTIONS: Options = {
@@ -463,6 +471,84 @@ const SPECS: Record<Command, CommandSpec> = {
     readsOnly: true,
     run: simulate.simulate,
   },
+  'sandbox create': {
+    usage: 'sandbox create --from <live org> [flags]',
+    summary:
+      "Copy a live organization's setup into a new sandbox organization: apps and their features, programs, groups and settings. Collaborators, keys, secrets and app addresses stay on the live Siren.",
+    group: 'Sandbox',
+    short: 'Copy a live setup into a sandbox',
+    options: { from: { type: 'string' }, 'live-url': { type: 'string' }, name: { type: 'string' }, json: { type: 'boolean' } },
+    flags: {
+      from: ['--from <slug or id>', 'The live organization to copy'],
+      'live-url': ['--live-url <url>', 'The live Siren, if not your one live session'],
+      name: ['--name <name>', 'The new organization\'s name'],
+      json: JSON_FLAG,
+    },
+    examples: ['siren sandbox create --from acme', 'siren sandbox create --from acme --live-url siren.acme.example'],
+    positionals: [0, 0],
+    run: sandbox.create,
+  },
+  'sandbox list': {
+    usage: 'sandbox list [flags]',
+    summary: 'List your sandbox organizations, and the live organization each was copied from.',
+    group: 'Sandbox',
+    short: 'List your sandbox organizations',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren sandbox list'],
+    positionals: [0, 0],
+    run: sandbox.list,
+  },
+  'sandbox reset': {
+    usage: 'sandbox reset [flags]',
+    summary:
+      'Clear the sandbox organization\'s activity: conversions, obligations, transactions, payouts, requests and deliveries. Its setup stays. You type the slug to confirm.',
+    group: 'Sandbox',
+    short: 'Clear activity, keep setup',
+    options: { org: { type: 'string' }, confirm: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { org: ORG_FLAG, confirm: ['--confirm <slug>', 'The slug, for when no terminal can ask'], json: JSON_FLAG },
+    examples: ['siren sandbox reset --org acme-sandbox', 'siren sandbox reset --org acme-sandbox --confirm acme-sandbox'],
+    positionals: [0, 0],
+    run: sandbox.reset,
+  },
+  'sandbox inbox': {
+    usage: 'sandbox inbox [<number>] [flags]',
+    summary: 'List the emails the sandbox caught for the organization, or show one.',
+    group: 'Sandbox',
+    short: "Read the sandbox's caught emails",
+    options: { org: { type: 'string' }, limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { org: ORG_FLAG, limit: ['--limit <n>', 'How many to list, 1 to 100 (20)'], json: JSON_FLAG },
+    examples: ['siren sandbox inbox --org acme-sandbox', 'siren sandbox inbox 31'],
+    positionals: [0, 1],
+    run: sandbox.inbox,
+  },
+  seed: {
+    usage: 'seed [flags]',
+    summary: 'Fill the sandbox organization with sample sales spread back over past months, and sample collaborators when it has too few.',
+    group: 'Sandbox',
+    short: 'Fill a sandbox with sample sales',
+    options: {
+      org: { type: 'string' },
+      sales: { type: 'string' },
+      collaborators: { type: 'string' },
+      months: { type: 'string' },
+      seed: { type: 'string' },
+      'no-wait': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      org: ORG_FLAG,
+      sales: ['--sales <n>', 'Sales to send, 1 to 200 (50)'],
+      collaborators: ['--collaborators <n>', 'Collaborators to credit, 1 to 25 (10)'],
+      months: ['--months <n>', 'Months back to spread them, 1 to 6 (3)'],
+      seed: ['--seed <n>', 'The same seed makes the same sales'],
+      'no-wait': ['--no-wait', 'Queue the job and stop'],
+      json: JSON_FLAG,
+    },
+    examples: ['siren seed --org acme-sandbox', 'siren seed --sales 120 --months 6'],
+    positionals: [0, 0],
+    run: seed.seed,
+  },
 };
 
 /** Every option any command takes, for the first read of the line, which finds the command. */
@@ -650,7 +736,7 @@ function commandNamed(words: readonly string[]): Command {
   // A first word that is a command alone and starts a two-word one, such as trigger and trigger ask, is the two-word one when its second word matches.
   const pair = `${words[0] ?? ''} ${words[1] ?? ''}`.trim();
   if (words[0] !== 'apps' && (COMMANDS as readonly string[]).includes(pair)) return pair as Command;
-  const name = words[0] === 'apps' || words[0] === 'logs' ? `${words[0]} ${words[1] ?? ''}`.trim() : (words[0] ?? '');
+  const name = words[0] === 'apps' || words[0] === 'logs' || words[0] === 'sandbox' ? `${words[0]} ${words[1] ?? ''}`.trim() : (words[0] ?? '');
   if ((COMMANDS as readonly string[]).includes(name)) return name as Command;
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
