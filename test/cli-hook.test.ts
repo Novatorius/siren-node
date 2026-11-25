@@ -32,7 +32,8 @@ const OFFLINE = ['apps', 'init', '--key', 'acme-payouts'];
 
 /** Every frame the hook draws: the slide and grip, then the hover. */
 const FRAME_COUNT = HOOK_FRAMES.length + HOOK_HOVER_LIFTS.length;
-const BRAILLE = /[\u2801-\u28ff]/;
+/** A drawn logo cell: a quadrant or half block, never braille. */
+const LOGO = /[\u2580\u2584\u2588\u258c\u2590\u2596-\u259f]/;
 
 /** The text written before the first wait, which is all a fast reader needs. */
 function beforeFirstWait(fake: ReturnType<typeof fakeScreen>) {
@@ -104,9 +105,9 @@ describe('apps-cli: logo animation v2, after the demo', () => {
     const lines = beforeFirstWait(fake).split('\n');
     const mark = lines.find((line) => line.includes(`${TRUECOLOR}\u001b[1mSiren`));
     expect(mark).toBeDefined();
-    expect(mark).toMatch(BRAILLE);
+    expect(mark).toMatch(LOGO);
     expect(mark).toMatch(/Siren\u001b\[0m \d+\.\d+\.\d+/);
-    expect(lines.some((line) => BRAILLE.test(line) && line.includes('siren login'))).toBe(true);
+    expect(lines.some((line) => LOGO.test(line) && line.includes('siren login'))).toBe(true);
   });
 
   it('stacks the text under the logo when the terminal is too narrow for both side by side', async () => {
@@ -114,7 +115,7 @@ describe('apps-cli: logo animation v2, after the demo', () => {
     expect(await run([])).toBe(0);
     const lines = beforeFirstWait(fake).split('\n');
     expect(lines.some((line) => line.includes('siren login'))).toBe(true);
-    expect(lines.some((line) => BRAILLE.test(line) && /siren|Siren/.test(line))).toBe(false);
+    expect(lines.some((line) => LOGO.test(line) && /siren|Siren/.test(line))).toBe(false);
   });
 
   it('prints the text alone, with no animation, when neither layout fits', async () => {
@@ -128,29 +129,53 @@ describe('apps-cli: logo animation v2, after the demo', () => {
     const { fake, run } = setup();
     await run([]);
     expect(Math.max(...HOOK_HOVER_LIFTS)).toBeGreaterThan(0);
-    expect(Math.max(...HOOK_HOVER_LIFTS)).toBeLessThanOrEqual(4);
+    expect(Math.max(...HOOK_HOVER_LIFTS)).toBeLessThanOrEqual(2);
     expect(HOOK_HOVER_LIFTS[HOOK_HOVER_LIFTS.length - 1]).toBe(0);
-    const shadows = fake.writes.map((write) => /\u001b\[2m[^\u001b]*?(\u2824+)/.exec(write)?.[1]?.length).filter((width): width is number => width !== undefined);
+    const shadows = fake.writes.map((write) => /\u001b\[2m[^\u001b]*?(\u2581+)/.exec(write)?.[1]?.length).filter((width): width is number => width !== undefined);
     expect(new Set(shadows).size).toBeGreaterThan(1);
     expect(Math.min(...shadows)).toBeLessThan(Math.max(...shadows));
     // Alex after the demo: the shadow read as stray noise above the next output, so it goes once the logo settles.
-    const settled = fake.writes.filter((write) => BRAILLE.test(write)).at(-1) ?? '';
-    expect(settled).not.toContain('\u2824\u2824');
-    const lifted = fake.writes.findIndex((write, at) => at > 0 && write.includes(HOOK_FRAMES[HOOK_FRAMES.length - 1]![3]!.trim()) === false && BRAILLE.test(write));
+    const settled = fake.writes.filter((write) => LOGO.test(write)).at(-1) ?? '';
+    expect(settled).not.toContain('\u2581\u2581');
+    const lifted = fake.writes.findIndex((write, at) => at > 0 && write.includes(HOOK_FRAMES[HOOK_FRAMES.length - 1]![3]!.trim()) === false && LOGO.test(write));
     expect(lifted).toBeGreaterThan(0);
     expect(fake.writes[fake.writes.length - 2] ?? '').toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]![3]!.trim());
   });
 });
 
 describe('apps-cli: logo animation v2, the lift', () => {
-  it('a lift of 4 dots raises the logo one whole row into the headroom, and 0 keeps it at rest', () => {
+  it('a lift of 2 half rows raises the logo one whole row into the headroom, and 0 keeps it at rest', () => {
     const still = HOOK_FRAMES[HOOK_FRAMES.length - 1]!;
     const rest = liftFrame(still, 0);
-    const up = liftFrame(still, 4);
+    const up = liftFrame(still, 2);
     expect(rest[0]!.trim()).toBe('');
     expect(rest.slice(1).map((line) => line.trimEnd())).toEqual(still.map((line) => line.trimEnd()));
     expect(up.slice(0, -1)).toEqual(rest.slice(1));
-    expect(liftFrame(still, 2)).not.toEqual(rest);
+    expect(liftFrame(still, 1)).not.toEqual(rest);
+    expect(liftFrame(still, 1)).not.toEqual(up);
+  });
+});
+
+/*
+ * Alex on 2026-11-25, in COSMIC Terminal with Fira Mono: "the logo has gaps
+ * between lines when animating". Braille dots never reach a cell's edges,
+ * Fira Mono has no braille so another font draws it, and line spacing above
+ * 1.0 opens a gap under every row. Block elements fill the cell, and many
+ * terminals draw them to the cell's edges whatever the spacing.
+ */
+describe('apps-cli: the logo is drawn in block elements, which hold up under line spacing', () => {
+  const blocks = /^[ \u2580\u2584\u2588\u258c\u2590\u2596-\u259f]*$/;
+  it('holds no braille in any frame, lifted or not', () => {
+    for (const frame of HOOK_FRAMES) for (const line of frame) expect(line, line).toMatch(blocks);
+    const still = HOOK_FRAMES[HOOK_FRAMES.length - 1]!;
+    for (const lift of [0, 1, 2]) for (const line of liftFrame(still, lift)) expect(line, `${lift}: ${line}`).toMatch(blocks);
+  });
+
+  it('keeps every quadrant when lifted by half a row and back', () => {
+    const still = HOOK_FRAMES[HOOK_FRAMES.length - 1]!;
+    const count = (lines: readonly string[]) => lines.join('').replace(/ /g, '').length;
+    expect(count(liftFrame(still, 1))).toBeGreaterThan(0);
+    expect(liftFrame(still, 0).map((line) => line.trimEnd())).toEqual(['', ...still.map((line) => line.trimEnd())]);
   });
 });
 
@@ -165,7 +190,7 @@ describe('apps-cli: the hook never gets in the way', () => {
     { name: '--json is given', argv: ['apps', 'list', '--json', '--base-url', 'http://127.0.0.1:9'] },
     { name: 'the terminal is narrower than the hook', screen: { columns: HOOK_WIDTH } },
     { name: 'the terminal is shorter than the hook', screen: { rows: HOOK_FRAMES[0]!.length + 2 } },
-    { name: 'the Windows console cannot draw braille', screen: { platform: 'win32' } },
+    { name: 'the old Windows console is not known to draw quadrant blocks', screen: { platform: 'win32' } },
   ];
 
   for (const skip of SKIPS) {
@@ -179,7 +204,7 @@ describe('apps-cli: the hook never gets in the way', () => {
     });
   }
 
-  it('plays in Windows Terminal, which draws braille', async () => {
+  it('plays in Windows Terminal, which draws block elements itself', async () => {
     const { fake, run } = setup({ WT_SESSION: 'abc' }, { platform: 'win32' });
     await run(OFFLINE);
     expect(fake.waits.length).toBeGreaterThan(0);
