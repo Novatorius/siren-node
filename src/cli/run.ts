@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
+import * as logs from './commands/logs';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
 import * as session from './commands/session';
@@ -46,6 +47,7 @@ export const COMMANDS = [
   'apps on',
   'apps off',
   'apps delete',
+  'logs tail',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -54,7 +56,7 @@ export type Command = (typeof COMMANDS)[number];
 type Options = NonNullable<ParseArgsConfig['options']>;
 
 /** The headings `siren --help` lists the commands under, in order. */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Logs', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -337,6 +339,42 @@ const SPECS: Record<Command, CommandSpec> = {
     positionals: [1, 1],
     run: apply.appsDelete,
   },
+  'logs tail': {
+    usage: 'logs tail [flags]',
+    summary: "Print what happens in the organization as it happens: app requests, deliveries, webhooks, events and API calls. Ctrl-C stops.",
+    group: 'Logs',
+    short: 'Watch requests, deliveries and API calls live',
+    options: {
+      app: { type: 'string' },
+      feature: { type: 'string' },
+      status: { type: 'string' },
+      type: { type: 'string' },
+      method: { type: 'string' },
+      path: { type: 'string' },
+      source: { type: 'string' },
+      since: { type: 'string' },
+      limit: { type: 'string' },
+      expand: { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      app: ['--app <key>', "Only this app's entries"],
+      feature: ['--feature <key>', "Only this feature's requests and deliveries"],
+      status: ['--status <list>', 'ok, failed or refused, joined by commas'],
+      type: ['--type <list>', 'request, delivery, webhook, event or api'],
+      method: ['--method <verb>', 'Only API calls with this method'],
+      path: ['--path <prefix>', 'Only API calls whose path starts so'],
+      source: ['--source <list>', 'dashboard, api_key, app, cli or site'],
+      since: ['--since <time>', 'Start back in time: 10m, 2h, 1d or an ISO time'],
+      limit: ['--limit <n>', 'Stop after n entries'],
+      expand: ['--expand', 'Show each entry\'s body'],
+      json: ['--json', 'Print one JSON object a line, and nothing else'],
+    },
+    examples: ['siren logs tail --app acme-payouts --status failed', 'siren logs tail --since 1h --limit 50 --json'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: logs.logsTail,
+  },
 };
 
 /** Every option any command takes, for the first read of the line, which finds the command. */
@@ -521,7 +559,7 @@ function editDistance(a: string, b: string): number {
 
 /** The command a line names, from its words, or {@link CliUsageError} with the nearest real one. */
 function commandNamed(words: readonly string[]): Command {
-  const name = words[0] === 'apps' ? `apps ${words[1] ?? ''}`.trim() : (words[0] ?? '');
+  const name = words[0] === 'apps' || words[0] === 'logs' ? `${words[0]} ${words[1] ?? ''}`.trim() : (words[0] ?? '');
   if ((COMMANDS as readonly string[]).includes(name)) return name as Command;
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];

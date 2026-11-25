@@ -585,15 +585,16 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(h.out()).not.toContain('someone else');
   });
 
-  it('follows the requests, printing each change once, until Ctrl-C', async () => {
-    const h = harness(
-      [row, row, { ...row, status: 'delivered' }].flatMap((polled) => [reply(200, { requests: [polled] }), reply(200, { requests: [] })]),
-      { onSleep: (count, abort) => count === 3 && abort() },
-    );
+  it('follows the requests, printing each change once, until Ctrl-C, which exits 130', async () => {
+    const page = (entries: unknown[], nextCursor: string) => reply(200, { entries, nextCursor, nextPollMs: 1000 });
+    const delivered = { id: 'request_1_delivered', type: 'request', at: '2026-11-17T09:15:03.000Z', status: 'ok', summary: 'ask payout-method', durationMs: null, httpStatus: null, reason: null, requestStatus: 'delivered', request: { ...row, status: 'delivered' } };
+    const h = harness([reply(200, { requests: [row] }), reply(200, { requests: [] }), page([], 'eyJoIjp7fX0'), page([delivered], 'eyJoIjp7ImEiOjF9fQ'), page([], 'eyJoIjp7ImEiOjF9fQ')], {
+      onSleep: (count, abort) => count === 3 && abort(),
+    });
     h.signedIn();
-    expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(0);
-    // Each poll reads the latest requests and those that need attention (demo fix 2).
-    expect(h.http.requests).toHaveLength(6);
+    expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(130);
+    // The list reads the latest requests and those that need attention (demo fix 2), then the feed is read three times.
+    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', 'GET /logs', 'GET /logs', 'GET /logs']);
     const lines = h.out().split('\n').filter((line) => line.includes(REQUEST));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain('sent');

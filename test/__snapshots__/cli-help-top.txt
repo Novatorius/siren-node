@@ -24,6 +24,9 @@ REQUESTS
   apps answer         Answer an ask by hand
   apps resend         Send a request again
 
+LOGS
+  logs tail           Watch requests, deliveries and API calls live
+
 RECORDS
   <resource> <op>     List, get, create, update or delete a record
   get <path>          Read any route, such as get /programs

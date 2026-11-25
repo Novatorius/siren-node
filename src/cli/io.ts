@@ -37,9 +37,9 @@ export interface CliIo {
   readonly httpClient: HttpClient;
   /** Milliseconds since the epoch. */
   now(): number;
-  /** Waits, for `apps requests --follow`. */
+  /** Waits between reads, for `logs tail` and `apps requests --follow`. */
   sleep(ms: number): Promise<void>;
-  /** Aborted when the person presses Ctrl-C. Ends `apps requests --follow` with exit code 0. */
+  /** Aborted when the person presses Ctrl-C. Ends `logs tail` and `apps requests --follow` with exit code 130. */
   readonly signal?: AbortSignal;
   /**
    * The terminal the Siren hook plays on (see `hook.ts`). Absent, as in most
@@ -99,6 +99,18 @@ export function defaultConfigDir(
   return join(home, '.config', 'siren');
 }
 
+/** What the tool calls itself to Siren, so Siren's API request log can tell its calls from the dashboard's. */
+export const CLI_CLIENT = 'siren-cli/0.3.0';
+
+/**
+ * `client` with an `X-Siren-Client` header on every request, so Siren's API
+ * request log names the call's source `cli` (contract/devtools-logs.md,
+ * section 4.3). The header names the tool and its version, nothing more.
+ */
+export function namedClient(client: HttpClient): HttpClient {
+  return { send: (request) => client.send({ ...request, headers: { ...request.headers, 'X-Siren-Client': CLI_CLIENT } }) };
+}
+
 /**
  * The real terminal: `process.stdout` and `process.stderr`, the process
  * environment and folder, a {@link FetchHttpClient}, the real clock, and a
@@ -136,7 +148,7 @@ export function nodeIo(): CliIo {
     env: process.env,
     cwd: process.cwd(),
     configDir: defaultConfigDir(process.env),
-    httpClient: new FetchHttpClient(),
+    httpClient: namedClient(new FetchHttpClient()),
     now: () => Date.now(),
     sleep: (ms) =>
       new Promise<void>((resolve) => {
