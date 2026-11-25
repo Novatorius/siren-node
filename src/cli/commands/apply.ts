@@ -337,7 +337,10 @@ export async function appsApply(input: CommandInput): Promise<number> {
   const err = styleFor(io, 'stderr', input.values);
   if (lines.length === 0) {
     if (json) run.print(JSON.stringify({ plan: planData(plan), applied: false }, null, 2));
-    else run.print(out.success(`${out.bold(key)} already matches ${shown}. Nothing to send.`));
+    else {
+      run.print(out.success(`${out.bold(key)} already matches ${shown}. Nothing to send.`));
+      offNote(run, out, plan);
+    }
     return 0;
   }
   const org = orgNamed(session);
@@ -428,6 +431,8 @@ interface Plan {
   changes: ReturnType<typeof appChanges>;
   lines: string[];
   envPath: string;
+  /** False when Siren holds the app and it is off, true when it is on, undefined for a new app. */
+  on: boolean | undefined;
 }
 
 /**
@@ -448,7 +453,10 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   const parsed = parseAppFile(text, { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) });
   if (parsed.file === null) {
     for (const problem of parsed.problems) {
-      const at = problem.path === '' || problem.message.startsWith(problem.path) ? '' : `${problem.path}: `;
+      // CLI pass 2, finding 11: a message that already starts with its path, or a shorter part of it, names its place once.
+      const segments = problem.path.split('.');
+      const named = segments.some((_, at) => problem.message.startsWith(segments.slice(0, at + 1).join('.')));
+      const at = problem.path === '' || named ? '' : `${problem.path}: `;
       io.stderr(`${shown}:${problem.line}:${problem.column}: ${at}${problem.message}\n`);
     }
     throw new CliRefusal(`${shown} has ${parsed.problems.length === 1 ? 'a problem' : `${parsed.problems.length} problems`}, so nothing was sent.`);
@@ -495,7 +503,8 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   const uses = changes.dropped.map(({ item }) => (typeof item.uses === 'number' ? item.uses : undefined));
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
-  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath };
+  const on = current === undefined ? undefined : current.status === 'active';
+  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath, on };
 }
 
 /**
@@ -555,6 +564,17 @@ function printPlan(run: CommandContext, out: Style, plan: Plan): void {
   const origin = plan.params.url == null ? undefined : originOf(plan.params.url);
   if (plan.changes.isNew && origin !== undefined) run.print(`  ${out.dim('→')} sends its requests to ${origin}`);
   run.print('');
+  offNote(run, out, plan);
+}
+
+/**
+ * CLI pass 2, finding 10: a warning that the app is off, so its features
+ * get nothing from Siren whatever the file says, and the command that
+ * turns it on. Nothing for an app that is on or new.
+ */
+function offNote(run: CommandContext, out: Style, plan: Plan): void {
+  if (plan.on !== false) return;
+  run.print(out.warning(`${plan.key} is off, so Siren sends it nothing until ${out.command(run.command(`apps on ${plan.key}`))}.`));
 }
 
 /** The plan as data, for `--json`: the app, the organization, whether it is new or matches, and each change as add, remove or change. */
@@ -567,6 +587,7 @@ function planData(plan: Plan): Record<string, unknown> {
     matches: plan.lines.length === 0,
     changes: plan.lines.map((text) => ({ op: /^(adds|makes) /.test(text) ? 'add' : /^removes /.test(text) ? 'remove' : 'change', text })),
     sendsTo: plan.changes.isNew ? origin : null,
+    on: plan.on ?? null,
   };
 }
 
@@ -589,6 +610,7 @@ export async function appsDiff(input: CommandInput): Promise<number> {
   const out = styleFor(input.io, 'stdout', input.values);
   if (plan.lines.length === 0) {
     run.print(out.success(`${out.bold(plan.key)} already matches ${plan.shown}. Nothing to send.`));
+    offNote(run, out, plan);
     return 0;
   }
   printPlan(run, out, plan);

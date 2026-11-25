@@ -396,6 +396,9 @@ const SPECS: Record<Command, CommandSpec> = {
   },
 };
 
+/** The command table, for tests that hold other lists to it. */
+export const COMMAND_SPECS: Readonly<Record<Command, Readonly<CommandSpec>>> = SPECS;
+
 /** Every option any command takes, for the first read of the line, which finds the command. */
 const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, ...Object.values(SPECS).map((spec) => spec.options));
 

@@ -347,9 +347,15 @@ export class CommandContext {
     return this.personal !== null;
   }
 
-  /** A `siren` command line for a hint, with the flags that reach this Siren (`commandLine`). */
+  /**
+   * A `siren` command line for a hint, with the flags that reach this Siren
+   * (`commandLine`). A hint to a write carries `--live` when the person typed
+   * it, and also when the session in use is live though this command, a
+   * read, needed none, since the write would be refused without it.
+   */
   command(words: string): string {
-    return commandLine(this.target, words);
+    const live = this.target.live || this.session?.edition === 'production';
+    return commandLine({ ...this.target, live }, words);
   }
 
   /** Uses this session for the rest of the run, without the edition check. `logout` alone calls it directly. */

@@ -198,12 +198,8 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
   it("the app file's kind messages name each kind readably beside the word the file takes", () => {
     const file = (item: Record<string, unknown>) =>
       JSON.stringify({ version: 1, name: 'A', description: '', apps: { [KEY]: { name: 'A', url: 'https://acme.example', features: { pay: item } } } });
-    expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
-      `apps.${KEY}.features.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ` +
-        'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), Transaction filter (transactionFilter), ' +
-        'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
-        'Collaborator group structure (collaboratorGroupStructure).',
+    expect(parseAppFile(file({ kind: 'metricCalc', name: 'Pay' }), {}).problems[0]?.message).toBe(
+      `apps.${KEY}.features.pay.kind metricCalc is not a kind. Did you mean metricCalculation, a Metric calculation?`,
     );
     expect(parseAppFile(file({ kind: 'payoutMethod', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.features.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,

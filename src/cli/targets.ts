@@ -84,13 +84,39 @@ export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, s
 }
 
 /**
- * A `siren` command line for a hint, with the flags that reach the same
- * Siren: the address flag the person typed, and `--live` when `live`, which
- * is the target's own `--live` unless the caller says otherwise. A hint that
- * names a command a person cannot run as printed is no help, so every hint
- * that names a command is built here.
+ * The commands that change a live organization, so take `--live` there.
+ * Every other command reads, works offline, or, like logout, needs no
+ * `--live` (CLI pass 2, finding 8). A test holds this list to the command
+ * table's `readsOnly` and `offline` marks.
  */
-export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live): string {
+export const LIVE_WRITES = [
+  'signup',
+  'login',
+  'apps apply',
+  'apps answer',
+  'apps resend',
+  'apps rotate-key',
+  'apps rotate-secret',
+  'apps add-key',
+  'apps on',
+  'apps off',
+  'apps delete',
+] as const;
+
+/** True when `words`, a command and its arguments, start with a command of {@link LIVE_WRITES}. */
+function changesLive(words: string): boolean {
+  return LIVE_WRITES.some((command) => words === command || words.startsWith(`${command} `));
+}
+
+/**
+ * A `siren` command line for a hint, with the flags that reach the same
+ * Siren: the address flag the person typed, and `--live` when `live`. That
+ * is the target's own `--live` for a command that changes a live
+ * organization, and never for a read or an offline command, unless the
+ * caller says otherwise. A hint that names a command a person cannot run as
+ * printed is no help, so every hint that names a command is built here.
+ */
+export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live && changesLive(words)): string {
   return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;
 }
 

@@ -1,6 +1,7 @@
 import type { AppConversionType, AppFeatureDeclaration, CustomEventField, DeclareAppParams } from '../record-types';
 import { FeatureKind } from '../taxonomy';
-import { kindLabel } from './app-kinds';
+import { kindLabel, kindName } from './app-kinds';
+import { suggestions } from './suggest';
 
 /*
  * The app file, `siren.app.json`: a Siren recipe that holds one `apps`
@@ -690,8 +691,18 @@ class AppFileCheck {
         this.where(`${path}.kind`),
         `${path}.kind fulfillmentMethod is the old name of this kind. Write payoutMethod, the word Siren and its documentation use.`,
       );
-    } else if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {
-      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind must be one of ${KINDS.map(kindLabel).join(', ')}.`);
+    } else if (typeof entry.kind !== 'string') {
+      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind is required, as text, such as postConversionAction.`);
+    } else if (!KINDS.includes(entry.kind)) {
+      // CLI pass 2, finding 7: the nearest kind, not all of them in one line.
+      const [guess] = suggestions(entry.kind, KINDS, /$^/);
+      this.problem(
+        `${path}.kind`,
+        this.where(`${path}.kind`),
+        guess === undefined
+          ? `${path}.kind ${entry.kind} is not a kind. The schema lists every kind, and an editor completes them.`
+          : `${path}.kind ${entry.kind} is not a kind. Did you mean ${guess}, ${/^[aeiou]/i.test(kindName(guess)) ? 'an' : 'a'} ${kindName(guess)}?`,
+      );
     }
     if (typeof entry.name !== 'string' || entry.name === '') {
       this.problem(`${path}.name`, this.where(`${path}.name`), `${path}.name is required, as text.`);

@@ -15,12 +15,16 @@ export function nearest(typed: string, choices: readonly string[]): string | und
 /**
  * What to offer for a name Siren does not have: the nearest one when it is
  * close, such as `event:sale` for `event:sales`. Otherwise up to four that
+ * it starts, such as `postAllocationAction` for `postAllocation`, or that
  * share its first part, such as each `program.` event for `program.made`.
  * Empty when neither finds one.
  */
 export function suggestions(typed: string, choices: readonly string[], separator: RegExp): string[] {
   const close = nearest(typed, choices);
   if (close !== undefined) return [close];
+  // A name cut short, such as postAllocation, names each one it starts.
+  const started = typed.length >= 3 ? choices.filter((choice) => choice.toLowerCase().startsWith(typed.toLowerCase())) : [];
+  if (started.length > 0) return started.slice(0, 4);
   const group = typed.split(separator)[0];
   if (group === undefined || group === '' || group === typed) return [];
   return choices.filter((choice) => choice.split(separator)[0] === group).slice(0, 4);
