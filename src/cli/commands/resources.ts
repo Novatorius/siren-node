@@ -233,6 +233,9 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
     };
   }
 
+  if (second === 'bulk' && resource.bulk !== undefined) return bulkSpec(resource, resource.bulk);
+  if (second === 'add' && MEMBER_ADD[resource.name] !== undefined) return addSpec(resource, MEMBER_ADD[resource.name]!);
+
   const op = second as ResourceOp;
   const route = resource.ops[op];
   if (route === undefined) {
@@ -285,7 +288,11 @@ async function listResources(input: CommandInput): Promise<number> {
 async function resourceHelp(input: CommandInput, resource: ResourceCommand): Promise<number> {
   const style = styleFor(input.io, 'stdout', {});
   const ops = RESOURCE_OPS.filter((op) => resource.ops[op]);
-  const rows = ops.map((op) => [`siren ${resource.name} ${op}${resource.ops[op]!.param ? ' <id>' : ''}`, `${resource.ops[op]!.method} ${resource.ops[op]!.path}`] as const);
+  const rows = [
+    ...ops.map((op) => [`siren ${resource.name} ${op}${resource.ops[op]!.param ? ' <id>' : ''}`, `${resource.ops[op]!.method} ${resource.ops[op]!.path}`] as const),
+    ...(resource.bulk === undefined ? [] : [[`siren ${resource.name} bulk <action>`, `POST ${resource.bulk.path}`] as const]),
+    ...(MEMBER_ADD[resource.name] === undefined ? [] : [[`siren ${resource.name} add <id>`, `POST ${MEMBER_ADD[resource.name]!.path}`] as const]),
+  ];
   const width = Math.max(...rows.map(([left]) => left.length)) + 3;
   input.io.stdout(
     [
@@ -861,4 +868,199 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
     ...fix,
     detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
   });
+}
+
+/*
+ * Pipes, both ends (lean output, section 5): --ids prints ids, and --stdin
+ * reads them, so one command's list feeds another's bulk change, as
+ * `siren conversions list --status pending --ids | siren conversions bulk approve --stdin --yes`.
+ */
+
+/** The most ids one bulk request carries. */
+const BULK_CHUNK = 1000;
+
+/** The member routes `siren <name> add <id>` sends: the path, and the key each member's id goes under. */
+const MEMBER_ADD: Readonly<Record<string, { path: string; key: string; max: number }>> = {
+  'collaborator-groups': { path: '/collaborator-groups/{id}/members', key: 'collaboratorId', max: 5000 },
+};
+
+const PIPE_OPTIONS: Options = { stdin: { type: 'boolean' }, yes: { type: 'boolean' }, d: OPTIONS.d!, json: OPTIONS.json!, 'dry-run': OPTIONS['dry-run']! };
+const PIPE_FLAGS = {
+  stdin: ['--stdin', 'Read the ids from standard input, one a line, as --ids prints them'],
+  yes: ['--yes', 'Send it without asking'],
+  d: ['-d <key=value>', 'Another field the request takes, such as programId=4, repeatable'],
+  json: FLAG.json,
+  'dry-run': FLAG['dry-run'],
+} as const;
+
+/** `siren <name> bulk <action> [ids…]`. */
+function bulkSpec(resource: ResourceCommand, bulk: NonNullable<ResourceCommand['bulk']>): { name: string; spec: ResourceSpec } {
+  return {
+    name: `${resource.name} bulk`,
+    spec: {
+      usage: `${resource.name} bulk <action> [<id>…] [--stdin] [options]`,
+      summary: `Run one action on many ${resource.name} at once: ${orList(bulk.actions)}. Sends POST ${bulk.path}, ${BULK_CHUNK} ids a request.`,
+      short: `Run one action on many ${resource.name}`,
+      group: 'Records',
+      options: PIPE_OPTIONS,
+      flags: PIPE_FLAGS,
+      examples: [`siren ${resource.name} list --ids | siren ${resource.name} bulk ${bulk.actions[0]} --stdin --yes`],
+      positionals: [1, 100000],
+      run: (input) => sendBulk(input, resource, bulk),
+    },
+  };
+}
+
+/** `siren <name> add <id> [ids…]`: people into a group. */
+function addSpec(resource: ResourceCommand, route: { path: string; key: string; max: number }): { name: string; spec: ResourceSpec } {
+  return {
+    name: `${resource.name} add`,
+    spec: {
+      usage: `${resource.name} add <id> [<collaborator id>…] [--stdin] [options]`,
+      summary: `Add people to one of the ${resource.name} by their ids, in one request. Sends POST ${route.path}.`,
+      short: `Add people to one of the ${resource.name}`,
+      group: 'Records',
+      options: PIPE_OPTIONS,
+      flags: PIPE_FLAGS,
+      examples: [`siren collaborators list --ids | siren ${resource.name} add 5 --stdin --yes`],
+      positionals: [1, 100000],
+      run: (input) => sendAdd(input, resource, route),
+    },
+  };
+}
+
+/** The ids typed after the command, then those read from standard input with --stdin, each a whole number. */
+async function idsOf(input: CommandInput, typed: readonly string[], words: string): Promise<number[]> {
+  const piped = input.values.stdin === true ? (await input.io.readStdin()).split(/\s+/) : [];
+  const given = [...typed, ...piped].map((id) => id.trim()).filter((id) => id !== '');
+  for (const id of given) if (!/^\d+$/.test(id)) throw new CliUsageError(`${JSON.stringify(id)} is not a record id. Give the ids Siren lists, such as 7.`);
+  if (given.length === 0) throw new CliUsageError(`Give the ids, or pipe them in with --stdin, as siren ${words.split(' ')[0]} list --ids prints them.`);
+  return [...new Set(given.map(Number))];
+}
+
+/** A yes for a change to many records: --yes, or a typed yes in a terminal. Standard input that carried ids is no terminal. */
+async function confirmMany(input: CommandInput, run: CommandContext, question: string, again: string): Promise<void> {
+  if (input.values.yes === true) return;
+  if (input.values.stdin === true || !input.io.interactive) {
+    throw new CliRefusal('Nothing was sent.', { why: 'A change to many records needs a yes, and there is no terminal to ask in.', fix: run.command(again), fixWords: 'to send it without asking' });
+  }
+  const typed = (await input.io.prompt(`${question} [y/N] `)).trim().toLowerCase();
+  if (typed !== 'y' && typed !== 'yes') throw new CliRefusal('Nothing was sent.', { why: "You didn't answer yes.", fix: run.command(again), fixWords: 'to send it without asking' });
+}
+
+/** The -d fields as a body, each read by its type. */
+function extraFields(input: CommandInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  for (const [key, value] of pairs(input)) setNested(body, key, fieldValue(value));
+  return body;
+}
+
+/** The line to run again with --yes. */
+function againLine(input: CommandInput, words: string, lead: readonly string[], typedIds: readonly string[]): string {
+  const ids = input.values.stdin === true ? ' --stdin' : typedIds.length > 0 ? ` ${typedIds.join(' ')}` : '';
+  const extra = pairs(input).map(([key, value]) => ` -d ${key}=${value}`).join('');
+  return `${words}${lead.length > 0 ? ` ${lead.join(' ')}` : ''}${ids}${extra} --yes`;
+}
+
+/** Prints the requests a --dry-run would send. */
+function printDryRun(input: CommandInput, run: CommandContext, bodies: ReadonlyArray<{ path: string; body: Record<string, unknown> }>): void {
+  if (input.values.json === true) {
+    run.print(JSON.stringify(bodies.map(({ path, body }) => ({ method: 'POST', url: urlOf(run.target.baseUrl, { method: 'POST', path, query: {}, body }), body })), null, 2));
+    return;
+  }
+  const style = styleFor(input.io, 'stdout', {});
+  for (const { path, body } of bodies) input.io.stdout(`Would send ${style.bold(`POST ${urlOf(run.target.baseUrl, { method: 'POST', path, query: {}, body })}`)}\n  ${JSON.stringify(body)}\n`);
+  input.io.stdout('Nothing was sent.\n');
+}
+
+function transportOf(input: CommandInput, run: CommandContext) {
+  return createHttpTransport({
+    accessToken: new CallbackAccessTokenSource(
+      () => run.accessToken(),
+      () => run.refresh(),
+    ),
+    httpClient: input.io.httpClient,
+    baseUrl: run.target.baseUrl,
+  });
+}
+
+/** Siren's refusal of a pipe write, as the record commands give it. */
+function pipeRefusal(error: unknown, input: CommandInput, resource: ResourceCommand, path: string, words: string): never {
+  if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
+  throw refusalOf(error, { outgoing: { method: 'POST', path, query: {}, body: undefined }, resource, words }, input);
+}
+
+async function sendBulk(input: CommandInput, resource: ResourceCommand, bulk: NonNullable<ResourceCommand['bulk']>): Promise<number> {
+  const run = contextOf(input);
+  const [action, ...typed] = input.args as [string, ...string[]];
+  const words = `${resource.name} bulk`;
+  if (!bulk.actions.includes(action)) throw new CliUsageError(`${words} takes ${orList(bulk.actions)}, and ${JSON.stringify(action)} isn't one.`);
+  const ids = await idsOf(input, typed, words);
+  const extra = extraFields(input);
+  const bodies: Array<{ path: string; body: Record<string, unknown> }> = [];
+  for (let at = 0; at < ids.length; at += BULK_CHUNK) bodies.push({ path: bulk.path, body: { action, ids: ids.slice(at, at + BULK_CHUNK), ...extra } });
+  if (input.values['dry-run'] === true) {
+    printDryRun(input, run, bodies);
+    return 0;
+  }
+  await run.signedIn();
+  const many = `${ids.length} ${ids.length === 1 ? singular(resource.name) : resource.name}`;
+  await confirmMany(input, run, `Run ${action} on ${many} in ${orgLabel(run)}?`, againLine(input, words, [action], typed));
+  const transport = transportOf(input, run);
+  const answers: unknown[] = [];
+  let changed: number | undefined = 0;
+  for (const { path, body } of bodies) {
+    try {
+      const answer = await parseJsonBody(await transport.request({ method: 'POST', path, body, retriable: false }));
+      answers.push(answer);
+      const affected = isObject(answer) && typeof answer.affected === 'number' ? answer.affected : undefined;
+      changed = changed === undefined || affected === undefined ? undefined : changed + affected;
+    } catch (error) {
+      if (answers.length > 0) input.io.stderr(`siren: ${answers.length} of ${bodies.length} requests went through before Siren refused one.\n`);
+      pipeRefusal(error, input, resource, path, words);
+    }
+  }
+  if (input.values.json === true) {
+    run.print(JSON.stringify(answers, null, 2));
+    return 0;
+  }
+  const requests = bodies.length > 1 ? `, in ${bodies.length} requests` : '';
+  run.print(`Siren ran ${action} on ${many}${requests}${changed === undefined ? '.' : `, and ${changed} changed.`}`);
+  return 0;
+}
+
+async function sendAdd(input: CommandInput, resource: ResourceCommand, route: { path: string; key: string; max: number }): Promise<number> {
+  const run = contextOf(input);
+  const [id, ...typed] = input.args as [string, ...string[]];
+  if (!/^\d+$/.test(id)) throw new CliUsageError(`${JSON.stringify(id)} is not a record id. Give the id Siren lists, such as 7.`);
+  const words = `${resource.name} add`;
+  const ids = await idsOf(input, typed, 'collaborators add');
+  if (ids.length > route.max) throw new CliUsageError(`Siren adds at most ${route.max} people a request, and ${ids.length} were given. Split them, or pipe them in parts.`);
+  const path = route.path.replace('{id}', id);
+  const body = { members: ids.map((member) => ({ [route.key]: member })), ...extraFields(input) };
+  if (input.values['dry-run'] === true) {
+    printDryRun(input, run, [{ path, body }]);
+    return 0;
+  }
+  await run.signedIn();
+  const what = `${singular(resource.name).replace(/-/g, ' ')} ${id}`;
+  await confirmMany(input, run, `Add ${ids.length} ${ids.length === 1 ? 'person' : 'people'} to ${what} in ${orgLabel(run)}?`, againLine(input, words, [id], typed));
+  let answer: unknown;
+  try {
+    answer = await parseJsonBody(await transportOf(input, run).request({ method: 'POST', path, body, retriable: false }));
+  } catch (error) {
+    pipeRefusal(error, input, resource, path, words);
+  }
+  if (input.values.json === true) {
+    run.print(JSON.stringify(answer, null, 2));
+    return 0;
+  }
+  const added = Array.isArray(answer) ? answer.length : isObject(answer) && Array.isArray(answer.data) ? answer.data.length : undefined;
+  if (added === undefined) {
+    run.print(`Added ${ids.length} ${ids.length === 1 ? 'person' : 'people'} to ${what}.`);
+    return 0;
+  }
+  const already = ids.length - added;
+  run.print(`Added ${added} ${added === 1 ? 'person' : 'people'} to ${what}.${already > 0 ? ` ${already} ${already === 1 ? 'was' : 'were'} in it already.` : ''}`);
+  return 0;
 }

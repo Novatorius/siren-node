@@ -125,7 +125,7 @@ export const LIVE_WRITES = [
 export const LIVE_SAFE_WRITES = ['notes add', 'notes edit', 'notes delete'] as const;
 
 /** A raw route call that changes a record, such as `post /programs`, or a generated record command that does, such as `programs delete 7`. */
-const RECORD_WRITE = /^(?:(?:post|put|patch|delete) |[a-z][a-z-]* (?:create|update|delete)(?: |$))/;
+const RECORD_WRITE = /^(?:(?:post|put|patch|delete) |[a-z][a-z-]* (?:create|update|delete|bulk)(?: |$)|collaborator-groups add(?: |$))/;
 
 /** True when `words`, a command and its arguments, start with a command of {@link LIVE_WRITES}, or change a record ({@link RECORD_WRITE}). */
 function changesLive(words: string): boolean {

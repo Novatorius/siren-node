@@ -55,6 +55,8 @@ describe('finding 8: --live only on a command that changes a live organization',
     expect([...LIVE_SAFE_WRITES].sort()).toEqual([...safe].sort());
     expect(commandLine({ addressFlag: '', live: true }, 'notes delete 5 --yes')).toBe('siren notes delete 5 --yes');
     expect(commandLine({ addressFlag: '', live: true }, 'programs delete 4')).toBe('siren programs delete 4 --live');
+    expect(commandLine({ addressFlag: '', live: true }, 'conversions bulk approve --stdin --yes')).toBe('siren conversions bulk approve --stdin --yes --live');
+    expect(commandLine({ addressFlag: '', live: true }, 'collaborator-groups add 5 --stdin --yes')).toBe('siren collaborator-groups add 5 --stdin --yes --live');
   });
 
   it('shows an unset url variable on a live Siren before asking anyone to sign in (review of PR 94)', async () => {
