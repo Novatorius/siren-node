@@ -235,7 +235,7 @@ test/cli-hidden-prompt.test.ts saw it in 45 of 60 runs before the fix and in non
 `DeviceSignIn` is the other, and `siren login` uses it by default in a terminal (Alex's ruling
 M105, contract/cli-signin.md in the run folder). It follows RFC 8628:
 
-- `POST /auth/cli/code` with the machine's host name. Siren answers a device code, which the tool
+- `POST /auth/cli/code` with the machine's host name, cut to the 1 to 63 letters, digits, dots, hyphens and underscores Siren takes, with any other character made a hyphen and `siren-cli` for an empty one (`machineName`). Siren answers a device code, which the tool
   keeps in memory and never prints, a short user code, the dashboard's approval page with the code
   filled in, its life and the poll interval.
 - The tool prints the user code and the page, and opens the page with the system's opener (`open`,
