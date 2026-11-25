@@ -393,7 +393,7 @@ why and fix in one sentence. `--json` output is never styled. Exit codes do not 
 
 The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts). The
 two halves of the logo slide in and grip, 39 frames 50 milliseconds apart, about 1.9 seconds. Then
-the logo floats: it lifts up to one braille row (4 dots) into a blank row above it and settles,
+the logo floats: it lifts up to one row, in half-row steps, into a blank row above it and settles,
 over a dim shadow that narrows as it rises, 20 frames more. The shadow goes when the logo
 settles, so no stray line sits above the next output. The whole run takes 2.95 seconds.
 
@@ -410,10 +410,16 @@ or who is logged in to which organization on which Siren, the three commands tha
 once logged in), and `siren --help`, and answers 0. It reads credentials.json and sends nothing.
 The signed-out card names the Siren only when it is not the default sandbox or live one. In a terminal the card takes the marks every screen has: a green ✓ and the email in bold when logged in, an amber ! when not, and "live" in amber. It names a Siren by its host, never its scheme (should-fix 9). A command that sends nothing, such as `apps init`, writes its hints for the Siren the next command would reach, so they keep `--live` after a live login (should-fix 11). The delete question names the organization, as every write question does (should-fix 12).
 
-The frames are braille, 24 characters by 14 lines, in src/cli/hook-frames.ts. They come from the
+The frames are quadrant blocks (▘ ▝ ▖ ▗ and the blocks they combine into), 24 characters by 14
+lines, in src/cli/hook-frames.ts. Each character holds 2 by 2 pixels. Blocks, not braille, because
+braille opens gaps between the rows in some terminals, as in COSMIC Terminal with Fira Mono.
+Braille dots never reach a cell's edges, Fira Mono has no braille so another font draws it, and line spacing above 1.0 widens the
+gap under every row. Block elements fill the cell, Fira Mono and most monospace fonts carry them,
+and terminals such as VTE, kitty, WezTerm, Alacritty and Windows Terminal draw them to the cell's
+edges whatever the spacing. They come from the
 website's public/logo-animated-once.svg through scripts/build-hook-frames.mjs with `--slow 1.6`,
 which steps the SVG's 1.2 second CSS animation in headless Chromium at 1.6 times as many points. The
-hover is not in the file: hook.ts lifts the last frame by whole dots. The package gains no runtime
+hover is not in the file: hook.ts lifts the last frame by half rows. The package gains no runtime
 dependency. The green is
 the dark theme's `--primary` in Siren's frontend/src/index.css, `164 100% 50%`, which that file
 names the exact logo color #00FFB9. The logo fills both halves with it. The tool draws it in

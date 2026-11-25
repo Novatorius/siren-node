@@ -22,7 +22,7 @@ const CTRL_C = '\u0003';
 const INDENT = '  ';
 
 /** Why the hook does not play. Each one is checked before anything is drawn or waited on. */
-export type HookSkip = 'not-a-terminal' | 'ci' | 'no-color' | 'dumb-terminal' | 'quiet' | 'json' | 'too-small' | 'no-braille';
+export type HookSkip = 'not-a-terminal' | 'ci' | 'no-color' | 'dumb-terminal' | 'quiet' | 'json' | 'too-small' | 'old-console';
 
 /** The flags on the command line that silence the hook. */
 export interface HookFlags {
@@ -36,7 +36,7 @@ export interface HookFlags {
  * `false` or `0`), under NO_COLOR (any value but empty, as no-color.org
  * says), when TERM is `dumb`, with `--quiet` or `--json`, in a terminal too
  * small to hold it, or in a Windows console other than Windows Terminal,
- * since the old console draws no braille.
+ * since the old console is not known to draw quadrant blocks.
  */
 export function hookSkip(screen: CliScreen | undefined, env: Readonly<Record<string, string | undefined>>, flags: HookFlags): HookSkip | null {
   if (screen === undefined || screen.size === null) return 'not-a-terminal';
@@ -46,7 +46,7 @@ export function hookSkip(screen: CliScreen | undefined, env: Readonly<Record<str
   if (flags.quiet) return 'quiet';
   if (flags.json) return 'json';
   if (screen.size.columns < HOOK_WIDTH + INDENT.length * 2 || screen.size.rows < HOOK_ROWS + 4) return 'too-small';
-  if (screen.platform === 'win32' && !env.WT_SESSION) return 'no-braille';
+  if (screen.platform === 'win32' && !env.WT_SESSION) return 'old-console';
   return null;
 }
 
@@ -54,11 +54,11 @@ export function hookSkip(screen: CliScreen | undefined, env: Readonly<Record<str
 export type HookEnd = 'played' | 'skipped' | 'interrupted';
 
 /**
- * How far the logo floats above its rest after the grip, in braille dots,
- * one entry a frame, {@link HOOK_FRAME_MS} apart: up a cell, down, a smaller
- * bob, and still. A braille cell is four dots tall, so 4 is one row.
+ * How far the logo floats above its rest after the grip, in half rows, one
+ * entry a frame, {@link HOOK_FRAME_MS} apart: up a row, down, a smaller bob,
+ * and still. A quadrant block is two pixels tall, so 2 is one row.
  */
-export const HOOK_HOVER_LIFTS: readonly number[] = [1, 2, 3, 3, 4, 4, 4, 3, 3, 2, 1, 0, 0, 1, 1, 2, 1, 1, 0, 0];
+export const HOOK_HOVER_LIFTS: readonly number[] = [1, 1, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0];
 
 /** The blank row above the logo that it floats into. */
 const HEADROOM = 1;
@@ -69,8 +69,8 @@ export const HOOK_ROWS = HEADROOM + (HOOK_FRAMES[0]?.length ?? 0) + 1;
 /** Columns between the logo and the text beside it. */
 const GAP = '    ';
 
-/** The shadow's character, a low line of braille dots, and its widths at rest and at the top of a lift. */
-const SHADOW = '\u2824';
+/** The shadow's character, a thin block along the bottom of the cell, and its widths at rest and at the top of a lift. */
+const SHADOW = '\u2581';
 const SHADOW_REST = 14;
 const SHADOW_NARROWEST = 8;
 
@@ -78,35 +78,35 @@ const SHADOW_NARROWEST = 8;
 const SHADOW_COLOR = { truecolor: '\u001b[38;2;0;110;80m', ansi256: '\u001b[38;5;23m' } as const;
 const DIM = '\u001b[2m';
 
-/** The braille dot bits: column 0 rows 0 to 3, then column 1 rows 0 to 3. */
-const DOT_BITS = [
-  [0x01, 0x02, 0x04, 0x40],
-  [0x08, 0x10, 0x20, 0x80],
-] as const;
+/**
+ * The quadrant block for each 4-bit pattern: top left 1, top right 2,
+ * bottom left 4, bottom right 8. The frames hold only these and spaces.
+ */
+const QUADRANTS = [' ', '\u2598', '\u259d', '\u2580', '\u2596', '\u258c', '\u259e', '\u259b', '\u2597', '\u259a', '\u2590', '\u259c', '\u2584', '\u2599', '\u259f', '\u2588'] as const;
+const QUADRANT_BITS = new Map<string, number>(QUADRANTS.map((char, bits) => [char, bits]));
 
 /**
- * A frame's rows with the headroom row above, the logo lifted `lift` dots
- * into it, each row exactly {@link HOOK_WIDTH} characters. The frames hold
- * braille, so a lift of 1 to 3 moves the logo by part of a row.
+ * A frame's rows with the headroom row above, the logo lifted `lift` half
+ * rows into it, each row exactly {@link HOOK_WIDTH} characters. Each
+ * character holds 2 by 2 pixels, so a lift of 1 moves the logo half a row.
  */
 export function liftFrame(frame: readonly string[], lift: number): string[] {
-  const height = (frame.length + HEADROOM) * 4;
+  const height = (frame.length + HEADROOM) * 2;
   const width = HOOK_WIDTH * 2;
-  const dots: boolean[][] = Array.from({ length: height }, () => new Array<boolean>(width).fill(false));
+  const pixels: boolean[][] = Array.from({ length: height }, () => new Array<boolean>(width).fill(false));
   frame.forEach((line, row) => {
     [...line].forEach((char, col) => {
-      const code = char.codePointAt(0)! - 0x2800;
-      if (code <= 0 || code > 0xff) return;
-      for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 4; dy++) if (code & DOT_BITS[dx]![dy]!) dots[(row + HEADROOM) * 4 + dy - lift]![col * 2 + dx] = true;
+      const bits = QUADRANT_BITS.get(char) ?? 0;
+      for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 2; dy++) if (bits & (1 << (dy * 2 + dx))) pixels[(row + HEADROOM) * 2 + dy - lift]![col * 2 + dx] = true;
     });
   });
   const rows: string[] = [];
-  for (let row = 0; row < height / 4; row++) {
+  for (let row = 0; row < height / 2; row++) {
     let line = '';
     for (let col = 0; col < HOOK_WIDTH; col++) {
-      let code = 0;
-      for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 4; dy++) if (dots[row * 4 + dy]?.[col * 2 + dx]) code |= DOT_BITS[dx]![dy]!;
-      line += code === 0 ? ' ' : String.fromCharCode(0x2800 + code);
+      let bits = 0;
+      for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 2; dy++) if (pixels[row * 2 + dy]?.[col * 2 + dx]) bits |= 1 << (dy * 2 + dx);
+      line += QUADRANTS[bits];
     }
     rows.push(line);
   }
@@ -136,7 +136,7 @@ export function hookSequence(): LogoFrame[] {
 
 /** The shadow narrows as the logo rises. */
 function shadowWidth(lift: number): number {
-  return Math.round(SHADOW_REST - ((SHADOW_REST - SHADOW_NARROWEST) * lift) / 4);
+  return Math.round(SHADOW_REST - ((SHADOW_REST - SHADOW_NARROWEST) * lift) / 2);
 }
 
 /**

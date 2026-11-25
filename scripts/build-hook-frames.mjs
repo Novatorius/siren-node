@@ -7,7 +7,7 @@
  *
  *   node scripts/build-hook-frames.mjs \
  *     --svg ../siren-website/public/logo-animated-once.svg \
- *     --playwright /path/to/a/checkout/with/playwright [--mode braille|half] [--cols 24] [--slow 1.6]
+ *     --playwright /path/to/a/checkout/with/playwright [--mode quad|half|braille] [--cols 24] [--slow 1.6]
  *
  * The source is public/logo-animated-once.svg in the website repository
  * (Novatorius/siren-website-headless). The script loads it in headless
@@ -24,9 +24,19 @@
  * The hover after the grip is not in the SVG. hook.ts draws it by lifting
  * the last frame.
  *
- * In braille mode each character holds 2 by 4 dots. In half mode each
- * character holds 1 by 2 pixels, drawn with ▀ ▄ █. A terminal cell is about
- * twice as tall as it is wide, so both keep the logo's shape.
+ * In quad mode, the one the CLI uses, each character holds 2 by 2 pixels,
+ * drawn with the quadrant blocks ▘ ▝ ▖ ▗ ▀ ▄ ▌ ▐ ▚ ▞ ▛ ▜ ▙ ▟ █. Each pixel is
+ * half a cell wide and half a cell tall, so it is sampled from a block twice
+ * as tall as it is wide. In half mode each character holds 1 by 2 pixels,
+ * drawn with ▀ ▄ █. In braille mode each holds 2 by 4 dots. A terminal cell
+ * is about twice as tall as it is wide, so all three keep the logo's shape.
+ *
+ * The CLI draws quadrant blocks, not braille, because block elements fill
+ * the cell. Braille dots never reach a cell's edges, many fonts (Fira Mono
+ * among them) have no braille, so another font draws it, and a terminal
+ * with line spacing above 1.0 opens a visible gap between every row.
+ * Terminals such as VTE, kitty, WezTerm, Alacritty and Windows Terminal draw
+ * block elements themselves to fill the whole cell, whatever the spacing.
  */
 import { writeFileSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
@@ -39,7 +49,7 @@ const { values } = parseArgs({
   options: {
     svg: { type: 'string' },
     playwright: { type: 'string' },
-    mode: { type: 'string', default: 'braille' },
+    mode: { type: 'string', default: 'quad' },
     cols: { type: 'string', default: '24' },
     fps: { type: 'string', default: '20' },
     slow: { type: 'string', default: '1' },
@@ -52,7 +62,7 @@ if (!values.svg || !values.playwright) {
   process.exit(2);
 }
 const mode = values.mode;
-if (mode !== 'braille' && mode !== 'half') throw new Error('--mode is braille or half');
+if (mode !== 'braille' && mode !== 'half' && mode !== 'quad') throw new Error('--mode is quad, half or braille');
 const cols = Number(values.cols);
 const fps = Number(values.fps);
 const slow = Number(values.slow);
@@ -66,18 +76,23 @@ if (!vbW) throw new Error('The SVG has no viewBox.');
 const durations = [...svg.matchAll(/animation:\s*\w+\s+([\d.]+)s/g)].map((m) => Number(m[1]));
 const seconds = Math.max(...durations);
 
-// Dots across and down. Braille holds 2 by 4 dots in a cell, half blocks 1 by 2.
-const cellW = mode === 'braille' ? 2 : 1;
+// Dots across and down. Braille holds 2 by 4 dots in a cell, quadrants 2 by 2, half blocks 1 by 2.
+// A quadrant pixel is twice as tall as it is wide, so `tall` samples it from a block of SS by 2 SS.
+const cellW = mode === 'half' ? 1 : 2;
 const cellH = mode === 'braille' ? 4 : 2;
+const tall = mode === 'quad' ? 2 : 1;
 const dotsW = cols * cellW;
-const rows = Math.ceil((dotsW * Number(vbH)) / Number(vbW) / cellH);
+const rows = Math.ceil((dotsW * Number(vbH)) / Number(vbW) / cellH / tall);
 const dotsH = rows * cellH;
 const SS = 4;
 
+/** The quadrant block for each 4-bit pattern: top left 1, top right 2, bottom left 4, bottom right 8. */
+const QUADRANTS = [' ', '▘', '▝', '▀', '▖', '▌', '▞', '▛', '▗', '▚', '▐', '▜', '▄', '▙', '▟', '█'];
+
 const { chromium } = createRequire(join(resolve(values.playwright), 'package.json'))('playwright');
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: dotsW * SS, height: dotsH * SS }, deviceScaleFactor: 1 });
-const sized = svg.replace(/<svg width="[\d.]+" height="[\d.]+"/, `<svg width="${dotsW * SS}" height="${dotsH * SS}" preserveAspectRatio="xMidYMid meet"`);
+const page = await browser.newPage({ viewport: { width: dotsW * SS, height: dotsH * SS * tall }, deviceScaleFactor: 1 });
+const sized = svg.replace(/<svg width="[\d.]+" height="[\d.]+"/, `<svg width="${dotsW * SS}" height="${dotsH * SS * tall}" preserveAspectRatio="xMidYMid meet"`);
 await page.setContent(`<!doctype html><html><body style="margin:0;background:transparent">${sized}</body></html>`);
 
 const count = Math.round(seconds * fps * slow) + 1;
@@ -103,8 +118,8 @@ for (let i = 0; i < count; i++) {
   }, png.toString('base64'));
   const on = (x, y) => {
     let sum = 0;
-    for (let dy = 0; dy < SS; dy++) for (let dx = 0; dx < SS; dx++) sum += alpha.a[(y * SS + dy) * alpha.w + x * SS + dx];
-    return sum / (SS * SS * 255) >= 0.5;
+    for (let dy = 0; dy < SS * tall; dy++) for (let dx = 0; dx < SS; dx++) sum += alpha.a[(y * SS * tall + dy) * alpha.w + x * SS + dx];
+    return sum / (SS * SS * tall * 255) >= 0.5;
   };
   frames.push(toText(on));
 }
@@ -115,7 +130,11 @@ function toText(on) {
   for (let r = 0; r < rows; r++) {
     let line = '';
     for (let c = 0; c < cols; c++) {
-      if (mode === 'half') {
+      if (mode === 'quad') {
+        // Bits: top left 1, top right 2, bottom left 4, bottom right 8.
+        const bits = (on(c * 2, r * 2) ? 1 : 0) | (on(c * 2 + 1, r * 2) ? 2 : 0) | (on(c * 2, r * 2 + 1) ? 4 : 0) | (on(c * 2 + 1, r * 2 + 1) ? 8 : 0);
+        line += QUADRANTS[bits];
+      } else if (mode === 'half') {
         const top = on(c, r * 2);
         const bottom = on(c, r * 2 + 1);
         line += top && bottom ? '█' : top ? '▀' : bottom ? '▄' : ' ';

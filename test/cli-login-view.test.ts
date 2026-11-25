@@ -46,7 +46,7 @@ describe('login screen: while it waits', () => {
     expect(first).toContain(`Code   ${USER_CODE}`);
     expect(first).toContain(`Link   ${LINK}`);
     expect(first).toContain('Waiting for approval');
-    expect(first.split('\n').find((line) => line.includes(USER_CODE))).toMatch(/^ {2}\S*[⠀-⣿ ]{20,} {4}Code/);
+    expect(first.split('\n').find((line) => line.includes(USER_CODE))).toMatch(/^ {2}\S*[\u2580-\u259f ]{20,} {4}Code/);
   });
 
   it('floats the halves apart and turns the spinner while it waits, and never shows the gripped logo before approval', async () => {
