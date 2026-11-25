@@ -1343,6 +1343,15 @@ export interface AppRequestListParams {
   limit?: number;
   /** Keeps the requests older than this one, a request id, to read the next page. Not with `needs_attention`. */
   before?: string;
+  /**
+   * Finds requests by the start of their id: `apr_` and 4 to 32 lowercase
+   * hex characters, as the command-line tool prints an id short. Siren
+   * answers at most two of the organization's matches, newest first, which
+   * tells one match from several. It takes no other filter and no paging.
+   * Siren reads it from feat/apps 76d5bbdf83. An older Siren ignores it and
+   * answers its latest requests, so check that each one starts with it.
+   */
+  idPrefix?: string;
 }
 
 /**

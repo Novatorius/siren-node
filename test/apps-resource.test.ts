@@ -228,6 +228,28 @@ describe('apps-cli: apps.requests', () => {
     }
   });
 
+  it('finds requests by the start of their id with idPrefix, which ListAppRequests reads at feat/apps 76d5bbdf83', async () => {
+    const { http, apps: resource } = apps([reply(200, { requests: [row], total: 1 })]);
+    expect(await resource.requests.list({ idPrefix: 'apr_9f2c' })).toEqual([row]);
+    expect(queryOf(http.requests[0])).toEqual({ idPrefix: 'apr_9f2c' });
+  });
+
+  it('refuses an idPrefix that is not apr_ and 4 to 32 hex characters, and one beside another filter, which Siren would ignore', async () => {
+    for (const params of [
+      { idPrefix: 'apr_9f2' },
+      { idPrefix: '9f2c4e1a' },
+      { idPrefix: `apr_${'a'.repeat(33)}` },
+      { idPrefix: 'apr_9F2C' },
+      { idPrefix: 'apr_9f2c', limit: 10 },
+      { idPrefix: 'apr_9f2c', before: REQUEST },
+      { idPrefix: 'apr_9f2c', status: 'sent' },
+    ]) {
+      const { http, apps: resource } = apps([reply(200, { requests: [] })]);
+      expect(await refused(() => resource.requests.list(params as never)), JSON.stringify(params)).toBeInstanceOf(SirenError);
+      expect(http.requests).toHaveLength(0);
+    }
+  });
+
   it('resends once, and refuses a bad id before sending', async () => {
     const { http, apps: resource } = apps([reply(200, { ...row, sendCount: 2 })]);
     expect((await resource.requests.resend(REQUEST)).sendCount).toBe(2);

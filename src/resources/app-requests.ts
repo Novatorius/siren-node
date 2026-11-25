@@ -76,7 +76,16 @@ export async function listAppRequests(
   if (status !== undefined && !REQUEST_STATUSES.includes(status as string)) {
     throw new SirenError(`apps.requests.list() takes a status of ${REQUEST_STATUSES.join(', ')}.`);
   }
-  const { limit, before } = params as { limit?: unknown; before?: unknown };
+  const { limit, before, idPrefix } = params as { limit?: unknown; before?: unknown; idPrefix?: unknown };
+  if (idPrefix !== undefined) {
+    if (typeof idPrefix !== 'string' || !/^apr_[0-9a-f]{4,32}$/.test(idPrefix)) {
+      throw new SirenError(`apps.requests.list() takes an idPrefix of apr_ and 4 to 32 lowercase hex characters, and got ${JSON.stringify(idPrefix)}.`);
+    }
+    if (Object.keys(params).length > 1) {
+      // ListAppRequests answers idPrefix alone, with no paging, and ignores every other filter.
+      throw new SirenError('apps.requests.list() takes idPrefix alone. Siren ignores status, limit and before beside it, and answers at most two matches.');
+    }
+  }
   if (limit !== undefined && !(Number.isInteger(limit) && (limit as number) >= 1 && (limit as number) <= 100)) {
     throw new SirenError(`apps.requests.list() takes a limit of a whole number from 1 to 100, and got ${String(limit)}.`);
   }
@@ -86,6 +95,7 @@ export async function listAppRequests(
     throw new SirenError('apps.requests.list() pages the plain list only. Siren answers needs_attention whole, so leave out limit and before.');
   }
   const query: Record<string, string> = {
+    ...(idPrefix === undefined ? {} : { idPrefix: idPrefix as string }),
     ...(limit === undefined ? {} : { limit: String(limit) }),
     ...(before === undefined ? {} : { before: before as string }),
     ...(status === undefined ? {} : { status: status as string }),

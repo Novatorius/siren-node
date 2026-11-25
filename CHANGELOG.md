@@ -131,6 +131,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apps.requests.list()` takes `limit` (1 to 100) and `before` (a request id) to page through every
   request, as `GET /apps/requests` now reads them. It refuses either one beside `needs_attention`,
   whose list Siren answers whole.
+- `apps.requests.list({ idPrefix })` finds requests by the start of their id, `apr_` and 4 to 32
+  hex characters, as Siren reads it from feat/apps 76d5bbdf83: at most two matches, newest
+  first. It refuses any other filter beside it, since Siren ignores them.
 
 - `new Siren()` reads `SIREN_BASE_URL` as its default base URL, the way it reads `SIREN_API_KEY`,
   and a `baseUrl` passed in code wins. `siren apps apply` writes the variable beside the key, so a

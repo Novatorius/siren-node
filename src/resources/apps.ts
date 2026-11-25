@@ -57,8 +57,8 @@ export const DEFAULT_APP_REQUEST_TOLERANCE_SECONDS = 300;
  * takes the app's own API key, or an admin's session to answer by hand.
  */
 export class AppRequestsResource {
-  /** The filters `list()` sends, the ones `GET /apps/requests` reads (ListAppRequests.php at feat/apps 0383186437). */
-  static readonly LIST_FILTERS = ['status', 'limit', 'before'] as const;
+  /** The filters `list()` sends, the ones `GET /apps/requests` reads (ListAppRequests.php at feat/apps 76d5bbdf83). */
+  static readonly LIST_FILTERS = ['status', 'limit', 'before', 'idPrefix'] as const;
 
   constructor(private readonly http: HttpTransport) {}
 

@@ -3182,18 +3182,32 @@ paths:
       operationId: listAppRequests
       summary: List the requests Siren sent the apps
       description: |
-        The organization's latest requests, at most 50, newest first. A
-        signed-in admin only.
+        The organization's latest requests, 50 or `limit`, newest first, or
+        the ones that start with `idPrefix`. A signed-in admin only.
       security:
         - dashboardSession: []
       parameters:
         - name: status
           in: query
           description: Only the requests in this status.
-          schema: { type: string, enum: [pending, sent, delivered, answered, applied, needs_attention, dropped] }
+          schema: { type: string, enum: [pending, sent, delivered, answered, applying, applied, needs_attention, dropped] }
+        - name: limit
+          in: query
+          description: How many requests to answer. Not with needs_attention.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: before
+          in: query
+          description: Only the requests older than this one, to read the next page. Not with needs_attention.
+          schema: { type: string, pattern: '^apr_[0-9a-f]{32}$' }
+        - name: idPrefix
+          in: query
+          description: |
+            The requests whose id starts with this, at most two, newest first,
+            with `total`. Siren ignores every other parameter beside it.
+          schema: { type: string, pattern: '^apr_[0-9a-f]{4,32}$' }
       responses:
         '200':
-          description: The requests.
+          description: The requests, and with idPrefix how many match in all.
           content:
             application/json:
               schema:
@@ -3202,8 +3216,11 @@ paths:
                 properties:
                   requests:
                     type: array
-                    maxItems: 50
+                    maxItems: 100
                     items: { $ref: '#/components/schemas/AppRequestRecord' }
+                  total:
+                    type: integer
+                    description: With idPrefix only, how many requests match in all.
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
