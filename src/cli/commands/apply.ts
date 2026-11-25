@@ -341,7 +341,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
         { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
       ]
     : [];
-  run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${session.orgName}`, rows, next, tips }).replace(/\n$/, ''));
+  run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${clean(session.orgName)}`, rows, next, tips }).replace(/\n$/, ''));
   return 0;
 }
 
