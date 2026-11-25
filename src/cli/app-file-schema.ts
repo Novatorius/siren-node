@@ -132,7 +132,8 @@ export function appFileSchema(): Schema {
       maxProperties: 1,
       propertyNames: { ...KEY_NAME, not: { enum: [...RESERVED_APP_KEYS] } },
       additionalProperties: app(),
-      description: 'One app, under its app key.',
+      description:
+        "One app under its app key. A Siren recipe maps each key to its record, so apps is a map. It holds one app, since the env file beside siren.app.json keeps that one app's key.",
     },
   };
   return {

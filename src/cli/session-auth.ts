@@ -514,7 +514,7 @@ export class PasswordSignIn implements SignInMethod {
   async signIn(auth: SessionAuthClient, io: CliIo, request: { email?: string; passwordFromStdin: boolean; orgId?: number }): Promise<LoginResult> {
     const email = request.email ?? (await askLine(io, 'Email: ', '--email'));
     const password = await readPassword(io, request.passwordFromStdin);
-    if (email.trim() === '') throw new CliRefusal('Siren needs an email address to sign in.');
+    if (email.trim() === '') throw new CliRefusal('No email given.', { why: 'Siren needs an email address to log you in.', fix: 'siren login --password --email you@example.com' });
     return auth.login(email.trim(), password, request.orgId);
   }
 }
@@ -535,7 +535,12 @@ export async function readPassword(io: CliIo, fromStdin: boolean): Promise<strin
   if (fromStdin) password = (await io.readStdin()).replace(/\r?\n$/, '');
   else if (io.interactive) password = await io.promptSecret('Password: ');
   else throw new CliUsageError('Pass --password-stdin and send the password on standard input, since there is no terminal to ask in.');
-  if (password === '') throw new CliRefusal('Siren needs a password, and none was given.');
+  if (password === '') {
+    throw new CliRefusal('No password given.', {
+      why: fromStdin ? '--password-stdin read an empty line, so nothing was sent.' : 'The password was empty, so nothing was sent.',
+      fixText: fromStdin ? 'Send the password on standard input, as in: echo "$PASSWORD" | siren login --password-stdin' : 'Run siren login --password again and type it.',
+    });
+  }
   return password;
 }
 
@@ -640,20 +645,20 @@ export class DeviceSignIn implements SignInMethod {
   /** The one line a poll that stops gets. Any other error is answered as it is. */
   private refusal(error: unknown): unknown {
     const code = error instanceof SirenError ? error.code : undefined;
-    if (code === 'access_denied') return new CliRefusal('The login was denied in the browser.', { why: 'Nothing was kept.' });
+    if (code === 'access_denied') return new CliRefusal('The login was denied in the browser.', { why: 'Nothing was kept.', fix: this.login, fixWords: 'to try again' });
     if (code === 'expired_token') return this.expired();
-    if (code === 'invalid_grant') return new CliRefusal('Siren no longer knows this code.', { fix: this.login, fixWords: 'again' });
+    if (code === 'invalid_grant') return new CliRefusal('Siren no longer knows this code.', { why: 'It was used or replaced, so nothing was kept.', fix: this.login, fixWords: 'again' });
     return error;
   }
 
   private expired(): CliRefusal {
-    return new CliRefusal('The code expired before anyone approved it.', { fix: this.login, fixWords: 'again' });
+    return new CliRefusal('The code expired before anyone approved it.', { why: 'A code lasts a few minutes, so nothing was kept.', fix: this.login, fixWords: 'again' });
   }
 }
 
 /** The refusal a login gets when the person pressed Ctrl-C while it waited. */
 function stopped(): CliRefusal {
-  return new CliRefusal('Stopped waiting for approval, so nothing was kept.');
+  return new CliRefusal('Stopped waiting for approval.', { why: 'You pressed Ctrl-C, so nothing was kept.', fixText: 'Run siren login again when you are ready.' });
 }
 
 /** The longest the tool waits for an approval, whatever life Siren names for the code. */
@@ -676,6 +681,7 @@ export function pageProblem(page: string, apiBase: string): CliRefusal | undefin
   if (pageUrl.protocol === 'http:' && !isThisMachine(pageUrl.hostname)) {
     return new CliRefusal(`Siren sent an approval page at ${pageUrl.origin}, which is not https.`, {
       why: 'The tool opens a plain http page only on this machine, so it opened nothing and kept nothing.',
+      fixText: "Check the Siren address you logged in to, or ask that Siren's owner.",
     });
   }
   const sameHost = pageUrl.hostname === api.hostname;
@@ -683,6 +689,7 @@ export function pageProblem(page: string, apiBase: string): CliRefusal | undefin
   if (sameHost || cloud) return undefined;
   return new CliRefusal(`Siren at ${api.host} sent an approval page on ${pageUrl.host}.`, {
     why: `The tool opens a page only on ${api.host} itself${isCloudHost(api.hostname) ? ` or another ${CLOUD_DOMAIN} host` : ''}, so it opened nothing and kept nothing.`,
+    fixText: "Check the Siren address you logged in to, or ask that Siren's owner.",
   });
 }
 

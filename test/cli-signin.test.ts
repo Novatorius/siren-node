@@ -94,9 +94,9 @@ describe('cli sign-in: login approves a code in the browser', () => {
   });
 
   it.each([
-    ['access_denied', 'The login was denied in the browser. Nothing was kept.'],
-    ['expired_token', 'The code expired before anyone approved it. Run siren login again.'],
-    ['invalid_grant', 'Siren no longer knows this code. Run siren login again.'],
+    ['access_denied', 'The login was denied in the browser. Nothing was kept. Run siren login to try again.'],
+    ['expired_token', 'The code expired before anyone approved it. A code lasts a few minutes, so nothing was kept. Run siren login again.'],
+    ['invalid_grant', 'Siren no longer knows this code. It was used or replaced, so nothing was kept. Run siren login again.'],
   ])('stops on %s with one line, and keeps nothing', async (code, line) => {
     const h = harness([Device.code(), Device.refused(code)], { interactive: true });
     expect(await h.run(['login'])).toBe(1);

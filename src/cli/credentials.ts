@@ -134,7 +134,11 @@ export class CredentialStore {
       if (POSIX) {
         const mode = (await stat(this.path)).mode;
         if ((mode & 0o077) !== 0) {
-          throw new CliRefusal(`${this.path} can be read by other users of this machine. Run chmod 600 ${this.path}, then try again.`);
+          throw new CliRefusal('Your session file is readable by other users of this machine.', {
+            why: `It holds your session, so the tool won't use it: ${this.path}`,
+            fix: `chmod 600 ${this.path}`,
+            fixWords: ', then try again',
+          });
         }
       }
       text = await readFile(this.path, 'utf8');
@@ -150,7 +154,10 @@ export class CredentialStore {
       parsed = undefined;
     }
     if (!isCredentialsFile(parsed)) {
-      throw new CliRefusal(`${this.path} is not a Siren credentials file. Move it out of the way, then sign in again.`);
+      throw new CliRefusal("The session file isn't one the tool wrote.", {
+        why: `The tool can't read ${this.path}, so it sent nothing.`,
+        fixText: 'Move it out of the way, then run siren login.',
+      });
     }
     const sessions = Object.create(null) as Record<string, StoredSession>;
     for (const [base, session] of Object.entries(parsed.sessions)) sessions[base] = session;

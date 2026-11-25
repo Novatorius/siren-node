@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseAppFile } from '../src/cli/app-file';
+import { RECIPE_NOTE, parseAppFile } from '../src/cli/app-file';
 import { COMMANDS } from '../src/cli/run';
 import { LIVE_BASE_URL, resolveTarget } from '../src/cli/targets';
 import { SANDBOX_BASE_URL } from '../src/http';
@@ -41,14 +41,13 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     expect(await h.run(['orgs', '--sandbox'])).toBe(1);
     // Alex after the demo: "Not logged in." in plain words, the API address only where it helps.
     expect(h.err()).toContain('siren: Not logged in.');
-    expect(h.err()).toContain(`You are logged in to Acme on ${UAT}.`);
-    expect(h.err()).toContain(`--base-url ${UAT}`);
+    expect(h.err()).toContain("You're logged in to acme on uat.example.com, which --base-url uat.example.com --live uses.");
 
     const other = harness([], { env: { SIREN_BASE_URL: 'https://other.example.com/siren/v1' } });
     other.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
     expect(await other.run(['whoami'])).toBe(1);
     expect(other.err()).toContain('siren: Not logged in.');
-    expect(other.err()).toContain('\nSiren: other.example.com\n');
+    expect(other.err()).toContain('The tool keeps no session for other.example.com.');
   });
 
   it('reads a live organization without --live, and still asks for --live before a write', async () => {
@@ -58,7 +57,7 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     expect(h.out()).toContain(APP_KEY);
 
     expect(await h.run(['apps', 'off', APP_KEY])).toBe(1);
-    expect(h.err()).toContain(`${UAT} is a live Siren. Add --live to change a live organization.`);
+    expect(h.err()).toContain(`uat.example.com is a live Siren. A change to a live organization needs --live, so none happens by accident. Run siren apps off ${APP_KEY} --live.`);
   });
 
   it('forgets the remembered Siren when you sign out of it', async () => {
@@ -88,7 +87,7 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
   it('siren whoami exits 1 when signed out', async () => {
     const h = harness([]);
     expect(await h.run(['whoami'])).toBe(1);
-    expect(h.err()).toBe('siren: Not logged in. Run siren login to log in.\n');
+    expect(h.err()).toBe('siren: Not logged in. The tool keeps no session for sandbox.sirenaffiliates.com. Run siren login to log in.\n');
   });
 });
 
@@ -204,7 +203,8 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     const file = JSON.parse(h.file('siren.app.json')) as Record<string, any>;
     expect(file.$schema).toMatch(/^https:\/\/unpkg\.com\/@novatorius\/siren@[\d.]+\/siren\.app\.schema\.json$/);
     expect(file.name).toBeUndefined();
-    expect(file.description).toBeUndefined();
+    // Pass 2, finding 4: the top description says the file is a Siren recipe and names what sends it.
+    expect(file.description).toBe(RECIPE_NOTE);
     const features = Object.values(file.apps[APP_KEY].features) as Array<{ kind: string }>;
     expect(features.map((feature) => feature.kind)).toEqual(['postConversionAction']);
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);
@@ -304,7 +304,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
   it('says sign in to, not change, when login meets a live Siren without --live', async () => {
     const h = harness([], { edition: 'production', stdin: PASSWORD });
     expect(await h.run(['login', '--base-url', UAT, '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain(`${UAT} is a live Siren. Add --live to log in to a live organization.`);
+    expect(h.err()).toContain(`uat.example.com is a live Siren. Logging in to a live organization needs --live, so none happens by accident. Run siren login --base-url ${UAT} --live.`);
     const help = harness([]);
     await help.run(['login', '--help']);
     expect(help.out()).not.toMatch(/--live\s+Change a live organization/);

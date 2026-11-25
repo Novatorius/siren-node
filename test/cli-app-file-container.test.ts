@@ -53,15 +53,10 @@ describe('apps-sdk-container: the app file', () => {
     );
   });
 
-  it('lists each kind once when a kind is unknown, and calls them features', () => {
+  it('names where the kinds are listed when a kind is unknown and none is close, and calls them features', () => {
     const parsed = parseAppFile(file({ name: 'Pay', url: 'https://acme.example', features: { pay: { kind: 'other', name: 'Pay' } } }), {});
-    expect(parsed.problems[0]?.message).toBe(
-      'apps.acme-reports.features.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ' +
-        'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), Transaction filter (transactionFilter), ' +
-        'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
-        'Collaborator group structure (collaboratorGroupStructure).',
-    );
+    // CLI pass 2, finding 7: the nearest kind when one is close, and where the kinds are listed when none is.
+    expect(parsed.problems[0]?.message).toBe('apps.acme-reports.features.pay.kind other is not a kind. The schema lists every kind, and an editor completes them.');
   });
 
   it("refuses the app keys Siren keeps for its own routes", () => {

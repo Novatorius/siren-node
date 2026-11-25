@@ -7,6 +7,8 @@ import type { CliIo } from '../io';
 import { clean, styleFor } from '../style';
 import type { NextStep, Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
+import { idLabelFor, whole } from './requests';
+import type { IdLabel } from './requests';
 
 /*
  * What `siren trigger`, `trigger ask`, `fixtures` and `simulate` share: the
@@ -184,9 +186,9 @@ export async function confirmLiveAsk(run: CommandContext, io: CliIo, client: Tes
   // On standard error, so `--json` output stays one JSON document.
   io.stderr(`${app} › ${feature} receives a sample request marked test in ${orgLabel(run)}.\n`);
   if (yes) return;
-  if (!io.interactive) throw new CliRefusal(`Nothing was sent. Run ${run.command(again)} to send it without asking.`);
+  if (!io.interactive) throw new CliRefusal('Nothing was sent.', { why: 'A sample request needs a yes, and there is no terminal to ask in.', fix: run.command(again), fixWords: 'to send it without asking' });
   const typed = (await io.prompt('Send it? [y/N] ')).trim().toLowerCase();
-  if (typed !== 'y' && typed !== 'yes') throw new CliRefusal('Nothing was sent.');
+  if (typed !== 'y' && typed !== 'yes') throw new CliRefusal('Nothing was sent.', { why: "You didn't answer yes.", fix: run.command(again), fixWords: 'to send it without asking' });
 }
 
 /** The flags `trigger`, `fixtures` and `simulate` read into a body. */
@@ -301,6 +303,15 @@ export function waitName(wait: ActivityWait): string {
 }
 
 /** The waits still open. */
+/**
+ * How a report prints the request id its hint names: short when Siren finds
+ * requests by their start (CLI pass 3), from one idPrefix call, and whole
+ * otherwise. No request id costs no call.
+ */
+export async function requestLabel(run: Pick<CommandContext, 'siren'>, id: string | undefined): Promise<IdLabel> {
+  return id === undefined ? whole : idLabelFor(run, id).catch(() => whole);
+}
+
 export function openWaits(result: ActivityResult): ActivityWait[] {
   return result.waits.filter((wait) => isOpen(wait.status));
 }
@@ -375,20 +386,20 @@ export function orgLabel(run: CommandContext): string {
 }
 
 /** What to run after a result: the ask a reward waits on, a refund of a sale, or a sale on a visit. */
-export function activityNext(style: Style, input: Pick<CommandInput, 'command'>, raw: ActivityResult): NextStep[] {
+export function activityNext(style: Style, input: Pick<CommandInput, 'command'>, raw: ActivityResult, label: IdLabel = whole): NextStep[] {
   const result = cleaned(raw);
   const next: NextStep[] = [];
   const open = openWaits(result);
-  if (open.length > 0) next.push({ text: style.command(input.command(`apps requests ${open[0]!.requestKey}`)), aside: 'the ask a reward waits on' });
+  if (open.length > 0) next.push({ text: style.command(input.command(`apps requests ${label(open[0]!.requestKey)}`)), aside: 'the ask a reward waits on' });
   if (result.event === 'sale' && result.transactionId !== null) next.push({ text: style.command(input.command(`trigger refund --transaction ${result.transactionId}`)) });
   if (result.event === 'visit' && result.opportunityId !== null) next.push({ text: style.command(input.command(`trigger sale --opportunity ${result.opportunityId}`)) });
   return next;
 }
 
 /** The report `siren trigger` prints for a result. Every value from Siren is cleaned first. */
-export function activityReport(style: Style, input: CommandInput, run: CommandContext, raw: ActivityResult): string {
+export function activityReport(style: Style, input: CommandInput, run: CommandContext, raw: ActivityResult, label: IdLabel = whole): string {
   const result = cleaned(raw);
-  const next = activityNext(style, input, result);
+  const next = activityNext(style, input, result, label);
   const open = openWaits(result);
   const tips = [
     ...(open.length > 0 ? ['A reward that waits is settled once the app answers.'] : []),
@@ -466,7 +477,7 @@ export async function askAndWait(client: TestActivityClient, io: CliIo, app: str
 }
 
 /** The report `siren trigger ask` prints for a test request. Every value from Siren is cleaned first. */
-export function askReport(style: Style, input: CommandInput, run: CommandContext, app: string, feature: string, raw: AppRequestDetail): string {
+export function askReport(style: Style, input: CommandInput, run: CommandContext, app: string, feature: string, raw: AppRequestDetail, label: IdLabel = whole): string {
   const request = cleaned(raw);
   const tell = request.mode === 'tell';
   const rows: Array<readonly [string, string]> = [
@@ -480,7 +491,7 @@ export function askReport(style: Style, input: CommandInput, run: CommandContext
   return style.report({
     headline: `Siren ${tell ? 'told' : 'asked'} ${app} › ${feature} in ${orgLabel(run)} (test)`,
     rows: fitted(style, rows),
-    next: [{ text: style.command(input.command(`apps requests ${request.id}`)), aside: 'each send and answer' }],
+    next: [{ text: style.command(input.command(`apps requests ${label(request.id)}`)), aside: 'each send and answer' }],
     tips: tell || request.answer !== null ? [] : [request.sendCount === 0 ? 'Siren queued it, and sends it on its next run.' : 'Your app answers it at the answerUrl the request carries.'],
   });
 }

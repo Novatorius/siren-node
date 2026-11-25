@@ -47,9 +47,9 @@ describe('cli pass 2, finding 3: a feature whose kind changes', () => {
     expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
     expect(h.paths()).toEqual([`GET /apps/${APP_KEY}`]);
     expect(h.err()).toBe(
-      'siren: notify-crm is a Post-conversion action (postConversionAction) on Siren, and siren.app.json makes it a Post-allocation action (postAllocationAction). ' +
-        "A feature's kind locks once Siren makes it, so applying this would replace app:11 with a new feature and a new id, and the 2 records that select app:11 would keep the old one. " +
-        'Nothing was sent. Give the new feature its own key, and keep or remove notify-crm on its own.\n',
+      "siren: notify-crm can't change kind. Siren holds it, app:11, as a Post-conversion action (postConversionAction), and siren.app.json makes it a Post-allocation action (postAllocationAction). " +
+        'A kind locks once made, so this would replace it with a new id. The 2 records that select it would keep the old one. Nothing was sent. ' +
+        'Give the Post-allocation action (postAllocationAction) its own key in siren.app.json, and keep or remove notify-crm on its own.\n',
     );
   });
 
@@ -58,7 +58,7 @@ describe('cli pass 2, finding 3: a feature whose kind changes', () => {
     h.signedIn();
     h.write('siren.app.json', file('postAllocationAction'));
     expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
-    expect(h.err()).toContain('app:11 with a new feature and a new id. Nothing selects app:11 today.');
+    expect(h.err()).toContain('this would replace it with a new id. Nothing selects it today.');
     expect(h.paths()).toEqual([`GET /apps/${APP_KEY}`]);
   });
 

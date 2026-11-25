@@ -11,6 +11,8 @@ import type { CliIo } from '../io';
 import { clean, styleFor, visibleLength } from '../style';
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
+import { idLabeller, whole } from './requests';
+import type { IdLabel } from './requests';
 
 /*
  * `siren logs tail`: what happens in the organization as it happens, from
@@ -105,7 +107,7 @@ export interface FollowOptions {
   query: LogQuery;
   /** Stop after this many entries, with exit code 0. */
   limit?: number;
-  onEntry(entry: LogEntry): void;
+  onEntry(entry: LogEntry): void | Promise<void>;
 }
 
 /**
@@ -124,6 +126,8 @@ export async function logsTail(input: CommandInput): Promise<number> {
   // The organization signedIn() settled: --org, SIREN_ORG, "org" in siren.app.json, the only one, or the one asked for.
   const org = await orgScope(run, input, session, 'logs tail');
   const style = styleFor(io, 'stdout', { json });
+  // Short request ids in hints when Siren finds requests by their start (CLI pass 3), from one idPrefix call at the first.
+  const labelFor = idLabeller(org);
 
   if (!json) {
     run.print(
@@ -142,9 +146,12 @@ export async function logsTail(input: CommandInput): Promise<number> {
     http: org.http,
     query,
     limit,
-    onEntry: (entry) => {
+    onEntry: async (entry) => {
       if (json) return io.stdout(`${JSON.stringify(entry)}\n`);
-      for (const line of entryLines(style, entry, (words) => run.command(`${words}${org.flag}`))) run.print(line);
+      // Only a failed entry names a request, in its hint, so only one of those asks Siren how to print ids.
+      const id = entry.status === 'failed' || entry.status === 'refused' ? requestIdOf(entry) : undefined;
+      const label = id === undefined ? whole : await labelFor(id);
+      for (const line of entryLines(style, entry, (words) => run.command(`${words}${org.flag}`), label)) run.print(line);
     },
   });
 }
@@ -203,7 +210,7 @@ export async function followFeed(run: CommandContext, io: CliIo, options: Follow
 
       cursor = page.nextCursor;
       for (const entry of page.entries) {
-        options.onEntry(entry);
+        await options.onEntry(entry);
         printed += 1;
         if (limit !== undefined && printed >= limit) return 0;
       }
@@ -241,13 +248,13 @@ function outOfReach(error: unknown): boolean {
 function logsRefusal(run: CommandContext, query: LogQuery, error: unknown): unknown {
   const code = appErrorCode(error);
   if (code === 'app_not_found' && query.app !== undefined) {
-    return new CliRefusal(`This organization has no app ${query.app}.`, { fix: run.command('apps list'), fixWords: 'to see its apps' });
+    return new CliRefusal(`This organization has no app ${query.app}.`, { why: `Siren found no app with the key ${query.app} here.`, fix: run.command('apps list'), fixWords: 'to see its apps' });
   }
   if (code === 'logs_since_too_old') {
-    return new CliRefusal('Siren keeps the log 7 days, so --since can reach back 7 days at most.');
+    return new CliRefusal('--since reaches back too far.', { why: 'Siren keeps the log 7 days, so --since can reach back 7 days at most.', fixText: 'Pass --since 7d or less.' });
   }
   if (error instanceof SirenError && error.statusCode === 404 && code === undefined) {
-    return new CliRefusal('This Siren has no log feed yet.', { why: 'It answered 404 for GET /logs, so it is older than this tool.' });
+    return new CliRefusal('This Siren has no log feed yet.', { why: 'It answered 404 for GET /logs, so it is older than this tool.', fixText: 'Update that Siren, or point the tool at one that has the log feed.' });
   }
   return error;
 }
@@ -332,7 +339,7 @@ function scopeWords(query: LogQuery): string {
  * body as JSON under it. Every value from Siren is cleaned of escape
  * sequences and control characters first.
  */
-export function entryLines(style: Style, entry: LogEntry, command: (words: string) => string): string[] {
+export function entryLines(style: Style, entry: LogEntry, command: (words: string) => string, label: IdLabel = whole): string[] {
   const bad = entry.status === 'failed' || entry.status === 'refused';
   const time = clock(entry.at);
   const type = cut(style, String(entry.type), TYPE_WIDTH).padEnd(TYPE_WIDTH);
@@ -344,7 +351,7 @@ export function entryLines(style: Style, entry: LogEntry, command: (words: strin
   const lines = [`${style.dim(time)}  ${type}  ${summary}  ${status}${duration}`.trimEnd()];
 
   if (bad && entry.reason) lines.push(`${INDENT}${style.red(cut(style, entry.reason, LINE_WIDTH - INDENT.length))}`);
-  const look = lookCloser(entry);
+  const look = lookCloser(entry, label);
   if (bad && look !== undefined) {
     // A command is never cut, since a cut one cannot be run. When it would pass 80 columns under the type, it moves left.
     const hint = style.next(style.dim(command(look)));
@@ -375,9 +382,9 @@ function requestIdOf(entry: LogEntry): string | undefined {
 }
 
 /** The command that shows more about a failed entry, or undefined. */
-function lookCloser(entry: LogEntry): string | undefined {
+function lookCloser(entry: LogEntry, label: IdLabel): string | undefined {
   const id = requestIdOf(entry);
-  return id === undefined ? undefined : `apps requests ${id}`;
+  return id === undefined ? undefined : `apps requests ${label(id)}`;
 }
 
 /** An entry's time as local `HH:MM:SS`. */

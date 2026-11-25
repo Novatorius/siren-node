@@ -31,7 +31,7 @@ describe('apply and diff check scopes and events against the lists Siren serves'
     h.write('siren.app.json', file({ scopes: ['event:sales', 'records:programs:read'] }));
     expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
     expect(h.err()).toContain('siren.app.json: scopes: "event:sales" is not a scope an app\'s key may hold. Did you mean "event:sale"?');
-    expect(h.err()).toContain('siren.app.json has a problem, so nothing was sent.');
+    expect(h.err()).toContain('siren.app.json has a problem. Siren offers no such scope, so nothing was sent.');
     expect(h.err()).toContain('siren apps scopes');
     expect(h.out()).not.toContain('Plan');
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes']);
@@ -55,7 +55,7 @@ describe('apply and diff check scopes and events against the lists Siren serves'
     expect(await h.run(['apps', 'diff'])).toBe(1);
     expect(h.err()).toContain('Did you mean "sale.created"?');
     expect(h.err()).not.toContain('"payout.paid"');
-    expect(h.err()).toContain('siren.app.json has 2 problems, so nothing was sent.');
+    expect(h.err()).toContain('siren.app.json has 2 problems. Siren offers no such scope or event, so nothing was sent.');
   });
 
   it('reads no list when every scope and event is one the app already holds, or is a wildcard', async () => {
@@ -83,7 +83,10 @@ describe('siren apps scopes and siren apps events', () => {
     expect(await h.run(['apps', 'scopes']), h.err()).toBe(0);
     const lines = h.out().trimEnd().split('\n');
     expect(lines[0]).toMatch(/^SCOPE\s+ALLOWS$/);
-    expect(lines.some((line) => /^event:sale\s+Sale$/.test(line))).toBe(true);
+    // CLI pass 3: an event scope's label is the event's name, so ALLOWS says what the key may do with it.
+    expect(lines.some((line) => /^event:sale\s+Send sale events$/.test(line))).toBe(true);
+    expect(lines.some((line) => /^event:site-visited\s+Send site visited events$/.test(line))).toBe(true);
+    expect(lines.some((line) => /^records:programs:read\s+Read programs$/.test(line))).toBe(true);
     expect(lines.some((line) => /^records:programs:read\s+\S/.test(line))).toBe(true);
     expect(h.paths()).toEqual(['GET /apps/scopes']);
 

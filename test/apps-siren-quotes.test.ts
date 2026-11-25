@@ -114,6 +114,7 @@ describe('apps-sdk-followups-1: the messages of Siren\'s exchange this repositor
     const h = harness([AppAnswers.notFound('admin')]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', 'apr_0123456789abcdef0123456789abcdef', '--body', '{"outcome":"paid"}'])).toBe(1);
-    expect(h.err()).toBe('siren: This organization has no request with this key.\n');
+    // CLI pass 3: the tool names the id typed in place of Siren's own words, which name none.
+    expect(h.err()).toBe('siren: This organization has no request apr_0123456789abcdef0123456789abcdef. Siren found none with that id. Run siren apps requests to list the latest.\n');
   });
 });

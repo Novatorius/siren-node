@@ -64,7 +64,7 @@ export class SandboxRecords {
     }
     const copies = (parsed as Partial<SandboxesFile> | undefined)?.copies;
     if (!Array.isArray(copies)) {
-      throw new CliRefusal(`${this.path} is not a Siren sandbox record.`, { why: 'The tool keeps which live organization each sandbox came from there.', note: 'Move it out of the way, then try again.' });
+      throw new CliRefusal(`${this.path} is not a Siren sandbox record.`, { why: 'The tool keeps which live organization each sandbox came from there.', fixText: 'Move it out of the way, then try again.' });
     }
     return copies.filter((copy): copy is SandboxCopy => typeof copy === 'object' && copy !== null && typeof copy.baseUrl === 'string' && typeof copy.orgId === 'number');
   }

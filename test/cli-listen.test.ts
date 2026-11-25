@@ -9,7 +9,7 @@ import { Style, visibleLength } from '../src/cli/style';
 import type { ListenDelivery } from '../src/cli/commands/listen';
 import { LIVE_BASE_URL } from '../src/cli/targets';
 import { verifyAppRequest } from '../src/resources/app-requests';
-import { appMissing, appRecord } from './apps-siren-answers';
+import { appMissing, appRecord, requestRow } from './apps-siren-answers';
 import { NOW_S, harness, session } from './cli-fakes';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
@@ -68,6 +68,8 @@ function delivery(overrides: Partial<ListenDelivery> = {}): ListenDelivery {
 const polled = (deliveries: ListenDelivery[], answers: unknown[] = []) => reply(200, { deliveries, answers, nextPollMs: 1000 });
 const reported = (status = 'delivered', nextRetryAt: string | null = null) => reply(200, { delivery: { id: 812, status, attemptCount: 1, nextRetryAt } });
 const closed = (returned = 0) => reply(200, { closed: true, returned });
+/** What GET /apps/requests?idPrefix= answers from feat/apps 76d5bbdf83: the matches, two at most. */
+const found = (...ids: string[]) => reply(200, { requests: ids.map((id) => requestRow({ id })), total: ids.length });
 
 interface Received {
   headers: IncomingHttpHeaders;
@@ -130,6 +132,24 @@ describe('siren listen', () => {
     expect(out).toMatch(new RegExp(`Next\\n  1  siren apps requests --app ${KEY} +what Siren did next\\n`));
     // Only the delivery line carries Siren's whole id, which a pipe never cuts. The rest stays within 80.
     for (const line of out.split('\n').filter((one) => !one.includes(REQUEST))) expect(line.length, line).toBeLessThanOrEqual(80);
+  });
+
+  it('shows a short request id in a terminal once one idPrefix lookup finds it, and the whole id through a pipe (CLI pass 3)', async () => {
+    const local = await handler(() => ({ status: 200, body: '{"received":true}' }));
+    const h = harness([opened(), polled([delivery()]), reported(), found(REQUEST), closed()], stopAtFirstWait);
+    h.signedIn();
+    const io = { ...h.io, stdoutTty: true, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } };
+    expect(await runCli(['listen', '--app', KEY, '--forward-to', local.url], io), h.err()).toBe(130);
+    expect(h.paths()).toEqual(['POST /listen-sessions', `POST /listen-sessions/${SESSION}/poll`, `POST /listen-sessions/${SESSION}/results`, 'GET /apps/requests', `DELETE /listen-sessions/${SESSION}`]);
+    expect(Object.fromEntries(new URL(h.http.requests[3]!.url).searchParams)).toEqual({ idPrefix: `apr_${REQUEST.slice(4, 12)}` });
+    const bare = h.out().replace(/\u001b\[[\d;]*m/g, '');
+    expect(bare).toMatch(new RegExp(`✓ \\d\\d:\\d\\d:\\d\\d {2}ask {5}acme-ledger {9}200 +\\d+ms {2}${REQUEST.slice(4, 12)}\n`));
+
+    // An older Siren answers its latest requests instead, so the line keeps the whole id, cut to fit.
+    const older = harness([opened(), polled([delivery()]), reported(), found('apr_1111111111111111111111111111aaaa', 'apr_2222222222222222222222222222bbbb', REQUEST), closed()], stopAtFirstWait);
+    older.signedIn();
+    expect(await runCli(['listen', '--app', KEY, '--forward-to', local.url], { ...older.io, stdoutTty: true, env: { ...older.io.env, TERM: 'xterm-256color' } }), older.err()).toBe(130);
+    expect(older.out().replace(/\u001b\[[\d;]*m/g, '')).toMatch(/200 +\d+ms {2}apr_b79943ff\n/);
   });
 
   it('prints a ✗ line with the reason and the resend command for a 500, and for a handler that is not running', async () => {
@@ -233,6 +253,8 @@ describe('siren listen', () => {
         opened({ session: { id: SESSION, app: KEY, address: 'https://acme.example/\u001b[2Jsiren', events: null, forwardTo: null, openedAt: '', idleTimeoutSeconds: 30, nextPollMs: 1000 } }),
         polled([sly, event], [{ request: `${REQUEST}\u001b[31m`, status: 'answered\u001b[5m', answeredBy: 'app:12', answeredAt: null }]),
         reported('failed', '2026-11-24T19:03:15+00:00'),
+        // The idPrefix lookup for the id it prints. This id carries an escape code, which Siren's match lacks, so the lines keep the whole id, cleaned.
+        found(REQUEST),
         reported('failed'),
         closed(),
       ],

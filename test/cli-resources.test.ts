@@ -269,7 +269,7 @@ describe('the live guard', () => {
   it('refuses a live write without --live, before sending it', async () => {
     const h = signedInLive([reply(201, { id: 3 })], { env: { SIREN_BASE_URL: LIVE } });
     expect(await h.run(['post', '/programs', '-d', 'name=X'])).toBe(1);
-    expect(h.err()).toContain('is a live Siren. Add --live');
+    expect(h.err()).toContain('is a live Siren. A change to a live organization needs --live, so none happens by accident. Run siren post /programs --live.');
     expect(h.paths()).toEqual([]);
   });
 

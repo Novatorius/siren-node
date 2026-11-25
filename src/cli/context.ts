@@ -5,14 +5,15 @@ import { CredentialStore } from './credentials';
 import type { StoredMembership, StoredSession } from './credentials';
 import { basename, join } from 'node:path';
 import { APP_FILE_NAME } from './app-file';
-import { findOrg, membershipsOf, orgFrom, orgWanted, settleOrg } from './org';
+import { findOrg, membershipsOf, orgFrom, orgOverruled, orgWanted, settleOrg } from './org';
 import type { OrgChoice, OrgWanted } from './org';
 import type { CliIo } from './io';
 import { SessionAuthClient } from './session-auth';
 import type { Edition, Membership, PersonalToken, SessionTokens } from './session-auth';
 import { SANDBOX_BASE_URL } from '../http';
-import { CliRefusal, LIVE_BASE_URL, assertEditionAllowed, assertSessionMatches, commandLine } from './targets';
+import { CliRefusal, LIVE_BASE_URL, assertEditionAllowed, assertSessionMatches, commandLine, hostName } from './targets';
 import type { Target } from './targets';
+import { clean, styleFor } from './style';
 
 /** How long before the access token's `exp` the tool refreshes it, in seconds. */
 const REFRESH_EARLY_SECONDS = 60;
@@ -32,9 +33,10 @@ export function tokenFrom(env: Readonly<Record<string, string | undefined>>): st
   const value = env.SIREN_TOKEN;
   if (value === undefined || value === '') return undefined;
   if (!PERSONAL_TOKEN.test(value.trim())) {
-    throw new CliRefusal(
-      'SIREN_TOKEN does not hold a Siren personal access token, which starts siren_pat_ and comes from API keys in the Siren dashboard. Nothing was sent.',
-    );
+    throw new CliRefusal("SIREN_TOKEN isn't a Siren personal access token.", {
+      why: 'A personal access token starts siren_pat_. Nothing was sent.',
+      fixText: 'Make one under API keys in the Siren dashboard, or unset SIREN_TOKEN.',
+    });
   }
   return value.trim();
 }
@@ -53,7 +55,12 @@ export function tokenRefusal(error: unknown, login: string): CliRefusal | undefi
     });
   }
   if (code === 'token_not_accepted') {
-    return new CliRefusal('Siren takes no personal access token for this.', { why: 'Unset SIREN_TOKEN.', fix: login, fixWords: 'to log in, then run the command again' });
+    return new CliRefusal('Siren takes no personal access token for this.', {
+      why: 'This route takes a logged-in session only.',
+      fixLead: 'Unset SIREN_TOKEN, run',
+      fix: login,
+      fixWords: 'to log in, then run the command again',
+    });
   }
   return undefined;
 }
@@ -64,16 +71,20 @@ export function tokenRefusal(error: unknown, login: string): CliRefusal | undefi
  * `login` the `siren login` line for this Siren, or undefined for a code
  * that is no plan code.
  */
-export function planLine(code: string | undefined, login: string): string | undefined {
+export function planRefusal(code: string | undefined, login: string): CliRefusal | undefined {
+  const choose = { why: 'Apps and the command-line tool need a plan.', fixLead: 'Choose a plan in the Siren dashboard, then run', fix: login, fixWords: 'again' };
   switch (code) {
     case 'no_entitlement':
-      return `The organization has no plan. Choose a plan in the Siren dashboard, then run ${login} again.`;
+      return new CliRefusal('The organization has no plan.', choose);
     case 'entitlement_lapsed':
-      return `The organization's plan has lapsed. Renew it in the Siren dashboard, then run ${login} again.`;
+      return new CliRefusal("The organization's plan has lapsed.", { ...choose, fixLead: 'Renew it in the Siren dashboard, then run' });
     case 'trial_ended':
-      return `The organization's trial has ended. Choose a plan in the Siren dashboard, then run ${login} again.`;
+      return new CliRefusal("The organization's trial has ended.", choose);
     case 'entitlements_unavailable':
-      return "Siren could not check the organization's plan just now. Try again in a minute.";
+      return new CliRefusal("Siren couldn't check the organization's plan just now.", {
+        why: "Siren's plan check didn't answer, so nothing was sent.",
+        fixText: 'Try again in a minute.',
+      });
     default:
       return undefined;
   }
@@ -134,6 +145,8 @@ export class CommandContext {
      * SIREN_TOKEN is set, and refuses before sending when there is none.
      */
     readonly sessionOnly?: string,
+    /** The command as typed, its name and arguments without flags, such as `apps resend apr_…`, which a refusal offers again with --live. */
+    readonly retry: string = '',
   ) {
     this.store = new CredentialStore(io.configDir);
     this.auth = new SessionAuthClient({ baseUrl: target.baseUrl, httpClient: io.httpClient });
@@ -150,9 +163,10 @@ export class CommandContext {
       return await this.auth.edition();
     } catch (error) {
       if (!(error instanceof ConnectionError)) throw error;
-      throw new CliRefusal(
-        `${this.target.baseUrl} did not answer when the tool asked which edition it is, so nothing was sent. Check the address, or try again in a minute.`,
-      );
+      throw new CliRefusal(`Can't reach ${hostName(this.target.baseUrl)}.`, {
+        why: 'Nothing answered there, so nothing was sent.',
+        fixText: 'Check the address, or try again in a minute.',
+      });
     }
   }
 
@@ -210,7 +224,8 @@ export class CommandContext {
     }
     const session = await this.store.get(this.target.baseUrl);
     if (session === null && token !== undefined) {
-      throw new CliRefusal(`siren ${this.sessionOnly} needs you to log in, since Siren takes no personal access token there.`, {
+      throw new CliRefusal(`siren ${this.sessionOnly} needs you to log in.`, {
+        why: 'Siren takes no personal access token there, so SIREN_TOKEN is not enough.',
         fix: this.command('login'),
         fixWords: 'to log in',
       });
@@ -220,16 +235,38 @@ export class CommandContext {
     const wanted = pick ? await this.wanted() : undefined;
     // A session from before login kept memberships knows only its own organization.
     const kept = orgFrom(membershipsOf(session), wanted);
-    if (pick && kept === 'several') this.orgChoice = await settleOrg(this.io, membershipsOf(session), undefined, this.command('orgs'));
+    if (pick && kept === 'several') this.orgChoice = await settleOrg(this.io, membershipsOf(session), undefined, this.command('orgs'), session.orgId);
     else if (pick && typeof kept === 'object') this.orgChoice = kept;
+    if (this.orgChoice !== undefined) this.checkOrgSources(wanted, this.orgChoice.org);
     const edition = await this.targetEdition();
     assertSessionMatches(this.target, session, edition);
-    if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition);
+    if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition, this.retry);
     this.adopt(session);
     // A name the kept list lacks, which the person may have joined since login: ask Siren.
-    if (pick && this.orgChoice === undefined) this.orgChoice = await settleOrg(this.io, await this.memberships(), wanted, this.command('orgs'));
+    if (pick && this.orgChoice === undefined) {
+      this.orgChoice = await settleOrg(this.io, await this.memberships(), wanted, this.command('orgs'), session.orgId);
+      this.checkOrgSources(wanted, this.orgChoice.org);
+    }
     if (this.orgChoice !== undefined && this.orgChoice.org.orgId !== session.orgId) await this.borrow(this.orgChoice.org);
     return this.current();
+  }
+
+  /**
+   * CLI pass 3, should-fix 5. SIREN_ORG wins over the app file's "org".
+   * When they name different organizations, a write refuses before it
+   * sends, since a change in the wrong organization is hard to take back,
+   * and a read goes ahead with a dim note on stderr that says which won.
+   */
+  private checkOrgSources(wanted: OrgWanted | undefined, chosen: StoredMembership): void {
+    const file = orgOverruled(wanted, chosen);
+    if (file === undefined || wanted === undefined) return;
+    if (!this.readsOnly) {
+      throw new CliRefusal(`SIREN_ORG names ${clean(wanted.name)}, and ${file.from} names ${clean(file.name)}.`, {
+        why: "A change goes to one organization, so the tool won't guess which you meant.",
+        fixText: `Pass --org to pick one, or unset SIREN_ORG to use ${file.from}.`,
+      });
+    }
+    this.warn(styleFor(this.io, 'stderr', {}).dim(`› SIREN_ORG names ${clean(wanted.name)}, so this reads ${clean(wanted.name)}, not ${clean(file.name)} from ${file.from}.`));
   }
 
   /**
@@ -255,7 +292,8 @@ export class CommandContext {
     const session = this.current();
     const wanted = await this.wanted();
     const kept = orgFrom(membershipsOf(session), wanted);
-    this.orgChoice = typeof kept === 'object' ? kept : await settleOrg(this.io, kept === 'several' ? membershipsOf(session) : await this.memberships(), wanted, list);
+    this.orgChoice = typeof kept === 'object' ? kept : await settleOrg(this.io, kept === 'several' ? membershipsOf(session) : await this.memberships(), wanted, list, session.orgId);
+    this.checkOrgSources(wanted, this.orgChoice.org);
     return this.orgChoice;
   }
 
@@ -271,10 +309,12 @@ export class CommandContext {
     const own = { orgId: session.orgId, orgName: session.orgName, orgSlug: session.orgSlug ?? '', role: session.role };
     if (wanted === undefined || findOrg([own], wanted.name) !== undefined) {
       this.orgChoice = { org: own, source: wanted?.source ?? 'only' };
+      this.checkOrgSources(wanted, own);
       return;
     }
-    throw new CliRefusal(`SIREN_TOKEN acts in ${session.orgName} (${session.orgSlug ?? session.orgId}), and ${wanted.from} names ${wanted.name}.`, {
+    throw new CliRefusal(`SIREN_TOKEN acts in ${session.orgSlug ?? session.orgName}, and ${wanted.from} names ${wanted.name}.`, {
       why: 'A personal access token works only in the organization it was made in.',
+      fixText: `Use a token made in ${wanted.name}, or ${wanted.source === 'file' ? `change "org" in ${wanted.from}` : `drop ${wanted.from}`}.`,
     });
   }
 
@@ -289,8 +329,7 @@ export class CommandContext {
     try {
       tokens = await this.withAccessToken((accessToken) => this.auth.switchOrg(accessToken, org.orgId));
     } catch (error) {
-      const plan = planLine(error instanceof SirenError ? error.code : undefined, this.command('login'));
-      throw plan === undefined ? error : new CliRefusal(plan);
+      throw planRefusal(error instanceof SirenError ? error.code : undefined, this.command('login')) ?? error;
     }
     this.session = {
       ...this.current(),
@@ -317,7 +356,7 @@ export class CommandContext {
    */
   private async withToken(token: string): Promise<StoredSession> {
     const edition = await this.targetEdition();
-    if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition);
+    if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition, this.retry);
     let about: PersonalToken;
     try {
       about = await this.auth.personalToken(token);
@@ -347,9 +386,15 @@ export class CommandContext {
     return this.personal !== null;
   }
 
-  /** A `siren` command line for a hint, with the flags that reach this Siren (`commandLine`). */
+  /**
+   * A `siren` command line for a hint, with the flags that reach this Siren
+   * (`commandLine`). A hint to a write carries `--live` when the person typed
+   * it, and also when the session in use is live though this command, a
+   * read, needed none, since the write would be refused without it.
+   */
   command(words: string): string {
-    return commandLine(this.target, words);
+    const live = this.target.live || this.session?.edition === 'production';
+    return commandLine({ ...this.target, live }, words);
   }
 
   /** Uses this session for the rest of the run, without the edition check. `logout` alone calls it directly. */
@@ -478,17 +523,16 @@ export class CommandContext {
  * elsewhere learns where.
  */
 export async function notSignedIn(store: CredentialStore, target: Target, login: string): Promise<CliRefusal> {
-  const here = target.baseUrl === SANDBOX_BASE_URL || target.baseUrl === LIVE_BASE_URL ? {} : { note: `Siren: ${shortAddress(target.baseUrl)}` };
   const detail = [`Siren: ${shortAddress(target.baseUrl)}`];
   const sessions = Object.entries(await store.all().catch(() => ({}) as Record<string, StoredSession>));
   const [base, other] = sessions.find(([key]) => key !== target.baseUrl) ?? [];
-  if (base === undefined || other === undefined) return new CliRefusal('Not logged in.', { fix: login, fixWords: 'to log in', ...here, detail });
+  const none = `The tool keeps no session for ${hostName(target.baseUrl)}.`;
+  if (base === undefined || other === undefined) return new CliRefusal('Not logged in.', { why: none, fix: login, fixWords: 'to log in', detail });
   const live = other.edition === 'production' ? ' --live' : '';
   return new CliRefusal('Not logged in.', {
-    why: `You are logged in to ${other.orgName} on ${base}. Pass --base-url ${base}${live} to use it.`,
+    why: `${none} You're logged in to ${other.orgSlug ?? other.orgName} on ${hostName(base)}, which --base-url ${shortAddress(base)}${live} uses.`,
     fix: login,
     fixWords: 'to log in here',
-    ...here,
     detail,
   });
 }
@@ -512,12 +556,12 @@ export function jwtClaim(token: string, claim: string): unknown {
 
 /** The one line a failed refresh gets, with `login` the `siren login` line for this Siren. */
 function refreshRefusal(error: unknown, login: string): CliRefusal {
-  const plan = planLine(error instanceof SirenError ? error.code : undefined, login);
-  if (plan !== undefined) return new CliRefusal(plan);
+  const plan = planRefusal(error instanceof SirenError ? error.code : undefined, login);
+  if (plan !== undefined) return plan;
   if (error instanceof ConnectionError || error instanceof ApiError) {
-    return new CliRefusal('Siren could not renew your session just now. Try again in a minute.');
+    return new CliRefusal("Couldn't renew your session just now.", { why: "Siren didn't answer, so nothing was sent.", fixText: 'Try again in a minute.' });
   }
-  return new CliRefusal(`Your session has ended. Run ${login} to sign in again.`);
+  return new CliRefusal('Your session has ended.', { why: 'Siren no longer accepts it, so nothing was sent.', fix: login, fixWords: 'to log in again' });
 }
 
 

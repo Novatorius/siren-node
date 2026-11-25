@@ -11,6 +11,7 @@ GETTING STARTED
 
 APPS
   apps diff           Show what apply would change
+  apps pull           Write siren.app.json from an app on Siren
   apps list           List the apps
   apps show           Show one app and its features
   apps scopes         List the scopes an app's key may hold

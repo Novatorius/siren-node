@@ -76,16 +76,27 @@ export async function listAppRequests(
   if (status !== undefined && !REQUEST_STATUSES.includes(status as string)) {
     throw new SirenError(`apps.requests.list() takes a status of ${REQUEST_STATUSES.join(', ')}.`);
   }
-  const { limit, before } = params as { limit?: unknown; before?: unknown };
+  const { limit, before, idPrefix, appId } = params as { limit?: unknown; before?: unknown; idPrefix?: unknown; appId?: unknown };
+  if (appId !== undefined && !(Number.isInteger(appId) && (appId as number) >= 1)) {
+    throw new SirenError(`apps.requests.list() takes an appId of a whole number of 1 or more, an app's id, and got ${JSON.stringify(appId)}.`);
+  }
+  if (idPrefix !== undefined) {
+    // IsRequestIdPrefix takes the hex in either case, and findByPrefix lowercases it.
+    if (typeof idPrefix !== 'string' || !/^apr_[0-9a-fA-F]{4,32}$/.test(idPrefix)) {
+      throw new SirenError(`apps.requests.list() takes an idPrefix of apr_ and 4 to 32 hex characters, and got ${JSON.stringify(idPrefix)}.`);
+    }
+    if (Object.keys(params).length > 1) {
+      // ListAppRequests answers idPrefix alone, with no paging, and ignores every other filter.
+      throw new SirenError('apps.requests.list() takes idPrefix alone. Siren ignores status, limit, before and appId beside it, and answers at most two matches.');
+    }
+  }
   if (limit !== undefined && !(Number.isInteger(limit) && (limit as number) >= 1 && (limit as number) <= 100)) {
     throw new SirenError(`apps.requests.list() takes a limit of a whole number from 1 to 100, and got ${String(limit)}.`);
   }
   if (before !== undefined) appRequestId(before, 'apps.requests.list() before');
-  if (status === 'needs_attention' && (limit !== undefined || before !== undefined)) {
-    // ListAppRequests reads the attention list whole and ignores both.
-    throw new SirenError('apps.requests.list() pages the plain list only. Siren answers needs_attention whole, so leave out limit and before.');
-  }
   const query: Record<string, string> = {
+    ...(idPrefix === undefined ? {} : { idPrefix: idPrefix as string }),
+    ...(appId === undefined ? {} : { appId: String(appId) }),
     ...(limit === undefined ? {} : { limit: String(limit) }),
     ...(before === undefined ? {} : { before: before as string }),
     ...(status === undefined ? {} : { status: status as string }),

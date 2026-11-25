@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { LIVE_WRITES } from '../src/cli/targets';
 import { reply } from './http-fakes';
 import { BASE } from './record-fakes';
 import { AuthAnswers, EMAIL, NOW_S, PASSWORD, harness, membershipAcme, session, user } from './cli-fakes';
@@ -40,8 +41,12 @@ function hints(text: string): string[] {
   return found;
 }
 
-/** The flags a live Siren at BASE needs, in the order the tool writes them. */
+/** The flags a command that changes a live organization at BASE needs, in the order the tool writes them. */
 const LIVE = ` --base-url ${BASE} --live`;
+/** The flags a read or an offline command needs for the same Siren: no --live (CLI pass 2, finding 8). */
+const READ = ` --base-url ${BASE}`;
+/** True when a hint names a command that changes a live organization. */
+const writes = (hint: string) => LIVE_WRITES.some((command) => hint.includes(`siren ${command}`));
 const signedInLive = { [BASE]: session({ edition: 'production', baseUrl: BASE }) };
 
 type Case = { name: string; argv: string[]; replies?: Parameters<typeof harness>[0]; options?: HarnessOptions; setup?: (h: ReturnType<typeof harness>) => void; command: string };
@@ -71,7 +76,7 @@ const LIVE_CASES: Case[] = [
     },
     command: `siren apps apply${LIVE}`,
   },
-  { name: 'apply with no app file', argv: ['apps', 'apply'], setup: (h) => h.signedIn(signedInLive), command: `siren apps init${LIVE}` },
+  { name: 'apply with no app file', argv: ['apps', 'apply'], setup: (h) => h.signedIn(signedInLive), command: `siren apps init${READ}` },
   {
     name: "apply where the env file holds another Siren's key",
     argv: ['apps', 'apply'],
@@ -103,7 +108,7 @@ const LIVE_CASES: Case[] = [
     argv: ['apps', 'delete', KEY, '--yes'],
     replies: [AppAnswers.inUseWithOpenAsks(2)],
     setup: (h) => h.signedIn(signedInLive),
-    command: `siren apps requests --app ${KEY}${LIVE}`,
+    command: `siren apps requests --app ${KEY}${READ}`,
   },
   { name: 'a command with no session', argv: ['apps', 'list'], command: `siren login${LIVE}` },
   {
@@ -132,9 +137,9 @@ const LIVE_CASES: Case[] = [
     options: { stdin: PASSWORD },
     command: `siren login${LIVE}`,
   },
-  { name: 'one request the organization does not have', argv: ['apps', 'requests', 'apr_0123456789abcdef0123456789abcdef'], replies: [AppAnswers.requestNotFound()], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests${LIVE}` },
-  { name: 'list with an app whose requests need attention', argv: ['apps', 'list'], replies: [reply(200, [appRecord({ needsAttention: 2 })])], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${LIVE}` },
-  { name: 'show of an app whose requests need attention', argv: ['apps', 'show', KEY], replies: [reply(200, appRecord({ needsAttention: 1 }))], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${LIVE}` },
+  { name: 'one request the organization does not have', argv: ['apps', 'requests', 'apr_0123456789abcdef0123456789abcdef'], replies: [AppAnswers.requestNotFound()], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests${READ}` },
+  { name: 'list with an app whose requests need attention', argv: ['apps', 'list'], replies: [reply(200, [appRecord({ needsAttention: 2 })])], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${READ}` },
+  { name: 'show of an app whose requests need attention', argv: ['apps', 'show', KEY], replies: [reply(200, appRecord({ needsAttention: 1 }))], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${READ}` },
   {
     name: 'delete of an app that is off and records use',
     argv: ['apps', 'delete', KEY, '--yes'],
@@ -162,7 +167,13 @@ describe('apps-cli: every hint names a command the person can run as printed', (
       expect(printed).toContain(hintCase.command);
       const found = hints(printed);
       expect(found.length, printed).toBeGreaterThan(0);
-      for (const hint of found) expect(hint, printed).toContain(LIVE);
+      for (const hint of found) {
+        if (writes(hint)) expect(hint, printed).toContain(LIVE);
+        else {
+          expect(hint, printed).toContain(READ);
+          expect(hint, printed).not.toContain('--live');
+        }
+      }
     });
   }
 

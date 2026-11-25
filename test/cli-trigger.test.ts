@@ -118,17 +118,21 @@ describe('siren trigger <event>', () => {
 
   it('stops waiting at --wait and says what still waits, and --wait 0 never reads again', async () => {
     const open = sale({ obligations: [], waits: [wait('sent')] });
-    const h = harness([reply(201, open), reply(200, open)]);
+    const h = harness([reply(201, open), reply(200, open), reply(200, open), reply(200, { requests: [requestRow({ id: REQUEST })], total: 1 })]);
     h.signedIn();
     expect(await h.run(['trigger', 'sale', '--wait', '4']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /test-activity', 'GET /test-activity/sales/3307', 'GET /test-activity/sales/3307']);
+    // Then one idPrefix lookup, which finds the request by its short id, so the hint gives that (CLI pass 3).
+    expect(h.paths()).toEqual(['POST /test-activity', 'GET /test-activity/sales/3307', 'GET /test-activity/sales/3307', 'GET /apps/requests']);
+    expect(Object.fromEntries(new URL(h.http.requests[3]!.url).searchParams)).toEqual({ idPrefix: 'apr_9c60190a' });
     expect(h.out()).toMatch(/Waits\s+Acme CRM › Split the pool · sent/);
-    expect(h.out()).toContain(`siren apps requests ${REQUEST}`);
+    expect(h.out()).toMatch(/siren apps requests 9c60190a +the ask a reward waits on/);
 
-    const none = harness([reply(201, open)]);
+    // A Siren from before idPrefix answers its latest requests instead, so the hint keeps the whole id.
+    const none = harness([reply(201, open), reply(200, { requests: [requestRow({ id: 'apr_1111111111111111111111111111aaaa' }), requestRow({ id: 'apr_2222222222222222222222222222bbbb' }), requestRow({ id: REQUEST })], total: 3 })]);
     none.signedIn();
     expect(await none.run(['trigger', 'sale', '--wait', '0'])).toBe(0);
-    expect(none.paths()).toEqual(['POST /test-activity']);
+    expect(none.paths()).toEqual(['POST /test-activity', 'GET /apps/requests']);
+    expect(none.out()).toContain(`siren apps requests ${REQUEST}`);
   });
 
   it('prints the last body and nothing else with --json', async () => {
@@ -169,10 +173,13 @@ describe('siren trigger ask <app> <feature>', () => {
       reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } }),
       reply(200, { ...sent, status: 'sent', data: {}, answer: null, answeredByUser: null }),
       reply(200, { ...sent, status: 'applied', data: {}, answer: { outcome: 'suppress', reason: 'Refunded.' }, answeredByUser: null }),
+      reply(200, { requests: [requestRow({ id: REQUEST })], total: 1 }),
     ]);
     h.signedIn();
     expect(await h.run(['trigger', 'ask', 'acme-crm', 'split-the-pool']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /apps/acme-crm/features/split-the-pool/test', `GET /apps/requests/${REQUEST}`, `GET /apps/requests/${REQUEST}`]);
+    expect(h.paths()).toEqual(['POST /apps/acme-crm/features/split-the-pool/test', `GET /apps/requests/${REQUEST}`, `GET /apps/requests/${REQUEST}`, 'GET /apps/requests']);
+    expect(h.out()).toContain('siren apps requests 9c60190a');
+    expect(h.out()).toMatch(/Request\s+apr_9c60190a4501399d0ae55f041c237b39/);
     expect(h.out()).toContain('Siren asked acme-crm › split-the-pool in Acme (3), sandbox (test)');
     expect(h.out()).toMatch(/Answer\s+\{"outcome":"suppress","reason":"Refunded\."\}/);
     expect(h.out()).toContain('Nothing acted on it.');
@@ -180,21 +187,21 @@ describe('siren trigger ask <app> <feature>', () => {
 
   it('runs on a live organization with --live, saying the app gets a sample marked test, with --yes in place of the question', async () => {
     const sent = requestRow({ id: REQUEST, mode: 'tell', status: 'delivered' });
-    const h = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }])), reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })], { edition: 'production' });
+    const h = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }])), reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } }), reply(200, { requests: [requestRow({ id: REQUEST })], total: 1 })], { edition: 'production' });
     h.signedIn(live());
     expect(await h.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live', '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test']);
+    expect(h.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test', 'GET /apps/requests']);
     expect(h.err()).toContain('acme-crm › notify receives a sample request marked test in Acme (3), live.');
     expect(h.out()).toContain('Siren told acme-crm › notify in Acme (3), live (test)');
   });
 
   it('asks before a live sample, and sends nothing unless the person says yes', async () => {
     const sent = requestRow({ id: REQUEST, mode: 'tell', status: 'delivered' });
-    const yes = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }])), reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })], { edition: 'production', interactive: true, typed: ['y'] });
+    const yes = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }])), reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } }), reply(200, { requests: [requestRow({ id: REQUEST })], total: 1 })], { edition: 'production', interactive: true, typed: ['y'] });
     yes.signedIn(live());
     expect(await yes.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live']), yes.err()).toBe(0);
     expect(yes.prompts).toEqual(['Send it? [y/N] ']);
-    expect(yes.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test']);
+    expect(yes.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test', 'GET /apps/requests']);
 
     const no = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }]))], { edition: 'production', interactive: true, typed: [''] });
     no.signedIn(live());
@@ -221,10 +228,10 @@ describe('siren trigger ask <app> <feature>', () => {
 
   it('sends a payout method its sample on a sandbox without asking', async () => {
     const sent = requestRow({ id: REQUEST, kind: 'payoutMethod', subject: { type: 'test', id: 'test_abc' }, status: 'pending' });
-    const h = harness([reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })]);
+    const h = harness([reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } }), reply(200, { requests: [requestRow({ id: REQUEST })], total: 1 })]);
     h.signedIn();
     expect(await h.run(['trigger', 'ask', 'acme-crm', 'payout', '--wait', '0']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /apps/acme-crm/features/payout/test']);
+    expect(h.paths()).toEqual(['POST /apps/acme-crm/features/payout/test', 'GET /apps/requests']);
   });
 
   it("is a usage error without the app and the feature, and trigger alone needs an event", async () => {
@@ -351,6 +358,7 @@ describe('siren fixtures <file>', () => {
       [
         reply(200, app([{ key: 'notify', kind: 'postConversionAction' }, { key: 'payout', kind: 'payoutMethod' }])),
         reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } }),
+        reply(200, { requests: [requestRow({ id: REQUEST })], total: 1 }),
         reply(200, app([{ key: 'notify', kind: 'postConversionAction' }, { key: 'payout', kind: 'payoutMethod' }])),
       ],
       { edition: 'production' },
@@ -358,7 +366,7 @@ describe('siren fixtures <file>', () => {
     h.signedIn(live());
     h.write('flow.json', flow);
     expect(await h.run(['fixtures', 'flow.json', '--base-url', BASE, '--live', '--yes'])).toBe(1);
-    expect(h.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test', 'GET /apps/acme-crm']);
+    expect(h.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test', 'GET /apps/requests', 'GET /apps/acme-crm']);
     expect(h.err()).toContain('acme-crm › notify receives a sample request marked test in Acme (3), live.');
     expect(h.err()).toContain('acme-crm › payout is a payout method');
 

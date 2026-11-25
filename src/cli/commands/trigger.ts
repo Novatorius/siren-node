@@ -3,7 +3,7 @@ import type { CommandInput } from '../context';
 import { styleFor } from '../style';
 import { CliUsageError } from '../targets';
 import { appKeyArgument } from './apply';
-import { TestActivityClient, activityBody, activityReport, askAndWait, askReport, assertSandbox, confirmLiveAsk, triggerAndWait, waitSeconds } from './trigger-client';
+import { TestActivityClient, activityBody, activityReport, askAndWait, askReport, assertSandbox, confirmLiveAsk, openWaits, requestLabel, triggerAndWait, waitSeconds } from './trigger-client';
 
 /*
  * `siren trigger <sale|refund|visit|event-slug>` and `siren trigger ask
@@ -49,7 +49,7 @@ export async function trigger(input: CommandInput): Promise<number> {
   const result = await triggerAndWait(new TestActivityClient(run), io, body, seconds, json);
 
   if (json) io.stdout(`${JSON.stringify(result, null, 2)}\n`);
-  else io.stdout(activityReport(styleFor(io, 'stdout', {}), input, run, result));
+  else io.stdout(activityReport(styleFor(io, 'stdout', {}), input, run, result, await requestLabel(run, openWaits(result)[0]?.requestKey)));
   return 0;
 }
 
@@ -74,6 +74,6 @@ export async function triggerAsk(input: CommandInput): Promise<number> {
   const request = await askAndWait(client, io, app, feature, seconds, json);
 
   if (json) io.stdout(`${JSON.stringify({ request }, null, 2)}\n`);
-  else io.stdout(askReport(styleFor(io, 'stdout', {}), input, run, app, feature, request));
+  else io.stdout(askReport(styleFor(io, 'stdout', {}), input, run, app, feature, request, await requestLabel(run, request.id)));
   return 0;
 }

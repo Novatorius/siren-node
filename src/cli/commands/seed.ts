@@ -113,6 +113,8 @@ export async function seed(input: CommandInput): Promise<number> {
     throw new CliRefusal(`The seed job for ${slug} ${job.status === 'failed' ? 'failed' : `is still ${clean(job.status)}`}.`, {
       why: clean(job.errorMessage ?? `${counts.salesSent ?? 0} sales were sent before it stopped.`),
       note: `Job ${clean(job.jobId)}.`,
+      fix: input.command(`seed --org ${slug}`),
+      fixWords: 'again once the reason is fixed',
     });
   }
 

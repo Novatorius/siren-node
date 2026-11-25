@@ -85,7 +85,7 @@ describe('apps-sdk-container review fix 1: the command for a missing key fits th
     const h = keyed([PartAnswers.keyMissing()]);
     expect(await h.run(['apps', 'rotate-key', KEY, '--yes'])).toBe(1);
     expect(h.paths()).toEqual([`POST /apps/${KEY}/key/rotate`]);
-    expect(h.err()).toBe(`siren: ${KEY} holds no key to rotate, so nothing changed. Run siren apps add-key ${KEY} to make one.\n`);
+    expect(h.err()).toBe(`siren: ${KEY} has no key yet. There's nothing to rotate, so nothing changed. Run siren apps add-key ${KEY} to make one.\n`);
     expect(h.file('.env.sandbox')).toBe(`SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\n`);
   });
 
@@ -93,7 +93,7 @@ describe('apps-sdk-container review fix 1: the command for a missing key fits th
     const h = keyed([PartAnswers.keyExists()]);
     expect(await h.run(['apps', 'add-key', KEY])).toBe(1);
     expect(h.err()).toBe(
-      `siren: ${KEY} already holds a key, so nothing changed. Run siren apps rotate-key ${KEY} for a new one, which revokes the old one at once.\n`,
+      `siren: ${KEY} already has a key. add-key makes a first key only, so nothing changed. Run siren apps rotate-key ${KEY} to replace it. The old one stops working at once.\n`,
     );
   });
 
@@ -101,7 +101,7 @@ describe('apps-sdk-container review fix 1: the command for a missing key fits th
     const h = keyed([PartAnswers.addressMissing()]);
     expect(await h.run(['apps', 'rotate-secret', KEY, '--yes'])).toBe(1);
     expect(h.err()).toBe(
-      `siren: ${KEY} has no address, so it has no signing secret to rotate. Give it a url in its app file, then run siren apps apply.\n`,
+      `siren: ${KEY} has no address, so it has no signing secret. Siren signs only what it sends to an app's url, so nothing changed. Give it a url in its app file, then run siren apps apply.\n`,
     );
   });
 
@@ -198,12 +198,8 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
   it("the app file's kind messages name each kind readably beside the word the file takes", () => {
     const file = (item: Record<string, unknown>) =>
       JSON.stringify({ version: 1, name: 'A', description: '', apps: { [KEY]: { name: 'A', url: 'https://acme.example', features: { pay: item } } } });
-    expect(parseAppFile(file({ kind: 'other', name: 'Pay' }), {}).problems[0]?.message).toBe(
-      `apps.${KEY}.features.pay.kind must be one of Post-conversion action (postConversionAction), Post-allocation action (postAllocationAction), ` +
-        'Payout method (payoutMethod), Distribution resolver (distributionResolver), Custom event (customEvent), ' +
-        'Metric calculation (metricCalculation), Customer filter for distributors (metricFilter), Attribution model (incentiveResolver), Transaction filter (transactionFilter), ' +
-        'Incentive structure (incentiveType), Engagement calculation (engagementCalculation), Customer filter for programs (engagementFilter), Program group structure (programGroupSorter), ' +
-        'Collaborator group structure (collaboratorGroupStructure).',
+    expect(parseAppFile(file({ kind: 'metricCalc', name: 'Pay' }), {}).problems[0]?.message).toBe(
+      `apps.${KEY}.features.pay.kind metricCalc is not a kind. Did you mean metricCalculation, a Metric calculation?`,
     );
     expect(parseAppFile(file({ kind: 'payoutMethod', name: 'Pay' }), {}).problems[0]?.message).toBe(
       `apps.${KEY}.features.pay.currencies is required for a Payout method (payoutMethod): a list of the currency codes it pays.`,

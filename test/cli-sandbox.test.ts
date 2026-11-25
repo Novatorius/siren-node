@@ -242,7 +242,8 @@ describe('sandbox: siren sandbox create', () => {
     expect(existsSync(join(h.configDir, 'sandboxes.json'))).toBe(false);
     const err = h.err().replace(/\s+/g, ' ');
     expect(err).toContain("Siren would refuse Acme's setup, so nothing was made.");
-    expect(err).toContain("programGroups.group_1.sorter: Invalid sorter 'alphabetical'. Valid values: newestBindingWins, oldestBindingWins.");
+    expect(err).toContain("Siren checked it on the sandbox first and refused 1 field.");
+    expect(h.err()).toContain("\nprogramGroups.group_1.sorter: Invalid sorter 'alphabetical'. Valid values: newestBindingWins, oldestBindingWins.\n");
     // The app choices are not the person's to fix. The copy handles them.
     expect(err).not.toContain('app:12');
     expect(err).toContain('Fix it in Acme on siren.acme.example, then run siren sandbox create --from acme');
@@ -253,9 +254,14 @@ describe('sandbox: siren sandbox create', () => {
     expect(await runCli(['sandbox', 'create', '--from', 'acme'], { ...tty.io, stderrTty: true, env: { ...tty.io.env, TERM: 'xterm-256color' } })).toBe(1);
     const lines = tty.err().replace(/\u001b\[[\d;]*m/g, '').trimEnd().split('\n');
     expect(lines[0]).toBe("✗ Siren would refuse Acme's setup, so nothing was made.");
-    expect(lines[1]).toBe("  programGroups.group_1.sorter: Invalid sorter 'alphabetical'. Valid values:");
-    expect(lines[2]).toBe('  newestBindingWins, oldestBindingWins.');
-    expect(lines[3]).toBe('› Fix it in Acme on siren.acme.example, then run siren sandbox create --from acme.');
+    expect(lines.slice(1)).toEqual([
+      '  Siren checked it on the sandbox first and refused 1 field.',
+      '  programGroups.group_1.sorter',
+      "    Invalid sorter 'alphabetical'. Valid values: newestBindingWins,",
+      '    oldestBindingWins.',
+      '› Fix it in Acme on siren.acme.example, then run',
+      '  siren sandbox create --from acme.',
+    ]);
   });
 
   it('names how many more fields Siren refused when there are several', async () => {
@@ -265,7 +271,10 @@ describe('sandbox: siren sandbox create', () => {
     expect(await h.run(['sandbox', 'create', '--from', 'acme'])).toBe(1);
     const err = h.err().replace(/\s+/g, ' ');
     expect(err).toContain("programGroups.group_1.sorter: Invalid sorter 'alphabetical'.");
-    expect(err).toContain('Siren refused 2 more fields too.');
+    expect(err).toContain('Siren checked it on the sandbox first and refused 3 fields.');
+    // Through a pipe, one `place: message` line each, as a compiler prints them.
+    expect(h.err()).toContain("\nprogramGroups.group_2.sorter: Invalid sorter 'random'.");
+    expect(h.err()).toContain("\nprogramGroups.group_3.sorter: Invalid sorter 'random'.");
   });
 
   it('goes on to the copy when the preview fails for another reason, since the apply checks the setup again', async () => {
@@ -306,8 +315,9 @@ describe('sandbox: siren sandbox create', () => {
     signedInBoth(h);
     expect(await h.run(['sandbox', 'create', '--from', 'globex'])).toBe(1);
     expect(h.paths()).toEqual(['GET /auth/memberships']);
-    expect(h.err()).toContain('You are not in an organization named globex. Yours are acme (Acme).');
-    expect(h.err()).toContain('siren orgs --base-url https://siren.acme.example/siren/v1 --live');
+    expect(h.err()).toContain("You're not in an organization named globex. --from names it. Yours: acme (Acme).");
+    // A read needs no --live (CLI pass 3), so the hint to list them leaves it out.
+    expect(h.err()).toContain('Run siren orgs --base-url https://siren.acme.example/siren/v1 to list them.');
   });
 
   it('refuses a live Siren with no session here, naming the login that makes one', async () => {
@@ -557,7 +567,7 @@ describe('sandbox: which organization a command acts on', () => {
     h.signedIn({ [SANDBOX_BASE_URL]: session({ memberships: [membershipAcme, sandboxOrg] }) });
     expect(await h.run(['seed'])).toBe(1);
     expect(h.paths()).toEqual([]);
-    expect(h.err()).toContain('You belong to 2 organizations: ');
+    expect(h.err()).toContain('You belong to 2 organizations, and nothing names one.');
     expect(h.err()).toContain('Pick one with --org <slug>, SIREN_ORG');
   });
 
@@ -566,7 +576,7 @@ describe('sandbox: which organization a command acts on', () => {
     h.signedIn();
     expect(await h.run(['sandbox', 'reset', '--confirm', 'globex'])).toBe(1);
     expect(h.paths()).toEqual(['GET /auth/memberships']);
-    expect(h.err()).toContain('You are not in an organization named globex.');
+    expect(h.err()).toContain("You're not in an organization named globex. SIREN_ORG names it.");
   });
 });
 

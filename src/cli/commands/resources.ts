@@ -416,7 +416,7 @@ async function outgoingOf(input: CommandInput, method: HttpMethod, given: string
   const data = input.values.data;
   if (typeof data === 'string') {
     const text = data.startsWith('@') ? await readFile(resolve(input.io.cwd, data.slice(1)), 'utf8').catch(() => {
-      throw new CliRefusal(`The tool could not read ${data.slice(1)}. Check the path, which starts from this folder.`);
+      throw new CliRefusal(`Couldn't read ${data.slice(1)}.`, { why: 'A path after @ starts from this folder.', fixText: 'Check the path, then run it again.' });
     }) : data;
     let parsed: unknown;
     try {
@@ -513,7 +513,7 @@ async function confirmLiveDelete(input: CommandInput, run: CommandContext, plan:
     throw new CliRefusal('Nothing was deleted.', { why: `Deleting from ${orgLabel(run)} needs the record's id typed, and there is no terminal to ask in.`, fix: again });
   }
   const typed = (await input.io.prompt(`This deletes ${id} from ${orgLabel(run)}. Type ${id} to delete it: `)).trim();
-  if (typed !== id) throw new CliRefusal('Nothing was deleted.', { why: `You typed ${JSON.stringify(typed)}, not ${JSON.stringify(id)}.` });
+  if (typed !== id) throw new CliRefusal('Nothing was deleted.', { why: `You typed ${JSON.stringify(typed)}, not ${JSON.stringify(id)}.`, fix: again });
 }
 
 /** The organization this run acts in, as apply names it: `Acme (acme), live`. */
@@ -614,7 +614,7 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
   const why = `Siren answered ${status}${error.code ? ` ${clean(error.code)}` : ''}: ${said}${fields}`;
   const list = plan.resource?.ops.list ? `${plan.resource.name} list` : `get /${path.split('/').filter(Boolean)[0] ?? ''}`;
   const help = `${plan.words} --help`;
-  const fix: { fix?: string; fixWords?: string } =
+  const fix: { fix: string; fixWords: string } =
     status === 401
       ? { fix: input.command('login'), fixWords: 'to log in again' }
       : status === 403

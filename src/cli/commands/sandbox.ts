@@ -194,15 +194,14 @@ function appFeaturePaths(error: unknown): string[] {
 }
 
 /**
- * The first field Siren refused, as `path: message`, and how many more,
- * such as "programGroups.group_1.sorter: Invalid sorter 'alphabetical'.
- * Valid values: newestBindingWins, oldestBindingWins." Siren's words are
- * cleaned first.
+ * The fields Siren refused, each at its recipe path, such as
+ * `programGroups.group_1.sorter` with "Invalid sorter 'alphabetical'. Valid
+ * values: newestBindingWins, oldestBindingWins." The style module prints
+ * them as it prints an app file's problems (CLI pass 3, must-fix 3). Siren's
+ * words are cleaned first.
  */
-function refusedFields(problems: readonly RecipeProblem[]): string {
-  const [first, ...rest] = problems;
-  const line = `${clean(first?.path ?? 'The recipe')}: ${clean(first?.message ?? 'refused')}`;
-  return rest.length === 0 ? line : `${line} Siren refused ${counted(rest.length, 'more field', 'more fields')} too.`;
+function refusedFields(problems: readonly RecipeProblem[]): Array<{ at: string; message: string }> {
+  return problems.map((problem) => ({ at: clean(problem.path ?? 'recipe'), message: clean(problem.message ?? 'Refused.') }));
 }
 
 /**
@@ -231,7 +230,7 @@ export async function create(input: CommandInput): Promise<number> {
     });
   }
   // --from names the live organization the way --org names one anywhere else.
-  const liveSession = await orgScope(live, input, await live.signedIn(), 'sandbox create', { name: from, list: 'orgs' });
+  const liveSession = await orgScope(live, input, await live.signedIn(), 'sandbox create', { name: from, list: 'orgs', from: '--from' });
 
   // Read everything from the live Siren before anything is made on the sandbox.
   const liveHttp = liveSession.http;
@@ -254,7 +253,11 @@ export async function create(input: CommandInput): Promise<number> {
     await writeRecord(transportOf(run), 'POST', '/recipes/preview', { ...recipe, configurationOnly: true, name: copyName });
   } catch (error) {
     const fields = recipeProblems(error).filter((problem) => !isAppChoice(problem));
-    if (fields.length > 0) throw new CliRefusal(`Siren would refuse ${clean(liveSession.orgName)}'s setup, so nothing was made.`, { why: refusedFields(fields), ...fixLive });
+    if (fields.length > 0) throw new CliRefusal(`Siren would refuse ${clean(liveSession.orgName)}'s setup, so nothing was made.`, {
+        why: `Siren checked it on the sandbox first and refused ${counted(fields.length, 'field', 'fields')}.`,
+        problems: refusedFields(fields),
+        ...fixLive,
+      });
   }
 
   const style = styleFor(input.io, 'stdout', { json });
@@ -265,7 +268,7 @@ export async function create(input: CommandInput): Promise<number> {
   let scope: Awaited<ReturnType<typeof borrowOrg>>;
   try {
     const made = await writeRecord<{ org?: Membership }>(transportOf(run), 'POST', '/sandbox/orgs', { name });
-    if (!isJsonObject(made.org) || typeof made.org.orgId !== 'number') throw new CliRefusal('Siren made the organization but did not say which it is.', { fix: input.command('sandbox list') });
+    if (!isJsonObject(made.org) || typeof made.org.orgId !== 'number') throw new CliRefusal("Siren made the organization but didn't say which it is.", { why: 'Its answer named no organization id, so the copy stopped there.', fix: input.command('sandbox list'), fixWords: 'to find it' });
     org = made.org;
     // A token for the new organization, for this run only.
     scope = await borrowOrg(run, org);
@@ -342,7 +345,8 @@ export async function create(input: CommandInput): Promise<number> {
     // The check above passed, so the sandbox refused something only the new organization shows. It stays, and the person is told so.
     const fields = recipeProblems(error).filter((problem) => !isAppChoice(problem));
     throw new CliRefusal(`Made ${slug}, but Siren refused its setup.`, {
-      why: fields.length > 0 ? refusedFields(fields) : clean(error.message.replace(/^Siren: /, '')),
+      why: fields.length > 0 ? `Siren refused ${counted(fields.length, 'field', 'fields')} once the organization was made.` : clean(error.message.replace(/^Siren: /, '')),
+      problems: refusedFields(fields),
       note: `Siren cannot delete a sandbox organization, so ${slug} stays, with ${copiedApps.length > 0 ? 'its apps and ' : ''}no setup.`,
       ...fixLive,
     });
@@ -398,6 +402,7 @@ export async function create(input: CommandInput): Promise<number> {
     throw new CliRefusal(`The import into ${slug} ${detail.status === 'failed' ? 'failed' : 'did not finish in three minutes'}.`, {
       why: clean(detail.errorMessage ?? `Import ${detail.jobId} is ${detail.status}.`),
       note: `Its apps were copied. Pass --org ${slug} to use it.`,
+      ...fixLive,
     });
   }
   progress?.stop(true, `Copied ${style.bold(clean(liveSession.orgName))} into a sandbox organization`);
@@ -522,7 +527,7 @@ export async function reset(input: CommandInput): Promise<number> {
     typed = (await input.io.prompt(`Type ${slug} to confirm: `)).trim();
   }
   if (typed !== slug) {
-    throw new CliRefusal(`${typed === '' ? 'Nothing' : typed} is not ${slug}, so nothing was cleared.`, { fix: input.command(`sandbox reset${org.flag} --confirm ${slug}`) });
+    throw new CliRefusal(`${typed === '' ? 'Nothing' : typed} is not ${slug}, so nothing was cleared.`, { why: 'A reset needs the organization typed, so a slip clears nothing.', fix: input.command(`sandbox reset${org.flag} --confirm ${slug}`) });
   }
 
   const answer = await writeRecord<ResetAnswer>(org.http, 'POST', '/sandbox/reset', { confirm: typed });

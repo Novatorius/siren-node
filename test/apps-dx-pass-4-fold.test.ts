@@ -152,7 +152,8 @@ describe('should 1: replay reads a saved request', () => {
 
   it('saves it with the command-line tool and reads the file', () => {
     expect(replay).toContain('siren apps requests <id> --json > request.json');
-    expect(replay).toMatch(/next CLI release/);
+    // This package ships --json on apps requests, so the README no longer calls it a next-release flag (SDK pass 5).
+    expect(replay).not.toMatch(/next CLI release/);
     expect(replay).toContain("readFileSync('request.json'");
     expect(replay).not.toContain('apps.requests.retrieve(');
   });

@@ -1,6 +1,7 @@
 import type { AppConversionType, AppFeatureDeclaration, CustomEventField, DeclareAppParams } from '../record-types';
 import { FeatureKind } from '../taxonomy';
-import { kindLabel } from './app-kinds';
+import { kindLabel, kindName } from './app-kinds';
+import { suggestions } from './suggest';
 
 /*
  * The app file, `siren.app.json`: a Siren recipe that holds one `apps`
@@ -31,6 +32,13 @@ import { kindLabel } from './app-kinds';
  *     }
  *   }
  */
+
+/**
+ * The top `description` `apps init` and `apps pull` write, so a person who
+ * opens the file learns it is a Siren recipe and what sends it (CLI pass 2,
+ * finding 4, declined: the file keeps the recipe shape).
+ */
+export const RECIPE_NOTE = 'A Siren recipe that sets up one app. siren apps apply sends it to Siren.';
 
 /** The file name `apps init` writes and `apps apply` reads when given none. */
 export const APP_FILE_NAME = 'siren.app.json';
@@ -196,6 +204,7 @@ export function appFileTemplate(key: string, name: string, org?: string): string
     $schema: APP_FILE_SCHEMA_PATH,
     version: 1,
     ...(org === undefined ? {} : { org }),
+    description: RECIPE_NOTE,
     apps: {
       [key]: {
         name,
@@ -596,8 +605,15 @@ class AppFileCheck {
       return null;
     }
     const appKeys = Object.keys(apps);
-    if (appKeys.length !== 1) {
-      this.problem('apps', this.where('apps'), `apps must hold exactly one app, and holds ${appKeys.length}.`);
+    if (appKeys.length === 0) {
+      this.problem('apps', this.where('apps'), 'apps holds no app. Write the app under its app key, such as "acme-payouts": { ... }.');
+    } else if (appKeys.length > 1) {
+      // The env file beside the file holds one SIREN_API_KEY, so a folder holds one app.
+      this.problem(
+        'apps',
+        this.where('apps'),
+        `apps holds ${appKeys.length} apps, and a file holds one, since the env file beside it keeps that one app's key. Give each app a folder of its own.`,
+      );
     }
     for (const appKey of appKeys) this.checkApp(appKey, apps[appKey]);
     return top as unknown as AppFile;
@@ -699,8 +715,18 @@ class AppFileCheck {
         this.where(`${path}.kind`),
         `${path}.kind fulfillmentMethod is the old name of this kind. Write payoutMethod, the word Siren and its documentation use.`,
       );
-    } else if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {
-      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind must be one of ${KINDS.map(kindLabel).join(', ')}.`);
+    } else if (typeof entry.kind !== 'string') {
+      this.problem(`${path}.kind`, this.where(`${path}.kind`), `${path}.kind is required, as text, such as postConversionAction.`);
+    } else if (!KINDS.includes(entry.kind)) {
+      // CLI pass 2, finding 7: the nearest kind, not all of them in one line.
+      const [guess] = suggestions(entry.kind, KINDS, /$^/);
+      this.problem(
+        `${path}.kind`,
+        this.where(`${path}.kind`),
+        guess === undefined
+          ? `${path}.kind ${entry.kind} is not a kind. The schema lists every kind, and an editor completes them.`
+          : `${path}.kind ${entry.kind} is not a kind. Did you mean ${guess}, ${/^[aeiou]/i.test(kindName(guess)) ? 'an' : 'a'} ${kindName(guess)}?`,
+      );
     }
     if (typeof entry.name !== 'string' || entry.name === '') {
       this.problem(`${path}.name`, this.where(`${path}.name`), `${path}.name is required, as text.`);

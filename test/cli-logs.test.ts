@@ -128,15 +128,19 @@ describe('siren logs tail', () => {
 
   it('tails the organization the resolver settles, switching for --org and naming it in the headline and the hints', async () => {
     const failed = entry({ id: 'delivery_4_1', type: 'delivery', status: 'failed', summary: 'ask payout-method', reason: 'The address answered 500.', request: APP_REQUEST_ID });
-    const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), page([failed], CURSOR_1)], { onSleep: (count, abort) => count === 1 && abort() });
+    const found = reply(200, { requests: [requestRow({ id: APP_REQUEST_ID })], total: 1 });
+    const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), page([failed], CURSOR_1), found], { onSleep: (count, abort) => count === 1 && abort() });
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme', memberships: [membershipAcme, membershipTwo] }) });
 
     expect(await h.run(['logs', 'tail', '--org', 'acme-two']), h.err()).toBe(130);
 
-    expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /logs']);
+    // The failed entry names a request, so one idPrefix lookup, in the organization it tails, decides how to print its id (CLI pass 3).
+    expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /logs', 'GET /apps/requests']);
     expect(h.http.requests[1]!.headers.Authorization).toBe(`Bearer ${ACCESS_2}`);
+    expect(h.http.requests[2]!.headers.Authorization).toBe(`Bearer ${ACCESS_2}`);
+    expect(Object.fromEntries(new URL(h.http.requests[2]!.url).searchParams)).toEqual({ idPrefix: `apr_${APP_REQUEST_ID.slice(4, 12)}` });
     expect(h.out()).toContain('Tailing Acme Two, all apps');
-    expect(h.out()).toContain(`siren apps requests ${APP_REQUEST_ID} --org acme-two`);
+    expect(h.out()).toContain(`siren apps requests ${APP_REQUEST_ID.slice(4, 12)} --org acme-two`);
   });
 
   it('refuses to guess among several organizations with no terminal to ask in, and sends nothing', async () => {

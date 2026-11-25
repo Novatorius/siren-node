@@ -81,7 +81,7 @@ describe('apps-c16-1: the metric kinds', () => {
       features: [{ ...appRecord().features[0], kind: 'metricCalculation', key: 'score', name: 'Score', settings: {} }],
     }) as unknown as App;
     expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: URL, features: [feature] }).lines).toEqual([
-      'changes feature score, Metric calculation (metricCalculation): scores money',
+      'changes feature score, Metric calculation (metricCalculation): scores money no becomes yes',
     ]);
     expect(appChanges(have, { name: 'Acme', description: "Siren's example app.", url: URL, features: [{ ...feature, scoresMoney: false }] }).lines).toEqual([]);
   });

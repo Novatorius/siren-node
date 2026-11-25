@@ -219,8 +219,63 @@ describe('apps-cli: apps.requests', () => {
     expect(queryOf(http.requests[0])).toEqual({ limit: '100', before: REQUEST, status: 'sent' });
   });
 
-  it('refuses a limit outside 1 to 100, a before that is no request id, and either one beside needs_attention, which Siren would ignore', async () => {
-    for (const params of [{ limit: 0 }, { limit: 101 }, { limit: 2.5 }, { before: 'apr_x' }, { status: 'needs_attention', limit: 10 }, { status: 'needs_attention', before: REQUEST }]) {
+  it('refuses a limit outside 1 to 100, and a before that is no request id', async () => {
+    for (const params of [{ limit: 0 }, { limit: 101 }, { limit: 2.5 }, { before: 'apr_x' }]) {
+      const { http, apps: resource } = apps([reply(200, { requests: [] })]);
+      expect(await refused(() => resource.requests.list(params as never)), JSON.stringify(params)).toBeInstanceOf(SirenError);
+      expect(http.requests).toHaveLength(0);
+    }
+  });
+
+  it('pages needs_attention with limit and before too, which Siren reads from pkt/apps-attention-paging, and an older Siren ignores', async () => {
+    const { http, apps: resource } = apps([reply(200, { requests: [row] })]);
+    expect(await resource.requests.list({ status: 'needs_attention', limit: 100, before: REQUEST })).toEqual([row]);
+    expect(queryOf(http.requests[0])).toEqual({ status: 'needs_attention', limit: '100', before: REQUEST });
+  });
+
+  it('finds requests by the start of their id with idPrefix, which ListAppRequests reads at feat/apps 76d5bbdf83', async () => {
+    const { http, apps: resource } = apps([reply(200, { requests: [row], total: 1 })]);
+    expect(await resource.requests.list({ idPrefix: 'apr_9f2c' })).toEqual([row]);
+    expect(queryOf(http.requests[0])).toEqual({ idPrefix: 'apr_9f2c' });
+  });
+
+  it('answers the matching rows as a plain list, never total, and takes the hex in either case, as Siren does', async () => {
+    const { http, apps: resource } = apps([reply(200, { requests: [row, row], total: 7 })]);
+    expect(await resource.requests.list({ idPrefix: 'apr_9F2C4e' })).toEqual([row, row]);
+    expect(queryOf(http.requests[0])).toEqual({ idPrefix: 'apr_9F2C4e' });
+  });
+
+  it('refuses an idPrefix that is not apr_ and 4 to 32 hex characters, and one beside another filter, which Siren would ignore', async () => {
+    for (const params of [
+      { idPrefix: 'apr_9f2' },
+      { idPrefix: '9f2c4e1a' },
+      { idPrefix: `apr_${'a'.repeat(33)}` },
+      { idPrefix: 'apr_9g2c' },
+      { idPrefix: 'APR_9f2c' },
+      { idPrefix: 'apr_9f2c', limit: 10 },
+      { idPrefix: 'apr_9f2c', before: REQUEST },
+      { idPrefix: 'apr_9f2c', status: 'sent' },
+    ]) {
+      const { http, apps: resource } = apps([reply(200, { requests: [] })]);
+      expect(await refused(() => resource.requests.list(params as never)), JSON.stringify(params)).toBeInstanceOf(SirenError);
+      expect(http.requests).toHaveLength(0);
+    }
+  });
+
+  it("keeps to one app with appId, on the plain list, a page of it and the attention list, as ListAppRequests reads it at feat/apps 76d5bbdf83", async () => {
+    for (const [params, query] of [
+      [{ appId: 12 }, { appId: '12' }],
+      [{ appId: 12, limit: 100, before: REQUEST }, { appId: '12', limit: '100', before: REQUEST }],
+      [{ appId: 12, status: 'needs_attention' }, { appId: '12', status: 'needs_attention' }],
+    ] as const) {
+      const { http, apps: resource } = apps([reply(200, { requests: [row] })]);
+      expect(await resource.requests.list(params as never)).toEqual([row]);
+      expect(queryOf(http.requests[0])).toEqual(query);
+    }
+  });
+
+  it('refuses an appId that is not a whole number of 1 or more, and one beside idPrefix, which Siren would ignore', async () => {
+    for (const params of [{ appId: 0 }, { appId: 1.5 }, { appId: '12' }, { appId: 12, idPrefix: 'apr_9f2c' }]) {
       const { http, apps: resource } = apps([reply(200, { requests: [] })]);
       expect(await refused(() => resource.requests.list(params as never)), JSON.stringify(params)).toBeInstanceOf(SirenError);
       expect(http.requests).toHaveLength(0);

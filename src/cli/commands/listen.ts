@@ -10,6 +10,8 @@ import { REPORT_WIDTH, clean, styleFor, visibleLength, wrapWords } from '../styl
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 import { saveSecrets } from './apply';
+import { idLabeller, whole } from './requests';
+import type { IdLabel } from './requests';
 
 /*
  * `siren listen`: while it runs, Siren sends one app's asks, tells and
@@ -138,6 +140,15 @@ function idOf(delivery: ListenDelivery): string {
   return delivery.request?.id ?? delivery.eventId;
 }
 
+/**
+ * The id a delivery line shows: a request's short id in a terminal when
+ * Siren finds requests by the start of their id (CLI pass 3), the whole
+ * id through a pipe, and a webhook event's id as it is.
+ */
+function idShown(style: Style, delivery: ListenDelivery, label: IdLabel): string {
+  return delivery.request !== null && style.rich ? label(delivery.request.id) : idOf(delivery);
+}
+
 /** Text from Siren or a handler on one line, with every control character and escape sequence taken out. */
 function shown(text: string): string {
   return clean(text.replace(/[\r\n\t]+/g, ' '));
@@ -158,17 +169,17 @@ const BAD_ANSWERS: ReadonlySet<string> = new Set(['needs_attention', 'dropped'])
  * symbol. Every value from Siren is cleaned. In a terminal no line passes
  * 80 columns, and through a pipe each value is whole.
  */
-export function deliveryLine(style: Style, at: number, delivery: ListenDelivery, result: Forwarded): string {
+export function deliveryLine(style: Style, at: number, delivery: ListenDelivery, result: Forwarded, label: IdLabel = whole): string {
   const ok = result.httpStatus !== null && result.httpStatus >= 200 && result.httpStatus < 300;
   const status = result.httpStatus === null ? '---' : String(result.httpStatus);
-  const rest = `${shown(kindOf(delivery)).padEnd(7)} ${cut(style, shown(labelOf(delivery)), 19).padEnd(19)} ${status.padEnd(4)} ${duration(result.durationMs).padStart(6)}  ${cut(style, shown(idOf(delivery)), 12)}`;
+  const rest = `${shown(kindOf(delivery)).padEnd(7)} ${cut(style, shown(labelOf(delivery)), 19).padEnd(19)} ${status.padEnd(4)} ${duration(result.durationMs).padStart(6)}  ${cut(style, shown(idShown(style, delivery, label)), 12)}`;
   return ok ? style.success(`${style.dim(clock(at))}  ${rest}`) : style.failure(`${clock(at)}  ${rest}`);
 }
 
 /** The line for an ask's answer the handler posted: time, the feature, Siren's status and the request id. */
-export function answerLine(style: Style, at: number, feature: string, answer: Pick<ListenAnswer, 'request' | 'status'>): string {
+export function answerLine(style: Style, at: number, feature: string, answer: Pick<ListenAnswer, 'request' | 'status'>, label: IdLabel = whole): string {
   const status = shown(answer.status);
-  const rest = `${'answer'.padEnd(7)} ${cut(style, shown(feature), 19).padEnd(19)} ${cut(style, status, 11).padEnd(11)}  ${cut(style, shown(answer.request), 12)}`;
+  const rest = `${'answer'.padEnd(7)} ${cut(style, shown(feature), 19).padEnd(19)} ${cut(style, status, 11).padEnd(11)}  ${cut(style, shown(style.rich ? label(answer.request) : answer.request), 12)}`;
   return BAD_ANSWERS.has(status) ? style.failure(`${clock(at)}  ${rest}`) : style.success(`${style.dim(clock(at))}  ${rest}`);
 }
 
@@ -279,6 +290,8 @@ export async function listen(input: CommandInput): Promise<number> {
   if (file !== undefined) run.appFilePath = file.path;
   const session = await run.signedIn();
   const scope = await orgScope(run, input, session, 'listen');
+  // Short request ids when Siren finds requests by their start (CLI pass 3), from one idPrefix call at the first request.
+  const labelFor = idLabeller(scope);
   const { http } = scope;
   const emit = (object: Record<string, unknown>) => io.stdout(`${JSON.stringify(object)}\n`);
   const say = (line: string) => {
@@ -409,14 +422,16 @@ export async function listen(input: CommandInput): Promise<number> {
         });
         continue;
       }
-      say(deliveryLine(style, io.now(), delivery, result));
-      if (!ok) for (const line of failureLines(style, run, delivery, result, nextRetryAt, io.now())) say(line);
+      // Through a pipe a line keeps the whole id, so only a terminal line or a failure's resend hint needs the lookup.
+      const label = delivery.request !== null && (style.rich || !ok) ? await labelFor(delivery.request.id) : whole;
+      say(deliveryLine(style, io.now(), delivery, result, label));
+      if (!ok) for (const line of failureLines(style, run, delivery, result, nextRetryAt, io.now(), label)) say(line);
     }
     for (const answer of page.answers) {
       if (json) {
         emit({ type: 'answer', at: answer.answeredAt ?? new Date(io.now()).toISOString(), request: answer.request, status: answer.status });
       } else {
-        say(answerLine(style, io.now(), features.get(answer.request) ?? '', answer));
+        say(answerLine(style, io.now(), features.get(answer.request) ?? '', answer, style.rich ? await labelFor(answer.request) : whole));
       }
     }
     pause = page.nextPollMs > 0 ? page.nextPollMs : pause;
@@ -493,7 +508,7 @@ function headline(style: Style, appKey: string, orgName: string, target: string,
  * command that sends it again, each a › step in a terminal. A command is
  * never cut, so one that would pass 80 columns under the kind moves left.
  */
-function failureLines(style: Style, run: CommandContext, delivery: ListenDelivery, result: Forwarded, nextRetryAt: string | null, now: number): string[] {
+function failureLines(style: Style, run: CommandContext, delivery: ListenDelivery, result: Forwarded, nextRetryAt: string | null, now: number, label: IdLabel = whole): string[] {
   const pad = ' '.repeat(10);
   const step = (text: string) => {
     const line = `${pad}${style.next(text)}`;
@@ -503,7 +518,7 @@ function failureLines(style: Style, run: CommandContext, delivery: ListenDeliver
   const reason = shown(failureReason(result));
   const lines = (style.rich ? wrapWords(reason, REPORT_WIDTH - pad.length) : [reason]).map((line) => `${pad}${line}`);
   if (delivery.request === null) return [...lines, step("The dashboard's webhook deliveries page shows it.")];
-  const resend = style.command(run.command(`apps resend ${shown(delivery.request.id)}`));
+  const resend = style.command(run.command(`apps resend ${shown(label(delivery.request.id))}`));
   if (result.httpStatus === null) {
     lines.push(step('Is your server running? Start it, then:'));
   } else if (nextRetryAt !== null) {
