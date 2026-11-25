@@ -49,8 +49,12 @@ const ROUTES: Array<[string, string]> = [
 ];
 
 describe('apps-cli docs', () => {
+  // Siren serves /apps/{app}/items until its own rename (pkt/apps-feature-rename)
+  // merges, and openapi.json is a copy of Siren's spec. A feature route counts
+  // under either name until then. test/openapi-sdk-routes.test.ts lists the
+  // SDK's /features calls as unserved, and fails once Siren serves them.
   it.each(ROUTES)("openapi.json, Siren's spec, serves %s %s", (key, method) => {
-    expect(specServes(method, key)).toBe(true);
+    expect(specServes(method, key) || specServes(method, key.replace('/features', '/items'))).toBe(true);
   });
 
   it("openapi.json, Siren's spec, serves the answer route", () => {

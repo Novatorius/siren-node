@@ -43,14 +43,14 @@ export const OPTIONS: Options = {
 };
 
 const FLAG = {
-  d: ['-d <key=value>', 'A field, repeatable. A query parameter on a read, a body field on a write. a[b]=1 nests.'],
-  data: ['--data <json or @file>', 'A JSON body, or @file.json to read one. -d fields go over it.'],
-  json: ['--json', "Print Siren's answer as JSON, and nothing else."],
-  limit: ['--limit <n>', 'How many records a page holds, sent as number.'],
-  offset: ['--offset <n>', 'How many records to skip, sent as offset.'],
-  all: ['--all', 'Read every page of the list.'],
-  'dry-run': ['--dry-run', 'Print the request and send nothing.'],
-  confirm: ['--confirm <id>', 'The id of the record a live delete removes, when there is no terminal to type it in.'],
+  d: ['-d <key=value>', 'A field, repeatable: a query parameter on a read, a body field on a write, a[b]=1 nested'],
+  data: ['--data <json or @file>', 'A JSON body, or @file.json to read one, under any -d fields'],
+  json: ['--json', "Print Siren's answer as JSON, and nothing else"],
+  limit: ['--limit <n>', 'How many records a page holds, sent as number'],
+  offset: ['--offset <n>', 'How many records to skip, sent as offset'],
+  all: ['--all', 'Read every page of the list'],
+  'dry-run': ['--dry-run', 'Print the request and send nothing'],
+  confirm: ['--confirm <id>', 'The id of the record a live delete removes, when there is no terminal to type it in'],
 } as const satisfies Record<string, readonly [string, string]>;
 
 /** A command line's shape, as `runCli` reads it. The same fields as its own command table. */

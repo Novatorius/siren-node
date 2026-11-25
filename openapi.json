@@ -558,6 +558,14 @@
                 "tags": [
                     "application-forms"
                 ],
+                "parameters": [
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -798,6 +806,12 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -982,6 +996,12 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -5236,6 +5256,20 @@
                 "tags": [
                     "auth"
                 ],
+                "parameters": [
+                    {
+                        "name": "number",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -7124,6 +7158,14 @@
                 "operationId": "getBillingSettings",
                 "tags": [
                     "billing"
+                ],
+                "parameters": [
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -11565,6 +11607,24 @@
                             "type": "integer",
                             "minimum": 1
                         }
+                    },
+                    {
+                        "name": "noTest",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -14011,46 +14071,6 @@
                 "x-siren-open-response": true
             }
         },
-        "/customers/(?P<id>\\d+)": {
-            "get": {
-                "operationId": "getCustomer",
-                "tags": [
-                    "customers"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Success.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "x-siren-open": true
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    }
-                },
-                "x-siren-controller": "Siren\\Customers\\Service\\Rest\\GetCustomer",
-                "x-siren-editions": [
-                    "lite",
-                    "essentials",
-                    "plus",
-                    "pro",
-                    "cloud"
-                ],
-                "x-siren-model": "Siren\\Opportunities\\Core\\Models\\Opportunity",
-                "x-siren-open-response": true
-            }
-        },
         "/customers/matching/cross-store": {
             "get": {
                 "operationId": "getCrossStoreCustomerMatching",
@@ -14321,6 +14341,56 @@
                 ],
                 "x-siren-model": "Siren\\Opportunities\\Core\\Models\\Opportunity",
                 "x-siren-open-request": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/customers/{id}": {
+            "get": {
+                "operationId": "getCustomer",
+                "tags": [
+                    "customers"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-controller": "Siren\\Customers\\Service\\Rest\\GetCustomer",
+                "x-siren-editions": [
+                    "lite",
+                    "essentials",
+                    "plus",
+                    "pro",
+                    "cloud"
+                ],
+                "x-siren-model": "Siren\\Opportunities\\Core\\Models\\Opportunity",
                 "x-siren-open-response": true
             }
         },
@@ -16508,6 +16578,12 @@
                             "minimum": 0,
                             "maximum": 9007199254740991
                         }
+                    },
+                    {
+                        "name": "number",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -16659,6 +16735,12 @@
                                 "DESC"
                             ]
                         }
+                    },
+                    {
+                        "name": "number",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -16850,6 +16932,18 @@
                             "type": "integer",
                             "minimum": 1
                         }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -16985,11 +17079,21 @@
                 "x-siren-open-response": true
             }
         },
-        "/engagements/events/(?P<id>[\\w:%-]+)": {
+        "/engagements/events/{id}": {
             "get": {
                 "operationId": "getTrigger",
                 "tags": [
                     "engagements"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -17171,6 +17275,14 @@
                 "tags": [
                     "entitlements"
                 ],
+                "parameters": [
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -17205,6 +17317,20 @@
                 "operationId": "listCustomEventTypes",
                 "tags": [
                     "event-types"
+                ],
+                "parameters": [
+                    {
+                        "name": "number",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -17510,6 +17636,24 @@
                             "type": "integer",
                             "minimum": 1
                         }
+                    },
+                    {
+                        "name": "currency",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -18741,7 +18885,7 @@
                 "x-siren-open-response": true
             }
         },
-        "/jobs/(?P<jobId>[a-zA-Z0-9]+)": {
+        "/jobs/{jobId}": {
             "get": {
                 "operationId": "getJob",
                 "tags": [
@@ -18750,7 +18894,7 @@
                 "parameters": [
                     {
                         "name": "jobId",
-                        "in": "query",
+                        "in": "path",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -21099,160 +21243,6 @@
                 "x-siren-open-response": true
             }
         },
-        "/notifications/(?P<id>\\d+)": {
-            "get": {
-                "operationId": "getNotification",
-                "tags": [
-                    "notifications"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Success.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "x-siren-open": true
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    }
-                },
-                "x-siren-controller": "Siren\\SaaS\\Notifications\\Rest\\GetNotification",
-                "x-siren-editions": [
-                    "cloud"
-                ],
-                "x-siren-open-response": true
-            },
-            "put": {
-                "operationId": "updateNotification",
-                "tags": [
-                    "notifications"
-                ],
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true,
-                                "x-siren-open": true
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Success.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "x-siren-open": true
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    }
-                },
-                "x-siren-controller": "Siren\\SaaS\\Notifications\\Rest\\UpdateNotification",
-                "x-siren-editions": [
-                    "cloud"
-                ],
-                "x-siren-open-request": true,
-                "x-siren-open-response": true
-            },
-            "delete": {
-                "operationId": "deleteNotification",
-                "tags": [
-                    "notifications"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Success.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "x-siren-open": true
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Refused.",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        }
-                    }
-                },
-                "x-siren-controller": "Siren\\SaaS\\Notifications\\Rest\\DeleteNotification",
-                "x-siren-editions": [
-                    "cloud"
-                ],
-                "x-siren-open-response": true
-            }
-        },
         "/notifications/bulk": {
             "post": {
                 "operationId": "bulkUpdateNotifications",
@@ -21653,11 +21643,203 @@
                 "x-siren-open-response": true
             }
         },
+        "/notifications/{id}": {
+            "get": {
+                "operationId": "getNotification",
+                "tags": [
+                    "notifications"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-controller": "Siren\\SaaS\\Notifications\\Rest\\GetNotification",
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            },
+            "put": {
+                "operationId": "updateNotification",
+                "tags": [
+                    "notifications"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "x-siren-open": true
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-controller": "Siren\\SaaS\\Notifications\\Rest\\UpdateNotification",
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-open-request": true,
+                "x-siren-open-response": true
+            },
+            "delete": {
+                "operationId": "deleteNotification",
+                "tags": [
+                    "notifications"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-controller": "Siren\\SaaS\\Notifications\\Rest\\DeleteNotification",
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            }
+        },
         "/oauth/authorize": {
             "get": {
                 "operationId": "getAuthorizationContext",
                 "tags": [
                     "oauth"
+                ],
+                "parameters": [
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -21936,6 +22118,24 @@
                             "type": "integer",
                             "minimum": 1
                         }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "earned",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -23717,11 +23917,21 @@
                 "x-siren-model": "Siren\\Opportunities\\Core\\Models\\Opportunity"
             }
         },
-        "/org-logos/(?P<key>[1-9][0-9]*-[0-9a-f]+\\.webp)": {
+        "/org-logos/{key}": {
             "get": {
                 "operationId": "getOrgLogoFile",
                 "tags": [
                     "org-logos"
+                ],
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -28337,6 +28547,20 @@
                 "tags": [
                     "properties"
                 ],
+                "parameters": [
+                    {
+                        "name": "number",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -29621,7 +29845,7 @@
                 "x-siren-open-response": true
             }
         },
-        "/recipes/imports/(?P<jobId>[a-zA-Z0-9]+)": {
+        "/recipes/imports/{jobId}": {
             "get": {
                 "operationId": "getRecipeImport",
                 "tags": [
@@ -29630,7 +29854,7 @@
                 "parameters": [
                     {
                         "name": "jobId",
-                        "in": "query",
+                        "in": "path",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -29859,6 +30083,14 @@
                 "tags": [
                     "sandbox"
                 ],
+                "parameters": [
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -29903,6 +30135,26 @@
                 "operationId": "listCapturedEmails",
                 "tags": [
                     "sandbox"
+                ],
+                "parameters": [
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "number",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -29957,6 +30209,12 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -30102,6 +30360,14 @@
                 "operationId": "getWalkthroughEditor",
                 "tags": [
                     "sandbox"
+                ],
+                "parameters": [
+                    {
+                        "name": "propertyId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -31088,6 +31354,48 @@
                             "type": "integer",
                             "minimum": 1
                         }
+                    },
+                    {
+                        "name": "refunded",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "collaboratorId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "currency",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "attributed",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "counted",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
                     }
                 ],
                 "responses": {
@@ -31489,7 +31797,7 @@
                 "x-siren-model": "Siren\\Transactions\\Core\\Models\\Transaction"
             }
         },
-        "/u/(?P<token>[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|sample)": {
+        "/u/{token}": {
             "post": {
                 "operationId": "oneClickUnsubscribe",
                 "tags": [
@@ -31507,6 +31815,16 @@
                         }
                     }
                 },
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -31758,7 +32076,7 @@
                 "x-siren-open-response": true
             }
         },
-        "/utilities/notices/(?P<id>[a-z0-9-]+)/dismiss": {
+        "/utilities/notices/{id}/dismiss": {
             "post": {
                 "operationId": "dismissAdminNotice",
                 "tags": [
@@ -31776,6 +32094,16 @@
                         }
                     }
                 },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -31851,32 +32179,35 @@
                 "x-siren-open-response": true
             }
         },
-        "/utilities/repairs/(?P<id>[a-z0-9-]+)": {
+        "/utilities/repairs/{id}": {
             "post": {
                 "operationId": "runRepair",
                 "tags": [
                     "utilities"
                 ],
                 "requestBody": {
-                    "required": true,
+                    "required": false,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "properties": {
-                                    "id": {
-                                        "type": "string",
-                                        "x-siren-unreadable": true
-                                    }
-                                },
-                                "required": [
-                                    "id"
-                                ],
-                                "additionalProperties": true
+                                "additionalProperties": true,
+                                "x-siren-open": true
                             }
                         }
                     }
                 },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "x-siren-unreadable": true
+                        }
+                    }
+                ],
                 "responses": {
                     "202": {
                         "description": "Success.",
@@ -31908,6 +32239,7 @@
                     "cloud"
                 ],
                 "x-siren-model": "Siren\\Utilities\\Core\\Models\\UtilitiesAccess",
+                "x-siren-open-request": true,
                 "x-siren-open-response": true
             }
         },
@@ -31946,6 +32278,20 @@
                 "operationId": "listWebhookSubscriptions",
                 "tags": [
                     "webhooks"
+                ],
+                "parameters": [
+                    {
+                        "name": "number",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "required": false,
+                        "schema": {}
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -32626,8 +32972,9 @@
             "POST /storefront/{sourceSlug}/{storefrontKey}/orders",
             "POST /stripe/webhook",
             "POST /track/visit",
-            "POST /u/(?P<token>[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|sample)",
-            "POST /utilities/notices/(?P<id>[a-z0-9-]+)/dismiss",
+            "POST /u/{token}",
+            "POST /utilities/notices/{id}/dismiss",
+            "POST /utilities/repairs/{id}",
             "POST /webhooks/{id}/test",
             "PUT /auth/members/{userId}/properties",
             "PUT /auth/org-opens/{orgId}",
@@ -32644,8 +32991,8 @@
             "PUT /notes/{id}/sharing",
             "PUT /notification-preferences",
             "PUT /notification-preferences/levels",
-            "PUT /notifications/(?P<id>\\d+)",
             "PUT /notifications/reply-to",
+            "PUT /notifications/{id}",
             "PUT /onboarding/checklist",
             "PUT /onboarding/site",
             "PUT /onboarding/walkthrough/progress",
@@ -32688,7 +33035,7 @@
             "DELETE /inbound/{sourceSlug}/test-deliveries",
             "DELETE /mappings",
             "DELETE /notes/{id}",
-            "DELETE /notifications/(?P<id>\\d+)",
+            "DELETE /notifications/{id}",
             "DELETE /obligations/{id}",
             "DELETE /orgs/{id}/logo",
             "DELETE /program-groups/{id}",
@@ -32759,9 +33106,9 @@
             "GET /coupons/{id}",
             "GET /credit-balances",
             "GET /customers",
-            "GET /customers/(?P<id>\\d+)",
             "GET /customers/matching/cross-store",
             "GET /customers/suggestions",
+            "GET /customers/{id}",
             "GET /demo-control/demos",
             "GET /demo-control/demos/{slug}",
             "GET /demo-control/jobs/{jobId}",
@@ -32778,7 +33125,7 @@
             "GET /docs",
             "GET /engagements/calculations",
             "GET /engagements/events",
-            "GET /engagements/events/(?P<id>[\\w:%-]+)",
+            "GET /engagements/events/{id}",
             "GET /engagements/filters/types",
             "GET /engagements/types",
             "GET /entitlements/trial",
@@ -32792,7 +33139,7 @@
             "GET /incentives/types",
             "GET /integrations/catalog",
             "GET /jobs",
-            "GET /jobs/(?P<jobId>[a-zA-Z0-9]+)",
+            "GET /jobs/{jobId}",
             "GET /line-item-filters/categories",
             "GET /migration/currency-conflicts",
             "GET /move-emails",
@@ -32802,9 +33149,9 @@
             "GET /notes/{id}/sharing",
             "GET /notification-preferences",
             "GET /notifications",
-            "GET /notifications/(?P<id>\\d+)",
             "GET /notifications/drafts/{event}/{audience}",
             "GET /notifications/test-recipients",
+            "GET /notifications/{id}",
             "GET /oauth/authorize",
             "GET /onboarding/checklist",
             "GET /onboarding/recipe-handoff",
@@ -32814,7 +33161,7 @@
             "GET /onboarding/walkthrough",
             "GET /onboarding/wizard",
             "GET /onboarding/wizard/go-live",
-            "GET /org-logos/(?P<key>[1-9][0-9]*-[0-9a-f]+\\.webp)",
+            "GET /org-logos/{key}",
             "GET /orgs",
             "GET /orgs/lookup",
             "GET /orgs/slug-check",
@@ -32851,7 +33198,7 @@
             "GET /recipes/catalog",
             "GET /recipes/export",
             "GET /recipes/imports",
-            "GET /recipes/imports/(?P<jobId>[a-zA-Z0-9]+)",
+            "GET /recipes/imports/{jobId}",
             "GET /registries/currencies",
             "GET /reporting/program-summary",
             "GET /sandbox/demo-store",
@@ -33028,9 +33375,9 @@
             "POST /track/visit",
             "POST /transactions/bulk",
             "POST /transactions/credit-collaborator",
-            "POST /u/(?P<token>[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|sample)",
-            "POST /utilities/notices/(?P<id>[a-z0-9-]+)/dismiss",
-            "POST /utilities/repairs/(?P<id>[a-z0-9-]+)",
+            "POST /u/{token}",
+            "POST /utilities/notices/{id}/dismiss",
+            "POST /utilities/repairs/{id}",
             "POST /webhooks/{id}/test",
             "PUT /application-forms/{id}",
             "PUT /auth/members/{userId}/properties",
@@ -33055,8 +33402,8 @@
             "PUT /notes/{id}/sharing",
             "PUT /notification-preferences",
             "PUT /notification-preferences/levels",
-            "PUT /notifications/(?P<id>\\d+)",
             "PUT /notifications/reply-to",
+            "PUT /notifications/{id}",
             "PUT /obligations/{id}",
             "PUT /onboarding/checklist",
             "PUT /onboarding/site",

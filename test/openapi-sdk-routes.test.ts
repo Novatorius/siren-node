@@ -28,18 +28,27 @@ function served(method: string, path: string): boolean {
 
 /**
  * Calls the SDK makes that Siren does not serve, as `METHOD /path` with
- * the ids the probe used. Each stays for the reason beside it.
+ * `{id}` for any one segment. Each stays for the reason beside it.
  */
 const KNOWN_UNSERVED: Record<string, string> = {
-  'GET /api-keys': 'apiKeys is deprecated since apps own their keys (docs/api/api-keys.md). Removing it is a breaking change for pass 6.',
-  'POST /api-keys': 'apiKeys is deprecated, as above.',
-  'GET /api-keys/1': 'apiKeys is deprecated, as above.',
-  'DELETE /api-keys/1': 'apiKeys is deprecated, as above.',
-  'POST /api-keys/1/rotate': 'apiKeys is deprecated, as above.',
+  'POST /webhooks': 'webhooks.subscriptions.create() is deprecated since an app holds its address, and Siren answers 405. Removing it is a breaking change.',
+  'GET /api-keys': 'apiKeys.list() is deprecated since an app holds its key, and Siren answers 404. Removing it is a breaking change.',
+  'POST /api-keys': 'apiKeys.create() is deprecated, as above.',
+  'GET /api-keys/scopes': 'apiKeys.scopes() is deprecated since an app holds its key, and Siren answers 404. Removing it is a breaking change.',
+  'DELETE /api-keys/{id}': 'apiKeys.revoke() is deprecated, as above.',
+  'POST /apps/{id}/features': 'Siren serves /apps/{app}/items until pkt/apps-feature-rename merges. Then openapi.json is copied again and these four leave the list.',
+  'GET /apps/{id}/features/{id}': 'The feature rename, as above.',
+  'PATCH /apps/{id}/features/{id}': 'The feature rename, as above.',
+  'DELETE /apps/{id}/features/{id}': 'The feature rename, as above.',
 };
 
+/** The known entry a sent line falls under, if any. */
+function knownAs(line: string): string | undefined {
+  return Object.keys(KNOWN_UNSERVED).find((known) => new RegExp(`^${known.replace(/\{id\}/g, '[^/]+')}$`).test(line));
+}
+
 /** Argument lists tried on each method, until one sends. */
-const ATTEMPTS: unknown[][] = [[], [1], [1, {}], ['acme-app'], ['acme-app', {}], [{}], [1, 1], ['apr_0123456789abcdef0123456789abcdef'], [{ name: 'x' }], [[1]], ['sale', {}]];
+const ATTEMPTS: unknown[][] = [[], [1], [1, {}], ['acme-app'], ['acme-app', {}], [{}], [1, 1], ['apr_0123456789abcdef0123456789abcdef'], [{ name: 'x' }], [[1]], ['sale', {}], ['acme-app', 'acme-ledger'], ['acme-app', { kind: 'payoutMethod', key: 'acme-ledger', name: 'Ledger' }], ['acme-app', 'acme-ledger', { name: 'Ledger' }], ['acme-app', 1], ['acme-app', 1, { name: 'Ledger' }]];
 
 function methodsOf(target: object): string[] {
   const names = new Set<string>();
@@ -109,9 +118,9 @@ describe("the SDK's requests against Siren's spec", () => {
       const [method, path] = line.split(' ') as [string, string];
       return !served(method, path);
     });
-    const unknown = unserved.filter((line) => !(line in KNOWN_UNSERVED)).map((line) => `${line} (${sent.get(line)})`);
+    const unknown = unserved.filter((line) => knownAs(line) === undefined).map((line) => `${line} (${sent.get(line)})`);
     expect(unknown, `The SDK sends routes Siren's spec lacks:\n${unknown.join('\n')}`).toEqual([]);
-    expect(Object.keys(KNOWN_UNSERVED).filter((line) => !unserved.includes(line)), 'KNOWN_UNSERVED names a call that is now served or no longer sent. Remove it.').toEqual([]);
+    expect(Object.keys(KNOWN_UNSERVED).filter((known) => !unserved.some((line) => knownAs(line) === known)), 'KNOWN_UNSERVED names a call that is now served or no longer sent. Remove it.').toEqual([]);
   });
 
   it('reaches most of the SDK with the probe', async () => {

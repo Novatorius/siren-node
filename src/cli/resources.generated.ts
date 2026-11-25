@@ -27,19 +27,25 @@ export interface ResourceCommand {
   readonly ops: Readonly<Partial<Record<ResourceOp, ResourceRoute>>>;
 }
 
-/** Every generated resource, by name, from openapi.json (47 resources). */
+/** Every generated resource, by name, from openapi.json (48 resources). */
 export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
   {
     "name": "application-forms",
     "ops": {
       "list": {
         "method": "GET",
-        "path": "/application-forms"
+        "path": "/application-forms",
+        "query": [
+          "propertyId"
+        ]
       },
       "get": {
         "method": "GET",
         "path": "/application-forms/{id}",
-        "param": "id"
+        "param": "id",
+        "query": [
+          "propertyId"
+        ]
       },
       "create": {
         "method": "POST",
@@ -85,7 +91,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
       "delete": {
         "method": "DELETE",
         "path": "/application-forms/{id}",
-        "param": "id"
+        "param": "id",
+        "query": [
+          "propertyId"
+        ]
       }
     }
   },
@@ -406,7 +415,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "type",
           "obligationId",
           "transactionId",
-          "number"
+          "number",
+          "noTest",
+          "from",
+          "to"
         ],
         "paginated": true
       },
@@ -563,6 +575,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
       "list": {
         "method": "GET",
         "path": "/customers"
+      },
+      "get": {
+        "method": "GET",
+        "path": "/customers/{id}",
+        "param": "id"
       }
     }
   },
@@ -704,7 +721,9 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "collaboratorId",
           "programId",
           "opportunityId",
-          "number"
+          "number",
+          "from",
+          "to"
         ],
         "paginated": true
       },
@@ -720,7 +739,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
     "ops": {
       "list": {
         "method": "GET",
-        "path": "/event-types"
+        "path": "/event-types",
+        "query": [
+          "number",
+          "offset"
+        ],
+        "paginated": true
       },
       "get": {
         "method": "GET",
@@ -740,7 +764,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "offset",
           "payoutStatus",
           "status",
-          "number"
+          "number",
+          "currency",
+          "from",
+          "to"
         ],
         "paginated": true
       },
@@ -800,6 +827,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "type",
           "subtype"
         ]
+      },
+      "get": {
+        "method": "GET",
+        "path": "/jobs/{jobId}",
+        "param": "jobId"
       }
     }
   },
@@ -935,9 +967,24 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "method": "GET",
         "path": "/notifications"
       },
+      "get": {
+        "method": "GET",
+        "path": "/notifications/{id}",
+        "param": "id"
+      },
       "create": {
         "method": "POST",
         "path": "/notifications"
+      },
+      "update": {
+        "method": "PUT",
+        "path": "/notifications/{id}",
+        "param": "id"
+      },
+      "delete": {
+        "method": "DELETE",
+        "path": "/notifications/{id}",
+        "param": "id"
       }
     }
   },
@@ -956,7 +1003,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "status",
           "awardType",
           "payoutId",
-          "number"
+          "number",
+          "from",
+          "to",
+          "earned"
         ],
         "paginated": true
       },
@@ -1031,6 +1081,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "status",
           "lastTriggered"
         ]
+      }
+    }
+  },
+  {
+    "name": "org-logos",
+    "ops": {
+      "get": {
+        "method": "GET",
+        "path": "/org-logos/{key}",
+        "param": "key"
       }
     }
   },
@@ -1267,7 +1327,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
     "ops": {
       "list": {
         "method": "GET",
-        "path": "/properties"
+        "path": "/properties",
+        "query": [
+          "number",
+          "offset"
+        ],
+        "paginated": true
       },
       "get": {
         "method": "GET",
@@ -1336,7 +1401,14 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "offset",
           "credited",
           "status",
-          "number"
+          "number",
+          "refunded",
+          "collaboratorId",
+          "currency",
+          "attributed",
+          "counted",
+          "from",
+          "to"
         ],
         "paginated": true
       },
@@ -1364,7 +1436,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
     "ops": {
       "list": {
         "method": "GET",
-        "path": "/webhooks"
+        "path": "/webhooks",
+        "query": [
+          "number",
+          "offset"
+        ],
+        "paginated": true
       },
       "get": {
         "method": "GET",
