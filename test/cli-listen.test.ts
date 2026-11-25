@@ -174,6 +174,48 @@ describe('siren listen', () => {
     expect(taken.err()).toContain('Another siren listen took over this app');
   });
 
+  it('stops with what happened, why and what to do when listen was turned off on this Siren', async () => {
+    const local = await handler(() => ({ status: 200, body: '{}' }));
+    const off = reply(410, {
+      error: {
+        code: 'listen_session_ended',
+        message: "This listen session ended because siren listen was turned off on this Siren. Its deliveries go to the app's address.",
+        context: { reason: 'listen_session_ended', endedBecause: 'listen_off' },
+      },
+    });
+    const h = harness([opened(), off]);
+    h.signedIn();
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url])).toBe(1);
+    expect(h.paths()).toEqual(['POST /listen-sessions', `POST /listen-sessions/${SESSION}/poll`]);
+    expect(h.err()).toContain(`Siren ended the listen session for ${KEY}.`);
+    expect(h.err()).toContain("siren listen was turned off on this Siren, so Siren sends this app's requests to its address now.");
+    expect(h.err()).toContain(`Run siren apps requests --app ${KEY} to see where they went.`);
+    expect(h.err()).toContain('SIREN_LISTEN_ALLOWED=1');
+    expect(h.err()).not.toContain('a new one is open');
+  });
+
+  it("reports a result again when Siren could not record it, and warns without stopping when it never can", async () => {
+    const local = await handler(() => ({ status: 200, body: '{}' }));
+    const failed = () => reply(500, { error: { code: 'internal_error', message: 'Siren could not reach its listen records. Try again.', context: {} } });
+    const results = `POST /listen-sessions/${SESSION}/results`;
+
+    const h = harness([opened(), polled([delivery()]), failed(), reported(), closed()], { onSleep: (count: number, abort: () => void) => (count === 2 ? abort() : undefined) });
+    h.signedIn();
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /listen-sessions', `POST /listen-sessions/${SESSION}/poll`, results, results, `DELETE /listen-sessions/${SESSION}`]);
+    expect(bodyOf(h.http.requests[3])).toEqual(bodyOf(h.http.requests[2]));
+    expect(local.received).toHaveLength(1);
+    expect(h.out()).toMatch(/ask\s+acme-ledger\s+200/);
+    expect(h.err()).toBe('');
+
+    const never = harness([opened(), polled([delivery()]), failed(), failed(), failed(), closed()], { onSleep: (count: number, abort: () => void) => (count === 3 ? abort() : undefined) });
+    never.signedIn();
+    expect(await never.run(['listen', '--app', KEY, '--forward-to', local.url]), never.err()).toBe(0);
+    expect(never.paths().filter((path) => path === results)).toHaveLength(3);
+    expect(never.err()).toContain('Siren could not record delivery 812 after 3 tries.');
+    expect(never.err()).toContain('Siren counts a failed attempt and sends it again');
+  });
+
   it('prints one JSON object per line with --json', async () => {
     const local = await handler(() => ({ status: 200, body: '{}' }));
     const h = harness([opened(), polled([delivery()]), reported(), closed(2)], stopAtFirstWait);

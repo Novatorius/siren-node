@@ -38,6 +38,13 @@ const MAX_BACKOFF_MS = 5000;
 /** How much of a handler's reply a failure line shows. */
 const REASON_LENGTH = 60;
 
+/**
+ * How many times the command sends one result before it gives up on it.
+ * Siren writes a result whole or not at all, so a failed send leaves the
+ * claim in place and the same result can go again.
+ */
+export const REPORT_TRIES = 3;
+
 /** One delivery Siren handed the command, as `POST /listen-sessions/{id}/poll` answers it. */
 export interface ListenDelivery {
   deliveryId: number;
@@ -291,6 +298,14 @@ export async function listen(input: CommandInput): Promise<number> {
         else say(`› Siren heard nothing for ${opened.session.idleTimeoutSeconds} seconds and ended the session, so a new one is open.`);
         continue;
       }
+      if (code === 'listen_session_ended' && endedBecause(error) === 'listen_off') {
+        throw new CliRefusal(`Siren ended the listen session for ${appKey}.`, {
+          why: "siren listen was turned off on this Siren, so Siren sends this app's requests to its address now.",
+          fix: run.command(`apps requests --app ${appKey}`),
+          fixWords: 'to see where they went',
+          note: 'To listen again, ask whoever runs this Siren to set SIREN_LISTEN_ALLOWED=1, or give the app a url and run siren apps apply.',
+        });
+      }
       if (code === 'listen_session_replaced' || code === 'listen_session_ended' || code === 'listen_session_not_found') throw error;
       if (!(error instanceof ConnectionError || error instanceof ApiError)) throw error;
       outOfReachSince ??= io.now();
@@ -309,19 +324,35 @@ export async function listen(input: CommandInput): Promise<number> {
       const ok = result.httpStatus !== null && result.httpStatus >= 200 && result.httpStatus < 300;
       if (ok) answeredOk += 1;
       let nextRetryAt: string | null = null;
-      try {
-        const reported = await writeRecord<{ delivery: { nextRetryAt: string | null } }>(http, 'POST', `/listen-sessions/${opened.session.id}/results`, {
-          deliveryId: delivery.deliveryId,
-          claim: delivery.claim,
-          httpStatus: result.httpStatus,
-          body: result.body,
-          error: result.error,
-          durationMs: result.durationMs,
-        });
-        nextRetryAt = reported.delivery.nextRetryAt;
-      } catch (error) {
-        if (appErrorCode(error) !== 'listen_claim_lost') throw error;
-        run.warn(`siren: Siren had already counted delivery ${delivery.deliveryId} as failed, because its 30 seconds ran out. It sends it again.`);
+      const sent = {
+        deliveryId: delivery.deliveryId,
+        claim: delivery.claim,
+        httpStatus: result.httpStatus,
+        body: result.body,
+        error: result.error,
+        durationMs: result.durationMs,
+      };
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          const reported = await writeRecord<{ delivery: { nextRetryAt: string | null } }>(http, 'POST', `/listen-sessions/${opened.session.id}/results`, sent);
+          nextRetryAt = reported.delivery.nextRetryAt;
+          break;
+        } catch (error) {
+          if (appErrorCode(error) === 'listen_claim_lost') {
+            run.warn(`siren: Siren had already counted delivery ${delivery.deliveryId} as failed, because its 30 seconds ran out. It sends it again.`);
+            break;
+          }
+          if (!reportMayGoAgain(error)) throw error;
+          if (attempt >= REPORT_TRIES) {
+            run.warn(
+              `siren: Siren could not record delivery ${delivery.deliveryId} after ${REPORT_TRIES} tries. ` +
+                'When its 30 seconds run out, Siren counts a failed attempt and sends it again.',
+            );
+            break;
+          }
+          // Siren kept the claim, so the same result goes again. Ctrl-C waits for it.
+          await io.sleep(500 * 2 ** (attempt - 1));
+        }
       }
       if (json) {
         emit({
@@ -376,7 +407,18 @@ export async function listen(input: CommandInput): Promise<number> {
   return 0;
 }
 
-/** Why Siren ended a session, from a 410's data: `idle` or `closed`. */
+/**
+ * Whether a result Siren did not take may go again: the request never
+ * arrived, or Siren failed on its side. A 4xx other than a lost claim is an
+ * answer, so it does not.
+ */
+function reportMayGoAgain(error: unknown): boolean {
+  if (error instanceof ConnectionError) return true;
+  if (!(error instanceof ApiError)) return false;
+  return error.statusCode === undefined || error.statusCode >= 500;
+}
+
+/** Why Siren ended a session, from a 410's data: `idle`, `closed` or `listen_off`. */
 function endedBecause(error: unknown): string | undefined {
   if (!(error instanceof SirenError)) return undefined;
   const data = error.data;
