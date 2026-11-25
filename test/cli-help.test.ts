@@ -28,9 +28,35 @@ describe('help: siren --help', () => {
   it('has the shape of gh help: description, usage, grouped commands, flags, examples and learn more', async () => {
     const text = await helpOf(['--help']);
     expect(text.split('\n')[0]).toMatch(/^[A-Z].+\.$/);
-    expect(sections(text)).toEqual(['USAGE', 'GETTING STARTED', 'APPS', 'REQUESTS', 'LOGS', 'RECORDS', 'ACCOUNT', 'FLAGS', 'ENVIRONMENT', 'EXAMPLES', 'LEARN MORE']);
+    expect(sections(text)).toEqual([
+      'USAGE',
+      'GETTING STARTED',
+      'APPS',
+      'REQUESTS',
+      'DEVELOPER TOOLS',
+      'SANDBOX',
+      'RECORDS',
+      'ACCOUNT',
+      'FLAGS',
+      'ENVIRONMENT',
+      'EXAMPLES',
+      'LEARN MORE',
+    ]);
     expect(text).toContain('https://github.com/Novatorius/siren-node#command-line-tool');
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-help-top.txt');
+  });
+
+  it('puts listen, trigger and logs under DEVELOPER TOOLS, and sandbox and seed under SANDBOX', async () => {
+    const text = await helpOf(['--help']);
+    const under = (heading: string): string[] => {
+      const lines = text.split('\n');
+      const start = lines.indexOf(heading);
+      const end = lines.indexOf('', start);
+      return lines.slice(start + 1, end).map((line) => line.trim().split(/ {2,}/)[0]!);
+    };
+    expect(under('DEVELOPER TOOLS')).toEqual(['listen', 'trigger', 'trigger ask', 'logs tail', 'simulate', 'fixtures', 'apps test']);
+    expect(under('SANDBOX')).toEqual(['sandbox create', 'sandbox list', 'sandbox reset', 'sandbox inbox', 'seed']);
+    expect(under('RECORDS')).toEqual(['<resource> <op>', 'get <path>', 'post <path>', 'resources']);
   });
 
   it('lists every command once, on one line, with its name and a short summary aligned', async () => {

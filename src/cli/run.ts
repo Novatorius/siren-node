@@ -55,12 +55,12 @@ export const COMMANDS = [
   'apps off',
   'apps delete',
   'listen',
-  'logs tail',
-  'apps test',
   'trigger',
   'trigger ask',
-  'fixtures',
+  'logs tail',
   'simulate',
+  'fixtures',
+  'apps test',
   'sandbox create',
   'sandbox list',
   'sandbox reset',
@@ -73,8 +73,13 @@ export type Command = (typeof COMMANDS)[number];
 
 type Options = NonNullable<ParseArgsConfig['options']>;
 
-/** The headings `siren --help` lists the commands under, in order. */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Account'] as const;
+/**
+ * The headings `siren --help` lists the commands under, in order, as gh
+ * groups its own. Developer tools holds listen, trigger, logs and the other
+ * commands that test an app against Siren. Records holds the commands
+ * generated from Siren's API, which {@link recordRows} lists.
+ */
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Records', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -82,7 +87,7 @@ interface CommandSpec {
   usage: string;
   summary: string;
   /** The heading `siren --help` lists it under. */
-  group: (typeof GROUPS)[number] | 'Records';
+  group: (typeof GROUPS)[number];
   /** The few words `siren --help` prints beside it, with no full stop. */
   short: string;
   options: Options;
@@ -129,7 +134,6 @@ const GUIDE_URL = 'https://github.com/Novatorius/siren-node#command-line-tool';
 const APP_FILE_FLAG = ['--app-file <path>', 'The app file beside the env file, if apply saved none'] as const;
 const YES_FLAG = ['--yes', 'Skip the question. Needed with no terminal'] as const;
 const JSON_FLAG = ['--json', 'Print JSON for a script, and nothing else'] as const;
-const ORG_FLAG = ['--org <slug>', 'The organization, if not SIREN_ORG or your only one'] as const;
 
 /** The options `trigger` and `simulate` share. */
 const ACTIVITY_OPTIONS: Options = {
@@ -524,8 +528,8 @@ const SPECS: Record<Command, CommandSpec> = {
       'Clear the sandbox organization\'s activity: conversions, obligations, transactions, payouts, requests and deliveries. Its setup stays. You type the slug to confirm.',
     group: 'Sandbox',
     short: 'Clear activity, keep setup',
-    options: { org: { type: 'string' }, confirm: { type: 'string' }, json: { type: 'boolean' } },
-    flags: { org: ORG_FLAG, confirm: ['--confirm <slug>', 'The slug, for when no terminal can ask'], json: JSON_FLAG },
+    options: { confirm: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { confirm: ['--confirm <slug>', 'The slug, for when no terminal can ask'], json: JSON_FLAG },
     examples: ['siren sandbox reset --org acme-sandbox', 'siren sandbox reset --org acme-sandbox --confirm acme-sandbox'],
     positionals: [0, 0],
     run: sandbox.reset,
@@ -535,8 +539,8 @@ const SPECS: Record<Command, CommandSpec> = {
     summary: 'List the emails the sandbox caught for the organization, or show one.',
     group: 'Sandbox',
     short: "Read the sandbox's caught emails",
-    options: { org: { type: 'string' }, limit: { type: 'string' }, json: { type: 'boolean' } },
-    flags: { org: ORG_FLAG, limit: ['--limit <n>', 'How many to list, 1 to 100 (20)'], json: JSON_FLAG },
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many to list, 1 to 100 (20)'], json: JSON_FLAG },
     examples: ['siren sandbox inbox --org acme-sandbox', 'siren sandbox inbox 31'],
     positionals: [0, 1],
     run: sandbox.inbox,
@@ -547,7 +551,6 @@ const SPECS: Record<Command, CommandSpec> = {
     group: 'Sandbox',
     short: 'Fill a sandbox with sample sales',
     options: {
-      org: { type: 'string' },
       sales: { type: 'string' },
       collaborators: { type: 'string' },
       months: { type: 'string' },
@@ -556,7 +559,6 @@ const SPECS: Record<Command, CommandSpec> = {
       json: { type: 'boolean' },
     },
     flags: {
-      org: ORG_FLAG,
       sales: ['--sales <n>', 'Sales to send, 1 to 200 (50)'],
       collaborators: ['--collaborators <n>', 'Collaborators to credit, 1 to 25 (10)'],
       months: ['--months <n>', 'Months back to spread them, 1 to 6 (3)'],
@@ -646,10 +648,11 @@ function helpText(style: Style): string {
     'Declare Siren apps, and watch and answer what Siren sends them.',
     '',
     ...section(style, 'Usage', ['  siren <command> [flags]']),
-    ...GROUPS.flatMap((group) => [
-      ...section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))),
-      ...(group === 'Requests' ? section(style, 'Records', recordRows(style)) : []),
-    ]),
+    ...GROUPS.flatMap((group) =>
+      group === 'Records'
+        ? section(style, group, recordRows(style))
+        : section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))),
+    ),
     ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text)),
     ...section(
       style,

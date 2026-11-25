@@ -23,23 +23,15 @@ REQUESTS
   apps requests       List what Siren sent, or show one request
   apps answer         Answer an ask by hand
   apps resend         Send a request again
+
+DEVELOPER TOOLS
   listen              Send the app's requests to this machine
-
-LOGS
-  logs tail           Watch requests, deliveries and API calls live
-
-RECORDS
-  <resource> <op>     List, get, create, update or delete a record
-  get <path>          Read any route, such as get /programs
-  post <path>         Write to any route, and put, patch and delete
-  resources           List the resources and their operations
-
-TESTING
-  apps test           Send the app's address a test delivery
   trigger             Make test activity in a sandbox
   trigger ask         Send a feature a test ask
-  fixtures            Run a file of trigger steps
+  logs tail           Watch requests, deliveries and API calls live
   simulate            Show who a sale would pay, writing nothing
+  fixtures            Run a file of trigger steps
+  apps test           Send the app's address a test delivery
 
 SANDBOX
   sandbox create      Copy a live setup into a sandbox
@@ -47,6 +39,12 @@ SANDBOX
   sandbox reset       Clear activity, keep setup
   sandbox inbox       Read the sandbox's caught emails
   seed                Fill a sandbox with sample sales
+
+RECORDS
+  <resource> <op>     List, get, create, update or delete a record
+  get <path>          Read any route, such as get /programs
+  post <path>         Write to any route, and put, patch and delete
+  resources           List the resources and their operations
 
 ACCOUNT
   logout              Log out, and forget the session here
