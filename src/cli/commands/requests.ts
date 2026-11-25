@@ -50,8 +50,13 @@ export function shortId(id: string): string {
 /** The most requests one page of `GET /apps/requests` holds (ListAppRequests::MAX_LIMIT). */
 const PAGE_LIMIT = 100;
 
-/** The most pages a short id's search reads, 5000 requests, before it asks for the whole id. */
-const SEARCH_PAGES = 50;
+/**
+ * The most pages a short id's search reads, 1000 requests, before it asks
+ * for the whole id. Each page is a call one of Siren Cloud's workers
+ * serves in turn, so the search stays short. A prefix lookup on Siren's
+ * side would lift this.
+ */
+const SEARCH_PAGES = 10;
 
 /**
  * The whole id for `typed`, a whole id or its start, after a search that
@@ -84,7 +89,7 @@ async function requestIdFor(run: CommandContext, typed: string, org: string): Pr
     throw new CliRefusal(`${ids.length} requests start with ${start}: ${ids.map((id) => shortIdOf(id, start)).join(', ')}.`, { why: 'Give more of the id.' });
   }
   if (!whole) {
-    throw new CliRefusal(`${org} has more than 5000 requests, more than a short id searches, so the tool can't be sure ${start} names one request.`, {
+    throw new CliRefusal(`${org} has more than 1000 requests, more than a short id searches, so the tool can't be sure ${start} names one request.`, {
       why: 'Give the whole id, apr_ and 32 characters, which the request view and --json show.',
     });
   }

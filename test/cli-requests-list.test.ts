@@ -156,14 +156,15 @@ describe('short request ids', () => {
     expect(queryOf(h, 1)).toEqual({ limit: '100', before: first.at(-1)!.id });
   });
 
-  it('refuses, and answers nothing, when the organization holds more requests than the search reads', async () => {
-    const full = Array.from({ length: 50 }, (_, page) => list(...filler(100, 'delivered', page * 100)));
+  it('reads at most 10 pages, 1000 requests, to spare Siren, then refuses, and answers nothing', async () => {
+    const full = Array.from({ length: 11 }, (_, page) => list(...filler(100, 'delivered', page * 100)));
     const h = harness([...full, reply(200, { status: 'accepted' })]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}'])).toBe(1);
     expect(h.err()).toContain("can't be sure b79943ff names one request");
+    expect(h.err()).toContain('more than 1000 requests');
     expect(h.err()).toContain('whole id');
-    expect(h.paths()).toHaveLength(50);
+    expect(h.paths()).toHaveLength(10);
     expect(h.paths()).not.toContain(`POST /apps/requests/${APP_REQUEST_ID}/answer`);
   });
 
