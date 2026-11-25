@@ -59,7 +59,7 @@ describe('apps-sdk-followups-1: the records', () => {
     const note = read('docs/architecture/apps-cli.md');
     expect(note).not.toContain('There is no `GET /apps/requests/{id}`');
     expect(note).toContain('| `siren.apps.requests.retrieve(id)` | `GET /apps/requests/{requestKey}` | admin session |');
-    expect(note).toContain('| `siren apps requests <id>` | `GET /apps/requests/{requestKey}`, `GET /apps`');
+    expect(note).toContain('| `siren apps requests <id> [--json]` | `GET /apps/requests/{requestKey}`, `GET /apps`');
     expect(read('README.md')).toContain('| `siren.apps.requests.retrieve()` | `GET /apps/requests/{requestKey}` |');
     expect(read('CHANGELOG.md')).toContain('`siren.apps.requests.retrieve(id)` reads one request');
     const openapi = read('openapi.yaml');

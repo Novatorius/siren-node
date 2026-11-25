@@ -49,6 +49,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
     }
     return showRequest(input, id);
   }
+  if (values.json === true) throw new CliUsageError('--json goes with a request id, as in siren apps requests <id> --json.');
 
   const run = contextOf(input);
   const { io } = input;
@@ -94,6 +95,25 @@ export async function appsRequests(input: CommandInput): Promise<number> {
 }
 
 /**
+ * `siren apps requests <id> --json`: Siren's whole request, with the keys
+ * of its app and feature, which Siren's detail names only by id, and the
+ * sends found for it among the app's latest deliveries. The SDKs' replay
+ * helpers read this saved request. The keys are null and the sends empty
+ * when the app is gone.
+ */
+async function printRequestJson(run: ReturnType<typeof contextOf>, request: AppRequestDetail): Promise<number> {
+  const siren = run.siren();
+  const app = (await siren.apps.list()).find((candidate) => candidate.id === request.appId);
+  const feature = app?.features.find((item) => item.ref === request.feature);
+  const sends =
+    app === undefined || app.address === null
+      ? []
+      : (await siren.apps.deliveries(app.key)).filter((delivery) => delivery.eventId.startsWith(`${request.id}.`)).sort((a, b) => sendNumber(a.eventId) - sendNumber(b.eventId));
+  run.print(JSON.stringify({ ...request, appKey: app?.key ?? null, featureKey: feature?.key ?? null, sends }, null, 2));
+  return 0;
+}
+
+/**
  * `siren apps requests <id>`: reads the request with
  * `GET /apps/requests/{id}`, however old, and prints its line, the data
  * Siren sent, and the answer Siren took with who gave it. Then it finds the
@@ -118,6 +138,7 @@ async function showRequest(input: CommandInput, id: string): Promise<number> {
     }
     throw error;
   }
+  if (input.values.json === true) return printRequestJson(run, request);
   run.print(requestLine(request));
   run.print('The data Siren sent:');
   run.print(JSON.stringify(request.data, null, 2));
