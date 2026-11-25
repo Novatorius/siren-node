@@ -593,6 +593,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The prepare script sends tsup's output to standard error, so `npm pack --json` prints JSON alone
+  under every npm version. On a dry run with dist already built, it keeps that dist rather than
+  rebuild it, since a dry run writes nothing.
 - The 400 for a signed body that is not an app request of version 1 names the first field that
   breaks its rule, such as "The request's `id` must be `apr_` followed by 32 hex characters."
 - The README leads with answering Siren: What you can do, Install with the branch install lines,

@@ -295,7 +295,9 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
     await h.run(['apps', 'init', '--key', APP_KEY]);
     const schema = (JSON.parse(h.file('siren.app.json')) as { $schema: string }).$schema;
     expect(schema).toBe(`https://unpkg.com/${pkg.name}@${pkg.version}/siren.app.schema.json`);
-    const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: join(__dirname, '..'), encoding: 'utf8' })) as Array<{
+    // From the first [, so a line any npm version prints before the JSON can't break the parse.
+    const listed = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: join(__dirname, '..'), encoding: 'utf8' });
+    const packed = JSON.parse(listed.slice(listed.indexOf('['))) as Array<{
       files: Array<{ path: string }>;
     }>;
     expect(packed[0]?.files.map((file) => file.path)).toContain(schema.split(`${pkg.version}/`)[1]);
