@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- Through a pipe, a generated list prints its table alone on standard output, starting at the
+  margin, and its count, Next and tips on standard error. A script that read the count from
+  standard output reads standard error now, or uses `--json`.
 - `openapi.yaml` is gone. `openapi.json` replaces it, a byte copy of the spec Siren writes from its
   REST controllers, so it lists the routes Siren serves on Cloud and WordPress and marks each with
   `x-siren-platforms`. Its named schemas drop from 50 to 2, `Error` and `ListEnvelope`. Request
@@ -135,6 +138,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Generated lists take `--ids`, one id a line, and `--fields a,b,c`, which shapes the table and
+  `--json`. They ask for newest first where the route takes an order, and print dates as dates.
+  Generated help opens with a sentence, such as "List programs, newest first.", before the route.
 - `siren condition-sets` lists, shows and makes condition sets, and `siren condition-sets matches`
   counts who matches one now and names the first few, or counts the matches of conditions not yet
   saved. `siren enrollers` lists and shows enrollers, prints their log, makes one from JSON, and

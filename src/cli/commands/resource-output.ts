@@ -1,3 +1,4 @@
+import { isSirenDate, stamp } from '../record-view';
 import { clean } from '../style';
 import type { Style } from '../style';
 
@@ -54,17 +55,33 @@ export function columns(rows: readonly Record<string, unknown>[], width: number 
   return chosen;
 }
 
-/** A list as an aligned table, the header dim, indented two spaces. */
-export function table(style: Style, rows: readonly Record<string, unknown>[]): string[] {
+/** How a table prints: the columns to show, and the zone and time a date is read against. */
+export interface TableOptions {
+  /** The columns, in order, in place of the ones that fit. */
+  keys?: readonly string[];
+  zone?: string;
+  now?: number;
+  /** Two spaces before each line, as a report has. Through a pipe the table starts at the margin. */
+  indent?: boolean;
+}
+
+/** A cell, with a Siren date read as `Today 13:58`, `Nov 24 19:58` or `Mar 2, 2025` when the clock is given. */
+function tableCell(value: unknown, options: TableOptions): string {
+  return options.now !== undefined && isSirenDate(value) ? stamp(value, options.zone, options.now) : cell(value);
+}
+
+/** A list as an aligned table, the header dim, indented two spaces unless told otherwise. */
+export function table(style: Style, rows: readonly Record<string, unknown>[], options: TableOptions = {}): string[] {
   const width = style.rich ? WIDTH : Number.POSITIVE_INFINITY;
-  const keys = columns(rows, width);
+  const keys = options.keys ?? columns(rows, width);
   if (keys.length === 0) return [];
+  const indent = options.indent ?? true;
   const lines = style.table(
     keys.map((key) => clean(key)),
-    rows.map((row) => keys.map((key) => style.fit(cell(row[key]), COLUMN))),
-    width - 2,
+    rows.map((row) => keys.map((key) => style.fit(tableCell(row[key], options), COLUMN))),
+    width - (indent ? 2 : 0),
   );
-  return lines.map((line) => `  ${line}`);
+  return indent ? lines.map((line) => `  ${line}`) : lines;
 }
 
 /** One record as labels and values for {@link Style.report}, `id` left out, each line inside {@link WIDTH} in a terminal and whole through a pipe. */

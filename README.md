@@ -2307,6 +2307,12 @@ program ends with its latest three notes. Next names the commands that open what
 Through a pipe the record goes to standard output and Next to standard error, and `--json` prints
 Siren's answer whole.
 
+A list, such as `siren programs list`, comes newest first where Siren's route takes an order, and
+dates read as `Today 13:58`, `Nov 24 19:58` or `Mar 2, 2025`. Through a pipe, standard output holds
+the table alone, and the count, Next and tips go to standard error. `--ids` prints one id a line,
+such as `siren programs list --ids --all`. `--fields id,name,status` shows only those fields, in the
+table and in `--json`, and asks Siren for them where the route takes `fields`.
+
 When Siren refuses a request's fields, every command prints one row a field under what was
 refused, such as `email  must be a valid email address of 254 characters or fewer`. A field with
 no value says only that it is required, and a field that takes set values lists them. Through a

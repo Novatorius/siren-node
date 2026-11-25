@@ -104,6 +104,34 @@ export function minute(iso: string, zone: string | undefined): string {
   return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
+/**
+ * A Siren date for a table cell: `Today 13:58` on the day it is now,
+ * `Nov 24 19:58` in the same year, `Mar 2, 2025` in another, all in `zone`.
+ */
+export function stamp(iso: string, zone: string | undefined, now: number): string {
+  const date = sirenDate(iso);
+  if (Number.isNaN(date.getTime())) return clean(iso);
+  const parts = (at: Date) => {
+    let format: Intl.DateTimeFormat;
+    try {
+      format = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: zone || undefined });
+    } catch {
+      format = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    return Object.fromEntries(format.formatToParts(at).map((part) => [part.type, part.value]));
+  };
+  const then = parts(date);
+  const today = parts(new Date(now));
+  if (then.year === today.year && then.month === today.month && then.day === today.day) return `Today ${minute(iso, zone).split(' ').at(-1)}`;
+  if (then.year === today.year) return minute(iso, zone);
+  return day(iso, zone);
+}
+
+/** True for text that is a Siren date and time, such as `2026-11-24T19:58:00+00:00` or `2026-11-24 19:58:00`. */
+export function isSirenDate(value: unknown): value is string {
+  return typeof value === 'string' && ISO.test(value);
+}
+
 /** A scalar as words: text whole, null as -, a date as its day. */
 function scalarText(value: string | number | boolean | null, zone: string | undefined): string {
   if (value === null) return '-';

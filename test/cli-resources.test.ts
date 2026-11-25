@@ -56,22 +56,10 @@ describe('the generated resource commands', () => {
     const h = signedIn([reply(200, envelope(programs))]);
     expect(await h.run(['programs', 'list'])).toBe(0);
     expect(h.paths()).toEqual(['GET /programs']);
+    // Through a pipe, standard output is the table alone, and the count, Next and tip go to standard error.
     const out = h.out();
-    expect(out).toBe(
-      [
-        '2 programs',
-        '',
-        '  id  name              status  units',
-        '  1   Referral program  active  usd',
-        '  2   Partner program   draft   usd',
-        '',
-        'Next',
-        '  1  siren programs get 1',
-        '',
-        '--json prints the answer as JSON.',
-        '',
-      ].join('\n'),
-    );
+    expect(out).toBe(['id  name              status  units', '1   Referral program  active  usd', '2   Partner program   draft   usd', ''].join('\n'));
+    expect(h.err()).toBe(['2 programs', '', 'Next', '  1  siren programs get 1', '', '--json prints the answer as JSON. --ids prints the ids alone.', ''].join('\n'));
     for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
   });
 
@@ -155,8 +143,8 @@ describe('siren get, post, put, patch and delete', () => {
   it('says how many pages there are when it read one of several', async () => {
     const h = signedIn([reply(200, envelope(programs, 1, 3, 6, 2))]);
     expect(await h.run(['get', '/programs'])).toBe(0);
-    expect(h.out()).toContain('2 programs  page 1 of 3\n');
-    expect(h.out()).toContain('--all reads every page.');
+    expect(h.err()).toContain('2 programs  page 1 of 3\n');
+    expect(h.err()).toContain('--all reads every page.');
   });
 
   it('builds a body from --data @file and lays -d fields over it', async () => {

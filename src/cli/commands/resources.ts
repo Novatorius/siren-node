@@ -43,6 +43,8 @@ export const OPTIONS: Options = {
   all: { type: 'boolean' },
   'dry-run': { type: 'boolean' },
   confirm: { type: 'string' },
+  ids: { type: 'boolean' },
+  fields: { type: 'string' },
 };
 
 const FLAG = {
@@ -54,6 +56,8 @@ const FLAG = {
   all: ['--all', 'Read every page of the list'],
   'dry-run': ['--dry-run', 'Print the request and send nothing'],
   confirm: ['--confirm <id>', 'The id of the record a live delete removes, when there is no terminal to type it in'],
+  ids: ['--ids', 'Print one id a line and nothing else'],
+  fields: ['--fields <a,b,c>', 'Show only these fields, in the table and in --json'],
 } as const satisfies Record<string, readonly [string, string]>;
 
 /** A command line's shape, as `runCli` reads it. The same fields as its own command table. */
@@ -81,13 +85,38 @@ export function resourceNamed(name: string | undefined): ResourceCommand | undef
 function optionsFor(method: HttpMethod, list: boolean): { options: Options; flags: Record<string, readonly [string, string]> } {
   const keys: Array<keyof typeof FLAG> = ['d'];
   if (method !== 'GET' && method !== 'DELETE') keys.push('data');
-  if (list) keys.push('limit', 'offset', 'all');
+  if (list) keys.push('limit', 'offset', 'all', 'ids', 'fields');
   keys.push('json', 'dry-run');
   if (method === 'DELETE') keys.push('confirm');
   return {
     options: Object.fromEntries(keys.map((key) => [key, OPTIONS[key]!])),
     flags: Object.fromEntries(keys.map((key) => [key, FLAG[key]])),
   };
+}
+
+/** True when a list route takes both orderBy and order, so the tool can ask for newest first. */
+function ordersNewestFirst(route: ResourceRoute): boolean {
+  return route.query?.includes('orderBy') === true && route.query.includes('order');
+}
+
+/** What a generated command does, in a sentence: "List programs, newest first.", "Show one program.", "Create a program." */
+function sentenceOf(resource: ResourceCommand, op: ResourceOp, route: ResourceRoute): string {
+  const one = singular(resource.name).replace(/-/g, ' ');
+  const a = /^[aeiou]/.test(one) ? 'an' : 'a';
+  const words = resource.name.replace(/-/g, ' ');
+  if (op === 'list') return `List ${words}${ordersNewestFirst(route) ? ', newest first' : ''}.`;
+  if (op === 'get') return `Show one ${one}.`;
+  if (op === 'create') return `Create ${a} ${one}.`;
+  if (op === 'update') return `Change ${a} ${one}.`;
+  return `Delete ${a} ${one}.`;
+}
+
+/** The fields `--fields` names, or undefined without it. */
+function fieldsOf(value: string | boolean | undefined): string[] | undefined {
+  if (typeof value !== 'string') return undefined;
+  const fields = [...new Set(value.split(',').map((field) => field.trim()).filter((field) => field !== ''))];
+  if (fields.length === 0) throw new CliUsageError('--fields takes field names joined by commas, such as --fields id,name,status.');
+  return fields;
 }
 
 /** Singular, for a one-record headline: program-groups is program-group. */
@@ -165,8 +194,8 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
     name: `${resource.name} ${op}`,
     spec: {
       usage: `${resource.name} ${op}${takesId ? ' <id>' : ''}${Object.keys(flags).length > 0 ? ' [options]' : ''}`,
-      summary: `${route.method} ${route.path}${route.required?.length ? `. Siren requires ${route.required.join(', ')}.` : '.'}`,
-      short: `${route.method} ${route.path}`,
+      summary: `${sentenceOf(resource, op, route)} Sends ${route.method} ${route.path}.${route.required?.length ? ` Siren requires ${route.required.join(', ')}.` : ''}`,
+      short: sentenceOf(resource, op, route).replace(/\.$/, '').replace(/, newest first$/, ''),
       group: 'Records',
       options,
       flags,
@@ -240,6 +269,10 @@ interface Plan {
   resource?: ResourceCommand;
   /** The command's words, for an error's fix: `programs get` or `get`. */
   words: string;
+  /** `--ids`: one id a line and nothing else. */
+  ids?: boolean;
+  /** `--fields`: the fields the table and --json show. */
+  fields?: readonly string[];
 }
 
 /** `siren get|post|put|patch|delete <path>`. */
@@ -290,9 +323,19 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
   const id = input.args[0];
   if (id !== undefined && /^\.{1,2}$/.test(fullyDecoded(id))) throw new CliUsageError(`${JSON.stringify(id)} is not a record id. Give the id Siren lists, such as 7.`);
   const path = route.param !== undefined && id !== undefined ? route.path.replace(`{${route.param}}`, encodeURIComponent(id)) : route.path;
-  const outgoing = await outgoingOf(input, route.method, path, {});
+  const fields = op === 'list' ? fieldsOf(input.values.fields) : undefined;
+  const base: Record<string, string> = {};
+  if (op === 'list') {
+    // Newest first where the route takes an order, unless the line names one (lean output, section 5).
+    const named = pairs(input).map(([key]) => key);
+    if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(base, { orderBy: 'id', order: 'desc' });
+    if (fields !== undefined && route.query?.includes('fields')) base.fields = fields.join(',');
+  }
+  const outgoing = await outgoingOf(input, route.method, path, base);
   return send(input, {
     outgoing,
+    ...(op === 'list' && input.values.ids === true ? { ids: true } : {}),
+    ...(fields === undefined ? {} : { fields }),
     json: input.values.json === true,
     dryRun: input.values['dry-run'] === true,
     all: input.values.all === true,
@@ -602,8 +645,23 @@ async function latestNotes(transport: ReturnType<typeof createHttpTransport>, so
 
 function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string, notes?: ViewSection): void {
   const out = (text: string) => input.io.stdout(text.endsWith('\n') ? text : `${text}\n`);
+  const listed = isEnvelope(body) ? body.items : Array.isArray(body) ? body : undefined;
+  const listedRecords = (listed ?? []).filter(isObject);
+  if (plan.fields !== undefined && listedRecords.length > 0) {
+    const known = [...new Set(listedRecords.flatMap((record) => Object.keys(record)))];
+    const unknown = plan.fields.filter((field) => !known.includes(field));
+    if (unknown.length > 0) throw new CliUsageError(`${unknown.map((field) => clean(field)).join(', ')} ${unknown.length === 1 ? "isn't a field" : "aren't fields"} of these records. They have ${known.map((field) => clean(field)).join(', ')}.`);
+  }
+  if (plan.ids && listed !== undefined) {
+    for (const record of listedRecords) out(cell(record.id ?? record.key));
+    return;
+  }
   if (plan.json) {
-    out(JSON.stringify(plan.all && isEnvelope(body) ? body.items : (body ?? null), null, 2));
+    // --fields cuts each record to the fields named, and keeps the answer's shape.
+    const pick = (record: unknown) => (plan.fields !== undefined && isObject(record) ? Object.fromEntries(plan.fields.filter((field) => field in record).map((field) => [field, record[field]])) : record);
+    const items = isEnvelope(body) ? body.items.map(pick) : Array.isArray(body) ? body.map(pick) : undefined;
+    const shaped = items === undefined ? body : isEnvelope(body) ? { ...body, items } : items;
+    out(JSON.stringify(plan.all && isEnvelope(body) ? items : (shaped ?? null), null, 2));
     return;
   }
 
@@ -614,16 +672,26 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const records = rows.filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null && !Array.isArray(row));
     const paged = isEnvelope(body) && body.totalPages !== undefined && body.totalPages > 1;
     const page = paged ? style.dim(`  page ${(body as Envelope).page ?? 1} of ${(body as Envelope).totalPages}`) : '';
-    const lines = [style.success(`${style.bold(`${rows.length} ${rows.length === 1 ? singular(name) : name}`)}${page}`)];
-    const shown = records.length === rows.length ? table(style, records) : rows.map((row) => style.fit(`  ${cell(row)}`, WIDTH));
-    if (shown.length > 0) lines.push('', ...shown);
+    const headline = style.success(`${style.bold(`${rows.length} ${rows.length === 1 ? singular(name) : name}`)}${page}`);
+    const dated = { zone: input.io.env.TZ, now: input.io.now(), ...(plan.fields === undefined ? {} : { keys: plan.fields }) };
     const firstId = records[0]?.id;
+    const hints: string[] = [];
     if (firstId !== undefined && firstId !== null) {
       const next = plan.resource?.ops.get ? `${name} get ${cell(firstId)}` : `get ${plan.outgoing.path}/${cell(firstId)}`;
-      lines.push('', style.bold('Next'), `  1  ${style.command(input.command(next))}`);
+      hints.push('', style.bold('Next'), `  1  ${style.command(input.command(next))}`);
     }
-    const tip = `--json prints the answer as JSON.${paged ? ' --all reads every page.' : ''}`;
-    lines.push('', style.next(style.dim(tip)));
+    const tip = `--json prints the answer as JSON.${paged ? ' --all reads every page.' : ''} --ids prints the ids alone.`;
+    if (!style.rich) {
+      // Through a pipe, standard output carries the table alone, and the count, Next and tip go to standard error (lean output, section 5).
+      const shown = records.length === rows.length ? table(style, records, { ...dated, indent: false }) : rows.map((row) => cell(row));
+      if (shown.length > 0) out(shown.join('\n'));
+      input.io.stderr(`${[headline, ...hints, '', tip].join('\n')}\n`);
+      return;
+    }
+    const lines = [headline];
+    const shown = records.length === rows.length ? table(style, records, dated) : rows.map((row) => style.fit(`  ${cell(row)}`, WIDTH));
+    if (shown.length > 0) lines.push('', ...shown);
+    lines.push(...hints, '', style.next(style.dim(tip)));
     out(lines.join('\n'));
     return;
   }
