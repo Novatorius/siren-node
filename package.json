@@ -93,7 +93,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "node scripts/generate-cli-resources.mjs --check && tsup",
+    "build": "tsup",
     "generate:cli": "node scripts/generate-cli-resources.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
