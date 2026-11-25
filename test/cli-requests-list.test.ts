@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli/run';
+import { AppRequestStatus } from '../src/taxonomy';
 import { harness } from './cli-fakes';
 import { APP_KEY, APP_REQUEST_ID, appRecord, requestRow } from './apps-siren-answers';
 import { reply } from './http-fakes';
@@ -116,7 +117,8 @@ describe('siren apps requests: the list', () => {
 });
 
 describe('short request ids', () => {
-  const STATUSES = ['pending', 'sent', 'delivered', 'answered', 'applied', 'needs_attention', 'dropped'];
+  // The fake answers every status the SDK lists, so a status the SDK gains is read here too.
+  const STATUSES: string[] = Object.values(AppRequestStatus);
   const filler = (n: number, status = 'delivered') =>
     Array.from({ length: n }, (_, at) => requestRow({ id: `apr_ff${String(at).padStart(30, '0')}`, status }));
   const statusOf = (h: ReturnType<typeof harness>, at: number) => new URL(h.http.requests[at]!.url).searchParams.get('status');
@@ -146,13 +148,17 @@ describe('short request ids', () => {
     }
   });
 
+  it('reads only statuses Siren accepts: the list ListAppRequests validates at feat/apps 0383186437', () => {
+    expect(STATUSES).toEqual(['pending', 'sent', 'delivered', 'answered', 'applying', 'applied', 'needs_attention', 'dropped']);
+  });
+
   it('reads every state when the latest 50 are full, and finds an older request that matches', async () => {
     const reads = [list(...filler(50)), ...STATUSES.map((status) => (status === 'needs_attention' ? list(requestRow({ status })) : list(...filler(3, status))))];
     const h = harness([...reads, reply(200, { status: 'accepted' })]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([...Array.from({ length: 8 }, () => 'GET /apps/requests'), `POST /apps/requests/${APP_REQUEST_ID}/answer`]);
-    expect(Array.from({ length: 8 }, (_, at) => statusOf(h, at))).toEqual([null, ...STATUSES]);
+    expect(h.paths()).toEqual([...Array.from({ length: STATUSES.length + 1 }, () => 'GET /apps/requests'), `POST /apps/requests/${APP_REQUEST_ID}/answer`]);
+    expect(Array.from({ length: STATUSES.length + 1 }, (_, at) => statusOf(h, at))).toEqual([null, ...STATUSES]);
   });
 
   it('refuses, and answers nothing, when a state holds 50 or more, so an older request could start the same way', async () => {

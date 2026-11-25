@@ -307,12 +307,14 @@ export function checkSignedDelivery(
   now: number,
 ): { t: number; bytes: Buffer } {
   const v2 = readHeader(headers, 'X-Siren-Signature-V2');
-  if (v2 === undefined) throw new SignatureVerificationError('The request has no X-Siren-Signature-V2 header.');
+  if (v2 === undefined) throw new SignatureVerificationError('The request has no X-Siren-Signature-V2 header.', { code: 'signature_missing' });
   const { t, signatures } = readSignatureHeader(v2);
 
   const stamp = readHeader(headers, 'X-Siren-Timestamp');
   if (stamp !== undefined && stamp !== String(t)) {
-    throw new SignatureVerificationError('The X-Siren-Timestamp header differs from the time X-Siren-Signature-V2 signed.');
+    throw new SignatureVerificationError('The X-Siren-Timestamp header differs from the time X-Siren-Signature-V2 signed.', {
+      code: 'timestamp_mismatch',
+    });
   }
 
   const bytes = typeof rawBody === 'string' ? Buffer.from(rawBody, 'utf8') : Buffer.from(rawBody);
@@ -323,12 +325,14 @@ export function checkSignedDelivery(
   if (!matched) {
     throw new SignatureVerificationError(
       'The request signature does not match. Pass the raw body exactly as received and the signing secret of this app.',
+      { code: 'signature_mismatch' },
     );
   }
 
   if (Math.abs(now - t) > tolerance) {
     throw new SignatureVerificationError(
       `The request's signed timestamp is more than ${tolerance} seconds from this machine's clock, so it may be a replay. Check the clock if every request fails.`,
+      { code: 'timestamp_out_of_tolerance' },
     );
   }
   return { t, bytes };
@@ -354,10 +358,23 @@ export function appRequestFrom(bytes: Buffer, t: number, headers: WebhookHeaders
     throw new SignatureVerificationError(`The signed body is not an app request of version 1. ${problem}`);
   }
 
-  const request = { ...(parsed as Record<string, unknown>), timestamp: t } as unknown as AppRequest;
+  const body = parsed as Record<string, unknown>;
+  const request = { ...body, test: body.test === true, data: readData(body.data), isAsk: body.mode === 'ask', timestamp: t } as unknown as AppRequest;
   const delivery = readHeader(headers, 'X-Siren-Delivery');
   if (delivery !== undefined) request.deliveryId = delivery;
   return request;
+}
+
+/**
+ * The request's `data`, with an empty `args` read as `{}`. Siren stores an
+ * engagement type's settings with `json_encode` and no `JSON_FORCE_OBJECT`
+ * (AppEngagementQuestion::args(), AppRequestService), so an engagement type
+ * with no settings arrives as `"args": []` while the types say an object.
+ * Reading it as `{}` keeps `args.weight` safe until Siren sends `{}`.
+ */
+function readData(data: unknown): unknown {
+  if (isJsonObject(data) && Array.isArray(data.args) && data.args.length === 0) return { ...data, args: {} };
+  return data;
 }
 
 /**
@@ -384,6 +401,7 @@ function readSignatureHeader(header: string): { t: number; signatures: Buffer[] 
   if (t === undefined || v1Count === 0) {
     throw new SignatureVerificationError(
       'The X-Siren-Signature-V2 header cannot be read. Siren sends t=<seconds>,v1=<hex signature>.',
+      { code: 'signature_malformed' },
     );
   }
   return { t, signatures };
@@ -403,6 +421,7 @@ function envelopeProblem(body: unknown): string | undefined {
   if (body.type !== 'app.request') return "The request's `type` must be `app.request`.";
   if (typeof body.app !== 'string' || body.app === '') return "The request's `app` must be the app's key, a non-empty string.";
   if (body.mode !== 'tell' && body.mode !== 'ask') return "The request's `mode` must be `tell` or `ask`.";
+  if (body.test !== undefined && typeof body.test !== 'boolean') return "The request's `test` must be true or false.";
   const feature = body.feature;
   if (!isJsonObject(feature)) return "The request's `feature` must be an object.";
   for (const field of ['kind', 'key', 'id'] as const) {

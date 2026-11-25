@@ -5,7 +5,9 @@ import { Siren } from '@novatorius/siren'
 const siren = new Siren()
 const answers = siren.apps.requestHandler()
 
-answers.on('postAllocationAction', 'note-the-share', async ({ id, data }) => {
+answers.on('postAllocationAction', 'note-the-share', async ({ id, data, test }) => {
+  // A test request, such as one siren trigger ask sent: write nothing.
+  if (test) return
   // Siren may send it twice, so note it once, keyed by id.
   await noteShare(id, data.allocation)
 })

@@ -1,6 +1,8 @@
-import { SignatureVerificationError, SirenError, ValidationError } from '../errors';
+import { AppHandlerError, AppSlowTellError, SignatureVerificationError, SirenError, ValidationError } from '../errors';
 import type { HttpTransport } from '../http';
+import type { FeatureAnswers, FeatureKind, FeatureTells } from '../feature-kind';
 import type { AppAnswerLater, AppAsk, AppEventFunction, AppFeatureFunctions, AppRequest, AppRequestFunction } from '../record-types';
+import type { AppTestRequest } from '../testing';
 import { sirenAnswerProblem } from './app-answer-rules';
 import { featureKindProblem } from './app-feature-kinds';
 import type { WebhookEvent, WebhookHeaders } from '../types';
@@ -22,6 +24,46 @@ import { readHeader, webhookEventFrom } from './webhooks';
 
 /** The most bytes the handler reads of a body it reads itself, far past any request Siren sends. */
 export const APP_REQUEST_BODY_LIMIT = 1024 * 1024;
+
+/**
+ * How long Siren waits for a reply before it counts a timeout: the
+ * 8-second limit its delivery client puts on every post to an app's address
+ * (WebhookDeliveryService::deliver(), through GuardedCurlHttpClient). A
+ * tell's or a webhook event's reply waits for its function, so a function
+ * slower than this runs, replies to no one, and runs again when Siren sends
+ * the tell or event again.
+ */
+export const TELL_TIME_LIMIT_SECONDS = 8;
+
+/** Refused signatures the default writes in one minute before it only counts them. */
+const SIGNATURE_LINES_PER_MINUTE = 5;
+
+/**
+ * Where the handler writes. `console`, a pino logger and a winston logger
+ * all fit. Each method gets one line.
+ */
+export interface AppLogger {
+  /** One line per request handled: its name, the reply's status and the time it took. */
+  debug(message: string): void;
+  info(message: string): void;
+  /** A refused signature, and a tell or event that ran past Siren's 8 seconds. */
+  warn(message: string): void;
+  /** Every other failure `onError` gets. */
+  error(message: string): void;
+}
+
+/**
+ * The logger the handler uses when you give none: warnings and errors go to
+ * `console.warn` and `console.error`, and the debug line per request is
+ * left out, so a production log stays quiet. Pass `logger: console` to see
+ * each request.
+ */
+const QUIET_CONSOLE: AppLogger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: (message) => console.warn(message),
+  error: (message) => console.error(message),
+};
 
 /** What the handler answers when a body parser already read the body. */
 const PARSED_BODY =
@@ -57,16 +99,29 @@ export interface AppRequestHandlerOptions<X extends string = never> {
   runLater?: (work: () => Promise<void>) => void;
   /**
    * Gets every error the handler does not show Siren: a function that threw,
-   * an answer that broke the rules, Siren's refusal of an answer, and a body
-   * a parser already read. `request` is the checked request or event, when
-   * there is one. The default writes one `console.error` line with the
+   * an answer that broke the rules, Siren's refusal of an answer, a body a
+   * parser already read, a refused signature (`SignatureVerificationError`,
+   * still answered 401) and a tell or event slower than Siren's 8 seconds
+   * (`AppSlowTellError`). `request` is the checked request or event, when
+   * there is one. The default writes one line through `logger` with the
    * kind, key and request id (or the event's type and delivery id) and the
-   * error, never the request's data or headers. For an ask that failed
-   * after its 200, the line also says when Siren sends it again and how to
-   * resend it sooner, before the error, so a stack trace can't push it out of
-   * sight.
+   * error, never the request's data or headers. A stack trace follows only
+   * when your own function threw. For an ask that failed after its 200, the
+   * line also says when Siren sends it again and how to resend it sooner,
+   * before the error. A refused signature names what to check, such as
+   * `SIREN_SIGNING_SECRET`, and after five in a minute the rest are counted
+   * into one line.
    */
   onError?: (error: unknown, request?: AppRequest | WebhookEvent) => void;
+  /**
+   * Where the default `onError` writes, and where the handler writes one
+   * `debug` line per request it handled. Anything with `debug`, `info`,
+   * `warn` and `error` fits: `console`, pino or winston. Refused signatures
+   * and slow tells go to `warn`, and every other failure to `error`. Left
+   * out, warnings and errors go to the console and the debug lines are
+   * dropped.
+   */
+  logger?: AppLogger;
   /**
    * Kinds a newer Siren sends that this SDK does not know yet, which `on()`
    * then takes. `on()` refuses any other kind Siren never sends.
@@ -85,20 +140,32 @@ export interface AppRequestInput {
 }
 
 /**
- * What `simulate()` answers: the reply the handler would send, its body
- * parsed, and for an ask the answer the function returned. `error` is what
- * `onError` would get: a function that threw or returned nothing, an
- * answer the post would refuse, an answer Siren's answer route would
- * refuse (a `ValidationError` with code `app_answer_invalid` and Siren's
- * words), or an answer address on another Siren. `simulate()` never throws
- * for a function's failure.
+ * What `simulate()` answers, the same four fields in the PHP and Python
+ * SDKs: the reply's status, its body parsed, the answer the handler would
+ * post, and the error `onError` would get. `A` is the kind's answer type
+ * when the request came from `appRequest()`.
  */
-export interface AppSimulation {
+export interface AppSimulation<A = unknown> {
   status: number;
   body: Record<string, unknown>;
-  answer?: unknown;
-  error?: unknown;
+  /**
+   * The answer an ask's function returned, once it passed the post's check
+   * and Siren's answer rules for the kind. Null for a tell, after
+   * `answers.later()`, beside a refused answer, and on any error.
+   */
+  answer: A | null;
+  /**
+   * What `onError` would get, or null: a function that threw or returned
+   * nothing (`AppHandlerError`), an answer the post would refuse, an answer
+   * Siren's answer route would refuse (a `ValidationError` with code
+   * `app_answer_invalid` and Siren's words), or an answer address on another
+   * Siren. `simulate()` never throws for a function's failure.
+   */
+  error: unknown;
 }
+
+/** The answer type `simulate()` gives a request `appRequest()` built for `K`: the kind's answer, `never` for a tell, and `unknown` for a kind this SDK doesn't know. */
+export type AppSimulatedAnswer<K extends string> = K extends keyof FeatureAnswers ? FeatureAnswers[K] : K extends keyof FeatureTells ? never : unknown;
 
 /**
  * What `handle()` answers: the reply to send, and for an ask, the work to
@@ -160,11 +227,17 @@ export interface AppFastifyInstance {
 /** `answers.fastify`, a Fastify plugin. Register it with `{ path }`. */
 export type AppFastifyPlugin = (instance: AppFastifyInstance, options: { path?: string }, done: (error?: Error) => void) => void;
 
-/** The function `on` takes for `kind`, typed by the kind when Siren names it in {@link AppFeatureFunctions}. */
-export type AppFunctionFor<K extends string> = K extends keyof AppFeatureFunctions ? AppFeatureFunctions[K] : AppRequestFunction;
-
-/** The kinds `on()` takes: every kind Siren sends, and `X`, the kinds the `extraKinds` option names. */
-export type AppHandledKind<X extends string = never> = keyof AppFeatureFunctions | X;
+/**
+ * The function `on` takes for `kind`, typed by the kind when Siren sends it
+ * ({@link AppFeatureFunctions}). `customEvent` is a {@link FeatureKind} that
+ * Siren never sends, so no function fits it, and `on()` refuses it at run
+ * time too. A kind `extraKinds` names takes an {@link AppRequestFunction}.
+ */
+export type AppFunctionFor<K extends string> = K extends keyof AppFeatureFunctions
+  ? AppFeatureFunctions[K]
+  : K extends FeatureKind
+    ? never
+    : AppRequestFunction;
 
 /**
  * The handler `apps.requestHandler()` answers. Mount it as it is:
@@ -180,9 +253,11 @@ export type AppHandledKind<X extends string = never> = keyof AppFeatureFunctions
  *
  * Called with Node's `(req, res)` it writes the reply. Called with a Web
  * `Request` it answers a `Response`, and takes `ctx.waitUntil` from its
- * third argument. `X` is the kinds the `extraKinds` option names.
+ * third argument. `X` is the kinds the `extraKinds` option names: the
+ * handler `apps.requestHandler()` answers without them is
+ * {@link AppRequestHandler}.
  */
-export interface AppRequestHandler<X extends string = never> {
+export interface AppRequestHandlerWith<X extends string> {
   (req: AppNodeRequest, res: NodeResponseLike, next?: unknown): Promise<void>;
   // The Web signature stays last: Next.js 13 to 15 type-check a route's
   // `POST` against the last call signature (test/types/next-route.ts).
@@ -195,11 +270,11 @@ export interface AppRequestHandler<X extends string = never> {
    * error, which `onError` gets. Refuses a kind Siren never sends, saying
    * what to write instead, and a feature already handled. Chainable.
    */
-  on<K extends AppHandledKind<X>>(kind: K, key: string, fn: AppFunctionFor<K>): AppRequestHandler<X>;
+  on<K extends FeatureKind | X>(kind: K, key: string, fn: AppFunctionFor<K>): this;
   /** Hands the requests for every feature of `kind` that no `on(kind, key, fn)` names to `fn`. Chainable. */
-  on<K extends AppHandledKind<X>>(kind: K, fn: AppFunctionFor<K>): AppRequestHandler<X>;
+  on<K extends FeatureKind | X>(kind: K, fn: AppFunctionFor<K>): this;
   /** Hands a webhook event of `type`, sent to the same address, to `fn`. Refuses a type already handled. Chainable. */
-  onEvent(type: string, fn: AppEventFunction): AppRequestHandler<X>;
+  onEvent(type: string, fn: AppEventFunction): this;
   /**
    * What an ask's function returns when the app will answer later with
    * `apps.requests.answer()`. The handler then posts nothing and reports
@@ -213,12 +288,21 @@ export interface AppRequestHandler<X extends string = never> {
    * nothing and calls no `onError`. An ask's function runs at once, and its
    * answer gets the check the post would give it, then the checks Siren's
    * answer route runs for the kind. For tests, with `appRequest()` from
-   * `@novatorius/siren/testing`.
+   * `@novatorius/siren/testing`, which types the answer by the kind.
    */
+  simulate<K extends string>(input: AppTestRequest<K>): Promise<AppSimulation<AppSimulatedAnswer<K>>>;
+  /** Runs the whole handler on any signed request, as above. The answer is untyped. */
   simulate(input: AppRequestInput): Promise<AppSimulation>;
   /** A Fastify plugin with its own raw body parser, scoped to the plugin. */
   readonly fastify: AppFastifyPlugin;
 }
+
+/**
+ * The handler `apps.requestHandler()` answers. `on()` takes every kind
+ * Siren sends, and its function's request and answer are typed by the
+ * kind. See {@link AppRequestHandlerWith} for mounting it.
+ */
+export interface AppRequestHandler extends AppRequestHandlerWith<never> {}
 
 /** A body the handler cannot check. */
 const UNREADABLE = Symbol('unreadable');
@@ -236,6 +320,15 @@ interface HandlerSettings {
   runLater: ((work: () => Promise<void>) => void) | undefined;
   /** The caller's onError, or undefined for the default line. */
   onError: ((error: unknown, request?: AppRequest | WebhookEvent) => void) | undefined;
+  logger: AppLogger;
+}
+
+/** What a failure is, for the default line's level and words. */
+type Failure = 'error' | 'after-reply' | 'signature';
+
+/** The request or event `respond()` read, for the debug line. */
+interface Seen {
+  request?: AppRequest | WebhookEvent;
 }
 
 /** `answers.later()`: one frozen value for every handler. */
@@ -243,8 +336,8 @@ const LATER = Object.freeze({}) as AppAnswerLater;
 
 /** What a simulated request collects instead of posting or calling onError. */
 interface Simulation {
-  answer?: unknown;
-  error?: unknown;
+  answer: unknown;
+  error: unknown;
 }
 
 /**
@@ -277,13 +370,13 @@ export function createAppRequestHandler<X extends string = never>(
   http: Pick<HttpTransport, 'request' | 'urlFor'>,
   options: AppRequestHandlerOptions<X> = {},
   defaults: { toleranceSeconds: number; maxAnswerBytes: number },
-): AppRequestHandler<X> {
+): AppRequestHandlerWith<X> {
   const method = 'apps.requestHandler()';
   if (!isJsonObject(options)) {
     throw new SirenError(`${method} takes its options as an object, such as { signingSecret: process.env.SIREN_SIGNING_SECRET }.`);
   }
   const given: AppRequestHandlerOptions<X> = options;
-  const { toleranceSeconds, runLater, onError, extraKinds } = given;
+  const { toleranceSeconds, runLater, onError, extraKinds, logger } = given;
   const signingSecret = given.signingSecret === undefined ? readEnvironment('SIREN_SIGNING_SECRET') : given.signingSecret;
   if (typeof signingSecret !== 'string' || signingSecret === '') {
     throw new SirenError(
@@ -300,6 +393,12 @@ export function createAppRequestHandler<X extends string = never>(
   if (onError !== undefined && typeof onError !== 'function') {
     throw new SirenError(`${method} takes onError as a function of the error and the request.`);
   }
+  if (
+    logger !== undefined &&
+    (typeof logger !== 'object' || logger === null || !['debug', 'info', 'warn', 'error'].every((level) => typeof (logger as unknown as Record<string, unknown>)[level] === 'function'))
+  ) {
+    throw new SirenError(`${method} takes logger as an object with debug, info, warn and error functions, such as console or a pino logger.`);
+  }
   if (extraKinds !== undefined && (!Array.isArray(extraKinds) || !extraKinds.every((kind) => typeof kind === 'string' && kind !== ''))) {
     throw new SirenError(`${method} takes extraKinds as a list of kind names, such as ['brandNewKind'].`);
   }
@@ -311,34 +410,114 @@ export function createAppRequestHandler<X extends string = never>(
     maxAnswerBytes: defaults.maxAnswerBytes,
     runLater,
     onError,
+    logger: logger ?? QUIET_CONSOLE,
   };
 
   const features = new Map<string, AppRequestFunction>();
   const kinds = new Map<string, AppRequestFunction>();
   const events = new Map<string, AppEventFunction>();
 
-  /**
-   * Hands an error to onError, or writes the default line. `afterReply` is
-   * true for an ask's work after its 200, so the default line says when
-   * Siren sends the ask again.
-   */
-  const report = (error: unknown, request?: AppRequest | WebhookEvent, afterReply = false): void => {
+  /** Errors the app's own functions threw, which alone get a stack trace in the default line. */
+  const thrownByApp = new WeakSet<object>();
+  /** Runs an app's function, marking what it throws as its own. */
+  const run = async <T>(work: () => T | Promise<T>): Promise<T> => {
     try {
-      if (settings.onError !== undefined) settings.onError(error, request);
-      else defaultOnError(error, request, afterReply);
-    } catch {
-      // An onError that throws must not take the reply or the process with it.
+      return await work();
+    } catch (error) {
+      if (typeof error === 'object' && error !== null) thrownByApp.add(error);
+      throw error;
     }
   };
 
+  /** The refused signatures of the current minute, for the default's flood control. */
+  const refusals = { since: Number.NaN, written: 0, counted: 0 };
+
+  const refusedSignature = (error: unknown): void => {
+    const now = Date.now();
+    if (!(now - refusals.since < 60_000)) {
+      if (refusals.counted > 0) {
+        const n = refusals.counted;
+        settings.logger.warn(
+          `${n} more ${n === 1 ? 'request' : 'requests'} failed the signature check in the last minute. When every request fails, SIREN_SIGNING_SECRET is wrong or was rotated.`,
+        );
+      }
+      refusals.since = now;
+      refusals.written = 0;
+      refusals.counted = 0;
+    }
+    if (refusals.written >= SIGNATURE_LINES_PER_MINUTE) {
+      refusals.counted += 1;
+      return;
+    }
+    refusals.written += 1;
+    const message = error instanceof Error ? error.message : String(error);
+    const hint = SIGNATURE_HINTS[(error as SirenError).code ?? ''];
+    settings.logger.warn(`Siren request handler: refused a request with 401. ${message}${hint === undefined ? '' : ` ${hint}`}`);
+  };
+
+  /** The default onError: one line through the logger, at the failure's level. */
+  const defaultOnError = (error: unknown, request: AppRequest | WebhookEvent | undefined, failure: Failure): void => {
+    if (failure === 'signature') {
+      refusedSignature(error);
+      return;
+    }
+    const prefix = `Siren request handler${describeRequest(request)}:`;
+    let text = errorText(error);
+    if (typeof error === 'object' && error !== null && thrownByApp.has(error)) text += stackOf(error);
+    if (error instanceof AppSlowTellError) {
+      settings.logger.warn(`${prefix} ${text}`);
+      return;
+    }
+    if (failure === 'after-reply' && request !== undefined && 'feature' in request && request.mode === 'ask' && !settled(error)) {
+      settings.logger.error(`${prefix} ${brokeSirensRule(error) ? brokenRule(request) : nextSend(request)} ${text}`);
+      return;
+    }
+    settings.logger.error(`${prefix} ${text}`);
+  };
+
+  /**
+   * Hands an error to onError, or writes the default line. `failure` is
+   * `after-reply` for an ask's work after its 200, so the default line says
+   * when Siren sends the ask again, and `signature` for a refused signature.
+   */
+  const report = (error: unknown, request?: AppRequest | WebhookEvent, failure: Failure = 'error'): void => {
+    try {
+      if (settings.onError !== undefined) settings.onError(error, request);
+      else defaultOnError(error, request, failure);
+    } catch {
+      // An onError or a logger that throws must not take the reply or the process with it.
+    }
+  };
+
+  /** Serves one request, then writes its debug line. `simulate()` writes none. */
   const respond = async (
     verb: string | undefined,
     headers: WebhookHeaders,
     read: () => Promise<Body>,
     sim?: Simulation,
   ): Promise<AppRequestReply> => {
-    const note = (error: unknown, request?: AppRequest | WebhookEvent): void => {
-      if (sim === undefined) report(error, request);
+    const started = Date.now();
+    const seen: Seen = {};
+    const result = await serve(verb, headers, read, seen, sim);
+    if (sim === undefined) {
+      try {
+        settings.logger.debug(`Siren request handler${describeRequest(seen.request)}: ${result.status} in ${Date.now() - started} ms`);
+      } catch {
+        // A logger that throws must not take the reply with it.
+      }
+    }
+    return result;
+  };
+
+  const serve = async (
+    verb: string | undefined,
+    headers: WebhookHeaders,
+    read: () => Promise<Body>,
+    seen: Seen,
+    sim?: Simulation,
+  ): Promise<AppRequestReply> => {
+    const note = (error: unknown, request?: AppRequest | WebhookEvent, failure: Failure = 'error'): void => {
+      if (sim === undefined) report(error, request, failure);
       else sim.error = error;
     };
     if ((verb ?? 'POST').toUpperCase() !== 'POST') {
@@ -357,19 +536,23 @@ export function createAppRequestHandler<X extends string = never>(
     try {
       checked = checkSignedDelivery(raw, headers, settings.secret, settings.tolerance, Date.now() / 1000);
     } catch (error) {
-      if (error instanceof SignatureVerificationError) return reply(401, { error: error.message });
+      if (error instanceof SignatureVerificationError) {
+        note(error, undefined, 'signature');
+        return reply(401, { error: error.message });
+      }
       throw error;
     }
 
     const event = readHeader(headers, 'X-Siren-Event');
-    if (event === undefined || event === 'app.request') return serveRequest(checked, headers, note, sim);
-    return serveEvent(checked.bytes, headers, note);
+    if (event === undefined || event === 'app.request') return serveRequest(checked, headers, note, seen, sim);
+    return serveEvent(checked.bytes, headers, note, seen);
   };
 
   const serveRequest = async (
     { t, bytes }: { t: number; bytes: Buffer },
     headers: WebhookHeaders,
     note: (error: unknown, request?: AppRequest | WebhookEvent) => void,
+    seen: Seen,
     sim: Simulation | undefined,
   ): Promise<AppRequestReply> => {
     let request: AppRequest;
@@ -379,17 +562,20 @@ export function createAppRequestHandler<X extends string = never>(
       if (error instanceof SignatureVerificationError) return reply(400, { error: error.message });
       throw error;
     }
+    seen.request = request;
     const { kind, key } = request.feature;
     const fn = features.get(featureKey(kind, key)) ?? kinds.get(kind);
     if (fn === undefined) return reply(404, { error: `No function handles ${kind} ${key}.` });
 
     if (request.mode === 'tell') {
+      const started = Date.now();
       try {
-        await fn(request);
+        await run(() => fn(request));
       } catch (error) {
         note(error, request);
         return reply(500, { error: `The function for ${kind} ${key} failed, so Siren will send this request again.` });
       }
+      checkTime(started, `${kind} ${key}`, 'tell', request, note);
       return reply(200, {});
     }
 
@@ -401,9 +587,11 @@ export function createAppRequestHandler<X extends string = never>(
     }
     if (sim !== undefined) {
       try {
-        sim.answer = await fn(asked);
-        const answer = givenAnswer(sim.answer, asked);
-        if (answer !== LATER) simulatedAnswer(answer, asked);
+        const answer = givenAnswer(await run(() => fn(asked)), asked);
+        if (answer !== LATER) {
+          simulatedAnswer(answer, asked);
+          sim.answer = answer;
+        }
       } catch (error) {
         sim.error = error;
       }
@@ -411,11 +599,11 @@ export function createAppRequestHandler<X extends string = never>(
     }
     const after = async (): Promise<void> => {
       try {
-        const answer = givenAnswer(await fn(asked), asked);
+        const answer = givenAnswer(await run(() => fn(asked)), asked);
         if (answer === LATER) return;
         await answerAppRequest(http, asked.id, answer as never, settings.maxAnswerBytes, true);
       } catch (error) {
-        report(error, asked, true);
+        report(error, asked, 'after-reply');
       }
     };
     return { ...reply(200, {}), after };
@@ -453,6 +641,7 @@ export function createAppRequestHandler<X extends string = never>(
     bytes: Buffer,
     headers: WebhookHeaders,
     note: (error: unknown, request?: AppRequest | WebhookEvent) => void,
+    seen: Seen,
   ): Promise<AppRequestReply> => {
     let parsed: unknown;
     try {
@@ -462,15 +651,41 @@ export function createAppRequestHandler<X extends string = never>(
     }
     const event = isJsonObject(parsed) ? webhookEventFrom(parsed, headers) : undefined;
     if (event === undefined) return reply(400, { error: 'The signed body is not a JSON object.' });
+    seen.request = event;
     const fn = events.get(event.type);
     if (fn === undefined) return reply(200, {});
+    const started = Date.now();
     try {
-      await fn(event);
+      await run(() => fn(event));
     } catch (error) {
       note(error, event);
       return reply(500, { error: `The function for ${event.type} failed, so Siren will send this event again.` });
     }
+    checkTime(started, event.type, 'event', event, note);
     return reply(200, {});
+  };
+
+  /**
+   * Reports a tell or an event whose function ran past
+   * {@link TELL_TIME_LIMIT_SECONDS}: its reply came after Siren stopped
+   * waiting, so Siren sends it again and the function runs twice.
+   */
+  const checkTime = (
+    started: number,
+    name: string,
+    what: 'tell' | 'event',
+    about: AppRequest | WebhookEvent,
+    note: (error: unknown, request?: AppRequest | WebhookEvent) => void,
+  ): void => {
+    const took = Date.now() - started;
+    if (took <= TELL_TIME_LIMIT_SECONDS * 1000) return;
+    note(
+      new AppSlowTellError(
+        `${name} took ${(took / 1000).toFixed(1)} s. Siren stops waiting at ${TELL_TIME_LIMIT_SECONDS} s and sends the ${what} again, so it ran twice. ` +
+          'Save what you need, hand the slow part to runLater or your own queue, and return.',
+      ),
+      about,
+    );
   };
 
   /** Hands an ask's work to `runLater`, `waitUntil` or the event loop, in that order. */
@@ -531,35 +746,35 @@ export function createAppRequestHandler<X extends string = never>(
   };
 
   const api = {
-    on(kind: unknown, keyOrFn: unknown, maybeFn?: unknown): AppRequestHandler<X> {
+    on(kind: unknown, keyOrFn: unknown, maybeFn?: unknown): AppRequestHandlerWith<X> {
       const wide = maybeFn === undefined && typeof keyOrFn === 'function';
       if (typeof kind !== 'string' || kind === '') {
-        throw new SirenError('answers.on() takes a feature kind first, such as distributionResolver.');
+        throw new AppHandlerError('answers.on() takes a feature kind first, such as distributionResolver.');
       }
       const problem = featureKindProblem(kind, extra);
-      if (problem !== undefined) throw new SirenError(problem);
+      if (problem !== undefined) throw new AppHandlerError(problem);
       if (wide) {
-        if (kinds.has(kind)) throw new SirenError(`answers.on() already has a function for every ${kind}.`);
+        if (kinds.has(kind)) throw new AppHandlerError(`answers.on() already has a function for every ${kind}.`);
         kinds.set(kind, keyOrFn as AppRequestFunction);
         return self;
       }
       if (typeof keyOrFn !== 'string' || keyOrFn === '') {
-        throw new SirenError("answers.on() takes the feature's key second, such as split-by-score, or the function alone for every key.");
+        throw new AppHandlerError("answers.on() takes the feature's key second, such as split-by-score, or the function alone for every key.");
       }
       if (typeof maybeFn !== 'function') {
-        throw new SirenError(`answers.on() needs a function for ${kind} ${keyOrFn}.`);
+        throw new AppHandlerError(`answers.on() needs a function for ${kind} ${keyOrFn}.`);
       }
       const id = featureKey(kind, keyOrFn);
-      if (features.has(id)) throw new SirenError(`answers.on() already has a function for ${kind} ${keyOrFn}.`);
+      if (features.has(id)) throw new AppHandlerError(`answers.on() already has a function for ${kind} ${keyOrFn}.`);
       features.set(id, maybeFn as AppRequestFunction);
       return self;
     },
-    onEvent(type: unknown, fn: unknown): AppRequestHandler<X> {
+    onEvent(type: unknown, fn: unknown): AppRequestHandlerWith<X> {
       if (typeof type !== 'string' || type === '') {
-        throw new SirenError('answers.onEvent() takes an event type first, such as conversion.approved.');
+        throw new AppHandlerError('answers.onEvent() takes an event type first, such as conversion.approved.');
       }
-      if (typeof fn !== 'function') throw new SirenError(`answers.onEvent() needs a function for ${type}.`);
-      if (events.has(type)) throw new SirenError(`answers.onEvent() already has a function for ${type}.`);
+      if (typeof fn !== 'function') throw new AppHandlerError(`answers.onEvent() needs a function for ${type}.`);
+      if (events.has(type)) throw new AppHandlerError(`answers.onEvent() already has a function for ${type}.`);
       events.set(type, fn as AppEventFunction);
       return self;
     },
@@ -568,17 +783,17 @@ export function createAppRequestHandler<X extends string = never>(
     },
     handle(input: AppRequestInput): Promise<AppRequestReply> {
       if (!isJsonObject(input)) {
-        throw new SirenError('answers.handle() takes { method, headers, rawBody }.');
+        throw new AppHandlerError('answers.handle() takes { method, headers, rawBody }.');
       }
       const raw = input.rawBody;
       return respond(input.method, input.headers, async () => (typeof raw === 'string' || raw instanceof Uint8Array ? raw : UNREADABLE));
     },
     async simulate(input: AppRequestInput): Promise<AppSimulation> {
       if (!isJsonObject(input)) {
-        throw new SirenError('answers.simulate() takes { method, headers, rawBody }, such as appRequest() from @novatorius/siren/testing answers.');
+        throw new AppHandlerError('answers.simulate() takes { method, headers, rawBody }, such as appRequest() from @novatorius/siren/testing answers.');
       }
       const raw = input.rawBody;
-      const sim: Simulation = {};
+      const sim: Simulation = { answer: null, error: null };
       const result = await respond(
         input.method,
         input.headers,
@@ -588,13 +803,13 @@ export function createAppRequestHandler<X extends string = never>(
       return {
         status: result.status,
         body: JSON.parse(result.body) as Record<string, unknown>,
-        ...('answer' in sim ? { answer: sim.answer } : {}),
-        ...('error' in sim ? { error: sim.error } : {}),
+        answer: sim.error === null ? sim.answer : null,
+        error: sim.error,
       };
     },
     fastify,
   };
-  const self = Object.assign(handler, api) as unknown as AppRequestHandler<X>;
+  const self = Object.assign(handler, api) as unknown as AppRequestHandlerWith<X>;
   return self;
 }
 
@@ -604,27 +819,58 @@ export function createAppRequestHandler<X extends string = never>(
  */
 function givenAnswer(answer: unknown, asked: AppAsk): unknown {
   if (answer !== undefined && answer !== null) return answer;
-  throw new SirenError(
+  throw new AppHandlerError(
     `The function for ${asked.feature.kind} ${asked.feature.key} returned nothing. ` +
       'Return the answer, or return answers.later() when you will answer with apps.requests.answer().',
   );
 }
 
+/** What each refused signature's line adds, by the error's code. */
+const SIGNATURE_HINTS: Readonly<Record<string, string>> = {
+  signature_mismatch: "Check SIREN_SIGNING_SECRET: it must be this app's signing secret, and it changes when the secret is rotated.",
+  signature_missing: "Check that a proxy passes Siren's X-Siren-* headers through.",
+  signature_malformed: "Check that a proxy passes Siren's X-Siren-* headers through.",
+  timestamp_mismatch: "Check that a proxy passes Siren's X-Siren-* headers through.",
+};
+
 /**
- * Writes one console line naming what failed, as the PHP SDK's default
- * does: the kind, key and request id of an app request, or the type and
- * delivery id of an event, then the error. Never the request's data or
- * headers, which hold the app's business data. For an ask that failed
- * after its 200 it adds when Siren sends the ask again, unless Siren
- * already holds an answer or refused the app.
+ * An error as one line: its class, message and code, with a cause folded in
+ * as "(cause: ...)". Never its data, which can hold the app's business data.
  */
-function defaultOnError(error: unknown, request: AppRequest | WebhookEvent | undefined, afterReply: boolean): void {
-  const line = `Siren request handler${describeRequest(request)}:`;
-  if (afterReply && request !== undefined && 'feature' in request && request.mode === 'ask' && !settled(error)) {
-    console.error(line, nextSend(request), error);
-  } else {
-    console.error(line, error);
-  }
+function errorText(error: unknown): string {
+  if (!(error instanceof Error)) return oneLine(String(error));
+  let text = `${error.name}: ${oneLine(error.message)}`;
+  const code = (error as SirenError).code;
+  if (typeof code === 'string' && code !== '' && !error.message.includes(code)) text += ` (${code})`;
+  const cause: unknown = error.cause;
+  if (cause instanceof Error) text += ` (cause: ${oneLine(cause.message)})`;
+  else if (typeof cause === 'string' && cause !== '') text += ` (cause: ${oneLine(cause)})`;
+  return text;
+}
+
+/** The stack frames of an error the app's own function threw, on the lines after the first. */
+function stackOf(error: object): string {
+  const stack = (error as { stack?: unknown }).stack;
+  if (typeof stack !== 'string') return '';
+  const frames = stack.indexOf('\n    at ');
+  return frames < 0 ? '' : stack.slice(frames);
+}
+
+function oneLine(text: string): string {
+  return text.replace(/\s*\n\s*/g, ' ');
+}
+
+/** Whether Siren refused the answer for breaking its rules, which a resend would only repeat. */
+function brokeSirensRule(error: unknown): boolean {
+  return error instanceof ValidationError && error.code === 'app_answer_invalid';
+}
+
+/** What to do after Siren refused an answer with 422 `app_answer_invalid`. */
+function brokenRule(request: AppAsk): string {
+  return (
+    "Your function's answer broke Siren's rule. Reproduce it with simulate() on this request's data, fix it, " +
+    `then resend with \`siren apps resend ${request.id}\`.`
+  );
 }
 
 /**
@@ -639,7 +885,10 @@ function settled(error: unknown): boolean {
 /**
  * When Siren sends a failed ask again, from its `answerBy`, and how to
  * resend it sooner: `siren apps resend` (src/cli/commands/requests.ts,
- * appsResend) or Needs attention in Siren Cloud. The time is in UTC, with
+ * appsResend). Siren's resend route takes a pending ask
+ * (ResendAppRequest.php), while Siren Cloud offers Send again only once
+ * the ask needs attention (apps.ts resendAction()), so the line names the
+ * command alone. The time is in UTC, with
  * the day when it is not today. A `answerBy` that is not a date leaves the
  * time out.
  */
@@ -653,7 +902,7 @@ function nextSend(request: AppAsk): string {
   }
   return (
     `Siren sends it again${when === '' ? '' : `${when},`} when its answer window closes. ` +
-    `Resend it sooner from Needs attention in Siren Cloud, or with \`siren apps resend ${request.id}\`.`
+    `Resend it sooner with \`siren apps resend ${request.id}\`.`
   );
 }
 

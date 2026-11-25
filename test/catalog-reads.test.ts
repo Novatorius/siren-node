@@ -98,18 +98,18 @@ describe('P6: webhooks.subscriptions.events()', () => {
   });
 });
 
-describe('P7: apiKeys.scopes()', () => {
+describe('P7: apps.scopes()', () => {
   const groups = fixture<Record<string, Array<{ scope: string; resource: string; action: string; label: string }>>>(
     'api-key-scopes.json',
   );
 
-  it('GETs /api-keys/scopes and returns the groups as Siren sent them', async () => {
+  it('GETs /apps/scopes and returns the groups as Siren sent them', async () => {
     const ctx = makeClient([jsonResponse(200, groups)]);
-    const scopes = await ctx.client.apiKeys.scopes();
+    const scopes = await ctx.client.apps.scopes();
 
     const call = ctx.lastCall();
     expect(call.method).toBe('GET');
-    expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/api-keys/scopes');
+    expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/apps/scopes');
     expect(call.rawBody).toBeUndefined();
     expect(scopes).toEqual(groups);
     expect(scopes.events).toHaveLength(31);
@@ -120,10 +120,7 @@ describe('P7: apiKeys.scopes()', () => {
       label: 'Site Visited',
     });
     expect(scopes.ledger?.map((entry) => entry.scope)).toContain('ledger:conversions:read');
-    expect(scopes['webhook-subscriptions']?.map((entry) => entry.scope)).toEqual([
-      'webhook-subscriptions:read',
-      'webhook-subscriptions:manage',
-    ]);
+    expect(scopes['webhook-subscriptions']).toBeUndefined();
     expect(scopes['records:programs']?.[0]).toEqual({
       scope: 'records:programs:read',
       resource: 'records:programs',
@@ -136,11 +133,11 @@ describe('P7: apiKeys.scopes()', () => {
     const bodies = [[], [groups], null, 'scopes', { ...groups, events: 'event:sale' }, { ...groups, events: ['event:sale'] }];
     for (const body of bodies) {
       const ctx = makeClient([jsonResponse(200, body)]);
-      const error = await ctx.client.apiKeys.scopes().catch((e: unknown) => e);
+      const error = await ctx.client.apps.scopes().catch((e: unknown) => e);
       expect(error, JSON.stringify(body).slice(0, 40)).toBeInstanceOf(UnexpectedResponseError);
       expect((error as UnexpectedResponseError).statusCode).toBe(200);
       expect((error as UnexpectedResponseError).data).toEqual(body);
-      expect((error as UnexpectedResponseError).message).toContain('/api-keys/scopes');
+      expect((error as UnexpectedResponseError).message).toContain('/apps/scopes');
     }
   });
 
@@ -149,7 +146,7 @@ describe('P7: apiKeys.scopes()', () => {
       [jsonResponse(503, { error: 'unavailable' }, { 'Retry-After': '0' }), jsonResponse(200, groups)],
       { maxRetries: 1 },
     );
-    expect(await ctx.client.apiKeys.scopes()).toEqual(groups);
+    expect(await ctx.client.apps.scopes()).toEqual(groups);
     expect(ctx.calls()).toHaveLength(2);
   });
 
@@ -158,7 +155,7 @@ describe('P7: apiKeys.scopes()', () => {
       [jsonResponse(401, { error: { message: 'This route does not accept API keys.', code: 'api_key_not_accepted' } })],
       { maxRetries: 0 },
     );
-    const error = await ctx.client.apiKeys.scopes().catch((e: unknown) => e);
+    const error = await ctx.client.apps.scopes().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiKeyNotAcceptedError);
   });
 });

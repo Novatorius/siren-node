@@ -15,6 +15,7 @@ import type {
   ProgramGroupSorter,
   ProgramStatus,
 } from './taxonomy';
+import type { FeatureAnswers, FeatureQuestions, FeatureTells } from './feature-kind';
 import type { ListParams, WebhookEvent } from './types';
 
 /*
@@ -1307,6 +1308,8 @@ export interface AppRequestRecord {
   feature: string;
   kind: FeatureKind | (string & {});
   mode: AppRequestMode | (string & {});
+  /** True for a test request (`AppRequestSerializer` adds it then). Siren leaves it out otherwise. */
+  test?: boolean;
   subject: { type: string; id: string };
   status: AppRequestStatus | (string & {});
   sendCount: number;
@@ -1356,7 +1359,7 @@ export interface AppAnswerReceipt {
 
 /**
  * The fields every request Siren sends an app carries, from its signed body.
- * `D` is the kind's payload, such as {@link AppDistributionQuestion}.
+ * `D` is the kind's payload, such as {@link DistributionResolverQuestion}.
  */
 interface AppRequestBase<D = Record<string, unknown>> {
   version: 1;
@@ -1376,6 +1379,14 @@ interface AppRequestBase<D = Record<string, unknown>> {
    * names the feature, not the request.
    */
   feature: { kind: FeatureKind | (string & {}); key: string; id: string };
+  /**
+   * True for a test request, such as one `siren trigger ask` sent: Siren
+   * checks a test ask's answer by the kind's rules and applies nothing.
+   * False when Siren left the field out, as it does for every real request.
+   * Never move money or write records for a test request. Answer it as
+   * usual and stop there.
+   */
+  test: boolean;
   createdAt: string;
   /** The kind's payload. Its fields belong to the feature's kind. */
   data: D;
@@ -1392,12 +1403,20 @@ interface AppRequestBase<D = Record<string, unknown>> {
 /** A request that needs no answer. `D` is the kind's payload. */
 export interface AppTell<D = Record<string, unknown>> extends AppRequestBase<D> {
   mode: 'tell';
+  /** False: a tell needs no answer. The same as `mode === 'ask'`, as the PHP and Python SDKs name it. */
+  readonly isAsk: false;
 }
 
 /** A request that waits for the app's answer. `D` is the kind's question. */
 export interface AppAsk<D = Record<string, unknown>> extends AppRequestBase<D> {
   mode: 'ask';
-  /** When Siren sends the request again, or marks it as needing attention. */
+  /** True: an ask waits for the app's answer. The same as `mode === 'ask'`, as the PHP and Python SDKs name it. */
+  readonly isAsk: true;
+  /**
+   * When Siren sends the request again, or marks it as needing attention:
+   * an ISO 8601 time as Siren sends it, such as `2026-11-17T13:20:03+00:00`.
+   * `new Date(request.answerBy)` reads it.
+   */
   answerBy: string;
   /** Where the answer goes. `apps.requests.answer(id, answer)` posts to the same route. */
   answerUrl: string;
@@ -1431,7 +1450,7 @@ export interface AppCurrency extends ProgramCurrency {
  * The data of a `postConversionAction` tell, sent after a conversion is
  * approved (Siren's `AppActionSubjects::forConversion()`).
  */
-export interface AppConversionApprovedData {
+export interface PostConversionActionTell {
   conversion: {
     id: number;
     type: string;
@@ -1457,7 +1476,7 @@ export interface AppConversionApprovedData {
  * completes (Siren's `AppActionSubjects::forAllocation()`). The subject id is
  * `{distributionId}:{obligationId}`.
  */
-export interface AppAllocationCompletedData {
+export interface PostAllocationActionTell {
   allocation: {
     distributionId: number;
     obligationId: number;
@@ -1478,7 +1497,7 @@ export interface AppAllocationCompletedData {
  * even when Siren asks again later. `engagementCreatedDate` is an ISO 8601
  * time.
  */
-export interface AppRewardConversion {
+export interface IncentiveResolverConversion {
   conversionId: number;
   engagementId: number;
   collaboratorId: number;
@@ -1493,17 +1512,19 @@ export interface AppRewardConversion {
  * conversions one sale, renewal or lead made. `reason` is `sale` while the
  * rewards are not made yet, and `refund` when a partial refund asks again
  * about rewards already made. `transaction` is null for a lead. The
- * program's `status` is as it was at the sale. Answer with an
- * {@link AppRewardAnswer}.
+ * program's `status` is as it was at the sale. `conversionType` is one of
+ * the conversion types Siren registers (RegisterCoreConversionTypes.php).
+ * Answer with an {@link IncentiveResolverAnswer}.
  */
-export interface AppRewardQuestion {
-  reason: 'sale' | 'refund' | (string & {});
+export interface IncentiveResolverQuestion {
+  /** `AppRewardQuestion::REASON_SALE` or `REASON_REFUND`, the only two `build()` takes. */
+  reason: 'sale' | 'refund';
   program: { id: number; name: string; status: string };
-  conversionType: string;
+  conversionType: AppConversionType;
   transaction: { id: number; units: string; currency: AppCurrency } | null;
   /** The reward pool, a stored integer. Read it with `apps.shownAmount(pool.value, pool.currency)`. */
   pool: { value: number; units: string; currency: AppCurrency };
-  conversions: AppRewardConversion[];
+  conversions: IncentiveResolverConversion[];
 }
 
 /**
@@ -1514,7 +1535,7 @@ export interface AppRewardQuestion {
  * pool's stored units, or null for a collaborator who earns nothing. The
  * rewards may add up to more than the pool.
  */
-export interface AppRewardAnswer extends AppAnswer {
+export interface IncentiveResolverAnswer extends AppAnswer {
   outcome: 'rewards';
   units: string;
   rewards: Record<string, number | null>;
@@ -1549,9 +1570,9 @@ export interface AppIncentiveTypeLine {
  * refund asks again about an award already made, which then lists the
  * award's `conversions`. `transaction` is null for a lead, which names its
  * `binding` instead. `total` is the sum of the lines in the transaction's
- * units, in the stored integer form. Answer with an {@link AppIncentiveTypeAnswer}.
+ * units, in the stored integer form. Answer with an {@link IncentiveTypeAnswer}.
  */
-export interface AppIncentiveTypeQuestion {
+export interface IncentiveTypeQuestion {
   reason: 'sale' | 'refund';
   program: { id: number; name: string; units: string };
   conversionType: AppConversionType;
@@ -1578,7 +1599,7 @@ export interface AppIncentiveTypeQuestion {
  * changes only the pool. Siren refuses any other shape with 422
  * `app_answer_invalid`.
  */
-export type AppIncentiveTypeAnswer =
+export type IncentiveTypeAnswer =
   | (AppAnswer & { outcome: 'award'; units: string; pool: number; engagementIds: number[] })
   | (AppAnswer & { outcome: 'none' });
 
@@ -1587,7 +1608,7 @@ export type AppIncentiveTypeAnswer =
  * program holds on the opportunity at the sale. `createdDate` is an ISO 8601
  * time.
  */
-export interface AppGroupOrderEngagement {
+export interface ProgramGroupSorterEngagement {
   engagementId: number;
   collaboratorId: number;
   score: number;
@@ -1595,10 +1616,10 @@ export interface AppGroupOrderEngagement {
 }
 
 /** One program in a `programGroupSorter` ask, with its engagements oldest first. */
-export interface AppGroupOrderProgram {
+export interface ProgramGroupSorterProgram {
   id: number;
   name: string;
-  engagements: AppGroupOrderEngagement[];
+  engagements: ProgramGroupSorterEngagement[];
 }
 
 /**
@@ -1607,14 +1628,15 @@ export interface AppGroupOrderProgram {
  * program group's programs in for one sale or lead. `programs`
  * lists each program of the group that takes the conversion once, in the
  * order the group holds them. `transaction` is null for a lead, and its
- * `total` is a stored integer. Answer with an {@link AppGroupOrderAnswer}.
+ * `total` is a stored integer. Answer with an {@link ProgramGroupSorterAnswer}.
  */
-export interface AppGroupOrderQuestion {
+export interface ProgramGroupSorterQuestion {
   group: { id: number; name: string };
-  conversionType: string;
+  /** One of the conversion types Siren registers (RegisterCoreConversionTypes.php), as `AppGroupOrderQuestion::build()` copies it from the work. */
+  conversionType: AppConversionType;
   opportunity: { id: number };
   transaction: { id: number; units: string; total: number } | null;
-  programs: AppGroupOrderProgram[];
+  programs: ProgramGroupSorterProgram[];
 }
 
 /**
@@ -1623,7 +1645,7 @@ export interface AppGroupOrderQuestion {
  * program id of the question exactly once, in the order Siren tries them.
  * The first program that converts wins the group.
  */
-export interface AppGroupOrderAnswer extends AppAnswer {
+export interface ProgramGroupSorterAnswer extends AppAnswer {
   outcome: 'sorted';
   programIds: number[];
 }
@@ -1649,9 +1671,9 @@ export interface AppDistributionMetric {
  * `pool.paid` what collaborators already hold from it, so a first ask has
  * `paid` 0 and `value` equal to `total`, and a continued ask leaves out each
  * collaborator who already holds a share. Answer with an
- * {@link AppDistributionAnswer}, which `apps.splitPool()` helps build.
+ * {@link DistributionResolverAnswer}, which `apps.splitPool()` helps build.
  */
-export interface AppDistributionQuestion {
+export interface DistributionResolverQuestion {
   distribution: { id: number; distributorId: number; periodStart: string; periodEnd: string };
   distributor: { id: number; name: string };
   pool: { value: number; total: number; paid: number; units: string; currency: AppCurrency };
@@ -1666,7 +1688,7 @@ export interface AppDistributionQuestion {
  * units and a whole step of the currency, 100 for yen. They add up to the
  * pool's `value` at most.
  */
-export interface AppDistributionAnswer extends AppAnswer {
+export interface DistributionResolverAnswer extends AppAnswer {
   outcome: 'allocated';
   units: string;
   shares: Record<string, number>;
@@ -1693,23 +1715,11 @@ export type AppAskResult<A extends AppAnswer> = A | AppAnswerLater | Promise<A |
  * `apps.requests.answer()`. An ask's function that returns nothing is an
  * error, which `onError` gets.
  */
-export interface AppFeatureFunctions {
-  postConversionAction: (request: AppTell<AppConversionApprovedData>) => void | Promise<void>;
-  postAllocationAction: (request: AppTell<AppAllocationCompletedData>) => void | Promise<void>;
-  distributionResolver: (request: AppAsk<AppDistributionQuestion>) => AppAskResult<AppDistributionAnswer>;
-  incentiveResolver: (request: AppAsk<AppRewardQuestion>) => AppAskResult<AppRewardAnswer>;
-  payoutMethod: (request: AppAsk<AppPayoutQuestion>) => AppAskResult<AppPayoutAnswer>;
-  metricCalculation: (request: AppAsk<AppMetricCalculationQuestion>) => AppAskResult<AppMetricCalculationAnswer>;
-  metricFilter: (request: AppAsk<AppMetricFilterQuestion>) => AppAskResult<AppMetricFilterAnswer>;
-  incentiveType: (request: AppAsk<AppIncentiveTypeQuestion>) => AppAskResult<AppIncentiveTypeAnswer>;
-  engagementCalculation: (request: AppAsk<AppEngagementCalculationQuestion>) => AppAskResult<AppEngagementCalculationAnswer>;
-  engagementFilter: (request: AppAsk<AppEngagementFilterQuestion>) => AppAskResult<AppEngagementFilterAnswer>;
-  programGroupSorter: (request: AppAsk<AppGroupOrderQuestion>) => AppAskResult<AppGroupOrderAnswer>;
-  transactionFilter: (request: AppAsk<AppTransactionFilterQuestion>) => AppAskResult<AppTransactionFilterAnswer>;
-  collaboratorGroupStructure: (
-    request: AppAsk<AppCollaboratorGroupStructureQuestion>,
-  ) => AppAskResult<AppCollaboratorGroupStructureAnswer>;
-}
+export type AppFeatureFunctions = {
+  [K in keyof FeatureTells]: (request: AppTell<FeatureTells[K]>) => void | Promise<void>;
+} & {
+  [K in keyof FeatureQuestions]: (request: AppAsk<FeatureQuestions[K]>) => AppAskResult<FeatureAnswers[K]>;
+};
 
 /**
  * The function `apps.requestHandler().on(kind, ...)` takes for a kind the
@@ -1758,9 +1768,9 @@ export interface AppMetricSale {
 /**
  * The data of a `metricCalculation` ask: Siren asks the app to score one
  * metric for a distributor's period. `opportunityId` and `points` may be
- * null. Answer with an {@link AppMetricCalculationAnswer}.
+ * null. Answer with an {@link MetricCalculationAnswer}.
  */
-export interface AppMetricCalculationQuestion {
+export interface MetricCalculationQuestion {
   distributor: { id: number; name: string };
   /** The period being scored. `periodEnd` is an ISO 8601 time. */
   distribution: { id: number; periodEnd: string };
@@ -1782,7 +1792,7 @@ export interface AppMetricCalculationQuestion {
  * organization and not in the trash, and each score a whole number of 0 or
  * more. An empty list scores nobody.
  */
-export interface AppMetricCalculationAnswer extends AppAnswer {
+export interface MetricCalculationAnswer extends AppAnswer {
   outcome: 'scores';
   results: Array<{ collaboratorId: number; score: number }>;
 }
@@ -1790,9 +1800,9 @@ export interface AppMetricCalculationAnswer extends AppAnswer {
 /**
  * The data of a `metricFilter` ask: Siren asks the app whether one
  * collaborator's metric counts for a distributor. `opportunityId` and
- * `points` may be null. Answer with an {@link AppMetricFilterAnswer}.
+ * `points` may be null. Answer with an {@link MetricFilterAnswer}.
  */
-export interface AppMetricFilterQuestion {
+export interface MetricFilterQuestion {
   distributor: { id: number; name: string };
   distribution: { id: number };
   collaborator: { id: number; name: string };
@@ -1808,7 +1818,7 @@ export interface AppMetricFilterQuestion {
  * metric, and `{ outcome: 'suppress', reason }` drops it. The reason is
  * plain text of 1 to 200 characters.
  */
-export type AppMetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+export type MetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
 
 /** One member of a collaborator group in a `collaboratorGroupStructure` ask. */
 export interface AppCollaboratorGroupMember {
@@ -1830,11 +1840,11 @@ export interface AppCollaboratorGroupMember {
  * cascade) or the distributor (a metric cascade). `cause.id` is 16 hex
  * characters, the trigger's own random id. The ask also carries the fields
  * of the trigger it interrupts, which differ by side, so they stay open
- * here. {@link AppCollaboratorGroupStructureDistributorQuestion} types a
- * distributor's and {@link AppCollaboratorGroupStructureProgramQuestion} a
- * program's. Answer with an {@link AppCollaboratorGroupStructureAnswer}.
+ * here. {@link CollaboratorGroupStructureDistributorQuestion} types a
+ * distributor's and {@link CollaboratorGroupStructureProgramQuestion} a
+ * program's. Answer with an {@link CollaboratorGroupStructureAnswer}.
  */
-export interface AppCollaboratorGroupStructureQuestion {
+export interface CollaboratorGroupStructureQuestion {
   group: { id: number; name: string };
   members: AppCollaboratorGroupMember[];
   for: { type: 'program' | 'distributor'; id: number };
@@ -1849,7 +1859,7 @@ export interface AppCollaboratorGroupStructureQuestion {
  * carries the fields of a metric calculation's question beside the group's,
  * and its `cause` is a metric's.
  */
-export interface AppCollaboratorGroupStructureDistributorQuestion extends AppCollaboratorGroupStructureQuestion {
+export interface CollaboratorGroupStructureDistributorQuestion extends CollaboratorGroupStructureQuestion {
   for: { type: 'distributor'; id: number };
   distributor: { id: number; name: string };
   /** The period being scored. `periodEnd` is an ISO 8601 time. */
@@ -1869,7 +1879,7 @@ export interface AppCollaboratorGroupStructureDistributorQuestion extends AppCol
  * `cause` is an engagement's. `args` holds the settings a person gave the
  * engagement type, as text by name, or an empty object.
  */
-export interface AppCollaboratorGroupStructureProgramQuestion extends AppCollaboratorGroupStructureQuestion {
+export interface CollaboratorGroupStructureProgramQuestion extends CollaboratorGroupStructureQuestion {
   for: { type: 'program'; id: number };
   program: { id: number; name: string };
   engagementType: string;
@@ -1886,7 +1896,7 @@ export interface AppCollaboratorGroupStructureProgramQuestion extends AppCollabo
  * chain first. Siren reads it as its built-in linear chain, where a lower
  * position is higher up.
  */
-export interface AppCollaboratorGroupChain extends AppAnswer {
+export interface CollaboratorGroupStructureChainAnswer extends AppAnswer {
   outcome: 'structure';
   shape: 'chain';
   order: number[];
@@ -1900,7 +1910,7 @@ export interface AppCollaboratorGroupChain extends AppAnswer {
  * member. The parents form no cycle. Siren reads it as its parent and child
  * structure.
  */
-export interface AppCollaboratorGroupTree extends AppAnswer {
+export interface CollaboratorGroupStructureTreeAnswer extends AppAnswer {
   outcome: 'structure';
   shape: 'tree';
   parents: Record<string, number | null>;
@@ -1911,7 +1921,7 @@ export interface AppCollaboratorGroupTree extends AppAnswer {
  * Siren refuses one that breaks the rules above with 422
  * `app_answer_invalid`.
  */
-export type AppCollaboratorGroupStructureAnswer = AppCollaboratorGroupChain | AppCollaboratorGroupTree;
+export type CollaboratorGroupStructureAnswer = CollaboratorGroupStructureChainAnswer | CollaboratorGroupStructureTreeAnswer;
 
 /**
  * The data of a `payoutMethod` ask: Siren asks the app to pay one payout.
@@ -1920,9 +1930,9 @@ export type AppCollaboratorGroupStructureAnswer = AppCollaboratorGroupChain | Ap
  * a whole number in the currency's smallest unit. Pay each `payout.id` at
  * most once, and when Siren asks again about a payout the app already paid,
  * answer `paid` with the first reference. Answer with an
- * {@link AppPayoutAnswer}.
+ * {@link PayoutMethodAnswer}.
  */
-export interface AppPayoutQuestion {
+export interface PayoutMethodQuestion {
   payout: { id: number; fulfillmentId: number; attempt: number };
   /** What to pay, a stored integer. Read it with `apps.shownAmount(amount.value, amount.currency)`. */
   amount: { value: number; units: string; currency: AppCurrency };
@@ -1935,7 +1945,7 @@ export interface AppPayoutQuestion {
  * `reference` is the payment's id in the app's own system, 1 to 191
  * characters.
  */
-export interface AppPayoutPaid extends AppAnswer {
+export interface PayoutMethodPaidAnswer extends AppAnswer {
   outcome: 'paid';
   reference: string;
 }
@@ -1944,13 +1954,13 @@ export interface AppPayoutPaid extends AppAnswer {
  * The answer to a `payoutMethod` ask when the app could not pay:
  * `{ outcome: 'failed', reason }`, where `reason` is 1 to 500 characters.
  */
-export interface AppPayoutFailed extends AppAnswer {
+export interface PayoutMethodFailedAnswer extends AppAnswer {
   outcome: 'failed';
   reason: string;
 }
 
 /** The answer to a `payoutMethod` ask: paid with a reference, or failed with a reason. */
-export type AppPayoutAnswer = AppPayoutPaid | AppPayoutFailed;
+export type PayoutMethodAnswer = PayoutMethodPaidAnswer | PayoutMethodFailedAnswer;
 
 /**
  * The trigger behind an engagement ask. `id` is the trigger's own random id,
@@ -1979,9 +1989,9 @@ export interface AppEngagementOpportunity {
  * an engagement, and its score, when an engagement type a program picks
  * this calculation for triggers. `args` holds the settings a person gave
  * that engagement type, as text by name. Answer with an
- * {@link AppEngagementCalculationAnswer}.
+ * {@link EngagementCalculationAnswer}.
  */
-export interface AppEngagementCalculationQuestion {
+export interface EngagementCalculationQuestion {
   program: { id: number; name: string };
   engagementType: string;
   /** The program's engagement type row that selects this calculation. */
@@ -2000,7 +2010,7 @@ export interface AppEngagementCalculationQuestion {
  * organization and not in the trash, and each score a whole number of 0 or
  * more. An empty list makes no engagement.
  */
-export interface AppEngagementCalculationAnswer extends AppAnswer {
+export interface EngagementCalculationAnswer extends AppAnswer {
   outcome: 'engagements';
   results: Array<{ collaboratorId: number; score: number }>;
 }
@@ -2009,9 +2019,9 @@ export interface AppEngagementCalculationAnswer extends AppAnswer {
  * The data of an `engagementFilter` ask (Siren's
  * `AppEngagementQuestion::forFilter()`): Siren asks the app whether an
  * engagement may be made for one collaborator on a program. Answer with an
- * {@link AppEngagementFilterAnswer}.
+ * {@link EngagementFilterAnswer}.
  */
-export interface AppEngagementFilterQuestion {
+export interface EngagementFilterQuestion {
   program: { id: number; name: string };
   /** The collaborator the engagement would credit. */
   collaborator: { id: number; name: string };
@@ -2025,7 +2035,7 @@ export interface AppEngagementFilterQuestion {
  * engagement, and `{ outcome: 'suppress', reason }` stops it. The reason is
  * plain text of 1 to 200 characters, which Siren notes on the opportunity.
  */
-export type AppEngagementFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+export type EngagementFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
 
 /**
  * One of a sale's own lines in a `transactionFilter` ask. `value` is the
@@ -2052,11 +2062,15 @@ export interface AppTransactionLine {
  * the sale's value lands in. `refundDistribution` is null, or the later
  * period a refund came in while the ask was open. Refunds reuse the stored
  * answer, so refund lines are never sent. Answer with an
- * {@link AppTransactionFilterAnswer}.
+ * {@link TransactionFilterAnswer}.
  */
-export interface AppTransactionFilterQuestion {
+export interface TransactionFilterQuestion {
   for: { type: 'program' | 'distributor'; id: number; name: string };
-  transaction: { id: number; units: string; currency: AppCurrency };
+  /**
+   * `currency` is null for a sale with no lines, since Siren reads it from
+   * the first line (`AppTransactionFilterQuestion::build()`).
+   */
+  transaction: { id: number; units: string; currency: AppCurrency | null };
   lines: AppTransactionLine[];
   distribution: { id: number } | null;
   refundDistribution: { id: number } | null;
@@ -2069,7 +2083,7 @@ export interface AppTransactionFilterQuestion {
  * includes nothing. A line counts when any filter the record picks includes
  * it. Siren refuses an id the question lacks with 422 `app_answer_invalid`.
  */
-export interface AppTransactionFilterAnswer extends AppAnswer {
+export interface TransactionFilterAnswer extends AppAnswer {
   outcome: 'filtered';
   include: number[];
 }

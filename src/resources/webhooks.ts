@@ -2,8 +2,6 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { SignatureVerificationError, SirenError, UnexpectedResponseError } from '../errors';
 import { parseJsonBody, type HttpTransport } from '../http';
 import type {
-  CreatedWebhookSubscription,
-  CreateWebhookSubscriptionParams,
   UpdateWebhookSubscriptionParams,
   WebhookDelivery,
   WebhookEvent,
@@ -111,12 +109,11 @@ function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
 /**
  * Manage webhook subscriptions (`/webhooks`).
  *
- * Takes an API key with a webhook scope, or a signed-in dashboard session's
- * access token. `webhook-subscriptions:read` opens `list()`, `events()`,
- * `retrieve()` and `deliveries()`, and `webhook-subscriptions:manage` opens
- * every method here. The key must be organization-wide, because
- * subscriptions are not kept by store. A key bound to one store gets a
- * `StoreKeyNotAllowedError`.
+ * Takes a signed-in dashboard session's access token. Siren refuses an API
+ * key on every `/webhooks` route with 401 `api_key_not_accepted`, raised as
+ * `ApiKeyNotAcceptedError`, and the `webhook-subscriptions:*` scopes are
+ * retired. There is no create call: Siren has no `POST /webhooks`. An app
+ * gets its address from `apps.create()` or `apps.update()`.
  *
  * `retrieve()`, `update()`, `test()` and `deliveries()` refuse an id that is
  * not a positive whole number with `SirenError` before sending, and throw
@@ -219,24 +216,6 @@ export class WebhookSubscriptionsResource {
     return readList<WebhookDelivery>(this.http, path, (rows) =>
       rows.every(isJsonObject) ? undefined : `Siren answered GET ${path} with a delivery that is not a JSON object.`,
     );
-  }
-
-  /**
-   * Register a URL to receive event callbacks.
-   *
-   * The response's `signingSecret` is returned exactly once — store it to
-   * verify future deliveries. This write is never auto-retried.
-   *
-   * @deprecated An app holds its address now. Make one with `apps.create()` and a `url`, or add one
-   * to an app with `apps.update()`. This call goes when Siren removes its route.
-   */
-  create(params: CreateWebhookSubscriptionParams): Promise<CreatedWebhookSubscription> {
-    return this.http.requestData<CreatedWebhookSubscription>({
-      method: 'POST',
-      path: '/webhooks',
-      body: params,
-      retriable: false,
-    });
   }
 
   /**

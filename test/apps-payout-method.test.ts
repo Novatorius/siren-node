@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Siren } from '../src/client';
 import { AppErrorCode, ConflictError, appErrorCode } from '../src/errors';
 import { AppsResource } from '../src/resources/apps';
-import type { AppPayoutAnswer, AppPayoutQuestion } from '../src/record-types';
+import type { PayoutMethodAnswer, PayoutMethodQuestion } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
 import { TEST_API_KEY } from './helpers';
 import { FakeHttpClient, reply } from './http-fakes';
@@ -64,7 +64,7 @@ describe('the payout method ask', () => {
   });
 
   it('reads the question from the JSON Siren sends', () => {
-    const question = (JSON.parse(ENVELOPE) as { data: AppPayoutQuestion }).data;
+    const question = (JSON.parse(ENVELOPE) as { data: PayoutMethodQuestion }).data;
     expect(question.payout.id).toBe(88);
     expect(question.payout.attempt).toBe(1);
     expect(question.amount.value).toBe(2500);
@@ -73,8 +73,8 @@ describe('the payout method ask', () => {
   });
 
   it('sends a paid and a failed answer through the one answer route', async () => {
-    const paid: AppPayoutAnswer = { outcome: 'paid', reference: 'acme-ledger-5521' };
-    const failed: AppPayoutAnswer = { outcome: 'failed', reason: 'The account is closed.' };
+    const paid: PayoutMethodAnswer = { outcome: 'paid', reference: 'acme-ledger-5521' };
+    const failed: PayoutMethodAnswer = { outcome: 'failed', reason: 'The account is closed.' };
     const accepted = { status: 'accepted', duplicate: false };
     const over = transportOver([reply(200, accepted), reply(200, accepted)]);
     const resource = new AppsResource(over.transport);
@@ -85,7 +85,7 @@ describe('the payout method ask', () => {
 
   it('refuses an answer that is neither paid nor failed at compile time', () => {
     // @ts-expect-error a paid answer carries a reference, not a reason
-    const wrong: AppPayoutAnswer = { outcome: 'paid', reason: 'x' };
+    const wrong: PayoutMethodAnswer = { outcome: 'paid', reason: 'x' };
     expect(wrong.outcome).toBe('paid');
   });
 

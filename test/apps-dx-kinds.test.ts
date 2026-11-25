@@ -105,7 +105,7 @@ describe('DX pass 2, finding 1: on() takes only a kind Siren sends', () => {
     const result = await answers.simulate(appRequest('brandNewKind', 'a-key', { secret: SECRET, baseUrl: BASE, data: {} }));
     expect(result.status).toBe(200);
     expect(result.answer).toEqual({ outcome: 'done' });
-    expect(result.error).toBeUndefined();
+    expect(result.error).toBeNull();
   });
 
   it('refuses extraKinds that is not a list of kind names when it is made', () => {

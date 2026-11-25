@@ -47,14 +47,15 @@ is gone. It was never released, and `RotatedApp` stays as a deprecated type.
 
 ## The old key and webhook calls
 
-Every method on `siren.apiKeys` and `siren.webhooks.subscriptions` carries
-an `@deprecated` line naming the app call that replaces it. The calls still
-work, since Siren keeps their routes until slice C5 removes them, and they go
-then. `webhooks.constructEvent()` and `webhooks.verifySignature()` stay as
-they are, because an app's address receives events signed the same way.
-openapi.yaml marks each old `/webhooks` and `/api-keys` operation
-`deprecated: true`, with a first description line naming the app route that
-replaces it.
+Slice C5 removed `/api-keys` and `POST /webhooks` from Siren, so
+`siren.apiKeys` and `siren.webhooks.subscriptions.create()` are gone, and
+openapi.yaml drops their operations. Every other method on
+`siren.webhooks.subscriptions` carries an `@deprecated` line naming the app
+call that replaces it. `webhooks.constructEvent()` and
+`webhooks.verifySignature()` stay as they are, because an app's address
+receives events signed the same way. openapi.yaml marks each remaining
+`/webhooks` operation `deprecated: true`, with a first description line naming
+the app route that replaces it.
 
 A malformed answer to a call that made a secret throws
 `UnexpectedResponseError` with the body as `data`, less `rawKey` and

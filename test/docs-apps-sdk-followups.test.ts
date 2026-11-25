@@ -16,8 +16,8 @@ describe('apps-sdk-followups-1: the records', () => {
     const readme = read('README.md');
     expect(readme).toContain('`value` is not the amount a person reads');
     expect(readme).toContain('apps.shownAmount(value, currency)');
-    expect(readme).toContain('`AppConversionApprovedData`');
-    expect(readme).toContain('`AppAllocationCompletedData`');
+    expect(readme).toContain('`PostConversionActionTell`');
+    expect(readme).toContain('`PostAllocationActionTell`');
     expect(read('CHANGELOG.md')).toContain('`siren.apps.shownAmount(value, currency)`');
     expect(read('docs/architecture/apps-cli.md')).toContain('`siren.apps.shownAmount(value, currency)`');
     expect(read('examples/apps/acme/README.md')).toContain('siren.apps.shownAmount(value, currency)');

@@ -361,52 +361,6 @@ paths:
                 items: { $ref: '#/components/schemas/WebhookSubscription' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-    post:
-      tags: [Webhooks]
-      operationId: createWebhookSubscription
-      deprecated: true
-      summary: Create a webhook subscription
-      description: |
-        Deprecated: an app holds its address now. Use `POST /apps` to make an
-        app with an address. This route stays until Siren removes it.
-
-        Registers a URL to receive event callbacks. The response includes
-        `signingSecret`, returned **once** — store it to verify future
-        deliveries. Each delivery is a POST whose body is the event payload
-        itself. The headers carry the rest:
-        `X-Siren-Signature: sha256=<hmac-sha256(rawBody, signingSecret)>`,
-        `X-Siren-Event` (the event type) and `X-Siren-Delivery` (`evt_` and 32
-        hex characters, for skipping repeats). An organization holds at most
-        100 subscriptions. Siren does not check `events` against
-        `GET /webhooks/events`, so an unknown name is stored and never fires.
-
-        An API key needs `webhook-subscriptions:manage`, and must be
-        organization-wide. A key bound to one store is refused with 403
-        `store_key_not_allowed`.
-      security:
-        - apiKey: ['webhook-subscriptions:manage']
-        - dashboardSession: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/WebhookSubscriptionCreate' }
-      responses:
-        '201':
-          description: Subscription created.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/WebhookSubscription'
-                  - type: object
-                    properties:
-                      signingSecret:
-                        type: string
-                        description: HMAC signing secret. Returned once.
-        '400': { $ref: '#/components/responses/ValidationError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
   /webhooks/events:
     get:
       tags: [Webhooks]
@@ -635,141 +589,6 @@ paths:
                 items: { $ref: '#/components/schemas/WebhookDelivery' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-  /api-keys:
-    get:
-      tags: [API Keys]
-      operationId: listApiKeys
-      deprecated: true
-      summary: List API keys
-      description: |
-        Deprecated: an app holds its key now. Use `GET /apps` to read each app
-        with its key. This route stays until Siren removes it.
-
-        Oldest first. Pages with `number` (default 200, and a size above 200
-        is lowered to 200) and `offset`.
-        The `x-siren-estimated-count` header carries the total.
-
-        Takes a signed-in dashboard session. No API key scope reaches this
-        route, and Siren answers an API key with 401 `api_key_not_accepted`.
-      security:
-        - dashboardSession: []
-      parameters:
-        - { $ref: '#/components/parameters/Offset' }
-        - name: number
-          in: query
-          schema: { type: integer, minimum: 1, default: 200 }
-      responses:
-        '200':
-          description: API keys (bare array, without raw key material).
-          headers:
-            x-siren-estimated-count: { $ref: '#/components/headers/XSirenEstimatedCount' }
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ApiKey' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-    post:
-      tags: [API Keys]
-      operationId: createApiKey
-      deprecated: true
-      summary: Create an API key
-      description: |
-        Deprecated: an app holds its key now. Use `POST /apps/{key}/key` to give
-        an app a key. This route stays until Siren removes it.
-
-        Creates a new API key. The plaintext `rawKey` (`sk_live_...`) is
-        returned **once** and cannot be retrieved later. `scopes` takes event
-        scopes (`event:*`, `event:{slug}`, or the older `*`), the ledger read
-        scopes and the webhook scopes. An older resource scope such as
-        `programs:read` or `conversions:read` is refused with 400. An
-        organization holds at most 250 active keys.
-
-        Takes a signed-in dashboard session. No API key scope reaches this
-        route, and Siren answers an API key with 401 `api_key_not_accepted`.
-      security:
-        - dashboardSession: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ApiKeyCreate' }
-      responses:
-        '201':
-          description: API key created.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/ApiKey'
-                  - type: object
-                    properties:
-                      rawKey:
-                        type: string
-                        description: Plaintext key. Returned once.
-        '400': { $ref: '#/components/responses/ValidationError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-  /api-keys/scopes:
-    get:
-      tags: [API Keys]
-      operationId: listApiKeyScopes
-      deprecated: true
-      summary: List the scopes a new API key may be given
-      description: |
-        Deprecated: an app holds its key now. Use `GET /apps/scopes` for the
-        scopes an app's key may hold. This route stays until Siren removes it.
-
-        The scopes `createApiKey` takes, grouped by resource. Siren lists the
-        event scopes under `events`, the ledger read scopes under `ledger`,
-        the webhook scopes under `webhook-subscriptions`, and the record
-        scopes under one `records:*` group each, such as `records:programs`.
-        It leaves out a group with no scopes. The event scopes include each
-        custom event type the organization has added.
-
-        Takes a signed-in dashboard session. No API key scope reaches this
-        route, and Siren answers an API key with 401 `api_key_not_accepted`.
-      security:
-        - dashboardSession: []
-      responses:
-        '200':
-          description: Scopes grouped by resource (bare object).
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: array
-                  items: { $ref: '#/components/schemas/ApiKeyScopeEntry' }
-                example:
-                  events:
-                    - { scope: 'event:sale', resource: events, action: sale, label: Sale }
-                  ledger:
-                    - { scope: 'ledger:conversions:read', resource: ledger, action: 'conversions:read', label: Read conversions }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-  /api-keys/{id}:
-    delete:
-      tags: [API Keys]
-      operationId: revokeApiKey
-      deprecated: true
-      summary: Revoke an API key
-      description: |
-        Deprecated: an app holds its key now. Use `DELETE /apps/{key}/key` to
-        revoke an app's key. This route stays until Siren removes it.
-
-        Takes a signed-in dashboard session. No API key scope reaches this
-        route, and Siren answers an API key with 401 `api_key_not_accepted`.
-      security:
-        - dashboardSession: []
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
-      responses:
-        '200':
-          description: Revoked. The body is the key with `status` set to `revoked`.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ApiKey' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
   /conversions:
     get:
@@ -3324,7 +3143,7 @@ paths:
       tags: [Apps]
       operationId: listAppScopes
       summary: List the scopes an app's key may hold
-      description: The groups `GET /api-keys/scopes` answers.
+      description: The scopes an app's key may hold, grouped by resource (ApiKeyScopePolicy::issuableGroups()). The `webhook-subscriptions` scopes are retired and never listed.
       security:
         - dashboardSession: []
       responses:
@@ -3907,7 +3726,7 @@ components:
       scheme: bearer
       bearerFormat: sk_live_... or sk_test_...
       description: |
-        An API key minted in the Siren dashboard or via createApiKey, or an
+        An API key minted in the Siren dashboard, or an
         app's own key. A sandbox key starts `sk_test_` and works on the
         sandbox server. An app's key answers its own app's asks on
         `POST /apps/requests/{id}/answer` with no scope. Event
@@ -4434,16 +4253,6 @@ components:
           description: The app that owns the subscription. An app's subscription changes only when the app is declared again, and an update or delete of it gets 409 app_owned_subscription.
         dateCreated: { type: [string, 'null'] }
         dateModified: { type: [string, 'null'] }
-    WebhookSubscriptionCreate:
-      type: object
-      required: [targetUrl, events]
-      properties:
-        targetUrl: { type: string, format: uri, example: https://example.com/webhooks/siren }
-        events:
-          type: array
-          items: { $ref: '#/components/schemas/WebhookEventType' }
-          example: ['conversion.approved', 'payout.paid']
-        description: { type: string }
     WebhookEventType:
       type: string
       description: |
@@ -4516,61 +4325,11 @@ components:
         - store.disconnected
         - transaction.completed
         - transaction.created
-    ApiKey:
-      type: object
-      properties:
-        id: { type: integer }
-        keyPrefix: { type: string, example: sk_live_a1b2c3d4 }
-        label: { type: string }
-        status: { type: string, enum: [active, revoked] }
-        propertyId: { type: [integer, 'null'] }
-        scopes:
-          type: array
-          items: { type: string }
-        expiresAt: { type: [string, 'null'] }
-        lastUsedAt: { type: [string, 'null'] }
-        revokedAt: { type: [string, 'null'] }
-        dateCreated: { type: [string, 'null'] }
-        dateModified: { type: [string, 'null'] }
-    ApiKeyCreate:
-      type: object
-      required: [scopes]
-      properties:
-        label: { type: string, example: Production server }
-        scopes:
-          type: array
-          minItems: 1
-          items: { type: string }
-          example: ['event:sale', 'ledger:conversions:read']
-          description: |
-            Event scopes: `event:*` for every event, or `event:{slug}` for one
-            event type. `*` is also accepted and grants what `event:*` grants.
-
-            Ledger and webhook scopes: `ledger:conversions:read`,
-            `ledger:transactions:read`, `ledger:obligations:read`,
-            `ledger:payouts:read`, `webhook-subscriptions:read` and
-            `webhook-subscriptions:manage`. Each is granted only by its exact
-            name. `*`, `event:*` and wildcards such as `ledger:*` grant none
-            of them.
-
-            An older resource scope such as `programs:read` or
-            `conversions:read` is refused with 400.
-        expiresAt:
-          type: string
-          description: ISO 8601 date in the future. Omit for a key that never expires.
-        propertyId:
-          type: integer
-          minimum: 1
-          description: |
-            Binds the key to this Property of the organization. Siren stamps
-            it on the key's events, the key reads only that store's
-            conversions, transactions and obligations, and it is refused on
-            payouts and webhook subscriptions with 403 `store_key_not_allowed`.
     ApiKeyScopeEntry:
       type: object
-      description: One scope a new API key may be given, as `GET /api-keys/scopes` lists it.
+      description: One scope an app's key may hold, as `GET /apps/scopes` lists it.
       properties:
-        scope: { type: string, description: The scope string to pass to `createApiKey`., example: 'ledger:conversions:read' }
+        scope: { type: string, description: The scope string an app's key may hold., example: 'ledger:conversions:read' }
         resource: { type: string, description: The group the scope belongs to., example: ledger }
         action: { type: string, description: What the scope allows within its group., example: 'conversions:read' }
         label: { type: string, example: Read conversions }

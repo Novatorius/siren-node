@@ -7,9 +7,9 @@ const answers = siren.apps.requestHandler()
 
 answers.on('programGroupSorter', 'pick-the-program', ({ data }) => {
   // Try the program whose best engagement scores highest first.
-  const best = (program) => Math.max(0, ...program.engagements.map((engagement) => engagement.score))
-  const programs = [...data.programs].sort((a, b) => best(b) - best(a))
-  return { outcome: 'sorted', programIds: programs.map((program) => program.id) }
+  const scored = data.programs.map((program) => ({ id: program.id, best: Math.max(0, ...program.engagements.map((engagement) => engagement.score)) }))
+  scored.sort((a, b) => b.best - a.best)
+  return { outcome: 'sorted', programIds: scored.map((program) => program.id) }
 })
 
 express().post('/siren', express.raw({ type: 'application/json' }), answers).listen(3000)

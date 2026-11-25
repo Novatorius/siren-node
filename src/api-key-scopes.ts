@@ -1,33 +1,29 @@
 /**
- * The scopes an API key may be given (`apiKeys.create`).
+ * The scopes an app's key may hold (`apps.createKey()`, or `scopes` in
+ * `apps.declare()`). `apps.scopes()` lists the ones Siren offers.
  *
  * A key sends events with event scopes: `AllEvents` (`event:*`), or
  * {@link eventScope} for one event type. `FullAccess` (`*`) is still accepted
  * and grants what `AllEvents` grants.
  *
- * A key also reads the ledger and manages webhook subscriptions with the
- * ledger and webhook scopes:
+ * A key also reads the ledger with the ledger scopes:
  *
  * - `LedgerConversionsRead`, `LedgerTransactionsRead`, `LedgerObligationsRead`
  *   and `LedgerPayoutsRead` open `list()` on `conversions`, `transactions`,
  *   `obligations` and `payouts`, and Siren's read by id on each.
- * - `WebhookSubscriptionsRead` lists subscriptions, reads one, and reads the
- *   event catalog and a subscription's deliveries.
- * - `WebhookSubscriptionsManage` does all of that, and creates, changes and
- *   deletes subscriptions and sends a test delivery.
  *
- * Siren grants each of these six only by its exact name. `*`, `event:*`,
+ * Siren grants each of these four only by its exact name. `*`, `event:*`,
  * wildcards such as `ledger:*`, and older names such as `conversions:read`
  * grant none of them, and Siren refuses those older names on a new key with
  * a 400. No scope reaches API key management, which takes a signed-in
  * dashboard session.
  *
  * {@link ApiKeyRecordScope} names every record scope Siren issues, these
- * six included.
+ * four included. The `webhook-subscriptions:*` scopes are retired: an app's
+ * address is its own part, which no key changes.
  *
  * ```ts
- * await siren.apiKeys.create({
- *   label: 'Accounting export',
+ * await siren.apps.createKey('accounting-export', {
  *   scopes: [ApiKeyScope.LedgerConversionsRead, ApiKeyScope.LedgerPayoutsRead],
  * });
  * ```
@@ -35,7 +31,7 @@
 export const ApiKeyScope = {
   /** Every event type the key may send. */
   AllEvents: 'event:*',
-  /** The full wildcard. Siren treats it as `event:*`, and it opens no ledger or webhook route. */
+  /** The full wildcard. Siren treats it as `event:*`, and it opens no ledger route. */
   FullAccess: '*',
   Sale: 'event:sale',
   Refund: 'event:refund',
@@ -51,17 +47,6 @@ export const ApiKeyScope = {
    * not kept by store, so a key bound to one store is refused here.
    */
   LedgerPayoutsRead: 'ledger:payouts:read',
-  /**
-   * Lists webhook subscriptions, reads one, and reads the event catalog and a
-   * subscription's deliveries. A key bound to one store is refused here.
-   */
-  WebhookSubscriptionsRead: 'webhook-subscriptions:read',
-  /**
-   * Everything `WebhookSubscriptionsRead` opens, plus creating, changing and
-   * deleting subscriptions and sending a test delivery
-   * (`POST /webhooks/{id}/test`).
-   */
-  WebhookSubscriptionsManage: 'webhook-subscriptions:manage',
 } as const;
 
 /** Union of the named API key scope strings. */
@@ -83,9 +68,6 @@ export const LEDGER_READ_SCOPES: readonly ApiKeyScope[] = [
  *
  * - The `ledger:` scopes only read what Siren recorded. No scope approves a
  *   reward, moves an obligation along or sends a payout.
- * - `WebhooksRead` and `WebhooksManage` read and manage webhook
- *   subscriptions. They are the same strings as
- *   `ApiKeyScope.WebhookSubscriptionsRead` and `WebhookSubscriptionsManage`.
  * - The `records:` scopes read and manage the records a merchant sets up.
  *   A manage scope reads everything its read scope reads.
  *
@@ -94,8 +76,7 @@ export const LEDGER_READ_SCOPES: readonly ApiKeyScope[] = [
  * ApiKeyRecordScopes.php and fails when this list differs from it.
  *
  * ```ts
- * await siren.apiKeys.create({
- *   label: 'Payout app',
+ * await siren.apps.createKey('payout-app', {
  *   scopes: [ApiKeyRecordScope.PayoutsRead, ApiKeyRecordScope.FulfillmentsRead],
  * });
  * ```
@@ -115,10 +96,6 @@ export const ApiKeyRecordScope = Object.freeze({
   FulfillmentsRead: 'ledger:fulfillments:read',
   /** `payouts.list()` and `retrieve()`. Organization keys only. */
   PayoutsRead: 'ledger:payouts:read',
-  /** Lists and reads webhook subscriptions, the event catalog and deliveries. Organization keys only. */
-  WebhooksRead: 'webhook-subscriptions:read',
-  /** Everything `WebhooksRead` opens, plus create, update, delete and test. Organization keys only. */
-  WebhooksManage: 'webhook-subscriptions:manage',
   ProductsRead: 'records:products:read',
   ProductsManage: 'records:products:manage',
   CouponsRead: 'records:coupons:read',
