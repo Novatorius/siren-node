@@ -552,12 +552,12 @@ answers each request:
 - A request that fails `verifyRequest` gets 400 and nothing else happens.
 - Every request that passes gets 200. A repeat, found by `id`, gets 200 and is not acted on again.
 - An ask is answered after the 200 with `requests.answer()`. A fulfillment method's payout is
-  answered `{ outcome: 'paid', reference: 'acme-<payoutId>' }`. A distribution resolver's pool is
+  answered `{ outcome: 'paid', reference: 'acme-<payout id>' }`, the id read from `data.payout.id`. A distribution resolver's pool is
   answered `{ outcome: 'resolved', shares: [{ id, amount }] }`, divided by each metric's value in
   whole minor units, the remainder going to the largest fractions. An ask counts as handled only
   once its answer is accepted.
 - An ask whose data lacks what the answer needs, such as a pool with no metrics or a payout with no
-  `payoutId`, gets 500 and a logged line that says why, and no guessed answer. Siren sends it again
+  `data.payout.id`, gets 500 and a logged line that says why, and no guessed answer. Siren sends it again
   on its deadline, then marks it `needs_attention`. `createRequestListener` gives server.mjs a
   listener that answers 500 for anything the handler throws and keeps serving (AP-A905).
 
@@ -845,7 +845,7 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: Siren made 1 conversion on opportunity <id>.` A sale no program pays for prints `Siren recorded it on opportunity <id> and made no conversion (no_program).` and Siren's message, which is what step 7 skipped gives (capture events-sale-200-no-program). | example-app |
 | 9 | Approve the conversion in the dashboard. Then `siren apps requests --follow`, and in another terminal `siren apps requests <id>` for the tell | The tell's line going from `sent` to `delivered`. The single request shows the send, `HTTP 200`, the app's answer and the body Siren sent. Ctrl-C ends `--follow` with exit 130. | cli-requests, Siren slices 2 and 3 |
 | 10 | Close the program's distribution with slice 4's test route (claim C7) | `--follow` shows the ask `sent`, then `answered`, then `applied`. The server logs the answer, and the distribution completes with the app's shares. | example-app, sdk-verify, sdk-answer, Siren slice 4 |
-| 11 | With slice 5 only: pick "Acme: Acme ledger" on an autofulfiller and run a payout through it | The payout waits, then shows as paid with reference `acme-<payoutId>` | example-app, Siren slice 5 |
+| 11 | With slice 5 only: pick "Acme: Acme ledger" on an autofulfiller and run a payout through it | The payout waits, then shows as paid with reference `acme-<payout id>` | example-app, Siren slice 5 |
 | 12 | Stop the server with Ctrl-C, close another distribution as in step 10, and run `siren apps requests --attention --follow` | Nothing at first. About three minutes later, after three one-minute windows, the ask's line with `needs_attention` and its send error. The Apps screen marks it too. Each window's end is a wake on Siren's task queue, so this needs a Siren whose worker runs: the public sandbox, or a Siren you run with `SIREN_DURABLE_TASKS` on (README, "Running against your own Siren Cloud"). With it off, the ask is sent once, its job fails at the first wake, and it never needs attention. | cli-requests, the shortest window in the example's app file, Siren slices 2 and 3 |
 | 13 | `npm start` again, then `siren apps resend <id>` | The request's line back at `sent`, then `--follow` shows `answered` and `applied` | cli-requests |
 | 14 | Or, with the server still stopped and the ask still shown by `siren apps requests --attention` after step 12, read the metric ids with `siren apps requests <id>` and run `siren apps answer <id> --body '{"outcome":"resolved","shares":[{"id":"<metric id>","amount":<minor units>}]}'` | `Siren accepted the answer.` Sending it again prints `Siren already had this answer. Nothing changed.` A person may answer only a request that needs attention, so the same answer to an ask still `pending` or `sent` is refused with Siren's line and `See the requests that need attention with siren apps requests --attention.` | cli-requests, sdk-answer |
@@ -919,8 +919,9 @@ https.
 
 ## Claims on others
 
-- Slices 4 and 5: the data of a fulfillment-method ask is `{ payoutId, amount, currency }` as
-  Siren's fixture shows, and the answer `{ outcome: 'paid', reference }` as answer.json shows. The
+- Slices 4 and 5: the data of a fulfillment-method ask is `{ payout: { id, fulfillmentId,
+  attempt }, amount, collaborator }`, as Siren's AppPayoutQuestion builds it and the kind's
+  sample shows, and the answer `{ outcome: 'paid', reference }` as answer.json shows. The
   distribution resolver's data `{ amount, currency, metrics: [{ id, value }] }` and answer
   `{ outcome: 'resolved', shares: [{ id, amount }] }` are this slice's guess. Slice 5 owns both and
   the example follows it.

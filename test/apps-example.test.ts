@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,8 +17,11 @@ import { BASE, bodyOf, unavailable } from './record-fakes';
  * docs/architecture/apps-cli.md, "The example app", and the comment at the
  * top of examples/apps/acme/handler.mjs.
  *
- * The request is Siren's signed fixture. The distribution resolver's data
- * and answer shapes are a claim on slice 5, written down in the note.
+ * The request is Siren's signed fixture with its data set to a payout ask
+ * as Siren sends one (AppPayoutQuestion and the kind's sample in
+ * AppFeatureSamples), signed again with the fixture's secret. The
+ * distribution resolver's data and answer shapes are a claim on slice 5,
+ * written down in the note.
  */
 
 interface SignedFixture {
@@ -30,6 +34,22 @@ const fixture = JSON.parse(
   readFileSync(new URL('./fixtures/apps-exchange/signed-request.json', import.meta.url), 'utf8'),
 ) as SignedFixture;
 const APP_KEY = `sk_test_${'0a'.repeat(32)}`;
+
+/** The data of a payout method's ask, as Siren sends it. */
+const PAYOUT_DATA = {
+  payout: { id: 88, fulfillmentId: 31, attempt: 1 },
+  amount: { value: 2500, units: 'USD' },
+  collaborator: { id: 42, name: 'Ana Ruiz', email: 'ana@example.com' },
+};
+
+/** Siren's fixture carrying a payout ask's data, signed again with the fixture's secret. */
+const ask = (() => {
+  const request = JSON.parse(fixture.body) as Record<string, unknown>;
+  request.data = PAYOUT_DATA;
+  const body = JSON.stringify(request);
+  const v1 = createHmac('sha256', fixture.secret).update(`${fixture.timestamp}.${body}`).digest('hex');
+  return { body, headers: { ...fixture.headers, 'X-Siren-Signature-V2': `t=${fixture.timestamp},v1=${v1}` } };
+})();
 const REQUEST = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
 
 function acme(replies: Array<HttpResponse | Error>, now = fixture.timestamp) {
@@ -42,7 +62,7 @@ function acme(replies: Array<HttpResponse | Error>, now = fixture.timestamp) {
 describe('apps-cli: the example app', () => {
   it("answers Siren's signed ask with 200, then pays it with the app's key", async () => {
     const { http, app } = acme([reply(200, { status: 'accepted' })]);
-    const result = await app.handle(fixture.body, fixture.headers);
+    const result = await app.handle(ask.body, ask.headers);
     expect(result.status).toBe(200);
     await result.answered;
 
@@ -55,8 +75,8 @@ describe('apps-cli: the example app', () => {
 
   it('answers a repeat with 200 and acts on it once', async () => {
     const { http, app } = acme([reply(200, { status: 'accepted' })]);
-    await (await app.handle(fixture.body, fixture.headers)).answered;
-    const again = await app.handle(Buffer.from(fixture.body), fixture.headers);
+    await (await app.handle(ask.body, ask.headers)).answered;
+    const again = await app.handle(Buffer.from(ask.body), ask.headers);
     expect(again.status).toBe(200);
     await again.answered;
     expect(http.requests).toHaveLength(1);
@@ -64,22 +84,22 @@ describe('apps-cli: the example app', () => {
 
   it('answers again after an answer that failed', async () => {
     const { http, app } = acme([unavailable(), reply(200, { status: 'accepted' })]);
-    await (await app.handle(fixture.body, fixture.headers)).answered;
-    await (await app.handle(fixture.body, fixture.headers)).answered;
+    await (await app.handle(ask.body, ask.headers)).answered;
+    await (await app.handle(ask.body, ask.headers)).answered;
     expect(http.requests).toHaveLength(2);
   });
 
   it('refuses a request it cannot check with 400 and sends nothing', async () => {
     const changed = acme([reply(200, { status: 'accepted' })]);
-    expect((await changed.app.handle(fixture.body.replace('2500', '2600'), fixture.headers)).status).toBe(400);
+    expect((await changed.app.handle(ask.body.replace('2500', '2600'), ask.headers)).status).toBe(400);
     const stale = acme([reply(200, { status: 'accepted' })], fixture.timestamp + 3600);
-    expect((await stale.app.handle(fixture.body, fixture.headers)).status).toBe(400);
+    expect((await stale.app.handle(ask.body, ask.headers)).status).toBe(400);
     expect(changed.http.requests).toHaveLength(0);
     expect(stale.http.requests).toHaveLength(0);
   });
 
   it('pays a payout with its own reference, and divides a pool by each metric in whole minor units', () => {
-    expect(answerFor({ feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' }, data: { payoutId: 88, amount: 2500, currency: 'USD' } })).toEqual({
+    expect(answerFor({ feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' }, data: PAYOUT_DATA })).toEqual({
       outcome: 'paid',
       reference: 'acme-88',
     });
