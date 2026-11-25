@@ -9,7 +9,7 @@ import type { LoginView } from '../login-view';
 import type { Style } from '../style';
 import { DeviceSignIn, PasswordSignIn, askLine, readPassword } from '../session-auth';
 import type { Edition, EmailConfirmationWindow, LoginResult, Membership, PersonalToken, SessionTokens } from '../session-auth';
-import { CliRefusal, CliUsageError, assertEditionAllowed, assertSessionMatches } from '../targets';
+import { CliRefusal, CliUsageError, assertEditionAllowed, assertSessionMatches, httpDetail } from '../targets';
 
 /*
  * `siren signup`, `login`, `logout`, `orgs` and `use`: signing a person in
@@ -138,7 +138,7 @@ export async function login(input: CommandInput): Promise<number> {
       ? await new DeviceSignIn(run.command('login'), view).signIn(run.auth, io)
       : await new PasswordSignIn().signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
   } catch (error) {
-    throw signInRefusal(error, run.command('login'));
+    throw signInRefusal(error, run.command('login'), run.target.baseUrl);
   }
   try {
     return await keepLogin(input, result, edition, style, view);
@@ -172,7 +172,7 @@ async function keepLogin(input: CommandInput, result: LoginResult, edition: Edit
       try {
         tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);
       } catch (error) {
-        throw signInRefusal(error, run.command('login'));
+        throw signInRefusal(error, run.command('login'), run.target.baseUrl);
       }
     }
   }
@@ -202,7 +202,10 @@ async function keepLogin(input: CommandInput, result: LoginResult, edition: Edit
 export async function logout(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const session = await run.store.get(run.target.baseUrl);
-  if (session === null) throw new CliRefusal(`You are not signed in to ${run.target.baseUrl}.`);
+  const host = new URL(run.target.baseUrl).host;
+  if (session === null) throw new CliRefusal(`You weren't logged in to ${host}, so there was nothing to log out of.`);
+  const out = styleFor(input.io, 'stdout', input.values);
+  const done = () => run.print(out.success(`Logged out of ${out.bold(host)}.`));
   run.adopt(session);
   let edition;
   try {
@@ -210,14 +213,14 @@ export async function logout(input: CommandInput): Promise<number> {
   } catch (error) {
     run.warn(`Siren did not confirm the sign-out: ${messageOf(error)} This machine forgets the session anyway.`);
     await run.store.remove(run.target.baseUrl);
-    run.print(`Signed out of ${run.target.baseUrl}.`);
+    done();
     return 0;
   }
   try {
     assertSessionMatches(run.target, session, edition);
   } catch (mismatch) {
     await run.store.remove(run.target.baseUrl);
-    run.print(`Forgot the session for ${run.target.baseUrl} on this machine. ${messageOf(mismatch)}`);
+    run.print(out.success(`Forgot the session for ${out.bold(host)} on this machine. ${messageOf(mismatch)}`));
     return 0;
   }
   try {
@@ -226,7 +229,7 @@ export async function logout(input: CommandInput): Promise<number> {
     run.warn(`Siren did not confirm the sign-out: ${messageOf(error)} This machine forgets the session anyway.`);
   }
   await run.store.remove(run.target.baseUrl);
-  run.print(`Signed out of ${run.target.baseUrl}.`);
+  done();
   return 0;
 }
 
@@ -264,9 +267,15 @@ export async function whoami(input: CommandInput): Promise<number> {
     );
     return 0;
   }
-  run.print(`Logged in as ${clean(session.email)} to ${clean(session.orgName)}${session.orgSlug ? ` (${clean(session.orgSlug)})` : ''}, as ${clean(session.role)}.`);
-  run.print(`Siren: ${run.target.baseUrl}, ${edition === 'live' ? 'live' : 'a sandbox'}.`);
-  run.print(`Session file: ${run.store.path}`);
+  const out = styleFor(input.io, 'stdout', input.values);
+  const others = (session.memberships ?? []).filter((membership) => membership.orgId !== session.orgId).map((membership) => clean(membership.orgSlug || String(membership.orgId)));
+  const rows: Array<readonly [string, string]> = [
+    ['Org', `${clean(session.orgName)} (${session.orgSlug ? clean(session.orgSlug) : session.orgId}) · ${clean(session.role)}`],
+    ...(others.length > 0 ? [['Also in', others.join(', ')] as const] : []),
+    ['Siren', sirenRow(out, run.target.baseUrl, edition)],
+    ['Session', run.store.path],
+  ];
+  run.print(out.report({ headline: `Logged in as ${out.bold(clean(session.email))}`, rows }).replace(/\n$/, ''));
   return 0;
 }
 
@@ -298,10 +307,17 @@ async function whoamiToken(run: CommandContext, token: string, json: boolean): P
     );
     return 0;
   }
+  const out = styleFor(run.io, 'stdout', {});
   const slug = about.org.orgSlug ? ` (${clean(about.org.orgSlug)})` : '';
-  run.print(`Using SIREN_TOKEN "${clean(about.name)}", ending ${clean(about.lastFour)}, as ${clean(about.user.email)} in ${clean(about.org.orgName)}${slug}, as ${clean(about.user.role)}.`);
-  run.print(`Siren: ${run.target.baseUrl}, ${edition === 'live' ? 'live' : 'a sandbox'}.`);
-  if (expires !== null) run.print(`It expires ${expires}. SIREN_TOKEN wins over the session file while it is set.`);
+  const rows: Array<readonly [string, string]> = [
+    ['Token', `ending ${clean(about.lastFour)}, ${expires === null ? 'never expires' : `expires ${clean(expires)}`}`],
+    ['User', `${clean(about.user.email)}${about.user.role ? ` · ${clean(about.user.role)}` : ''}`],
+    ['Org', `${clean(about.org.orgName)}${slug}`],
+    ['Siren', sirenRow(out, run.target.baseUrl, edition)],
+  ];
+  run.print(
+    out.report({ headline: `Using SIREN_TOKEN "${out.bold(clean(about.name))}"`, rows, tips: ['SIREN_TOKEN wins over the session file while it is set.'] }).replace(/\n$/, ''),
+  );
   return 0;
 }
 
@@ -311,9 +327,24 @@ export async function orgs(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   await run.signedIn({ org: false });
   const memberships = await run.withAccessToken((token) => run.auth.memberships(token));
-  const style = styleFor(input.io, 'stdout', {});
-  const rows = memberships.map((membership) => [clean(membership.orgSlug), clean(membership.orgName), clean(membership.role)] as const);
-  for (const line of style.table(['SLUG', 'NAME', 'ROLE'], rows, 80)) run.print(line);
+  if (input.values.json === true) {
+    run.print(JSON.stringify(memberships.map(({ orgId, orgName, orgSlug, role }) => ({ orgId, orgName, orgSlug, role })), null, 2));
+    return 0;
+  }
+  const style = styleFor(input.io, 'stdout', input.values);
+  const inUse = await run.orgInUse(memberships.map(({ orgId, orgName, orgSlug, role }) => ({ orgId, orgName, orgSlug, role })));
+  const rows = memberships.map((membership) => {
+    const used = membership.orgId === inUse?.orgId;
+    const mark = used ? (style.rich ? style.green('●') : '*') : ' ';
+    const slug = clean(membership.orgSlug);
+    return [mark, used ? style.bold(slug) : slug, clean(membership.orgName), clean(membership.role)] as const;
+  });
+  const width = style.rich ? (input.io.screen?.size?.columns ?? 80) : Number.POSITIVE_INFINITY;
+  for (const line of style.table(['', 'ORG', 'NAME', 'ROLE'], rows, width)) run.print(line);
+  if (inUse === undefined && memberships.length > 1) {
+    run.print('');
+    run.print(style.next('Each command picks one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.'));
+  }
   return 0;
 }
 
@@ -334,13 +365,24 @@ export function confirmationLine(window: EmailConfirmationWindow | undefined, no
  * Siren. Any other error is answered as it is, so a wrong password shows
  * Siren's own message.
  */
-function signInRefusal(error: unknown, login: string): unknown {
+function signInRefusal(error: unknown, login: string, baseUrl: string): unknown {
   const code = error instanceof SirenError ? error.code : undefined;
   if (code === 'email_unconfirmed') {
     return new CliRefusal(`Confirm your email address first. Open the email Siren sent from your inbox, confirm the address, then run ${login} again.`);
   }
   const plan = planLine(code, login);
-  return plan === undefined ? error : new CliRefusal(plan);
+  if (plan !== undefined) return new CliRefusal(plan);
+  if (error instanceof SirenError && error.statusCode === 401) {
+    // Siren's own words say two things in one line (catalog mockup 4), so the tool splits them.
+    return new CliRefusal("Siren didn't accept that email and password.", {
+      why: 'Either is wrong, or this account has no password yet.',
+      fixLead: 'Check your inbox for the set-up email, or run',
+      fix: login,
+      fixWords: 'again',
+      detail: httpDetail(error, baseUrl),
+    });
+  }
+  return error;
 }
 
 /**
@@ -363,4 +405,9 @@ function text(value: string | boolean | undefined): string | undefined {
 function messageOf(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/^Siren: /, '');
+}
+
+/** The Siren as a person reads it: its host and edition, with live in amber, since live is the one that makes a change risky. */
+function sirenRow(out: Style, baseUrl: string, edition: string): string {
+  return `${new URL(baseUrl).host} · ${edition === 'live' ? out.amber('live') : 'sandbox'}`;
 }

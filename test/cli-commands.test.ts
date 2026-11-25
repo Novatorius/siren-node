@@ -172,10 +172,10 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(bodyOf(unchosen.http.requests[1])).toEqual({ verificationToken: 'verification-token', orgId: 3 });
   });
 
-  it("answers a wrong password with Siren's message and keeps nothing", async () => {
+  it('answers a wrong password in its own words, which split what Siren said, and keeps nothing', async () => {
     const h = harness([AuthAnswers.wrongPassword()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain("Invalid email or password. If you haven't set up your login yet, check your email for a link to set it up.");
+    expect(h.err()).toContain("Siren didn't accept that email and password. Either is wrong, or this account has no password yet.");
     expect(h.printed()).not.toContain(PASSWORD);
     expect(() => h.credentialsText()).toThrow();
   });
@@ -439,7 +439,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
       `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`,
     );
     expect(() => h.file('.env.sandbox')).toThrow();
-    expect(h.out()).toContain(`Saved key ${RAW_KEY_2.slice(0, 16)}… in acme/.env.sandbox.`);
+    expect(h.out()).toContain(`  Key   ${RAW_KEY_2.slice(0, 16)}… in acme/.env.sandbox\n`);
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
   });

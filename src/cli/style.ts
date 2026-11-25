@@ -172,7 +172,7 @@ export class Style {
 
   /** "✗ Not logged in.", the words in bold. */
   failure(line: string): string {
-    return this.rich ? `${this.red('✗')} ${this.bold(line)}` : line;
+    return this.rich ? `${RED}${BOLD}✗ ${line}${RESET}` : line;
   }
 
   /** "! The key is not saved." */
@@ -193,13 +193,13 @@ export class Style {
    * `verbose` adds the detail, dim, in both.
    */
   error(refusal: Pick<CliRefusal, 'message' | 'headline' | 'parts'>, verbose: boolean): string {
-    const { why, fix, fixWords, note, detail } = refusal.parts;
+    const { why, fix, fixLead, fixWords, note, detail } = refusal.parts;
     const extra = [...(note === undefined ? [] : [note]), ...(verbose ? (detail ?? []) : [])];
     if (!this.rich) return `siren: ${refusal.message}\n${extra.map((line) => `${line}\n`).join('')}`;
     const lines = [this.failure(refusal.headline)];
     if (why !== undefined) lines.push(`  ${why}`);
-    if (fix !== undefined) lines.push(`  ${this.next(`Run ${this.command(fix)}${fixWords === undefined ? '' : ` ${fixWords}`}.`)}`);
-    for (const line of extra) lines.push(this.dim(`  ${line}`));
+    if (fix !== undefined) lines.push(`${this.green('›')} ${fixLead ?? 'Run'} ${this.command(fix)}${fixWords === undefined ? '' : ` ${fixWords}`}.`);
+    for (const line of extra) lines.push(this.dim(line));
     return `${lines.join('\n')}\n`;
   }
 

@@ -42,7 +42,7 @@ describe('style: lines', () => {
   it('marks done, failed, a warning and a next step with a symbol in a terminal', () => {
     expect(rich.success('Applied acme-payouts.')).toMatch(/^\u001b\[[\d;]+m✓\u001b\[0m Applied acme-payouts\.$/);
     expect(rich.failure('Not logged in.')).toContain('✗');
-    expect(rich.failure('Not logged in.')).toContain(`${ESC}1mNot logged in.`);
+    expect(rich.failure('Not logged in.')).toBe(`${ESC}31m${ESC}1m✗ Not logged in.${ESC}0m`);
     expect(rich.warning('The key is not saved.')).toContain('!');
     expect(rich.next('siren apps apply')).toContain('›');
   });
@@ -82,14 +82,14 @@ describe('style: errors are three parts at most', () => {
 
   it('adds the detail, dim, only with --verbose or SIREN_DEBUG', () => {
     expect(rich.error(refusal, false)).not.toContain('uat.example');
-    expect(rich.error(refusal, true)).toContain(`${ESC}2m  Siren: uat.example`);
+    expect(rich.error(refusal, true)).toContain(`${ESC}2mSiren: uat.example`);
     expect(plain.error(refusal, true)).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
   });
 
   it('always shows a dim line that is marked to show, such as a Siren that is not the default', () => {
     const elsewhere = new CliRefusal('Not logged in.', { fix: 'siren login', fixWords: 'to log in', note: 'Siren: uat.example' });
     expect(plain.error(elsewhere, false)).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
-    expect(rich.error(elsewhere, false)).toContain(`${ESC}2m  Siren: uat.example`);
+    expect(rich.error(elsewhere, false)).toContain(`${ESC}2mSiren: uat.example`);
   });
 });
 
@@ -212,15 +212,15 @@ describe('style: a command line the tool cannot read', () => {
     expect(await runCli(['apps', 'aply'], { ...h.io, stderrTty: true, env: { TERM: 'xterm-256color' } })).toBe(2);
     const lines = h.err().split('\n');
     expect(lines[0]).toContain('✗');
-    expect(lines[0]).toContain('There is no command "apps aply".');
+    expect(lines[0]).toContain(`siren apps has no command ${ESC}1m"aply"${ESC}0m.`);
     expect(lines[1]).toContain(`Did you mean ${ESC}1msiren apps apply${ESC}0m?`);
     expect(lines[1]).toContain('›');
-    expect(lines[2]).toBe(`  ${ESC}2mRun siren --help to see the commands.${ESC}0m`);
+    expect(lines[2]).toBe(`${ESC}2m  siren apps --help lists the app commands.${ESC}0m`);
   });
 
   it('keeps the one-line form when plain', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'aply'])).toBe(2);
-    expect(h.err()).toBe('siren: There is no command "apps aply". Did you mean "apps apply"?\nRun siren --help to see the commands.\n');
+    expect(h.err()).toBe('siren: siren apps has no command "aply". Did you mean "apps apply"?\nsiren apps --help lists the app commands.\n');
   });
 });

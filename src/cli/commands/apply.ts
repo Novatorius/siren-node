@@ -562,15 +562,24 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
         `Move that file aside to keep its key, then run ${run.command(`${command} ${key}`)} again.`,
     );
   }
+  const out = styleFor(io, 'stdout', values);
   if (part !== 'add-key' && values.yes !== true) {
-    const warning =
-      part === 'key'
-        ? `Rotating ${key}'s key revokes the old key at once, so anything still using it stops working.`
-        : `Rotating ${key}'s signing secret makes Siren sign with the new one at once, so the app refuses requests until it reads the new one.`;
-    if (!io.interactive) throw new CliRefusal(`${warning} Nothing was sent. Run ${run.command(`${command} ${key} --yes`)} to rotate it.`);
-    run.print(warning);
+    const why = part === 'key' ? 'The old key stops working at once.' : 'Siren signs with the new secret at once, and the app refuses requests until it reads it.';
+    if (!io.interactive) throw new CliRefusal('Nothing sent: rotating needs a yes.', { why, fix: run.command(`${command} ${key} --yes`) });
+    run.print(
+      out.warning(
+        part === 'key'
+          ? 'Rotating the key revokes the old one at once, so anything still using it stops working.'
+          : 'Rotating the signing secret makes Siren sign with the new one at once.',
+      ),
+    );
     const typed = (await io.prompt(`Rotate it in ${orgNamed(run.current())}? [y/N] `)).trim().toLowerCase();
-    if (typed !== 'yes' && typed !== 'y') throw new CliRefusal(`Nothing was sent, and ${what} still works.`);
+    if (typed !== 'yes' && typed !== 'y') {
+      // Saying no is the person's choice, so it reads as a quiet line, with exit 1 kept for scripts.
+      const err = styleFor(io, 'stderr', values);
+      io.stderr(err.rich ? `${err.dim(`Nothing sent. ${what.charAt(0).toUpperCase()}${what.slice(1)} still works.`)}\n` : `siren: Nothing was sent, and ${what} still works.\n`);
+      return 1;
+    }
   }
 
   const siren = run.siren();
@@ -587,17 +596,23 @@ async function rotatePart(input: CommandInput, part: 'key' | 'secret' | 'add-key
   }
   const saved = await saveSecrets(run, key, envPath, secrets, part !== 'add-key');
   await run.remember(key, envPath);
-  if (saved !== false) {
-    run.print(saved.startsWith('the new') ? `Saved ${saved}.` : `Saved key ${saved}.`);
-    run.print(
-      part === 'key'
-        ? 'Siren revoked the old key. Restart your app so it reads the new key.'
-        : part === 'secret'
-          ? 'Siren signs every request with the new secret from now on. Restart your app so it reads it.'
-          : `The key holds no scopes yet. Run ${run.command('apps apply')} to give it the scopes your app file names.`,
-    );
-  }
-  return saved === false ? 1 : 0;
+  if (saved === false) return 1;
+  const report =
+    part === 'key'
+      ? { headline: `Rotated the key of ${out.bold(key)}`, rows: [['Key', saved]] as const, tips: ['Siren revoked the old key. Restart your app so it reads the new one.'] }
+      : part === 'secret'
+        ? {
+            headline: `Rotated the signing secret of ${out.bold(key)}`,
+            rows: [['Secret', saved.replace(/^the new signing secret /, '')]] as const,
+            tips: ['Siren signs with the new secret from now on. Restart your app so it reads it.'],
+          }
+        : {
+            headline: `Made a key for ${out.bold(key)}`,
+            rows: [['Key', saved]] as const,
+            next: [{ text: out.command(run.command('apps apply')), aside: 'give the key the scopes your app file names' }],
+          };
+  run.print(out.report(report).replace(/\n$/, ''));
+  return 0;
 }
 
 /**
@@ -636,7 +651,12 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   const key = appKeyArgument(input.args[0] ?? '');
   if (values.yes !== true) {
     const typed = io.interactive ? (await io.prompt(`Deleting ${key} revokes its key and cannot be undone. Type ${key} to delete it: `)).trim() : undefined;
-    if (typed !== key) throw new CliRefusal(`Deleting ${key} revokes its key and cannot be undone. Run ${run.command(`apps delete ${key} --yes`)} to delete it.`);
+    if (typed !== key) {
+      throw new CliRefusal(io.interactive ? `Nothing deleted: you typed something other than ${key}.` : 'Nothing deleted: deleting needs a yes.', {
+        why: 'It revokes the key and cannot be undone.',
+        fix: run.command(`apps delete ${key} --yes`),
+      });
+    }
   }
   await run.signedIn();
   try {
@@ -645,7 +665,8 @@ export async function appsDelete(input: CommandInput): Promise<number> {
     if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use') throw new CliRefusal(await inUseLines(run, key, error));
     throw error;
   }
-  run.print(`Deleted ${key} from ${run.target.baseUrl}. Its key no longer works.`);
+  const out = styleFor(io, 'stdout', values);
+  run.print(out.success(`Deleted ${out.bold(key)}. Its key no longer works.`));
   return 0;
 }
 
@@ -670,7 +691,15 @@ async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Pr
   const key = appKeyArgument(input.args[0] ?? '');
   await run.signedIn();
   const app = await run.siren().apps.setStatus(key, status);
-  run.print(`${app.key} is ${app.status === 'active' ? 'on' : 'off'}.`);
+  const out = styleFor(input.io, 'stdout', input.values);
+  const shown = out.bold(clean(app.key));
+  run.print(
+    out.success(
+      app.status === 'active'
+        ? `${shown} is on. Siren sends it requests again.`
+        : `${shown} is off. Siren sends it nothing until ${out.command(run.command(`apps on ${clean(app.key)}`))}.`,
+    ),
+  );
   return 0;
 }
 

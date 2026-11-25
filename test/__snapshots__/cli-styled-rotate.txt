@@ -1,0 +1,5 @@
+[38;5;49m✓[0m Rotated the key of [1macme-payouts[0m
+
+  [2mKey[0m   sk_test_1b1b1b1b… in acme/.env.sandbox
+
+[2m› Siren revoked the old key. Restart your app so it reads the new one.[0m
