@@ -98,7 +98,16 @@ function route(method, path, operation) {
     if (filters.length > 0) entry.filters = filters;
   }
   const body = operation.requestBody?.content?.['application/json']?.schema;
-  if (body?.properties) entry.fields = Object.keys(body.properties);
+  if (body?.properties) {
+    entry.fields = Object.keys(body.properties);
+    // The scalar type of each field openapi types plainly, so -d reads 2026 as text for a string field and as a number for a number field.
+    const types = {};
+    for (const [name, property] of Object.entries(body.properties)) {
+      const listed = (Array.isArray(property?.type) ? property.type : [property?.type]).filter((type) => typeof type === 'string' && type !== 'null');
+      if (listed.length === 1 && ['string', 'integer', 'number', 'boolean'].includes(listed[0])) types[name] = listed[0];
+    }
+    if (Object.keys(types).length > 0) entry.types = types;
+  }
   if (body?.required?.length) entry.required = [...body.required];
   return entry;
 }
@@ -151,6 +160,8 @@ export function generate(specText) {
     "  readonly filters?: readonly { readonly name: string; readonly type: 'string' | 'integer' | 'number' | 'boolean'; readonly values?: readonly string[] }[];",
     '  /** The body fields Siren validates. */',
     '  readonly fields?: readonly string[];',
+    '  /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. */',
+    '  readonly types?: Readonly<Record<string, string>>;',
     '  /** The body fields Siren requires. */',
     '  readonly required?: readonly string[];',
     '}',

@@ -335,7 +335,7 @@ interface Plan {
 async function sendRaw(input: CommandInput, method: HttpMethod): Promise<number> {
   const { path, query } = apiPath(input.args[0]!);
   const deleteId = method === 'DELETE' ? recordIdOf(path) : undefined;
-  const outgoing = await outgoingOf(input, method, path, query);
+  const outgoing = await outgoingOf(input, method, path, query, typesOf(method, path));
   const fields = method === 'GET' ? fieldsOf(input.values.fields) : undefined;
   return send(input, {
     outgoing,
@@ -391,7 +391,7 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
     if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(base, { orderBy: 'id', order: 'desc' });
     if (fields !== undefined && route.query?.includes('fields')) base.fields = fields.join(',');
   }
-  const outgoing = await outgoingOf(input, route.method, path, base);
+  const outgoing = await outgoingOf(input, route.method, path, base, route.types);
   return send(input, {
     outgoing,
     ...(op === 'list' && input.values.ids === true ? { ids: true } : {}),
@@ -464,12 +464,29 @@ export function insideApi(path: string, given: string = path): string {
 }
 
 /** A `-d` value as Siren gets it: a JSON number, true, false or null as that, anything else as text. */
-export function fieldValue(text: string): unknown {
+export function fieldValue(text: string, type?: string): unknown {
+  // Where openapi types the field, the type decides, so a name such as 2026 stays text (review of PR 94).
+  if (type === 'string') return text;
+  if ((type === 'integer' || type === 'number') && text.trim() !== '' && Number.isFinite(Number(text))) return Number(text);
+  if (type === 'boolean' && (text === 'true' || text === 'false')) return text === 'true';
   if (text === 'true') return true;
   if (text === 'false') return false;
   if (text === 'null') return null;
   if (/^-?(0|[1-9]\d*)(\.\d+)?$/.test(text) && Number.isSafeInteger(Math.trunc(Number(text)))) return Number(text);
   return text;
+}
+
+/** The body field types of the generated route a raw call reaches, such as POST /programs, or none. */
+function typesOf(method: HttpMethod, path: string): Readonly<Record<string, string>> {
+  const bare = path.split('?')[0]!.replace(/\/+$/, '');
+  for (const resource of RESOURCE_COMMANDS) {
+    for (const route of Object.values(resource.ops)) {
+      if (route === undefined || route.method !== method || route.types === undefined) continue;
+      const pattern = new RegExp(`^${route.path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{[^}]+\\?\}/g, '[^/]+')}$`);
+      if (pattern.test(bare)) return route.types;
+    }
+  }
+  return {};
 }
 
 /** `-d` pairs as written, each split at its first `=`. */
@@ -508,7 +525,7 @@ function count(flag: string, value: unknown, least: number): number | undefined 
 }
 
 /** What a command line sends: the method, path, query and body its flags make. */
-async function outgoingOf(input: CommandInput, method: HttpMethod, given: string, query: Record<string, string>): Promise<Outgoing> {
+async function outgoingOf(input: CommandInput, method: HttpMethod, given: string, query: Record<string, string>, types: Readonly<Record<string, string>> = {}): Promise<Outgoing> {
   const path = insideApi(given);
   const fields = pairs(input);
   const limit = count('--limit', input.values.limit, 1);
@@ -536,7 +553,7 @@ async function outgoingOf(input: CommandInput, method: HttpMethod, given: string
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new CliUsageError('--data must be a JSON object, with the fields as its keys.');
     body = parsed as Record<string, unknown>;
   }
-  for (const [key, value] of fields) setNested(body, key, fieldValue(value));
+  for (const [key, value] of fields) setNested(body, key, fieldValue(value, types[key.replace(/\[([^\]]*)\]/g, '.$1').replace(/^\./, '')]));
   return { method, path, query, body };
 }
 

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CLI_CLIENT, namedClient } from '../src/cli/io';
 import { CLI_VERSION, COMMANDS } from '../src/cli/run';
@@ -285,5 +286,7 @@ describe('the tool as Siren sees it', () => {
 
     expect(seen[0]).toEqual({ Authorization: 'Bearer t', Accept: 'application/json', 'X-Siren-Client': `siren-cli/${CLI_VERSION}` });
     expect(CLI_CLIENT).toBe(`siren-cli/${CLI_VERSION}`);
+    // The header takes the version from CLI_VERSION, which a test holds to package.json, so it can't drift (review of PR 94).
+    expect(readFileSync(new URL('../src/cli/io.ts', import.meta.url), 'utf8')).not.toMatch(/siren-cli\/\d/);
   });
 });

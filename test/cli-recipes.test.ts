@@ -186,6 +186,10 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
     expect(new URL(recipeRequests(h)[0]!.url).searchParams.get('limit')).toBe('5');
     expect(h.out()).toContain('job7f3a');
     expect(h.out()).toContain(FILE);
+    // Through a pipe, standard output holds the table alone, and the hint goes to standard error (review of PR 94).
+    expect(h.out().split('\n')[0]).toMatch(/^ID +STARTED/);
+    expect(h.out()).not.toContain('shows one');
+    expect(h.err()).toContain('siren recipes status job7f3a shows one.');
   });
 
   it('export prints the recipe alone on standard output, and what it left out on standard error', async () => {
@@ -205,6 +209,8 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
     expect(new URL(recipeRequests(h)[0]!.url).searchParams.get('q')).toBe('gold');
     expect(h.out()).toMatch(/gold-partners +Gold partners +yes/);
     expect(h.out()).toMatch(/tiers +Tiers +needs plus/);
+    expect(h.out()).not.toContain('saves one to edit');
+    expect(h.err()).toContain('saves one to edit and apply.');
     const before = h.out().length;
     expect(await h.run(['recipes', 'show', 'gold-partners']), h.err()).toBe(0);
     expect(JSON.parse(h.out().slice(before))).toEqual(RECIPE);

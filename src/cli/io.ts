@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import { FetchHttpClient } from '../http';
 import type { HttpClient } from '../http';
 import { CliRefusal } from './targets';
+import { CLI_VERSION } from './version';
 
 /**
  * Everything the `siren` command reads from or writes to the world outside
@@ -100,7 +101,7 @@ export function defaultConfigDir(
 }
 
 /** What the tool calls itself to Siren, so Siren's API request log can tell its calls from the dashboard's. */
-export const CLI_CLIENT = 'siren-cli/0.3.0';
+export const CLI_CLIENT = `siren-cli/${CLI_VERSION}`;
 
 /**
  * `client` with an `X-Siren-Client` header on every request, so Siren's API

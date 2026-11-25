@@ -376,6 +376,14 @@ describe('sandbox: every command runs only on a sandbox', () => {
   });
 });
 
+describe('sandbox: what a copy takes', () => {
+  it("leaves the app's contacts behind, since real people stay on the live Siren (review of PR 94)", async () => {
+    const { declarationOf } = await import('../src/cli/commands/sandbox');
+    const app = { key: 'acme', name: 'Acme', description: 'Acme app', url: 'https://acme.example', events: [], contacts: [{ email: 'ops@acme.example', name: 'Ops' }] };
+    expect(declarationOf(app as never, [])).not.toHaveProperty('contacts');
+  });
+});
+
 describe('sandbox: siren sandbox list', () => {
   it('lists the organizations and names where a copy came from', async () => {
     const copied = JSON.stringify({
@@ -402,11 +410,14 @@ describe('sandbox: siren sandbox list', () => {
 
     const plain = listing();
     expect(await plain.run(['sandbox', 'list'])).toBe(0);
-    expect(plain.out()).toContain('2 sandbox organizations on sandbox.sirenaffiliates.com');
-    expect(plain.out()).toMatch(/^ {2}acme-sandbox +Acme \(sandbox\) +acme on siren\.acme\.example/m);
+    // Through a pipe, standard output holds the table alone, and the headline and tip go to standard error (review of PR 94).
+    expect(plain.err()).toContain('2 sandbox organizations on sandbox.sirenaffiliates.com');
+    expect(plain.out()).toMatch(/^acme-sandbox +Acme \(sandbox\) +acme on siren\.acme\.example/m);
+    expect(plain.out().split('\n')[0]).toMatch(/^ORG +NAME/);
     expect(plain.out()).not.toContain('*');
     expect(plain.out()).not.toContain('siren use');
-    expect(plain.out()).toContain('Pass --org <slug>, or set SIREN_ORG, to pick one.');
+    expect(plain.out()).not.toContain('Pass --org');
+    expect(plain.err()).toContain('Pass --org <slug>, or set SIREN_ORG, to pick one.');
   });
 });
 
@@ -515,9 +526,9 @@ describe('sandbox: siren sandbox inbox', () => {
     expect(await h.run(['sandbox', 'inbox', '--org', 'acme', '--limit', '5']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['GET /sandbox/inbox']);
     expect(new URL(h.http.requests[0]!.url).searchParams.get('number')).toBe('5');
-    expect(h.out()).toContain("1 email in acme's sandbox inbox");
+    expect(h.err()).toContain("1 email in acme's sandbox inbox");
     expect(h.out()).toMatch(/#31 +2026-11-24 17:40 +ana@example\.com +Your commission was approved/);
-    expect(h.out()).toContain('siren sandbox inbox --org acme 31');
+    expect(h.err()).toContain('siren sandbox inbox --org acme 31');
 
     const one = harness([reply(200, { ...email, text: 'Your commission of $12.00 was approved.', html: '<p>…</p>', headers: {} })], { env: { SIREN_ORG: '3' } });
     one.signedIn();
@@ -546,7 +557,8 @@ describe('sandbox: which organization a command acts on', () => {
     expect(h.paths()).toEqual(['GET /auth/memberships', 'POST /auth/switch-org', 'GET /sandbox/inbox']);
     expect(bodyOf(h.http.requests[1])).toEqual({ orgId: 42 });
     expect(h.http.bearers()[2]).toBe(`Bearer ${ACCESS_2}`);
-    expect(h.out()).toContain("0 emails in acme-sandbox's sandbox inbox");
+    expect(h.err()).toContain("0 emails in acme-sandbox's sandbox inbox");
+    expect(h.out()).toBe('');
     expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 3, accessToken: ACCESS_1 });
   });
 
@@ -554,7 +566,7 @@ describe('sandbox: which organization a command acts on', () => {
     const env = harness([both(), AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, { emails: [], total: 0 })], { env: { SIREN_ORG: 'acme-sandbox' } });
     env.signedIn();
     expect(await env.run(['sandbox', 'inbox']), env.err()).toBe(0);
-    expect(env.out()).toContain('acme-sandbox');
+    expect(env.err()).toContain('acme-sandbox');
 
     const flag = harness([reply(200, { emails: [], total: 0 })], { env: { SIREN_ORG: 'acme-sandbox' } });
     flag.signedIn();
@@ -608,7 +620,7 @@ describe('sandbox: what Siren sends, printed', () => {
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await h.run(['sandbox', 'list']), h.err()).toBe(0);
     clear(h.out());
-    expect(h.out()).toMatch(/^ {2}acme +Acme/m);
+    expect(h.out()).toMatch(/^acme +Acme/m);
 
     const email = { id: 31, recipients: [sly('ana@example.com')], subject: sly('Your commission'), fromName: sly('Acme'), template: sly('conversion-approved'), createdAt: sly('2026-11-24T17:40:00+00:00') };
     const list = harness([reply(200, { emails: [email], total: 1 })]);

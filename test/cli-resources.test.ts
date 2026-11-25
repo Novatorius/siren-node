@@ -85,6 +85,15 @@ describe('the generated resource commands', () => {
     expect(h.out()).toContain('program 9 saved in Acme (3), sandbox\n');
   });
 
+  it("keeps -d text as text where openapi types the field a string, and reads numbers where it types one (review of PR 94)", async () => {
+    const h = signedIn([]);
+    expect(await h.run(['programs', 'create', '-d', 'name=2026', '-d', 'expirationDays=30', '-d', 'incentiveTypeArgs[transactionPercent]=12.5', '--dry-run', '--json'])).toBe(0);
+    expect(JSON.parse(h.out()).body).toEqual({ name: '2026', expirationDays: 30, incentiveTypeArgs: { transactionPercent: 12.5 } });
+    const raw = signedIn([]);
+    expect(await raw.run(['post', '/programs', '-d', 'name=2026', '--dry-run', '--json'])).toBe(0);
+    expect(JSON.parse(raw.out()).body).toEqual({ name: '2026' });
+  });
+
   it('updates with the method the spec names for the route', async () => {
     const programsCommand = RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')!;
     const h = signedIn([reply(200, { id: 1, name: 'Renamed' })]);

@@ -444,8 +444,15 @@ export async function recipesImports(input: CommandInput): Promise<number> {
   const width = out.rich ? Math.min(input.io.screen?.size?.columns ?? REPORT_WIDTH, REPORT_WIDTH) : Number.POSITIVE_INFINITY;
   const rows = items.map((item) => [item.jobId, say(item.dateCreated).slice(0, 16).replace('T', ' '), say(item.status), `${item.processedItems}/${item.totalItems}`, say(item.source?.fileName ?? item.source?.kind ?? '')]);
   for (const line of out.table(['ID', 'STARTED', 'STATUS', 'DONE', 'FROM'], rows, width)) run.print(line);
-  run.print(out.next(`${out.command(run.command(`recipes status ${items[0]!.jobId}`))} shows one.`));
+  // Through a pipe, standard output holds the table alone (review of PR 94).
+  hint(input, out, out.next(`${out.command(run.command(`recipes status ${items[0]!.jobId}`))} shows one.`));
   return 0;
+}
+
+/** A line that isn't data: under the table in a terminal, on standard error through a pipe. */
+function hint(input: CommandInput, out: { rich: boolean }, text: string): void {
+  if (out.rich) input.io.stdout(`${text}\n`);
+  else input.io.stderr(`${text}\n`);
 }
 
 /** `siren recipes export [--include a,b]`: the organization's setup as a recipe, on standard output. */
@@ -526,7 +533,7 @@ export async function recipesCatalog(input: CommandInput): Promise<number> {
   const width = out.rich ? Math.min(input.io.screen?.size?.columns ?? REPORT_WIDTH, REPORT_WIDTH) : Number.POSITIVE_INFINITY;
   for (const line of out.table(['ID', 'NAME', 'FITS'], rows, width)) run.print(line);
   const first = catalog.recipes.find((entry) => typeof entry.id === 'string');
-  if (first !== undefined) run.print(out.next(`${out.command(run.command(`recipes show ${say(String(first.id))} > recipe.json`))} saves one to edit and apply.`));
+  if (first !== undefined) hint(input, out, out.next(`${out.command(run.command(`recipes show ${say(String(first.id))} > recipe.json`))} saves one to edit and apply.`));
   return 0;
 }
 

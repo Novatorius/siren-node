@@ -16,6 +16,8 @@ export interface ResourceRoute {
   readonly filters?: readonly { readonly name: string; readonly type: 'string' | 'integer' | 'number' | 'boolean'; readonly values?: readonly string[] }[];
   /** The body fields Siren validates. */
   readonly fields?: readonly string[];
+  /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. */
+  readonly types?: Readonly<Record<string, string>>;
   /** The body fields Siren requires. */
   readonly required?: readonly string[];
 }
@@ -78,6 +80,14 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "submitMessage",
           "confirmationUrl"
         ],
+        "types": {
+          "name": "string",
+          "slug": "string",
+          "enabled": "boolean",
+          "approveExisting": "boolean",
+          "submitMessage": "string",
+          "confirmationUrl": "string"
+        },
         "required": [
           "name",
           "enabled",
@@ -102,7 +112,15 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "approveExisting",
           "submitMessage",
           "confirmationUrl"
-        ]
+        ],
+        "types": {
+          "name": "string",
+          "slug": "string",
+          "enabled": "boolean",
+          "approveExisting": "boolean",
+          "submitMessage": "string",
+          "confirmationUrl": "string"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -164,6 +182,9 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "currency",
           "method"
         ],
+        "types": {
+          "method": "string"
+        },
         "required": [
           "currency",
           "method"
@@ -176,6 +197,9 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "fields": [
           "method"
         ],
+        "types": {
+          "method": "string"
+        },
         "required": [
           "method"
         ]
@@ -230,6 +254,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "code",
           "type"
         ],
+        "types": {
+          "code": "string",
+          "type": "string"
+        },
         "required": [
           "code",
           "type"
@@ -300,6 +328,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "description",
           "members"
         ],
+        "types": {
+          "name": "string",
+          "structure": "string",
+          "description": "string"
+        },
         "required": [
           "name",
           "structure"
@@ -313,7 +346,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "name",
           "description",
           "structure"
-        ]
+        ],
+        "types": {
+          "name": "string",
+          "description": "string",
+          "structure": "string"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -363,6 +401,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "collaboratorId",
           "programId"
         ],
+        "types": {
+          "collaboratorId": "integer",
+          "programId": "integer"
+        },
         "required": [
           "collaboratorId",
           "programId"
@@ -387,6 +429,13 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "statusOnSignup",
           "approveExisting"
         ],
+        "types": {
+          "email": "string",
+          "fullName": "string",
+          "nickname": "string",
+          "source": "string",
+          "approveExisting": "boolean"
+        },
         "required": [
           "email",
           "source",
@@ -484,6 +533,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "status",
           "trackingId"
         ],
+        "types": {
+          "fullName": "string",
+          "nickname": "string"
+        },
         "required": [
           "nickname",
           "email",
@@ -504,7 +557,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "status",
           "trackingId",
           "fields"
-        ]
+        ],
+        "types": {
+          "fullName": "string",
+          "nickname": "string"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -683,6 +740,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "transactionId",
           "obligationId"
         ],
+        "types": {
+          "type": "string",
+          "transactionId": "integer",
+          "obligationId": "integer"
+        },
         "required": [
           "engagementId",
           "type",
@@ -699,7 +761,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "status",
           "transactionId",
           "obligationId"
-        ]
+        ],
+        "types": {
+          "type": "string",
+          "transactionId": "integer",
+          "obligationId": "integer"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -866,6 +933,13 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "platformId",
           "ttl"
         ],
+        "types": {
+          "collaboratorId": "integer",
+          "amount": "integer",
+          "token": "string",
+          "platformId": "string",
+          "ttl": "integer"
+        },
         "required": [
           "collaboratorId",
           "currency",
@@ -1004,6 +1078,13 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "postAllocationActions",
           "metricFilters"
         ],
+        "types": {
+          "name": "string",
+          "description": "string",
+          "distributionPoolResolver": "string",
+          "revenuePercentage": "integer",
+          "collaboratorGroupId": "integer"
+        },
         "required": [
           "name",
           "description",
@@ -1034,7 +1115,14 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "lineItemFilters",
           "postAllocationActions",
           "metricFilters"
-        ]
+        ],
+        "types": {
+          "name": "string",
+          "description": "string",
+          "distributionPoolResolver": "string",
+          "revenuePercentage": "integer",
+          "collaboratorGroupId": "integer"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -1268,6 +1356,9 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "fields": [
           "signingSecret"
         ],
+        "types": {
+          "signingSecret": "string"
+        },
         "required": [
           "signingSecret"
         ]
@@ -1351,6 +1442,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "externalId",
           "externalType"
         ],
+        "types": {
+          "externalId": "string",
+          "externalType": "string"
+        },
         "required": [
           "localType",
           "externalId",
@@ -1564,6 +1659,9 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "value",
           "payoutId"
         ],
+        "types": {
+          "payoutId": "integer"
+        },
         "required": [
           "collaboratorId",
           "status",
@@ -1581,7 +1679,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "awardType",
           "value",
           "payoutId"
-        ]
+        ],
+        "types": {
+          "awardType": "string",
+          "payoutId": "integer"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -1661,7 +1763,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "fields": [
           "status",
           "lastTriggered"
-        ]
+        ],
+        "types": {
+          "lastTriggered": "string"
+        }
       }
     }
   },
@@ -1766,6 +1871,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "name",
           "expiresInDays"
         ],
+        "types": {
+          "name": "string",
+          "expiresInDays": "integer"
+        },
         "required": [
           "name"
         ]
@@ -1879,6 +1988,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "sorter",
           "programs"
         ],
+        "types": {
+          "name": "string",
+          "description": "string"
+        },
         "required": [
           "name",
           "description",
@@ -1893,7 +2006,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "name",
           "description",
           "programs"
-        ]
+        ],
+        "types": {
+          "name": "string",
+          "description": "string"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -2015,6 +2132,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "setupProgress",
           "status"
         ],
+        "types": {
+          "name": "string",
+          "description": "string",
+          "incentiveTypeArgs.transactionPercent": "number",
+          "incentiveTypeArgs.leadRequalificationDays": "integer",
+          "incentiveTypeArgs.autoApprove": "boolean",
+          "expirationDays": "integer",
+          "programGroupId": "integer",
+          "collaboratorGroupId": "integer"
+        },
         "required": [
           "name",
           "status"
@@ -2048,7 +2175,17 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "units",
           "status",
           "setupProgress"
-        ]
+        ],
+        "types": {
+          "name": "string",
+          "description": "string",
+          "incentiveTypeArgs.transactionPercent": "number",
+          "incentiveTypeArgs.leadRequalificationDays": "integer",
+          "incentiveTypeArgs.autoApprove": "boolean",
+          "expirationDays": "integer",
+          "programGroupId": "integer",
+          "collaboratorGroupId": "integer"
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -2110,6 +2247,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "value",
           "currency"
         ],
+        "types": {
+          "collaboratorId": "integer",
+          "value": "integer",
+          "currency": "string"
+        },
         "required": [
           "collaboratorId",
           "value"
@@ -2210,6 +2352,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "bindingId",
           "bindingDataType"
         ],
+        "types": {
+          "bindingId": "string",
+          "bindingDataType": "string"
+        },
         "required": [
           "details"
         ]
@@ -2250,7 +2396,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "events",
           "status",
           "description"
-        ]
+        ],
+        "types": {
+          "targetUrl": "string",
+          "description": "string"
+        }
       },
       "delete": {
         "method": "DELETE",

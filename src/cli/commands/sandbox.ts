@@ -111,7 +111,8 @@ function needsAnAddress(error: unknown): boolean {
 
 /**
  * The declaration that makes the same app on another Siren: its parts and
- * its active features, never a key, a secret or the live address. A sandbox
+ * its active features, never a key, a secret, the live address or its
+ * contacts, who are real people and stay on the live Siren. A sandbox
  * ask must never reach the client's real server, so the copy has no url
  * (AP-A4139b). Its events go with it when `events` is true.
  */
@@ -121,7 +122,6 @@ export function declarationOf(app: App, features: readonly AppFeature[], events 
     description: app.description,
     ...(events && app.events !== undefined && app.events.length > 0 ? { events: app.events } : {}),
     ...(app.apiKey !== null && app.apiKey !== undefined ? { scopes: app.scopes } : {}),
-    ...(app.contacts !== undefined && app.contacts.length > 0 ? { contacts: app.contacts } : {}),
     features: features.map((feature) => {
       const settings: Record<string, unknown> = {};
       for (const name of FEATURE_SETTINGS) {
@@ -473,16 +473,14 @@ export async function list(input: CommandInput): Promise<number> {
     }),
     76,
   );
-  input.io.stdout(
-    [
-      style.success(`${counted(memberships.length, 'sandbox organization', 'sandbox organizations')} on ${hostOf(run.target.baseUrl)}`),
-      '',
-      ...lines.map((line) => `  ${line}`),
-      '',
-      style.next(style.dim(LIST_TIP)),
-      '',
-    ].join('\n'),
-  );
+  const headline = style.success(`${counted(memberships.length, 'sandbox organization', 'sandbox organizations')} on ${hostOf(run.target.baseUrl)}`);
+  // Through a pipe, standard output holds the table alone, and the headline and tip go to standard error (review of PR 94).
+  if (!style.rich) {
+    if (lines.length > 0) input.io.stdout(`${lines.join('\n')}\n`);
+    input.io.stderr(`${headline}\n${LIST_TIP}\n`);
+    return 0;
+  }
+  input.io.stdout([headline, '', ...lines.map((line) => `  ${line}`), '', style.next(style.dim(LIST_TIP)), ''].join('\n'));
   return 0;
 }
 
@@ -636,14 +634,12 @@ export async function inbox(input: CommandInput): Promise<number> {
     76,
   );
   const tip = emails.length === 0 ? 'The sandbox keeps each email it sends here. Seeded test sales send none.' : `${input.command(`sandbox inbox${org.flag} ${clean(String(emails[0]!.id))}`)} shows one.`;
-  input.io.stdout(
-    [
-      style.success(`${counted(page.total ?? emails.length, 'email', 'emails')} in ${style.bold(clean(slug))}'s sandbox inbox`),
-      ...(emails.length === 0 ? [] : ['', ...lines.map((line) => `  ${line}`)]),
-      '',
-      style.next(style.dim(tip)),
-      '',
-    ].join('\n'),
-  );
+  const headline = style.success(`${counted(page.total ?? emails.length, 'email', 'emails')} in ${style.bold(clean(slug))}'s sandbox inbox`);
+  if (!style.rich) {
+    if (emails.length > 0) input.io.stdout(`${lines.join('\n')}\n`);
+    input.io.stderr(`${headline}\n${tip}\n`);
+    return 0;
+  }
+  input.io.stdout([headline, ...(emails.length === 0 ? [] : ['', ...lines.map((line) => `  ${line}`)]), '', style.next(style.dim(tip)), ''].join('\n'));
   return 0;
 }

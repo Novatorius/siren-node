@@ -135,7 +135,8 @@ export function isSirenDate(value: unknown): value is string {
 /** A scalar as words: text whole, null as -, a date as its day. */
 function scalarText(value: string | number | boolean | null, zone: string | undefined): string {
   if (value === null) return '-';
-  if (typeof value === 'string') return ISO.test(value) ? day(value, zone) : clean(value.replace(/\s+/g, ' '));
+  // A timestamp keeps its time, as `Nov 25, 2026 18:57` (review of PR 94).
+  if (typeof value === 'string') return ISO.test(value) ? `${day(value, zone)} ${minute(value, zone).split(' ').at(-1)}` : clean(value.replace(/\s+/g, ' '));
   return String(value);
 }
 
