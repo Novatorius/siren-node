@@ -128,18 +128,19 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     for (const line of [
       `Plan  ${KEY} → Acme (3), sandbox`,
       '  ~ name: Acme from the dashboard becomes Acme',
-      '  ~ description changes',
-      '  ~ moves the address to a new url, keeping its signing secret',
+      `  ~ description: "Changed in the dashboard." becomes "Siren's example app."`,
+      '  ~ moves the address from elsewhere.example to acme.example, keeping its signing secret',
       '  ~ events: removes sale.created',
       '  ~ key scopes: removes event:sale',
-      '  ~ changes feature notify-crm, Post-conversion action (postConversionAction): name',
+      '  ~ changes feature notify-crm, Post-conversion action (postConversionAction): name "Tell the CRM, renamed" becomes "Tell the CRM"',
       '  ~ brings back the archived feature acme-ledger, Payout method (payoutMethod)',
       '  - removes feature added-in-dashboard, Post-conversion action (postConversionAction): 2 records select it, so Siren archives it and never calls it',
       '  - removes feature unused, Post-conversion action (postConversionAction): nothing selects it, so Siren deletes it',
     ]) {
       expect(out, line).toContain(`${line}\n`);
     }
-    expect(h.printed()).not.toContain('elsewhere.example');
+    // The hosts show, as apps show prints them. The urls, which may hold a path or come from the environment, never do.
+    expect(h.printed()).not.toContain('elsewhere.example/siren');
     expect(h.printed()).not.toContain(URL_ENV.SIREN_APP_URL);
     expect(h.prompts).toEqual([
       'Apply to Acme (3), sandbox? [y/N] ',
