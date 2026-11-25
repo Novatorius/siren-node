@@ -135,6 +135,46 @@ export class TestActivityClient {
   request(id: string): Promise<AppRequestDetail> {
     return this.run.siren().apps.requests.retrieve(id);
   }
+
+  /**
+   * The kind of one of an app's features, from `GET /apps/{key}`, or null
+   * when the app has no feature with that key. Siren lists them as `items`,
+   * and the SDK's App type names the list `features`, so either is read.
+   */
+  async featureKind(app: string, feature: string): Promise<string | null> {
+    const body = await this.http.requestData<Record<string, unknown>>({ method: 'GET', path: `/apps/${encodeURIComponent(app)}`, retriable: true });
+    const list = Array.isArray(body.features) ? body.features : Array.isArray(body.items) ? body.items : [];
+    const found = (list as Array<Record<string, unknown>>).find((entry) => entry !== null && typeof entry === 'object' && entry.key === feature);
+    return typeof found?.kind === 'string' ? found.kind : null;
+  }
+}
+
+/** The kinds Siren never sends a sample to on a live organization, since an app could pay out on one. */
+export const LIVE_REFUSED_KINDS: ReadonlySet<string> = new Set(['payoutMethod']);
+
+/**
+ * Before a sample ask on a live organization: refuses a payout method
+ * outright, and for any other kind prints what the app receives and asks,
+ * unless `yes`. With no terminal and no `yes` it refuses, having sent
+ * nothing. Does nothing on a sandbox. `again` is the command line that
+ * sends it without asking.
+ */
+export async function confirmLiveAsk(run: CommandContext, io: CliIo, client: TestActivityClient, app: string, feature: string, yes: boolean, again: string): Promise<void> {
+  if (run.current().edition !== 'production') return;
+  const kind = await client.featureKind(app, feature);
+  if (kind !== null && LIVE_REFUSED_KINDS.has(kind)) {
+    throw new CliRefusal(`${app} › ${feature} is a payout method, so Siren sends it no sample in ${orgLabel(run)}.`, {
+      why: "An app that doesn't read the request's test flag could pay out on a sample.",
+      fix: 'siren login --sandbox',
+      fixWords: 'and send it there',
+    });
+  }
+  // On standard error, so `--json` output stays one JSON document.
+  io.stderr(`${app} › ${feature} receives a sample request marked test in ${orgLabel(run)}.\n`);
+  if (yes) return;
+  if (!io.interactive) throw new CliRefusal(`Nothing was sent. Run ${run.command(again)} to send it without asking.`);
+  const typed = (await io.prompt('Send it? [y/N] ')).trim().toLowerCase();
+  if (typed !== 'y' && typed !== 'yes') throw new CliRefusal('Nothing was sent.');
 }
 
 /** The flags `trigger`, `fixtures` and `simulate` read into a body. */

@@ -45,6 +45,11 @@ const wait = (status: string) => ({
   programId: 3,
 });
 
+/** What GET /apps/{key} answers, Siren listing the features as `items`. */
+function app(items: Array<{ key: string; kind: string }>) {
+  return { key: 'acme-crm', name: 'Acme CRM', items };
+}
+
 function live() {
   return { [BASE]: session({ edition: 'production', baseUrl: BASE }) };
 }
@@ -172,12 +177,53 @@ describe('siren trigger ask <app> <feature>', () => {
     expect(h.out()).toContain('Nothing acted on it.');
   });
 
-  it('runs on a live organization with --live', async () => {
+  it('runs on a live organization with --live, saying the app gets a sample marked test, with --yes in place of the question', async () => {
     const sent = requestRow({ id: REQUEST, mode: 'tell', status: 'delivered' });
-    const h = harness([reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })], { edition: 'production' });
+    const h = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }])), reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })], { edition: 'production' });
     h.signedIn(live());
-    expect(await h.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live']), h.err()).toBe(0);
+    expect(await h.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live', '--yes']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test']);
+    expect(h.err()).toContain('acme-crm › notify receives a sample request marked test in Acme (3), live.');
     expect(h.out()).toContain('Siren told acme-crm › notify in Acme (3), live (test)');
+  });
+
+  it('asks before a live sample, and sends nothing unless the person says yes', async () => {
+    const sent = requestRow({ id: REQUEST, mode: 'tell', status: 'delivered' });
+    const yes = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }])), reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })], { edition: 'production', interactive: true, typed: ['y'] });
+    yes.signedIn(live());
+    expect(await yes.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live']), yes.err()).toBe(0);
+    expect(yes.prompts).toEqual(['Send it? [y/N] ']);
+    expect(yes.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test']);
+
+    const no = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }]))], { edition: 'production', interactive: true, typed: [''] });
+    no.signedIn(live());
+    expect(await no.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live'])).toBe(1);
+    expect(no.paths()).toEqual(['GET /apps/acme-crm']);
+    expect(no.err()).toContain('Nothing was sent.');
+
+    const script = harness([reply(200, { key: 'acme-crm', features: [{ key: 'notify', kind: 'postConversionAction' }] })], { edition: 'production' });
+    script.signedIn(live());
+    expect(await script.run(['trigger', 'ask', 'acme-crm', 'notify', '--base-url', BASE, '--live'])).toBe(1);
+    expect(script.paths()).toEqual(['GET /apps/acme-crm']);
+    expect(script.err()).toContain('trigger ask acme-crm notify --live --yes');
+  });
+
+  it('refuses a payout method on a live organization outright, even with --yes, and names a sandbox', async () => {
+    const h = harness([reply(200, app([{ key: 'payout', kind: 'payoutMethod' }]))], { edition: 'production' });
+    h.signedIn(live());
+    expect(await h.run(['trigger', 'ask', 'acme-crm', 'payout', '--base-url', BASE, '--live', '--yes'])).toBe(1);
+    expect(h.paths()).toEqual(['GET /apps/acme-crm']);
+    expect(h.err()).toContain('acme-crm › payout is a payout method, so Siren sends it no sample in Acme (3), live.');
+    expect(h.err()).toContain("An app that doesn't read the request's test flag could pay out on a sample.");
+    expect(h.err()).toContain('siren login --sandbox');
+  });
+
+  it('sends a payout method its sample on a sandbox without asking', async () => {
+    const sent = requestRow({ id: REQUEST, kind: 'payoutMethod', subject: { type: 'test', id: 'test_abc' }, status: 'pending' });
+    const h = harness([reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } })]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'ask', 'acme-crm', 'payout', '--wait', '0']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /apps/acme-crm/features/payout/test']);
   });
 
   it("is a usage error without the app and the feature, and trigger alone needs an event", async () => {
@@ -275,6 +321,52 @@ describe('siren fixtures <file>', () => {
     h.write('flow.json', JSON.stringify({ fixtures: [{ name: 'sale', trigger: 'sale' }] }));
     expect(await h.run(['fixtures', 'flow.json', '--base-url', BASE, '--live'])).toBe(1);
     expect(h.paths()).toEqual([]);
+  });
+
+  it("checks an ask step's app and feature keys as trigger ask does, before sending it", async () => {
+    for (const [params, words] of [
+      [{ app: 'Acme CRM', feature: 'notify' }, 'Acme CRM'],
+      [{ app: 'acme-crm', feature: 'Notify_All' }, 'Notify_All'],
+      [{ app: 'acme-crm' }, 'A feature key'],
+    ] as const) {
+      const h = harness([]);
+      h.signedIn();
+      h.write('flow.json', JSON.stringify({ fixtures: [{ name: 'ask', trigger: 'ask', params }] }));
+      expect(await h.run(['fixtures', 'flow.json'])).toBe(2);
+      expect(h.err()).toContain(words);
+      expect(h.paths()).toEqual([]);
+    }
+  });
+
+  it('follows the live guard of trigger ask for each ask step', async () => {
+    const sent = requestRow({ id: REQUEST, mode: 'tell', status: 'delivered' });
+    const flow = JSON.stringify({
+      fixtures: [
+        { name: 'notify', trigger: 'ask', params: { app: 'acme-crm', feature: 'notify', wait: 0 } },
+        { name: 'payout', trigger: 'ask', params: { app: 'acme-crm', feature: 'payout' } },
+      ],
+    });
+    const h = harness(
+      [
+        reply(200, app([{ key: 'notify', kind: 'postConversionAction' }, { key: 'payout', kind: 'payoutMethod' }])),
+        reply(202, { test: true, request: { ...sent, data: {}, answer: null, answeredByUser: null } }),
+        reply(200, app([{ key: 'notify', kind: 'postConversionAction' }, { key: 'payout', kind: 'payoutMethod' }])),
+      ],
+      { edition: 'production' },
+    );
+    h.signedIn(live());
+    h.write('flow.json', flow);
+    expect(await h.run(['fixtures', 'flow.json', '--base-url', BASE, '--live', '--yes'])).toBe(1);
+    expect(h.paths()).toEqual(['GET /apps/acme-crm', 'POST /apps/acme-crm/features/notify/test', 'GET /apps/acme-crm']);
+    expect(h.err()).toContain('acme-crm › notify receives a sample request marked test in Acme (3), live.');
+    expect(h.err()).toContain('acme-crm › payout is a payout method');
+
+    const script = harness([reply(200, app([{ key: 'notify', kind: 'postConversionAction' }]))], { edition: 'production' });
+    script.signedIn(live());
+    script.write('flow.json', flow);
+    expect(await script.run(['fixtures', 'flow.json', '--base-url', BASE, '--live'])).toBe(1);
+    expect(script.paths()).toEqual(['GET /apps/acme-crm']);
+    expect(script.err()).toContain('fixtures flow.json --live --yes');
   });
 });
 

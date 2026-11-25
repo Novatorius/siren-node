@@ -4,8 +4,9 @@ import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { styleFor } from '../style';
 import { CliRefusal } from '../targets';
-import { TestActivityClient, activityBody, activityRows, askAndWait, assertSandbox, eventName, orgLabel, triggerAndWait, waitSeconds } from './trigger-client';
-import { ASK_WAIT_SECONDS, TRIGGER_WAIT_SECONDS } from './trigger';
+import { appKeyArgument } from './apply';
+import { TestActivityClient, activityBody, activityRows, askAndWait, assertSandbox, confirmLiveAsk, eventName, orgLabel, triggerAndWait, waitSeconds } from './trigger-client';
+import { ASK_WAIT_SECONDS, TRIGGER_WAIT_SECONDS, featureKeyArgument } from './trigger';
 
 /*
  * `siren fixtures <file.json>`: an ordered list of trigger steps, each able
@@ -102,8 +103,10 @@ export function resolveReferences(value: unknown, results: ReadonlyMap<string, u
 /**
  * Runs the file's steps in order and stops at the first refusal, having
  * printed each step it finished. A file of asks alone follows the live
- * guard of `trigger ask`. Any other step needs a sandbox, checked before
- * anything is sent.
+ * guard of `trigger ask`, step by step: an ask step's app and feature keys
+ * are checked as that command checks them, a payout method is refused, and
+ * any other kind is asked about unless `--yes`. Any other step needs a
+ * sandbox, checked before anything is sent.
  */
 export async function fixtures(input: CommandInput): Promise<number> {
   const { io, values } = input;
@@ -130,8 +133,9 @@ export async function fixtures(input: CommandInput): Promise<number> {
     let result: unknown;
     let line: string;
     if (step.trigger === 'ask') {
-      const app = String(params.app ?? '');
-      const feature = String(params.feature ?? '');
+      const app = appKeyArgument(String(params.app ?? ''));
+      const feature = featureKeyArgument(String(params.feature ?? ''));
+      await confirmLiveAsk(run, io, client, app, feature, values.yes === true, `fixtures ${input.args[0]} --live --yes`);
       const request = await askAndWait(client, io, app, feature, waitSeconds(params.wait, ASK_WAIT_SECONDS), json);
       result = request;
       line = `${step.name}  asked ${app} › ${feature} · ${request.status}${request.answer === null ? '' : ` · ${JSON.stringify(request.answer)}`}`;

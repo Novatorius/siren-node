@@ -3,7 +3,7 @@ import type { CommandInput } from '../context';
 import { styleFor } from '../style';
 import { CliUsageError } from '../targets';
 import { appKeyArgument } from './apply';
-import { TestActivityClient, activityBody, activityReport, askAndWait, askReport, assertSandbox, triggerAndWait, waitSeconds } from './trigger-client';
+import { TestActivityClient, activityBody, activityReport, askAndWait, askReport, assertSandbox, confirmLiveAsk, triggerAndWait, waitSeconds } from './trigger-client';
 
 /*
  * `siren trigger <sale|refund|visit|event-slug>` and `siren trigger ask
@@ -21,7 +21,7 @@ export const ASK_WAIT_SECONDS = 60;
 const EVENT = /^[a-z0-9][a-z0-9._-]{0,190}$/i;
 
 /** A feature key, as an app file names one: lowercase letters and digits joined by single dashes. */
-function featureKeyArgument(key: string): string {
+export function featureKeyArgument(key: string): string {
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(key) || key.length > 64) {
     throw new CliUsageError(`A feature key is lowercase letters and digits joined by single dashes, at most 64 characters, and ${JSON.stringify(key)} is not one.`);
   }
@@ -57,7 +57,8 @@ export async function trigger(input: CommandInput): Promise<number> {
  * `siren trigger ask <app> <feature>`: Siren sends the feature its kind's
  * sample request now, marked as a test, and the command waits up to
  * `--wait` for the answer. Siren checks the answer as the kind would, and
- * nothing acts on it. A live organization needs `--live`.
+ * nothing acts on it. A live organization needs `--live`, refuses a payout
+ * method outright, and asks before any other kind unless `--yes`.
  */
 export async function triggerAsk(input: CommandInput): Promise<number> {
   const app = appKeyArgument(input.args[0]!);
@@ -68,7 +69,9 @@ export async function triggerAsk(input: CommandInput): Promise<number> {
 
   const run = contextOf(input);
   await run.signedIn();
-  const request = await askAndWait(new TestActivityClient(run), io, app, feature, seconds, json);
+  const client = new TestActivityClient(run);
+  await confirmLiveAsk(run, io, client, app, feature, values.yes === true, `trigger ask ${app} ${feature} --live --yes`);
+  const request = await askAndWait(client, io, app, feature, seconds, json);
 
   if (json) io.stdout(`${JSON.stringify({ request }, null, 2)}\n`);
   else io.stdout(askReport(styleFor(io, 'stdout', {}), input, run, app, feature, request));
