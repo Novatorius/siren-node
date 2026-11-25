@@ -3,7 +3,7 @@ import { contextOf, jwtClaim, notSignedIn, planLine, tokenFrom, tokenRefusal } f
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { findOrg, orgList } from '../org';
-import { styleFor } from '../style';
+import { clean, styleFor } from '../style';
 import { loginView } from '../login-view';
 import type { LoginView } from '../login-view';
 import type { Style } from '../style';
@@ -264,7 +264,7 @@ export async function whoami(input: CommandInput): Promise<number> {
     );
     return 0;
   }
-  run.print(`Signed in as ${session.email} to ${session.orgName}${session.orgSlug ? ` (${session.orgSlug})` : ''}, as ${session.role}.`);
+  run.print(`Logged in as ${clean(session.email)} to ${clean(session.orgName)}${session.orgSlug ? ` (${clean(session.orgSlug)})` : ''}, as ${clean(session.role)}.`);
   run.print(`Siren: ${run.target.baseUrl}, ${edition === 'live' ? 'live' : 'a sandbox'}.`);
   run.print(`Session file: ${run.store.path}`);
   return 0;
@@ -298,17 +298,13 @@ async function whoamiToken(run: CommandContext, token: string, json: boolean): P
     );
     return 0;
   }
-  const slug = about.org.orgSlug ? ` (${about.org.orgSlug})` : '';
-  run.print(`Using SIREN_TOKEN "${plain(about.name)}", ending ${plain(about.lastFour)}, as ${about.user.email} in ${about.org.orgName}${slug}, as ${about.user.role}.`);
+  const slug = about.org.orgSlug ? ` (${clean(about.org.orgSlug)})` : '';
+  run.print(`Using SIREN_TOKEN "${clean(about.name)}", ending ${clean(about.lastFour)}, as ${clean(about.user.email)} in ${clean(about.org.orgName)}${slug}, as ${clean(about.user.role)}.`);
   run.print(`Siren: ${run.target.baseUrl}, ${edition === 'live' ? 'live' : 'a sandbox'}.`);
   if (expires !== null) run.print(`It expires ${expires}. SIREN_TOKEN wins over the session file while it is set.`);
   return 0;
 }
 
-/** Text from Siren with every control character taken out, so a name cannot move the cursor or recolor the terminal. */
-function plain(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
-}
 
 /** `siren orgs`: the organizations the person belongs to, as an aligned table. Each command picks one with --org, SIREN_ORG or the app file. */
 export async function orgs(input: CommandInput): Promise<number> {
@@ -316,7 +312,7 @@ export async function orgs(input: CommandInput): Promise<number> {
   await run.signedIn({ org: false });
   const memberships = await run.withAccessToken((token) => run.auth.memberships(token));
   const style = styleFor(input.io, 'stdout', {});
-  const rows = memberships.map((membership) => [membership.orgSlug, membership.orgName, membership.role] as const);
+  const rows = memberships.map((membership) => [clean(membership.orgSlug), clean(membership.orgName), clean(membership.role)] as const);
   for (const line of style.table(['SLUG', 'NAME', 'ROLE'], rows, 80)) run.print(line);
   return 0;
 }

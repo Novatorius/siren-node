@@ -10,7 +10,7 @@ import { appChanges, droppedLine } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
-import { REPORT_WIDTH, styleFor, unbroken, wrapWords } from '../style';
+import { REPORT_WIDTH, clean, styleFor, unbroken, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError, commandLine } from '../targets';
@@ -111,7 +111,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
 
 /** "Acme (acme), live": the organization a write acts in, and whether it is live, for the question before the write. */
 function orgNamed(session: { orgName: string; orgSlug?: string; orgId: number; edition: string }): string {
-  return `${session.orgName} (${session.orgSlug ?? session.orgId}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
+  return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
 /**
@@ -308,8 +308,8 @@ export async function appsApply(input: CommandInput): Promise<number> {
   await run.remember(key, envPath);
   if (saved === false) return 1;
   if (saved !== '') rows.push([app.created ? 'Key' : 'Secret', saved]);
-  for (const item of app.features) rows.push([item.key, featureRow(item)]);
-  if (Array.isArray(app.events) && app.events.length > 0) rows.push(['Events', `${app.events.join(', ')}${planMark(app.eventsAccess, ', so Siren does not send them')}`]);
+  for (const item of app.features) rows.push([clean(item.key), featureRow(item)]);
+  if (Array.isArray(app.events) && app.events.length > 0) rows.push(['Events', `${clean(app.events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`]);
   for (const name of parsed.filled) rows.push(['URL from', `${name}${shell(name) ? '' : ' in .env'}`]);
   if (app.features.some((item) => item.status === 'archived')) {
     const again = unbroken(run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`));
@@ -342,7 +342,7 @@ function planMarker(style: Style, line: string): string {
 /** A feature's row after apply: its `app:{id}`, its kind, and any mark for its state or plan. */
 function featureRow(item: AppFeature): string {
   const archived = item.status === 'archived' ? ' · archived' : '';
-  return `${item.ref} · ${kindName(item.kind)}${archived}${planMark(item)}`;
+  return `${clean(item.ref)} · ${clean(kindName(item.kind))}${archived}${planMark(item)}`;
 }
 
 /** `path` relative to `cwd` when it is inside it, such as `.env.sandbox`, else the absolute path. */
@@ -398,7 +398,7 @@ export async function appsList(input: CommandInput): Promise<number> {
   const rows = apps.map((app) => {
     const count = attentionCount(app);
     return [
-      app.key,
+      clean(app.key),
       stateCell(out, app),
       String(app.features.length),
       count === 0 ? out.dim('–') : out.bold(out.amber(`${count} ${count === 1 ? 'request' : 'requests'}`)),
@@ -432,18 +432,18 @@ export async function appsShow(input: CommandInput): Promise<number> {
     ['State', stateCell(out, app)],
     ['Address', addressCell(out, app)],
     ...(typeof prefix === 'string' && prefix !== '' ? [['Key', `${prefix}…`] as const] : [['Key', out.dim('none')] as const]),
-    ...(events.length > 0 ? [['Events', `${events.join(', ')}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
+    ...(events.length > 0 ? [['Events', `${clean(events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
   ];
-  const report = out.report({ headline: `${out.bold(app.key)}  ${app.name}`, rows });
+  const report = out.report({ headline: `${out.bold(clean(app.key))}  ${clean(app.name)}`, rows });
   // A report leads with ✓, which says something was done. A view has nothing to mark.
   run.print(report.replace(/^(\S*✓\S* )?/, '').replace(/\n$/, ''));
   if (app.features.length > 0) {
     run.print('');
     const features = app.features.map((item) => [
-      item.ref,
-      item.key,
-      kindLabel(item.kind),
-      `${item.name}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
+      clean(item.ref),
+      clean(item.key),
+      clean(kindLabel(item.kind)),
+      `${clean(item.name)}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
     ]);
     for (const line of out.table(['ID', 'KEY', 'KIND', 'NAME'], features, widthOf(input, out))) run.print(line);
   }
@@ -662,7 +662,8 @@ function planMark(access: { entitled?: unknown; requiredPlan?: unknown } | undef
   if (access === undefined || access === null || access.entitled !== false) return '';
   const plan = typeof access.requiredPlan === 'string' && access.requiredPlan !== '' ? access.requiredPlan : undefined;
   if (plan === undefined) return `  your plan cannot use it${then}`;
-  return `  requires ${plan.charAt(0).toUpperCase()}${plan.slice(1)}${then}`;
+  const named = clean(plan);
+  return `  requires ${named.charAt(0).toUpperCase()}${named.slice(1)}${then}`;
 }
 
 /** Turns the app on or off and prints its new state. */

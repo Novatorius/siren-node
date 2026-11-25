@@ -31,7 +31,7 @@ const FIRST = HOOK_FRAMES[0]!;
 const strip = (text: string) => text.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '');
 
 async function login(replies: ReturnType<typeof reply>[], screenOptions: FakeScreenOptions = {}, env: Record<string, string> = {}) {
-  const h = harness(replies, { interactive: true, env: { TERM: 'xterm-256color', COLORTERM: 'truecolor', ...env } });
+  const h = harness(replies, { interactive: true, env: { TERM: 'xterm-256color', COLORTERM: 'truecolor', SIREN_BASE_URL: 'http://127.0.0.1:34142/siren/v1', ...env } });
   const fake = fakeScreen({ columns: 80, rows: 30, ...screenOptions });
   const code = await runCli(['login'], { ...h.io, screen: fake.screen });
   return { h, fake, code };

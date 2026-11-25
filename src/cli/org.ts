@@ -5,6 +5,7 @@ import type { HttpTransport } from '../http';
 import type { CommandContext, CommandInput } from './context';
 import type { StoredMembership, StoredSession } from './credentials';
 import type { CliIo } from './io';
+import { clean } from './style';
 import { CliRefusal } from './targets';
 
 /*
@@ -189,7 +190,7 @@ export function findOrg<T extends { orgId: number; orgSlug: string }>(membership
 
 /** "acme (Acme) and acme-two (Acme Two)". */
 export function orgList(memberships: readonly StoredMembership[]): string {
-  const names = memberships.map((membership) => `${membership.orgSlug || membership.orgId} (${membership.orgName})`);
+  const names = memberships.map((membership) => `${clean(membership.orgSlug) || membership.orgId} (${clean(membership.orgName)})`);
   return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
@@ -207,9 +208,9 @@ export async function orgInFile(path: string): Promise<string | undefined> {
 /** Lists the person's organizations on standard error, asks which one, and answers it, or refuses one they are not in. */
 export async function askOrg(io: CliIo, memberships: readonly StoredMembership[]): Promise<StoredMembership> {
   io.stderr(`You belong to ${memberships.length} organizations:\n`);
-  for (const membership of memberships) io.stderr(`  ${membership.orgSlug}  ${membership.orgName}\n`);
+  for (const membership of memberships) io.stderr(`  ${clean(membership.orgSlug)}  ${clean(membership.orgName)}\n`);
   const typed = (await io.prompt('Organization (slug): ')).trim();
   const chosen = findOrg(memberships, typed);
-  if (chosen === undefined) throw new CliRefusal(`You are not in an organization named ${typed}. Yours are ${orgList(memberships)}.`);
+  if (chosen === undefined) throw new CliRefusal(`You are not in an organization named ${clean(typed)}. Yours are ${orgList(memberships)}.`);
   return chosen;
 }

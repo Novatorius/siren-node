@@ -242,11 +242,25 @@ M105, contract/cli-signin.md in the run folder). It follows RFC 8628:
   `rundll32` or `xdg-open`), given the address as one argument and never through a shell. It opens
   nothing over SSH, on a Linux machine with no display, or for an address that is not http or
   https. It refuses an answer whose user code holds anything but letters, digits and dashes.
+- Before it opens or prints the page, it checks where the page is. A plain http page must be on
+  this machine, as the API must be. The page must be on the API's own host, or, for a Siren Cloud
+  API, on another `sirenaffiliates.com` host, where the dashboard lives apart from the API. Any
+  other page stops the login before the first poll, so a server that answers for Siren cannot send
+  the person to a look-alike page (`pageProblem`). The view shows the host of the Siren the tool
+  polls beside the code, so the person can match it against the page.
 - It polls `POST /auth/cli/token` every interval: `authorization_pending` waits the interval Siren
   names, `slow_down` waits the longer one it names, and a network fault, a 5xx or a 429 waits and
   polls again until the code's life runs out. `access_denied`, `expired_token` and `invalid_grant`
-  stop with one line. An interval is held between 1 and 60 seconds whatever Siren names.
+  stop with one line. An interval is held between 1 and 60 seconds whatever Siren names, and the
+  wait stops after the code's life or 15 minutes, whichever comes first.
+- Ctrl-C under the logo wins over an approval that lands in the same poll: the tool keeps no
+  session and exits 1.
 - The approval answers the same `LoginResult` a password gives, so the session is kept as before.
+  The store writes credentials.json at mode 0600 and sets its folder to 0700 on every write, also
+  when the folder was already there with looser modes.
+- Every name, email and role Siren sends loses its escape sequences and control characters before
+  the tool keeps or prints it (`clean` in the style module), so no answer can move the cursor,
+  clear the screen or plant a terminal link.
 - The logo animation plays the moment the approval lands, with every skip rule. It counts as the
   first-run animation, which `login` holds back for that moment.
 

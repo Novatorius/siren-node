@@ -53,6 +53,20 @@ export interface Report {
 /** The widest a line of a report may be, so nothing wraps in an 80-column terminal. */
 export const REPORT_WIDTH = 80;
 
+/**
+ * Text from Siren, such as an organization's name or an email, with every
+ * escape sequence and control character taken out, so nothing a server
+ * sends can move the cursor, clear the screen, recolor the terminal or
+ * plant a link. Run it on every value Siren sends before printing it.
+ */
+export function clean(text: string): string {
+  return text
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '')
+    .replace(/(?:\u001b\[|\u009b)[\d;?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b[@-_]/g, '')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+}
+
 /** `text` that {@link wrapWords} keeps on one line, such as a command a person copies. A report prints it with plain spaces. */
 export function unbroken(text: string): string {
   return text.replace(/ /g, '\u00a0');

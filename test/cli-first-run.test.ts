@@ -73,7 +73,7 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     const h = harness([]);
     h.signedIn({ [SANDBOX_BASE_URL]: session({ baseUrl: SANDBOX_BASE_URL, orgSlug: 'acme' }) });
     expect(await h.run(['whoami']), h.err()).toBe(0);
-    expect(h.out()).toContain(`Signed in as ${EMAIL} to Acme (acme), as admin.`);
+    expect(h.out()).toContain(`Logged in as ${EMAIL} to Acme (acme), as admin.`);
     expect(h.out()).toContain(`Siren: ${SANDBOX_BASE_URL}, a sandbox.`);
     expect(h.out()).toContain(`Session file: ${h.credentialsPath}`);
     expect(h.sent()).toEqual([]);

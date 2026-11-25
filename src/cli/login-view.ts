@@ -30,13 +30,14 @@ export function loginView(io: CliIo, values: Readonly<Record<string, unknown>>):
   let stage: LoginStage | null = null;
   let spinner: Spinner | null = null;
   return {
-    show(code: DeviceCode, opened: boolean) {
-      stage = startLoginStage(io, flags, { version: CLI_VERSION, code: code.userCode, link: code.page, opened });
+    show(code: DeviceCode, opened: boolean, siren: string) {
+      stage = startLoginStage(io, flags, { version: CLI_VERSION, code: code.userCode, link: code.page, opened, siren });
       if (stage !== null) return;
       io.stderr(`${opened ? 'Your browser is open. Approve the code there.' : 'Open the link in your browser, and approve the code there.'}\n`);
-      io.stderr(`Code: ${err.bold(code.userCode)}\nLink: ${code.page}\n`);
+      io.stderr(`Code: ${err.bold(code.userCode)}\nLink: ${code.page}\nSiren: ${siren}\n`);
       spinner = err.spinner('Waiting for approval', (text) => io.stderr(text));
     },
+    stopped: () => stage?.stopped() ?? false,
     async wait(ms: number) {
       if (stage !== null) return stage.wait(ms);
       return io.sleep(ms);

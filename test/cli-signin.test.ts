@@ -21,12 +21,12 @@ import { fakeScreen } from './cli-screen-fake';
 
 const DEVICE_CODE = 'd'.repeat(64);
 const USER_CODE = 'BCDF-GHJK';
-const VERIFY = `https://app.example/cli?code=${USER_CODE}`;
+const VERIFY = `https://app.sirenaffiliates.com/cli?code=${USER_CODE}`;
 const TOKEN = `siren_pat_${'9'.repeat(44)}9f3c`;
 
 const Device = {
   code: (interval = 5) =>
-    reply(200, { device_code: DEVICE_CODE, user_code: USER_CODE, verification_uri: 'https://app.example/cli', verification_uri_complete: VERIFY, expires_in: 600, interval }),
+    reply(200, { device_code: DEVICE_CODE, user_code: USER_CODE, verification_uri: 'https://app.sirenaffiliates.com/cli', verification_uri_complete: VERIFY, expires_in: 600, interval }),
   refused: (code: string, interval?: number) =>
     reply(400, { error: { message: `Siren says ${code}.`, code, context: interval === undefined ? {} : { interval } } }),
   approved: () => reply(200, { accessToken: ACCESS_1, refreshToken: REFRESH_1, user, memberships: [membershipAcme] }),
@@ -80,7 +80,7 @@ describe('cli sign-in: login approves a code in the browser', () => {
   });
 
   it('prints the page with no character that could move the cursor or recolor the terminal', async () => {
-    const page = `https://app.example/cli?code=${USER_CODE}\u001b[2J`;
+    const page = `https://app.sirenaffiliates.com/cli?code=${USER_CODE}\u001b[2J`;
     const h = harness([reply(200, { ...JSON.parse(Device.code().body), verification_uri_complete: page }), Device.approved()], { interactive: true, opens: false });
     expect(await h.run(['login']), h.err()).toBe(0);
     expect(h.printed()).not.toContain('\u001b');
@@ -154,7 +154,8 @@ describe('cli sign-in: login approves a code in the browser', () => {
       interactive: true,
       env: { COLORTERM: 'truecolor', TERM: 'xterm-256color' },
     });
-    const fake = fakeScreen();
+    // Siren Cloud's approval link needs more than 80 columns beside the logo.
+    const fake = fakeScreen({ columns: 100 });
     const sentAtFirstFrame: number[] = [];
     const screen = { ...fake.screen, write: (text: string) => (sentAtFirstFrame.push(h.paths().length), fake.screen.write(text)) };
     expect(await runCli(['login'], { ...h.io, screen }), h.err()).toBe(0);
@@ -296,7 +297,7 @@ describe('cli sign-in: whoami says which credential is in use', () => {
     const h = harness([]);
     h.signedIn();
     expect(await h.run(['whoami']), h.err()).toBe(0);
-    expect(h.out()).toContain('Signed in as');
+    expect(h.out()).toContain('Logged in as');
     expect(h.paths()).toEqual([]);
   });
 
