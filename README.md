@@ -929,10 +929,10 @@ nothing more was applied. A different answer after an accepted one gets 409
 `apps.requests.list({ status, limit, before })` reads the latest requests, newest first: 50, or `limit` from 1 to 100,
 older than the request `before` names when it is given. Pass each page's last id as the next page's `before` to read them
 all. `needs_attention` comes whole and takes neither. `apps.requests.list({ idPrefix: 'apr_9f2c' })`
-finds requests by the start of their id, 4 to 32 hex characters after `apr_`, as the command-line
-tool prints one short: at most two, newest first, so one match tells itself from several. It takes
-no other filter. An older Siren ignores it and answers its latest requests, so check that each
-starts with the prefix. Each request has its status:
+finds requests by the start of their id, 4 to 32 hex characters in either case after `apr_`, as
+the command-line tool prints one short. It answers the matching requests, at most two, newest
+first: one is the request, and two mean the start fits more than one. It takes no other filter. An
+older Siren ignores it and answers its latest requests. Each request has its status:
 `pending`, `sent`, `delivered` (a tell the app received), `answered`, `applying` (an ask whose
 answer Siren is applying now), `applied` (an ask whose answer did its work), `needs_attention` or
 `dropped`. `apps.requests.retrieve(id)` reads one request, however old,

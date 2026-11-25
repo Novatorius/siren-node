@@ -78,8 +78,9 @@ export async function listAppRequests(
   }
   const { limit, before, idPrefix } = params as { limit?: unknown; before?: unknown; idPrefix?: unknown };
   if (idPrefix !== undefined) {
-    if (typeof idPrefix !== 'string' || !/^apr_[0-9a-f]{4,32}$/.test(idPrefix)) {
-      throw new SirenError(`apps.requests.list() takes an idPrefix of apr_ and 4 to 32 lowercase hex characters, and got ${JSON.stringify(idPrefix)}.`);
+    // IsRequestIdPrefix takes the hex in either case, and findByPrefix lowercases it.
+    if (typeof idPrefix !== 'string' || !/^apr_[0-9a-fA-F]{4,32}$/.test(idPrefix)) {
+      throw new SirenError(`apps.requests.list() takes an idPrefix of apr_ and 4 to 32 hex characters, and got ${JSON.stringify(idPrefix)}.`);
     }
     if (Object.keys(params).length > 1) {
       // ListAppRequests answers idPrefix alone, with no paging, and ignores every other filter.

@@ -234,12 +234,19 @@ describe('apps-cli: apps.requests', () => {
     expect(queryOf(http.requests[0])).toEqual({ idPrefix: 'apr_9f2c' });
   });
 
+  it('answers the matching rows as a plain list, never total, and takes the hex in either case, as Siren does', async () => {
+    const { http, apps: resource } = apps([reply(200, { requests: [row, row], total: 7 })]);
+    expect(await resource.requests.list({ idPrefix: 'apr_9F2C4e' })).toEqual([row, row]);
+    expect(queryOf(http.requests[0])).toEqual({ idPrefix: 'apr_9F2C4e' });
+  });
+
   it('refuses an idPrefix that is not apr_ and 4 to 32 hex characters, and one beside another filter, which Siren would ignore', async () => {
     for (const params of [
       { idPrefix: 'apr_9f2' },
       { idPrefix: '9f2c4e1a' },
       { idPrefix: `apr_${'a'.repeat(33)}` },
-      { idPrefix: 'apr_9F2C' },
+      { idPrefix: 'apr_9g2c' },
+      { idPrefix: 'APR_9f2c' },
       { idPrefix: 'apr_9f2c', limit: 10 },
       { idPrefix: 'apr_9f2c', before: REQUEST },
       { idPrefix: 'apr_9f2c', status: 'sent' },
