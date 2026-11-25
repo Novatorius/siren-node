@@ -227,7 +227,7 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     h.write('.env', '# mine\nexport SIREN_APP_URL="https://acme.example/siren"\nOTHER=1\n');
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(JSON.parse(String(h.http.requests[1]?.body))).toMatchObject({ url: 'https://acme.example/siren' });
-    expect(h.out()).toContain('Its url came from SIREN_APP_URL in .env.');
+    expect(h.out()).toMatch(/\n  URL from +SIREN_APP_URL in \.env\n/);
   });
 
   it('names the place once in a problem line', async () => {
@@ -257,7 +257,8 @@ describe('cli pass 1, finding 6: the first apply says what comes next', () => {
     expect(h.printed()).not.toContain('token=abc');
     expect(h.out()).toContain('node --env-file=.env.sandbox');
     expect(h.out()).toContain('siren apps requests --follow');
-    expect(h.out()).toMatch(/app:\d+ is the id/);
+    expect(h.out()).toMatch(/\n  notify-crm +app:\d+ · /);
+    expect(h.out()).not.toContain('autofulfiller');
   });
 });
 
@@ -284,7 +285,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
     h.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
     await h.run(['apps', 'init', '--key', APP_KEY]);
     expect(await h.run(['apps', 'apply', '--yes', '--live', '--base-url', UAT]), h.err()).toBe(0);
-    expect(h.out()).toContain(`Watch what Siren sends it: siren apps requests --follow --base-url ${UAT}\n`);
+    expect(h.out()).toContain(`\n  2  siren apps requests --follow --base-url ${UAT}\n`);
   });
 
   it('points $schema at the versioned schema on unpkg, which resolves with or without a local install, and the package ships that file', async () => {

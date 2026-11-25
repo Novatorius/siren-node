@@ -32,15 +32,14 @@ describe('apps-sdk-followups-1: an archived item', () => {
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const lines = h.out().split('\n');
-    expect(lines).toContain(ARCHIVED_LINE);
+    expect(lines.some((line) => /^  notify-crm +app:1 · Post-conversion action · archived$/.test(line)), h.out()).toBe(true);
     // The capture predates the payout kind's new word, so Siren answered the old one.
-    expect(lines).toContain('  app:2  fulfillmentMethod  acme-ledger  Acme ledger');
-    expect(lines).toContain(
-      'An archived feature is one siren.app.json no longer names while a record still selects it. ' +
-        'Siren keeps it so that record still points at it, never calls it, and deletes it once nothing selects it. ' +
-        'To bring it back, name it in siren.app.json again with the same kind and key, and run siren apps apply.',
+    expect(lines.some((line) => /^  acme-ledger +app:2 · fulfillmentMethod$/.test(line)), h.out()).toBe(true);
+    expect(h.out().replace(/\n  /g, ' ')).toContain(
+      'Siren keeps an archived feature while a record selects it, and never calls it. ' +
+        'Name it in siren.app.json again and run siren apps apply to bring it back.',
     );
-    expect(h.out().match(/An archived feature is/g)).toHaveLength(1);
+    expect(h.out().match(/keeps an archived feature/g)).toHaveLength(1);
   });
 
   it('keeps the target flags in the apply hint, and names the file as it was given', async () => {
@@ -48,7 +47,7 @@ describe('apps-sdk-followups-1: an archived item', () => {
     h.signedIn();
     h.write('my.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', 'my.app.json', '--sandbox', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain('name it in my.app.json again with the same kind and key, and run siren apps apply my.app.json --sandbox.');
+    expect(h.out().replace(/\n  /g, ' ')).toContain('Name it in my.app.json again and run siren apps apply my.app.json --sandbox to bring it back.');
   });
 
   it('says nothing about archiving when no item is archived', async () => {

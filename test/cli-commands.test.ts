@@ -394,7 +394,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`, `GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
-    expect(h.printed()).toContain(`siren apps rotate-key ${KEY}`);
+    expect(h.printed().replace(/\n  /g, " ")).toContain(`siren apps rotate-key ${KEY}`);
   });
 
   it('prints each problem in the app file with its line, and sends nothing', async () => {
@@ -439,7 +439,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
       `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`,
     );
     expect(() => h.file('.env.sandbox')).toThrow();
-    expect(h.out()).toContain(envFile);
+    expect(h.out()).toContain(`Saved key ${RAW_KEY_2.slice(0, 16)}… in acme/.env.sandbox.`);
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
   });

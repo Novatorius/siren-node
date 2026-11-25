@@ -69,7 +69,7 @@ const LIVE_CASES: Case[] = [
       h.write('siren.app.json', exampleFile);
       h.write('.env.live', 'SIREN_API_KEY=sk_live_made_up\n');
     },
-    command: `name it in siren.app.json again with the same kind and key, and run siren apps apply${LIVE}`,
+    command: `siren apps apply${LIVE}`,
   },
   { name: 'apply with no app file', argv: ['apps', 'apply'], setup: (h) => h.signedIn(signedInLive), command: `siren apps init${LIVE}` },
   {
@@ -179,6 +179,6 @@ describe('apps-cli: every hint names a command the person can run as printed', (
     plain.signedIn();
     plain.write('siren.app.json', exampleFile);
     expect(await plain.run(['apps', 'apply', '--yes']), plain.err()).toBe(0);
-    expect(plain.out()).toContain(`siren apps rotate-key ${KEY} would save a new one here and revoke the one in use at once.`);
+    expect(plain.out().replace(/\n  /g, ' ')).toContain(`siren apps rotate-key ${KEY} would save a new one here and revoke the one in use.`);
   });
 });

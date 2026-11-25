@@ -38,7 +38,7 @@ describe('apps-sdk-container item 3: a key-only app from the file', () => {
     expect(bodyOf(h.http.requests.at(-1))).toEqual({ name: 'Acme', scopes: ['records:programs:read'] });
     const lines = h.file('.env.sandbox').trimEnd().split('\n');
     expect(lines).toEqual([`SIREN_BASE_URL=${SANDBOX_BASE_URL}`, `SIREN_API_KEY=${RAW_KEY}`]);
-    expect(h.out()).toContain(`Key ${RAW_KEY.slice(0, 16)} is in ${join(h.cwd, '.env.sandbox')}.`);
+    expect(h.out()).toMatch(new RegExp(`\\n  Key +${RAW_KEY.slice(0, 16)}… in \\.env\\.sandbox\\n`));
     expect(h.printed()).not.toContain(RAW_KEY);
   });
 
@@ -48,13 +48,13 @@ describe('apps-sdk-container item 3: a key-only app from the file', () => {
     h.write('.env.sandbox', `SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY}\n`);
     h.write('siren.app.json', appFile({ name: 'Acme', description: "Siren's example app.", url: '${SIREN_APP_URL}' }));
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain('  adds an address, with a new signing secret');
+    expect(h.out()).toContain('  + adds an address, with a new signing secret');
     expect(h.file('.env.sandbox').trimEnd().split('\n')).toEqual([
       `SIREN_BASE_URL=${SANDBOX_BASE_URL}`,
       `SIREN_API_KEY=${RAW_KEY}`,
       `SIREN_SIGNING_SECRET=${SIGNING_SECRET}`,
     ]);
-    expect(h.out()).toContain(`Its new signing secret is in ${join(h.cwd, '.env.sandbox')}.`);
+    expect(h.out()).toMatch(/\n  Secret +the new signing secret in \.env\.sandbox\n/);
     expect(h.printed()).not.toContain(SIGNING_SECRET);
   });
 
@@ -95,7 +95,7 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/${KEY}`]);
-    expect(h.out()).toBe(`${KEY} on ${SANDBOX_BASE_URL} already matches siren.app.json, so nothing was sent.\n`);
+    expect(h.out()).toBe(`${KEY} already matches siren.app.json. Nothing to send.\n`);
     expect(() => h.file('.env.sandbox')).toThrow();
     expect(h.credentials().sessions[SANDBOX_BASE_URL]?.envFiles).toBeUndefined();
   });
@@ -126,16 +126,16 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
     const out = h.out();
     for (const line of [
-      `Applying siren.app.json changes ${KEY} on ${SANDBOX_BASE_URL}:`,
-      '  name: Acme from the dashboard becomes Acme',
-      '  description changes',
-      '  moves the address to a new url, keeping its signing secret',
-      '  events: removes sale.created',
-      '  key scopes: removes event:sale',
-      '  changes feature notify-crm, Post-conversion action (postConversionAction): name',
-      '  brings back the archived feature acme-ledger, Payout method (payoutMethod)',
-      '  removes feature added-in-dashboard, Post-conversion action (postConversionAction): 2 records select it, so Siren archives it and never calls it',
-      '  removes feature unused, Post-conversion action (postConversionAction): nothing selects it, so Siren deletes it',
+      `Plan  ${KEY} → Acme (3), sandbox`,
+      '  ~ name: Acme from the dashboard becomes Acme',
+      '  ~ description changes',
+      '  ~ moves the address to a new url, keeping its signing secret',
+      '  ~ events: removes sale.created',
+      '  ~ key scopes: removes event:sale',
+      '  ~ changes feature notify-crm, Post-conversion action (postConversionAction): name',
+      '  ~ brings back the archived feature acme-ledger, Payout method (payoutMethod)',
+      '  - removes feature added-in-dashboard, Post-conversion action (postConversionAction): 2 records select it, so Siren archives it and never calls it',
+      '  - removes feature unused, Post-conversion action (postConversionAction): nothing selects it, so Siren deletes it',
     ]) {
       expect(out, line).toContain(`${line}\n`);
     }
@@ -170,10 +170,10 @@ describe('apps-sdk-container item 4: apply shows what it will change and asks', 
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.prompts).toEqual([]);
     expect(h.out()).toContain(
-      `${KEY} is new on ${SANDBOX_BASE_URL}. Applying siren.app.json:\n` +
-        '  makes the app with a key, an address and 2 features\n' +
-        '  adds feature notify-crm, Post-conversion action (postConversionAction), named Tell the CRM\n' +
-        '  adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n',
+      `Plan  ${KEY} → Acme (3), sandbox\n\n` +
+        '  + makes the app with a key, an address and 2 features\n' +
+        '  + adds feature notify-crm, Post-conversion action (postConversionAction), named Tell the CRM\n' +
+        '  + adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n',
     );
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
   });
@@ -210,7 +210,7 @@ describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
     expect(h.prompts[0]).toBe('Rotate it in Acme (3), sandbox? [y/N] ');
     expect(h.paths()).toEqual([`POST /apps/${KEY}/secret/rotate`]);
     expect(h.file('.env.sandbox')).toBe(OLD.replace(SIGNING_SECRET, NEW_SECRET));
-    expect(h.out()).toContain(`Its new signing secret is in ${join(h.cwd, '.env.sandbox')}.`);
+    expect(h.out()).toContain('Saved the new signing secret in .env.sandbox.');
     expect(h.printed()).not.toContain(NEW_SECRET);
   });
 
@@ -281,8 +281,8 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.out()).toContain('  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM  requires Pro\n');
-    expect(h.out()).toContain('  events  obligation.approved  requires Pro, so Siren does not send them\n');
+    expect(h.out()).toMatch(/\n  notify-crm +app:11 · Post-conversion action  requires Pro\n/);
+    expect(h.out()).toMatch(/\n  Events +obligation\.approved  requires Pro, so Siren does not send them\n/);
   });
 
   it('apply warns when the file names scopes and the app holds no key, and names the command that makes one', async () => {
@@ -331,7 +331,7 @@ describe('apps-sdk-container item 7: a person reads feature, never item', () => 
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(await h.run(['apps', 'delete', KEY, '--yes'])).toBe(1);
     const printed = h.printed();
-    expect(printed).toContain('An archived feature is one siren.app.json no longer names');
+    expect(printed).toContain('Siren keeps an archived feature while a record selects it');
     expect(printed).toContain('Records still select its features');
     expect(printed.replace(/app:\d+/g, '')).not.toMatch(/\bitems?\b/i);
   });
