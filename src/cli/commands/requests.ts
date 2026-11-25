@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { AppErrorCode, ConflictError, ErrorCode, NotFoundError, SirenError, appErrorCode } from '../../errors';
+import { AppErrorCode, BadRequestError, ConflictError, ErrorCode, NotFoundError, SirenError, ValidationError, appErrorCode } from '../../errors';
 import type { App, AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument, orgNamed } from './apply';
@@ -9,7 +9,7 @@ import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { REPORT_WIDTH, clean, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
-import { CliRefusal, CliUsageError } from '../targets';
+import { CliRefusal, CliUsageError, hostName } from '../targets';
 
 /*
  * `siren apps requests`, `answer` and `resend`: what Siren sent the
@@ -29,6 +29,9 @@ const REQUEST_PREFIX = /^(?:apr_)?[0-9a-f]{4,32}$/;
 /** How many characters of a request id the tool shows, and every command takes. */
 const SHORT_ID = 8;
 
+/** A whole request id's length: `apr_` and 32 hex characters. */
+const APP_REQUEST_ID_LENGTH = 36;
+
 /**
  * The request id or the start of one that a command line names, or
  * `CliUsageError` in the tool's words, so the command answers 2 and sends
@@ -47,60 +50,74 @@ export function shortId(id: string): string {
   return id.replace(/^apr_/, '').slice(0, SHORT_ID);
 }
 
-/** The most requests one page of `GET /apps/requests` holds (ListAppRequests::MAX_LIMIT). */
-const PAGE_LIMIT = 100;
+/** The most matches Siren answers for `idPrefix` (ListAppRequests::PREFIX_LIMIT): two tell one from several. */
+const PREFIX_LIMIT = 2;
 
 /**
- * The most pages a short id's search reads, 1000 requests, before it asks
- * for the whole id. Each page is a call one of Siren Cloud's workers
- * serves in turn, so the search stays short. A prefix lookup on Siren's
- * side would lift this.
+ * The ids of the requests that start with `start`, from one
+ * `GET /apps/requests?idPrefix=` call, at most {@link PREFIX_LIMIT}. It
+ * answers `undefined` for a Siren that doesn't read `idPrefix`, one from
+ * before feat/apps 76d5bbdf83: it refuses the param with 400 or 422, or
+ * ignores it and answers its latest requests, more than two or any that
+ * don't start with `start`. Two or fewer that all match from such a Siren
+ * are every request it holds, so they are the answer either way.
  */
-const SEARCH_PAGES = 10;
+async function requestsStartingWith(run: CommandContext, start: string): Promise<string[] | undefined> {
+  let rows: AppRequestRecord[];
+  try {
+    rows = await run.siren().apps.requests.list({ idPrefix: `apr_${start}` });
+  } catch (error) {
+    if (error instanceof BadRequestError || error instanceof ValidationError) return undefined;
+    throw error;
+  }
+  if (rows.length > PREFIX_LIMIT || rows.some((row) => !row.id.startsWith(`apr_${start}`))) return undefined;
+  return rows.map((row) => row.id);
+}
 
 /**
- * The whole id for `typed`, a whole id or its start, after a search that
- * covers the whole organization. It pages through `GET /apps/requests`
- * 100 at a time, newest first, each page before the last id of the one
- * before, until a page holds fewer than 100. A start that matches several
- * requests is refused with the list of them, never settled by picking
- * one. An organization with more than {@link SEARCH_PAGES} pages is
- * refused too, since an older request could start the same way, and the
- * command must not act on the wrong one.
+ * The whole id for `typed`, a whole id or its start. A start takes one
+ * call, {@link requestsStartingWith}: one match is the request, none or
+ * two are refused, and two are listed with "and maybe more", since Siren
+ * answers two at most. A Siren that can't find a request by the start of
+ * its id gets a refusal that asks for the whole id, which its list prints.
  */
 async function requestIdFor(run: CommandContext, typed: string, org: string): Promise<string> {
   if (REQUEST_ID.test(typed)) return typed;
   const start = typed.replace(/^apr_/, '');
-  const siren = run.siren();
-  const rows: AppRequestRecord[] = [];
-  let whole = false;
-  let before: string | undefined;
-  for (let page = 0; page < SEARCH_PAGES; page++) {
-    const some = await siren.apps.requests.list({ limit: PAGE_LIMIT, ...(before === undefined ? {} : { before }) });
-    rows.push(...some);
-    if (some.length < PAGE_LIMIT) {
-      whole = true;
-      break;
-    }
-    before = some.at(-1)!.id;
-  }
-  const ids = [...new Set(rows.map((row) => row.id).filter((id) => id.startsWith(`apr_${start}`)))];
-  if (ids.length > 1) {
-    throw new CliRefusal(`${ids.length} requests start with ${start}.`, {
-      why: `They are ${ids.map((id) => shortIdOf(id, start)).join(', ')}, so nothing was sent.`,
-      fixText: 'Give more of the id.',
+  const ids = await requestsStartingWith(run, start);
+  if (ids === undefined) {
+    throw new CliRefusal(`${hostName(run.target.baseUrl)} can't find a request by the start of its id.`, {
+      why: 'Siren finds one that way from feat/apps 76d5bbdf83, and this one is older.',
+      fixText: `Give the whole id, apr_ and 32 characters, which ${run.command('apps requests')} prints.`,
     });
   }
-  if (!whole) {
-    throw new CliRefusal(`The tool can't be sure ${start} names one request.`, {
-      why: `${org} has more than 1000 requests, more than a short id searches.`,
-      fixText: 'Give the whole id, apr_ and 32 characters, which the list prints.',
+  if (ids.length > 1) {
+    throw new CliRefusal(`${start} starts more than one request.`, {
+      why: `It starts ${ids.map((id) => shortIdOf(id, start)).join(', ')} and maybe more, so nothing was sent.`,
+      fixText: 'Give more of the id.',
     });
   }
   if (ids.length === 0) {
     throw new CliRefusal(`${org} has no request that starts with ${start}.`, { why: 'Siren found none, so nothing was sent.', fix: run.command('apps requests'), fixWords: 'to list the latest' });
   }
   return ids[0]!;
+}
+
+/** How a command prints a request id: short, or whole on a Siren that can't find a request by its start. */
+type IdLabel = (id: string) => string;
+
+const whole: IdLabel = (id) => id;
+
+/**
+ * How to print request ids against this Siren: {@link shortId} when one
+ * `idPrefix` call for `sample`'s short id finds it, and whole ids when it
+ * can't, so the tool never prints a short id that no command could find.
+ * A start the person typed was found that way already, so it costs no call.
+ */
+async function idLabelFor(run: CommandContext, sample: string, typed?: string): Promise<IdLabel> {
+  if (typed !== undefined && !REQUEST_ID.test(typed)) return shortId;
+  const ids = await requestsStartingWith(run, shortId(sample)).catch(() => undefined);
+  return ids?.length === 1 && ids[0] === sample ? shortId : whole;
 }
 
 /** Enough of `id` to tell it from the others that start with `start`. */
@@ -172,8 +189,10 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   };
 
   const zone = io.env.TZ;
+  // Short ids until a lookup shows this Siren can't find one, then whole ones.
+  let label: IdLabel = shortId;
   const columns: Column[] = [
-    { header: 'ID', cap: SHORT_ID, cell: (row) => out.dim(shortId(row.id)) },
+    { header: 'ID', cap: SHORT_ID, cell: (row) => out.dim(label(row.id)) },
     { header: 'WHEN', cap: 12, cell: (row) => when(row.createdAt, zone) },
     { header: 'APP', cap: 18, cell: (row) => clean(appsById.get(row.appId)?.key ?? `app ${row.appId}`) },
     { header: 'FEATURE', cap: 18, cell: (row) => clean(kindName(row.kind).replace(/ action$/, '')) },
@@ -198,12 +217,14 @@ export async function appsRequests(input: CommandInput): Promise<number> {
       } else run.print(attention ? `Nothing needs you in ${org}.` : `No requests in ${org} yet.`);
       return 0;
     }
+    label = await idLabelFor(run, rows.at(-1)!.id);
+    if (label === whole) columns[0]!.cap = APP_REQUEST_ID_LENGTH;
     const count = `${rows.length} ${rows.length === 1 ? 'request' : 'requests'}`;
     run.print(attention ? `${out.bold(count)} ${out.amber(rows.length === 1 ? 'needs you' : 'need you')} in ${org}` : `${out.bold(count)} in ${org}`);
     run.print('');
     const shown = fitting(columns, rows, width, false);
     for (const line of out.table(shown.map((column) => column.header), rows.map((row) => shown.map((column) => cut(column.cell(row), column.cap))), width)) run.print(line);
-    const newest = shortId(rows.at(-1)!.id);
+    const newest = label(rows.at(-1)!.id);
     run.print('');
     const one = out.command(run.command(`apps requests ${newest}`));
     run.print(out.next(attention ? `${one} shows it, and ${out.command(run.command(`apps resend ${newest}`))} sends it again.` : `${one} shows one.`));
@@ -216,7 +237,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   const following = () => undefined;
   io.signal?.addEventListener('abort', following);
   if (!json) io.stderr(`${styleFor(io, 'stderr', values).dim(`Watching ${org} for requests. Ctrl-C stops.`)}\n`);
-  const shown = fitting(columns, [], width, true);
+  let shown: Column[] = [];
   try {
     for (let poll = 1; ; poll += 1) {
       if (poll > 1) await run.recheckEdition();
@@ -229,6 +250,9 @@ export async function appsRequests(input: CommandInput): Promise<number> {
         }
         await appOf(row);
         if (!header) {
+          label = await idLabelFor(run, row.id);
+          if (label === whole) columns[0]!.cap = APP_REQUEST_ID_LENGTH;
+          shown = fitting(columns, [], width, true);
           run.print(out.dim(padded(shown.map((column) => column.header), shown)));
           header = true;
         }
@@ -425,13 +449,15 @@ async function showRequest(input: CommandInput, typed: string): Promise<number> 
     for (const line of dataLines(out, data, 2)) run.print(line);
   }
 
-  const short = shortId(id);
+  // An answered or applied request prints no tip, so it needs no lookup.
+  if (request.status === 'answered' || request.status === 'applied') return 0;
+  const short = (await idLabelFor(run, id, start))(id);
   const resend = `${out.command(run.command(`apps resend ${short}`))} sends it again.`;
   if (request.status === 'needs_attention') {
     run.print('');
     run.print(out.next(`${out.command(run.command(`apps answer ${short} --body '{"outcome":"…"}'`))} answers it.`));
     run.print(out.next(resend));
-  } else if (request.status !== 'answered' && request.status !== 'applied') {
+  } else {
     run.print('');
     run.print(out.next(resend));
   }
@@ -477,7 +503,7 @@ export async function appsAnswer(input: CommandInput): Promise<number> {
     throw answerRefusal(run, error);
   }
   const out = styleFor(io, 'stdout', values);
-  const short = shortId(id);
+  const short = (await idLabelFor(run, id, start))(id);
   if (receipt.duplicate) {
     run.print(out.success(`Siren already had this answer for ${out.bold(short)}. Nothing changed.`));
     return 0;
@@ -505,7 +531,7 @@ export async function appsResend(input: CommandInput): Promise<number> {
     throw error;
   }
   const out = styleFor(input.io, 'stdout', input.values);
-  const short = shortId(id);
+  const short = (await idLabelFor(run, id, start))(id);
   run.print(
     out
       .report({

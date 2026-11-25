@@ -76,10 +76,11 @@ const ONE_ID = 'apr_e221f712e2dd08c2daa566d3ac5ce340';
 
 describe('apps-sdk-followups-1: siren apps requests <id> reads the one request', () => {
   it('reads it with GET /apps/requests/{id}, and shows its state and why, the data Siren sent, and that a tell takes no answer', async () => {
-    const h = harness([renamedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
+    // The last call is the idPrefix lookup that shows the tip's short id finds it (CLI pass 3, must-fix 1).
+    const h = harness([renamedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, []), reply(200, { requests: [{ id: ONE_ID }], total: 1 })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
+    expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries', 'GET /apps/requests']);
     const out = h.out();
     expect(out.split('\n')[0]).toBe(ONE_ID);
     expect(out).toContain('  State     needs attention: Could not connect to the host.\n');
@@ -113,7 +114,9 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     const h = harness([renamedReply(ONE), reply(200, []), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.paths()).not.toContain('GET /apps/requests');
+    // It reads no list to find it. The one list call is the idPrefix lookup for the tip's id.
+    const lists = h.http.requests.filter((request) => new URL(request.url).pathname.endsWith('/apps/requests'));
+    expect(lists.map((request) => [...new URL(request.url).searchParams.keys()])).toEqual([['idPrefix']]);
   });
 
   it("refuses a request the organization does not have in one line that says where to see the latest, with the target flags", async () => {

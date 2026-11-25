@@ -50,7 +50,8 @@ describe('demo fix 2: apps requests shows a request that needs attention, howeve
   });
 
   it('shows it in the list for every app too, once', async () => {
-    const h = harness([reply(200, [appRecord()]), reply(200, { requests: [attention, ...recent.slice(0, 2)] }), reply(200, { requests: [attention] })]);
+    // The last is the idPrefix lookup for the newest, which shows the short ids find a request.
+    const h = harness([reply(200, [appRecord()]), reply(200, { requests: [attention, ...recent.slice(0, 2)] }), reply(200, { requests: [attention] }), reply(200, { requests: [recent[1]], total: 1 })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
     expect(h.out().split('\nec16a240')).toHaveLength(2);
