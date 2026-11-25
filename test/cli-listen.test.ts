@@ -206,7 +206,7 @@ describe('siren listen', () => {
     const local = await handler(() => ({ status: 200, body: '{}' }));
     const fromFile = harness([opened(), polled([]), closed()], stopAtFirstWait);
     fromFile.signedIn();
-    fromFile.write('siren.app.json', JSON.stringify({ apps: { [KEY]: { name: 'Acme', url: local.url, features: { 'acme-ledger': { kind: 'payoutMethod', name: 'Ledger' } } } } }));
+    fromFile.write('siren.app.json', JSON.stringify({ version: 1, apps: { [KEY]: { name: 'Acme', url: local.url, features: { 'acme-ledger': { kind: 'payoutMethod', name: 'Ledger', currencies: ['USD'] } } } } }));
     expect(await fromFile.run(['listen']), fromFile.err()).toBe(0);
     expect(bodyOf(fromFile.http.requests[0])).toEqual({ app: KEY, forwardTo: local.url });
   });
@@ -214,7 +214,7 @@ describe('siren listen', () => {
   it('applies an app with SIREN_APP_URL unset on a sandbox, saves its key and secret, and names siren listen next', async () => {
     const rawKey = `sk_test_${'0a'.repeat(32)}`;
     const app = appRecord({ apiKeyPrefix: rawKey.slice(0, 16) });
-    const file = JSON.stringify({ apps: { [KEY]: { name: 'Acme', url: '${SIREN_APP_URL}', features: { 'acme-ledger': { kind: 'payoutMethod', name: 'Ledger' } } } } });
+    const file = JSON.stringify({ version: 1, apps: { [KEY]: { name: 'Acme', url: '${SIREN_APP_URL}', features: { 'acme-ledger': { kind: 'payoutMethod', name: 'Ledger', currencies: ['USD'] } } } } });
     const h = harness([appMissing(), reply(201, { ...app, rawKey, signingSecret: SECRET })]);
     h.signedIn();
     h.write('siren.app.json', file);

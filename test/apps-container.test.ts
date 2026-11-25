@@ -54,11 +54,9 @@ describe('apps-sdk-container: declaring from a file', () => {
     expect(declared.signingSecret).toBe(SECRET);
   });
 
-  it('refuses features with no url, the old payout kind, items in place of features, and a reserved key, before sending', async () => {
+  it('refuses the old payout kind, items in place of features, and a reserved key, before sending', async () => {
     const feature = { kind: FeatureKind.PayoutMethod, key: 'ledger', name: 'Ledger', currencies: ['USD'] };
     const cases: Array<[string, DeclareAppParams, RegExp]> = [
-      [KEY, { name: 'Acme', features: [feature] }, /needs a url for an app with features/],
-      [KEY, { name: 'Acme', url: null, features: [feature] }, /needs a url for an app with features/],
       [KEY, { name: 'Acme', url: 'https://acme.example', features: [{ ...feature, kind: 'fulfillmentMethod' as never }] }, /payoutMethod/],
       [KEY, { name: 'Acme', url: 'https://acme.example', items: [feature] } as never, /does not take items\. Siren calls an app's features "features" now\. Send them under features\./],
       ...RESERVED_APP_KEYS.map((reserved): [string, DeclareAppParams, RegExp] => [reserved, { name: 'Acme' }, /never requests, events, scopes, kinds/]),
@@ -70,6 +68,13 @@ describe('apps-sdk-container: declaring from a file', () => {
       expect((error as Error).message).toMatch(message);
       expect(http.requests).toHaveLength(0);
     }
+  });
+
+  it('sends features with no url, since a sandbox takes them for siren listen and live refuses them', async () => {
+    const { http, apps: resource } = apps([reply(200, app)]);
+    await resource.declare(KEY, { name: 'Acme', features: [{ kind: FeatureKind.PayoutMethod, key: 'l', name: 'L', currencies: ['USD'] }] });
+    expect(http.requests).toHaveLength(1);
+    expect(bodyOf(http.requests[0])).not.toHaveProperty('url');
   });
 
   it('sends FeatureKind.PayoutMethod as payoutMethod, the value Siren stores, and has no old alias', async () => {

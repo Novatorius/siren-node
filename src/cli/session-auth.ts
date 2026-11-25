@@ -1,4 +1,4 @@
-import { ConnectionError, SirenError, UnexpectedResponseError, errorFromResponse } from '../errors';
+import { ConnectionError, RateLimitError, SirenError, UnexpectedResponseError, errorFromResponse } from '../errors';
 import { HttpClientError } from '../http';
 import type { HttpClient, HttpResponse } from '../http';
 import type { CliIo } from './io';
@@ -81,6 +81,29 @@ export interface RegisteredOrg {
   emailConfirmation?: EmailConfirmationWindow;
 }
 
+/** What `POST /auth/cli/code` answers, in the tool's names. */
+export interface DeviceCode {
+  /** The secret the tool polls with. Never printed. */
+  deviceCode: string;
+  /** The short code the person checks on the page, such as `BCDF-GHJK`. */
+  userCode: string;
+  /** The dashboard's approval page with the code filled in. */
+  page: string;
+  expiresInSeconds: number;
+  intervalSeconds: number;
+}
+
+/** What `GET /personal-tokens/current` answers about the token in use. */
+export interface PersonalToken {
+  id: number;
+  name: string;
+  lastFour: string;
+  /** ISO 8601, or null when Siren gave none. */
+  expiresAt: string | null;
+  user: { id: number; email: string; role: string };
+  org: Membership;
+}
+
 /** What `signup` sends. Siren refuses a sign-up without `acceptTerms`. */
 export interface RegisterOrgParams {
   orgName: string;
@@ -114,7 +137,7 @@ const EDITION_RETRIES = 1;
  * Fields of a session answer that hold a credential, in lower case with no
  * `_` or `-`. No error built from an answer carries their values.
  */
-const TOKEN_FIELDS: ReadonlySet<string> = new Set(['accesstoken', 'refreshtoken', 'verificationtoken', 'confirmationtoken', 'password']);
+const TOKEN_FIELDS: ReadonlySet<string> = new Set(['accesstoken', 'refreshtoken', 'verificationtoken', 'confirmationtoken', 'password', 'devicecode', 'token']);
 
 /**
  * Siren's session routes, called through an `HttpClient` the way the
@@ -181,6 +204,76 @@ export class SessionAuthClient {
       return { kind: 'choose-org', verificationToken: body.verificationToken, memberships };
     }
     return { kind: 'session', tokens: asTokens(body, '/auth/login'), memberships };
+  }
+
+  /**
+   * `POST /auth/cli/code`: a code for the browser sign-in (contract/cli-signin.md,
+   * section 1). Sent once. Refuses an answer whose page is not an http or
+   * https address, or whose code holds anything but letters, digits and
+   * dashes, since the tool prints both and may open the page.
+   */
+  async cliCode(machine: string): Promise<DeviceCode> {
+    const body = await this.send('POST', '/auth/cli/code', { machine });
+    if (!isObject(body)) throw unexpected('/auth/cli/code', 200);
+    const { device_code: deviceCode, user_code: userCode, verification_uri_complete: page, expires_in: expiresIn, interval } = body;
+    if (
+      !isFilled(deviceCode) ||
+      typeof userCode !== 'string' ||
+      !/^[A-Za-z0-9-]{1,32}$/.test(userCode) ||
+      typeof page !== 'string' ||
+      !isWebAddress(page) ||
+      typeof expiresIn !== 'number' ||
+      typeof interval !== 'number'
+    ) {
+      throw unexpected('/auth/cli/code', 200);
+    }
+    // The parsed form, which percent-encodes any character that could move the cursor when printed.
+    return { deviceCode, userCode, page: new URL(page).href, expiresInSeconds: expiresIn, intervalSeconds: interval };
+  }
+
+  /**
+   * `POST /auth/cli/token`: one poll. Answers the session once the person
+   * approved, the same shape `POST /auth/login` answers with an `orgId`.
+   * Siren's 400 answers (`authorization_pending`, `slow_down`,
+   * `access_denied`, `expired_token`, `invalid_grant`) raise the error
+   * `errorFromResponse` builds, with the code on `error.code` and
+   * `context.interval` on `error.data`. The device code never appears in an
+   * error.
+   */
+  async cliToken(deviceCode: string): Promise<LoginResult> {
+    const body = await this.send('POST', '/auth/cli/token', { device_code: deviceCode }, undefined, false, [deviceCode]);
+    const memberships = isObject(body) ? asMemberships(body.memberships) : null;
+    if (memberships === null) throw unexpected('/auth/cli/token', 200);
+    return { kind: 'session', tokens: asTokens(body, '/auth/cli/token'), memberships };
+  }
+
+  /** `GET /personal-tokens/current` with a personal access token as the bearer: the token describes itself. A read, so it retries. */
+  async personalToken(token: string): Promise<PersonalToken> {
+    const body = await this.send('GET', '/personal-tokens/current', undefined, token, true);
+    const person = isObject(body) ? body.user : undefined;
+    const org = isObject(body) ? body.organization : undefined;
+    if (
+      !isObject(body) ||
+      typeof body.id !== 'number' ||
+      typeof body.name !== 'string' ||
+      typeof body.lastFour !== 'string' ||
+      !isObject(person) ||
+      typeof person.id !== 'number' ||
+      typeof person.email !== 'string' ||
+      !isObject(org) ||
+      typeof org.orgId !== 'number' ||
+      typeof org.orgName !== 'string'
+    ) {
+      throw unexpected('/personal-tokens/current', 200);
+    }
+    return {
+      id: body.id,
+      name: body.name,
+      lastFour: body.lastFour,
+      expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : null,
+      user: { id: person.id, email: person.email, role: typeof person.role === 'string' ? person.role : '' },
+      org: { orgId: org.orgId, orgName: org.orgName, orgSlug: typeof org.orgSlug === 'string' ? org.orgSlug : '', role: typeof person.role === 'string' ? person.role : '' },
+    };
   }
 
   /** `POST /auth/select-org`, the second step for a person in several organizations. */
@@ -286,6 +379,16 @@ function unexpected(path: string, status: number): UnexpectedResponseError {
   return new UnexpectedResponseError(`Siren answered ${path} with a body the tool cannot read.`, { statusCode: status });
 }
 
+/** An absolute http or https address. */
+function isWebAddress(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 /** A JSON object, not an array or `null`. */
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -376,10 +479,10 @@ function scrub(value: unknown, secrets: readonly string[], depth = 0): unknown {
 }
 
 /**
- * How `siren login` proves who the person is. The first step has one,
- * {@link PasswordSignIn}. Device sign-in (slice 9) adds a second that shows
- * a code to approve in a browser and ends with the same {@link LoginResult},
- * so nothing after sign-in changes.
+ * How `siren login` proves who the person is: {@link DeviceSignIn}, a code
+ * approved in the browser, by default in a terminal, or
+ * {@link PasswordSignIn} with `--password` or `--password-stdin`. Both end
+ * with the same {@link LoginResult}, so nothing after sign-in changes.
  */
 export interface SignInMethod {
   signIn(auth: SessionAuthClient, io: CliIo, request: { email?: string; passwordFromStdin: boolean; orgId?: number }): Promise<LoginResult>;
@@ -422,4 +525,110 @@ export async function readPassword(io: CliIo, fromStdin: boolean): Promise<strin
   else throw new CliUsageError('Pass --password-stdin and send the password on standard input, since there is no terminal to ask in.');
   if (password === '') throw new CliRefusal('Siren needs a password, and none was given.');
   return password;
+}
+
+/** The longest wait between two polls, whatever interval Siren names, in seconds. */
+const MAX_POLL_SECONDS = 60;
+
+/**
+ * A code the person approves in the browser (RFC 8628, contract/cli-signin.md
+ * section 1). Asks Siren for a code with this machine's name, prints the
+ * short code and the approval page, opens the page when it can, then polls
+ * at the interval Siren sets until the person approves or denies, or the
+ * code expires. The device code is never printed.
+ *
+ * - `authorization_pending` waits `context.interval` seconds, and
+ *   `slow_down` waits the longer interval Siren names.
+ * - A network fault, a 5xx or a 429 waits and polls again, until the code's
+ *   life runs out, since the person may still be approving.
+ * - `access_denied`, `expired_token` and `invalid_grant` stop with one line.
+ * - Ctrl-C during a wait stops it, and nothing is kept.
+ */
+/** What the device login shows while it waits: the code and the link, then the wait, then how it ended. */
+export interface DeviceSignInView {
+  /** Shows the code and the page, and whether the browser opened it. */
+  show(code: DeviceCode, opened: boolean): void;
+  /** Waits `ms` before the next poll. */
+  wait(ms: number): Promise<void>;
+  /** The wait ended with no session. The tool prints why next. */
+  failed(): Promise<void>;
+}
+
+/** Plain lines on standard error, for a caller with no view of its own. */
+function plainView(io: CliIo): DeviceSignInView {
+  return {
+    show(code, opened) {
+      io.stderr(`${opened ? 'Your browser is open. Approve the code there.' : 'Open the link in your browser, and approve the code there.'}\n`);
+      io.stderr(`Code: ${code.userCode}\nLink: ${code.page}\nWaiting for approval...\n`);
+    },
+    wait: (ms) => io.sleep(ms),
+    failed: async () => undefined,
+  };
+}
+
+export class DeviceSignIn implements SignInMethod {
+  constructor(
+    private readonly login: string,
+    private readonly view?: DeviceSignInView,
+  ) {}
+
+  async signIn(auth: SessionAuthClient, io: CliIo): Promise<LoginResult> {
+    const code = await auth.cliCode(io.machine ?? 'this machine');
+    const opened = io.openUrl === undefined ? false : await io.openUrl(code.page).catch(() => false);
+    const view = this.view ?? plainView(io);
+    view.show(code, opened);
+    try {
+      return await this.poll(auth, io, code, view);
+    } catch (error) {
+      await view.failed();
+      throw error;
+    }
+  }
+
+  private async poll(auth: SessionAuthClient, io: CliIo, code: DeviceCode, view: DeviceSignInView): Promise<LoginResult> {
+    const deadline = io.now() + code.expiresInSeconds * 1000;
+    let wait = seconds(code.intervalSeconds);
+    for (;;) {
+      await view.wait(wait * 1000);
+      if (io.signal?.aborted) throw new CliRefusal('Stopped waiting for approval, so nothing was kept.');
+      if (io.now() >= deadline) throw this.expired();
+      try {
+        return await auth.cliToken(code.deviceCode);
+      } catch (error) {
+        const next = this.nextWait(error, wait);
+        if (next === null) throw this.refusal(error);
+        wait = next;
+      }
+    }
+  }
+
+  /** The seconds to wait before the next poll after `error`, or null when the poll should stop. */
+  private nextWait(error: unknown, wait: number): number | null {
+    if (error instanceof ConnectionError) return wait;
+    if (!(error instanceof SirenError)) return null;
+    const named = isObject(error.data) && typeof error.data.interval === 'number' ? seconds(error.data.interval) : undefined;
+    if (error.code === 'authorization_pending') return named ?? wait;
+    if (error.code === 'slow_down') return named ?? Math.min(wait + 5, MAX_POLL_SECONDS);
+    if (error instanceof RateLimitError) return seconds(Math.max(wait, error.retryAfter ?? wait));
+    if (error.statusCode !== undefined && error.statusCode >= 500) return wait;
+    return null;
+  }
+
+  /** The one line a poll that stops gets. Any other error is answered as it is. */
+  private refusal(error: unknown): unknown {
+    const code = error instanceof SirenError ? error.code : undefined;
+    if (code === 'access_denied') return new CliRefusal('The login was denied in the browser.', { why: 'Nothing was kept.' });
+    if (code === 'expired_token') return this.expired();
+    if (code === 'invalid_grant') return new CliRefusal('Siren no longer knows this code.', { fix: this.login, fixWords: 'again' });
+    return error;
+  }
+
+  private expired(): CliRefusal {
+    return new CliRefusal('The code expired before anyone approved it.', { fix: this.login, fixWords: 'again' });
+  }
+}
+
+/** An interval Siren named, held between 1 second and {@link MAX_POLL_SECONDS}. */
+function seconds(value: number): number {
+  return Number.isFinite(value) ? Math.min(Math.max(Math.ceil(value), 1), MAX_POLL_SECONDS) : 5;
 }

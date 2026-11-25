@@ -132,8 +132,10 @@ describe('apps-cli: logo animation v2, after the demo', () => {
     expect(HOOK_HOVER_LIFTS[HOOK_HOVER_LIFTS.length - 1]).toBe(0);
     const shadows = fake.writes.map((write) => /\u001b\[2m[^\u001b]*?(\u2824+)/.exec(write)?.[1]?.length).filter((width): width is number => width !== undefined);
     expect(new Set(shadows).size).toBeGreaterThan(1);
-    const rest = shadows[shadows.length - 1]!;
-    expect(Math.min(...shadows)).toBeLessThan(rest);
+    expect(Math.min(...shadows)).toBeLessThan(Math.max(...shadows));
+    // Alex after the demo: the shadow read as stray noise above the next output, so it goes once the logo settles.
+    const settled = fake.writes.filter((write) => BRAILLE.test(write)).at(-1) ?? '';
+    expect(settled).not.toContain('\u2824\u2824');
     const lifted = fake.writes.findIndex((write, at) => at > 0 && write.includes(HOOK_FRAMES[HOOK_FRAMES.length - 1]![3]!.trim()) === false && BRAILLE.test(write));
     expect(lifted).toBeGreaterThan(0);
     expect(fake.writes[fake.writes.length - 2] ?? '').toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]![3]!.trim());

@@ -1,0 +1,25 @@
+Log in by approving a code in your browser.
+
+USAGE
+  siren login [flags]
+
+FLAGS
+  --password          Log in with your email and password, with no browser
+  --password-stdin    Read the password from standard input, for scripts
+  --email <address>   The email for --password, asked when left out
+
+GLOBAL FLAGS
+  --sandbox           Use Siren's sandbox, whatever you logged in to last
+  --live              Log in to or change a live organization
+  --base-url <url>    Use another Siren, such as siren.example.com
+  --org <slug>        The organization to act in, when you have several
+  -q, --quiet         Skip the logo animation
+  --verbose           Show the detail behind an error
+  -h, --help          Show help for a command
+
+EXAMPLES
+  $ siren login
+  $ siren login --password
+
+LEARN MORE
+  Read the guide at https://github.com/Novatorius/siren-node#command-line-tool

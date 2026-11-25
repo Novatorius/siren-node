@@ -2,6 +2,7 @@ import { chmod, mkdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { HOOK_FRAMES, HOOK_FRAME_MS, HOOK_WIDTH } from './hook-frames';
 import type { CliIo, CliScreen } from './io';
+import { CliRefusal } from './targets';
 
 /**
  * Siren green, the dark theme's `--primary` in Siren's frontend
@@ -117,11 +118,18 @@ export interface LogoFrame {
   shadow: number;
 }
 
-/** The slide and grip, then the hover. The last is the still logo at rest over its shadow. */
+/**
+ * The slide and grip, then the hover. The last is the still logo at rest
+ * with no shadow, since a shadow left under a still logo reads as a stray
+ * line above whatever prints next.
+ */
 export function hookSequence(): LogoFrame[] {
   const last = HOOK_FRAMES[HOOK_FRAMES.length - 1] ?? [];
   const slide = HOOK_FRAMES.map((frame) => ({ rows: liftFrame(frame, 0), shadow: 0 }));
-  const hover = HOOK_HOVER_LIFTS.map((lift) => ({ rows: liftFrame(last, lift), shadow: shadowWidth(lift) }));
+  const hover = HOOK_HOVER_LIFTS.map((lift, at) => ({
+    rows: liftFrame(last, lift),
+    shadow: at === HOOK_HOVER_LIFTS.length - 1 ? 0 : shadowWidth(lift),
+  }));
   return [...slide, ...hover];
 }
 
@@ -332,4 +340,148 @@ export async function firstRun(io: CliIo, flags: HookFlags, version: string): Pr
   if (await hasPlayed(io)) return true;
   const end = await playCard(io, flags, { version, where: [], next: [], footer: 'Run siren --help any time to see every command.' });
   return end !== 'interrupted';
+}
+
+/** What the login screen shows beside the logo while it waits for approval in the browser. */
+export interface LoginCard {
+  version: string;
+  code: string;
+  link: string;
+  /** True when the tool opened the link in the browser itself. */
+  opened: boolean;
+}
+
+/** The logo during `siren login`. Build it with {@link startLoginStage}. */
+export interface LoginStage {
+  /** Waits `ms` while the halves float apart and the spinner turns. Ctrl-C stops the login. */
+  wait(ms: number): Promise<void>;
+  /** The halves slide in and grip, the logo floats and settles, and `line` takes the spinner's place with a ✓. */
+  approved(line: string): Promise<void>;
+  /** The halves drift away, and the spinner's line clears for the ✗ line the tool prints next. */
+  failed(): Promise<void>;
+}
+
+/** The frame the halves float around while login waits: apart, before they meet. */
+const APART = 6;
+
+/** How far from {@link APART} the halves drift on each frame while login waits, so they float without meeting. */
+const APART_DRIFT: readonly number[] = [0, 0, 1, 1, 2, 2, 2, 1, 1, 0, 0, -1, -1, -2, -2, -2, -1, -1];
+
+/** The spinner beside "Waiting for approval", one character a frame. */
+const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+/** The words under the wordmark while login waits. */
+function loginLines(card: LoginCard): string[] {
+  return [
+    '',
+    card.opened ? 'Your browser is open. Approve the code there.' : 'Open the link, and approve the code there.',
+    '',
+    `Code   ${card.code}`,
+    `Link   ${card.link}`,
+    '',
+    'Waiting for approval',
+  ];
+}
+
+/**
+ * Starts the login screen when the logo animation may play here and the
+ * logo and its text fit side by side or stacked, else answers null, and the
+ * tool prints plain lines. The text is all drawn at once. The halves float
+ * apart while login waits. Any key stills them, and Ctrl-C stops the login.
+ */
+export function startLoginStage(io: CliIo, flags: HookFlags, card: LoginCard): LoginStage | null {
+  const screen = io.screen;
+  if (hookSkip(screen, io.env, flags) !== null || screen === undefined || screen.size === null) return null;
+  const lines = loginLines(card);
+  const fits = hookLayout(screen.size, { version: card.version, where: lines, next: [], footer: '' });
+  if (fits === null) return null;
+  const color = greenFor(io.env);
+  const mark = `${color}${BOLD}Siren${RESET} ${card.version}`;
+  const spinAt = lines.length; // The spinner's line, counted with the wordmark as line 0.
+  const text = [mark, ...lines];
+  const top = fits === 'side' ? Math.max(0, Math.floor((HOOK_ROWS - text.length) / 2)) : 0;
+  const besideRows = fits === 'side' ? Math.max(HOOK_ROWS, top + text.length) : HOOK_ROWS;
+  const below = fits === 'stacked' ? ['', ...text] : [];
+  const height = besideRows + below.length;
+  const frameAt = (index: number): LogoFrame => ({ rows: liftFrame(HOOK_FRAMES[Math.max(0, Math.min(index, HOOK_FRAMES.length - 1))] ?? [], 0), shadow: 0 });
+  const blank: LogoFrame = { rows: liftFrame(HOOK_FRAMES[0] ?? [], 0).map((row) => ' '.repeat([...row].length)), shadow: 0 };
+
+  let status = `${color}${SPIN[0]}${RESET} Waiting for approval`;
+  const lineOf = (index: number) => (index === spinAt ? status : text[index] ?? '');
+  const draw = (frame: LogoFrame): string => {
+    let out = '';
+    for (let row = 0; row < height; row++) {
+      if (row >= besideRows) {
+        const index = row - besideRows - 1;
+        const line = index < 0 ? '' : lineOf(index);
+        out += `${CLEAR_LINE}${line === '' ? '' : `${INDENT}${line}`}\n`;
+        continue;
+      }
+      const logo = row < HOOK_ROWS - 1 ? `${color}${frame.rows[row] ?? ''.padEnd(HOOK_WIDTH)}${RESET}` : ' '.repeat(HOOK_WIDTH);
+      const index = row - top;
+      const beside = fits === 'side' && index >= 0 && index < text.length ? lineOf(index) : '';
+      out += `${CLEAR_LINE}${INDENT}${logo}${beside === '' ? '' : `${GAP}${beside}`}\n`;
+    }
+    return out;
+  };
+  const redraw = (frame: LogoFrame) => screen.write(`\u001b[${height}A${draw(frame)}`);
+
+  const keys: { pressed: string | null } = { pressed: null };
+  screen.write(HIDE_CURSOR);
+  const forgetExit = screen.atExit(() => screen.write(`${RESET}${SHOW_CURSOR}`));
+  const stopListening = screen.listen((key) => {
+    keys.pressed ??= key;
+  });
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    stopListening?.();
+    screen.write(SHOW_CURSOR);
+    forgetExit();
+  };
+  let tick = 0;
+  let current = frameAt(APART);
+  screen.write(draw(current));
+
+  return {
+    async wait(ms) {
+      const ticks = Math.max(1, Math.ceil(ms / HOOK_FRAME_MS));
+      for (let step = 0; step < ticks; step++) {
+        await screen.wait(HOOK_FRAME_MS);
+        if (keys.pressed === CTRL_C) {
+          close();
+          throw new CliRefusal('Stopped waiting for approval, so nothing was kept.');
+        }
+        tick += 1;
+        if (keys.pressed === null) current = frameAt(APART + APART_DRIFT[tick % APART_DRIFT.length]!);
+        status = `${color}${SPIN[tick % SPIN.length]}${RESET} Waiting for approval`;
+        redraw(current);
+      }
+    },
+    async approved(line) {
+      if (closed) return;
+      status = `${color}✓${RESET} ${line}`;
+      const grip = hookSequence().slice(APART);
+      for (const frame of grip) {
+        if (keys.pressed !== null) break;
+        redraw(frame);
+        await screen.wait(HOOK_FRAME_MS);
+      }
+      redraw(hookSequence().at(-1)!);
+      close();
+      await rememberPlayed(io);
+    },
+    async failed() {
+      // Ctrl-C already gave the terminal back.
+      if (closed) return;
+      status = '';
+      for (let index = APART; index >= 0 && keys.pressed === null; index--) {
+        redraw(frameAt(index));
+        await screen.wait(HOOK_FRAME_MS);
+      }
+      redraw(blank);
+      close();
+    },
+  };
 }

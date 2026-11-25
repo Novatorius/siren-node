@@ -1,0 +1,24 @@
+Show what siren.app.json changes, ask, then declare the app and save its key
+beside the file.
+
+USAGE
+  siren apps apply [file] [flags]
+
+FLAGS
+  --yes               Skip the question. Needed with no terminal
+
+GLOBAL FLAGS
+  --sandbox           Use Siren's sandbox, whatever you logged in to last
+  --live              Log in to or change a live organization
+  --base-url <url>    Use another Siren, such as siren.example.com
+  --org <slug>        The organization to act in, when you have several
+  -q, --quiet         Skip the logo animation
+  --verbose           Show the detail behind an error
+  -h, --help          Show help for a command
+
+EXAMPLES
+  $ siren apps apply
+  $ siren apps apply --live --yes
+
+LEARN MORE
+  Read the guide at https://github.com/Novatorius/siren-node#command-line-tool

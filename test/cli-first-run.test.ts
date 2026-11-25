@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseAppFile } from '../src/cli/app-file';
 import { COMMANDS } from '../src/cli/run';
-import { resolveTarget } from '../src/cli/targets';
+import { LIVE_BASE_URL, resolveTarget } from '../src/cli/targets';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { AuthAnswers, EMAIL, PASSWORD, harness, session } from './cli-fakes';
@@ -32,21 +32,23 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     expect(h.credentials()).toMatchObject({ current: UAT });
     expect(await h.run(['orgs']), h.err()).toBe(0);
     expect(h.http.requests.at(-1)?.url.startsWith(UAT)).toBe(true);
-    expect(h.out()).toContain('* acme');
+    expect(h.out()).toMatch(/acme\s+Acme\s+admin/);
   });
 
   it('lets a flag or SIREN_BASE_URL win over the remembered Siren', async () => {
     const h = harness([AuthAnswers.oneOrg()], { edition: 'production', stdin: PASSWORD });
     await signInLive(h);
     expect(await h.run(['orgs', '--sandbox'])).toBe(1);
-    expect(h.err()).toContain(`You are not signed in to ${SANDBOX_BASE_URL}`);
-    expect(h.err()).toContain(`You are signed in to Acme on ${UAT}`);
+    // Alex after the demo: "Not logged in." in plain words, the API address only where it helps.
+    expect(h.err()).toContain('siren: Not logged in.');
+    expect(h.err()).toContain(`You are logged in to Acme on ${UAT}.`);
     expect(h.err()).toContain(`--base-url ${UAT}`);
 
     const other = harness([], { env: { SIREN_BASE_URL: 'https://other.example.com/siren/v1' } });
     other.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
     expect(await other.run(['whoami'])).toBe(1);
-    expect(other.err()).toContain('You are not signed in to https://other.example.com/siren/v1');
+    expect(other.err()).toContain('siren: Not logged in.');
+    expect(other.err()).toContain('\nSiren: other.example.com\n');
   });
 
   it('reads a live organization without --live, and still asks for --live before a write', async () => {
@@ -85,7 +87,7 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
   it('siren whoami exits 1 when signed out', async () => {
     const h = harness([]);
     expect(await h.run(['whoami'])).toBe(1);
-    expect(h.err()).toContain(`You are not signed in to ${SANDBOX_BASE_URL}. Run siren login first.`);
+    expect(h.err()).toBe('siren: Not logged in. Run siren login to log in.\n');
   });
 });
 
@@ -106,7 +108,7 @@ describe('cli pass 1, finding 3: bare siren, the apps group, help and typos', ()
     const signed = harness([]);
     signed.signedIn({ [SANDBOX_BASE_URL]: session({ baseUrl: SANDBOX_BASE_URL, orgSlug: 'acme' }) });
     expect(await signed.run([])).toBe(0);
-    expect(signed.out()).toContain(`Logged in as ${EMAIL} to Acme.`);
+    expect(signed.out()).toContain(`Logged in as ${EMAIL}.`);
     expect(signed.out()).toContain('Siren: sandbox.sirenaffiliates.com, a sandbox.');
     expect(signed.out()).toContain('siren apps requests --follow');
   });
@@ -115,19 +117,19 @@ describe('cli pass 1, finding 3: bare siren, the apps group, help and typos', ()
     for (const argv of [['apps'], ['apps', '--help'], ['help', 'apps']]) {
       const h = harness([]);
       expect(await h.run(argv), argv.join(' ')).toBe(0);
-      expect(h.out()).toContain('siren apps apply');
-      expect(h.out()).toContain('siren apps requests');
-      expect(h.out()).not.toContain('siren login');
+      expect(h.out()).toContain('  apps apply ');
+      expect(h.out()).toContain('  apps requests ');
+      expect(h.out()).not.toContain('  login ');
     }
   });
 
   it('takes siren help, siren help <command>, siren version and -v', async () => {
     const help = harness([]);
     expect(await help.run(['help'])).toBe(0);
-    expect(help.out()).toContain('Usage: siren <command>');
+    expect(help.out()).toContain('USAGE\n  siren <command> [flags]');
     const one = harness([]);
     expect(await one.run(['help', 'apps', 'apply'])).toBe(0);
-    expect(one.out()).toContain('Usage: siren apps apply');
+    expect(one.out()).toContain('USAGE\n  siren apps apply [file] [flags]');
     for (const argv of [['-v'], ['version']]) {
       const h = harness([]);
       expect(await h.run(argv)).toBe(0);
@@ -161,13 +163,13 @@ describe('cli pass 1, finding 7: each command explains its options and shows an 
       const h = harness([]);
       expect(await h.run([...command.split(' '), '--help']), command).toBe(0);
       const text = h.out();
-      expect(text, command).toContain(`Usage: siren ${command}`);
-      expect(text, command).toContain('Example:');
+      expect(text, command).toContain(`USAGE\n  siren ${command}`);
+      expect(text, command).toContain('EXAMPLES\n  $ siren ');
       for (const flag of ['--sandbox', '--live', '--base-url', '--quiet']) expect(text, `${command} ${flag}`).toContain(flag);
     }
     const login = harness([]);
     await login.run(['login', '--help']);
-    expect(login.out()).toMatch(/--org <slug or id>\s+\S/);
+    expect(login.out()).toMatch(/--password\s+\S/);
     expect(login.out()).toMatch(/--password-stdin\s+\S/);
   });
 });
@@ -180,7 +182,7 @@ describe('cli pass 1, finding 8: apps rotate is gone', () => {
     expect(h.err()).toContain('There is no command "apps rotate".');
     const help = harness([]);
     await help.run(['--help']);
-    expect(help.out()).not.toMatch(/siren apps rotate[ \n]/);
+    expect(help.out()).not.toMatch(/apps rotate[ \n]/);
   });
 });
 
@@ -206,7 +208,7 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     expect(features.map((feature) => feature.kind)).toEqual(['postConversionAction']);
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);
     expect(h.out()).toContain('.env');
-    expect(h.out()).toContain('Feature kinds');
+    expect(h.out()).toContain('Your editor completes them.');
     expect(h.out()).toContain('siren listen --forward-to localhost:<port>/<path>');
   });
 
@@ -229,10 +231,10 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
   });
 
   it('names the place once in a problem line', async () => {
-    const h = harness([]);
-    h.signedIn();
+    const h = harness([], { edition: 'production' });
+    h.signedIn({ [LIVE_BASE_URL]: session({ edition: 'production' }) });
     await h.run(['apps', 'init', '--key', APP_KEY]);
-    expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
+    expect(await h.run(['apps', 'apply', '--yes', '--live'])).toBe(1);
     expect(h.err()).toMatch(/siren\.app\.json:\d+:\d+: apps\.acme-payouts\.url needs the environment variable SIREN_APP_URL/);
     expect(h.err()).not.toContain('url: apps.');
     expect(h.err()).toContain('.env');
@@ -249,7 +251,7 @@ describe('cli pass 1, finding 6: the first apply says what comes next', () => {
     h.signedIn();
     await h.run(['apps', 'init', '--key', APP_KEY]);
     expect(await h.run(['apps', 'apply']), h.err()).toBe(0);
-    expect(h.prompts.at(-1)).toContain(`Make ${APP_KEY} on Acme, a sandbox organization?`);
+    expect(h.prompts.at(-1)).toBe(`Make ${APP_KEY} in Acme (3), sandbox? [y/N] `);
     expect(h.prompts.at(-1)).not.toContain('last write wins');
     expect(h.out()).toContain('https://acme.example');
     expect(h.printed()).not.toContain('token=abc');
@@ -300,7 +302,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
   it('says sign in to, not change, when login meets a live Siren without --live', async () => {
     const h = harness([], { edition: 'production', stdin: PASSWORD });
     expect(await h.run(['login', '--base-url', UAT, '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain(`${UAT} is a live Siren. Add --live to sign in to a live organization.`);
+    expect(h.err()).toContain(`${UAT} is a live Siren. Add --live to log in to a live organization.`);
     const help = harness([]);
     await help.run(['login', '--help']);
     expect(help.out()).not.toMatch(/--live\s+Change a live organization/);

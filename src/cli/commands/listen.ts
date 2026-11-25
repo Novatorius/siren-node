@@ -1,11 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { CallbackAccessTokenSource } from '../../auth/callback-access-token-source';
-import { createHttpTransport } from '../../client';
 import { ApiError, ConnectionError, SirenError, appErrorCode } from '../../errors';
 import { deleteRecord, writeRecord } from '../../resources/record-requests';
 import { APP_FILE_NAME, declarationFor, parseAppFile } from '../app-file';
 import { contextOf } from '../context';
+import { orgScope } from '../org';
 import type { CommandContext, CommandInput } from '../context';
 import { CliRefusal, CliUsageError } from '../targets';
 import { saveSecrets } from './apply';
@@ -242,15 +241,11 @@ export async function listen(input: CommandInput): Promise<number> {
   if (events !== undefined && events.length === 0) throw new CliUsageError('--events takes a comma list, such as app.request,sale.created.');
 
   const run = contextOf(input);
-  await run.signedIn();
-  const http = createHttpTransport({
-    accessToken: new CallbackAccessTokenSource(
-      () => run.accessToken(),
-      () => run.refresh(),
-    ),
-    httpClient: io.httpClient,
-    baseUrl: run.target.baseUrl,
-  });
+  // The organization comes from --org, SIREN_ORG, "org" in the app file, or the only one.
+  if (file !== undefined) run.appFilePath = file.path;
+  const session = await run.signedIn();
+  const scope = await orgScope(run, input, session, 'listen');
+  const { http } = scope;
   const emit = (object: Record<string, unknown>) => io.stdout(`${JSON.stringify(object)}\n`);
   const say = (line: string) => {
     if (!json) run.print(line);
@@ -271,7 +266,7 @@ export async function listen(input: CommandInput): Promise<number> {
   if (json) {
     emit({ type: 'session', id: opened.session.id, app: appKey, address, forwardTo: target, events: opened.session.events, replaced: opened.replaced });
   } else {
-    headline(run, appKey, target, opened, basename(envPath));
+    headline(run, appKey, scope.orgName, target, opened, basename(envPath));
   }
 
   const features = new Map<string, string>();
@@ -389,8 +384,7 @@ function endedBecause(error: unknown): string | undefined {
 }
 
 /** The block `siren listen` starts with. */
-function headline(run: CommandContext, appKey: string, target: string, opened: OpenedSession, envName: string): void {
-  const host = run.target.baseUrl.replace(/^https?:\/\//, '').replace(/\/siren\/v1$/, '');
+function headline(run: CommandContext, appKey: string, orgName: string, target: string, opened: OpenedSession, envName: string): void {
   const events = opened.session.events;
   const takes =
     events === null
@@ -398,7 +392,7 @@ function headline(run: CommandContext, appKey: string, target: string, opened: O
       : events.includes('app.request')
         ? `asks, tells${events.length > 1 ? ` and ${events.length - 1} event ${events.length === 2 ? 'type' : 'types'}` : ''}`
         : `${events.length} event ${events.length === 1 ? 'type' : 'types'}`;
-  run.print(`✓ Listening for ${appKey} on ${host}`);
+  run.print(`✓ Listening for ${appKey} in ${orgName}`);
   run.print('');
   run.print(`  Forwarding  ${target}`);
   run.print(`  Takes       ${takes}`);

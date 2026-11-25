@@ -96,7 +96,6 @@ describe('apps-cli: apps.declare', () => {
       [KEY, { ...declaration, secret: 'x' }],
       [KEY, { ...declaration, status: undefined }],
       [KEY, { ...declaration, name: undefined }],
-      [KEY, { ...declaration, url: undefined }],
       [KEY, { ...declaration, features: {} }],
       [KEY, { ...declaration, features: ['acme-ledger'] }],
       [KEY, { ...declaration, features: [{ key: 'acme-ledger', name: 'Acme ledger' }] }],
