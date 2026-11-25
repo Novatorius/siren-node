@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +7,7 @@ import { answerFor, createAcmeApp } from '../examples/apps/acme/handler.mjs';
 import { saleLine, sendSale } from '../examples/apps/acme/sale.mjs';
 import { Siren } from '../src/client';
 import type { HttpResponse } from '../src/http';
+import { PAYOUT_DATA, ask, fixture } from './apps-example-ask';
 import { FakeHttpClient, reply } from './http-fakes';
 import { capturedReply } from './cloud-captures';
 import { BASE, bodyOf, unavailable } from './record-fakes';
@@ -17,39 +17,12 @@ import { BASE, bodyOf, unavailable } from './record-fakes';
  * docs/architecture/apps-cli.md, "The example app", and the comment at the
  * top of examples/apps/acme/handler.mjs.
  *
- * The request is Siren's signed fixture with its data set to a payout ask
- * as Siren sends one (AppPayoutQuestion and the kind's sample in
- * AppFeatureSamples), signed again with the fixture's secret. The
+ * The request is a payout ask as Siren sends one (test/apps-example-ask.ts). The
  * distribution resolver's data and answer shapes are a claim on slice 5,
  * written down in the note.
  */
 
-interface SignedFixture {
-  secret: string;
-  timestamp: number;
-  body: string;
-  headers: Record<string, string>;
-}
-const fixture = JSON.parse(
-  readFileSync(new URL('./fixtures/apps-exchange/signed-request.json', import.meta.url), 'utf8'),
-) as SignedFixture;
 const APP_KEY = `sk_test_${'0a'.repeat(32)}`;
-
-/** The data of a payout method's ask, as Siren sends it. */
-const PAYOUT_DATA = {
-  payout: { id: 88, fulfillmentId: 31, attempt: 1 },
-  amount: { value: 2500, units: 'USD' },
-  collaborator: { id: 42, name: 'Ana Ruiz', email: 'ana@example.com' },
-};
-
-/** Siren's fixture carrying a payout ask's data, signed again with the fixture's secret. */
-const ask = (() => {
-  const request = JSON.parse(fixture.body) as Record<string, unknown>;
-  request.data = PAYOUT_DATA;
-  const body = JSON.stringify(request);
-  const v1 = createHmac('sha256', fixture.secret).update(`${fixture.timestamp}.${body}`).digest('hex');
-  return { body, headers: { ...fixture.headers, 'X-Siren-Signature-V2': `t=${fixture.timestamp},v1=${v1}` } };
-})();
 const REQUEST = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
 
 function acme(replies: Array<HttpResponse | Error>, now = fixture.timestamp) {
