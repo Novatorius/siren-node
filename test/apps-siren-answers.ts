@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { reply } from './http-fakes';
 import { capturedReply } from './cloud-captures';
 
@@ -219,6 +220,13 @@ export function requestRow(overrides: Record<string, unknown> = {}) {
 }
 
 export const AppAnswers = {
+  /**
+   * `GET /apps/scopes`: ListAppScopes serves ApiKeyScopePolicy::issuableGroups(),
+   * the same groups as the api-key-scopes fixture, which scripts/siren-fixtures.mjs builds.
+   */
+  scopes: () => reply(200, (JSON.parse(readFileSync(new URL('./fixtures/api-key-scopes.json', import.meta.url), 'utf8')) as { body: unknown }).body),
+  /** `GET /apps/events`: WebhookCatalog::all(), as the webhook-events fixture holds it. */
+  events: () => reply(200, (JSON.parse(readFileSync(new URL('./fixtures/webhook-events.json', import.meta.url), 'utf8')) as { body: unknown }).body),
   /**
    * 409 on a delete while records select the app's items:
    * lib/Apps/Service/Exceptions/AppInUseException.php lines 30 to 50 on

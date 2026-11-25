@@ -336,14 +336,15 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('declares the app on the first apply, writes its key and secret to .env.sandbox, and prints neither', async () => {
-    const h = harness([appMissing(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
+    const h = harness([appMissing(), AppAnswers.scopes(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
 
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
-    expect(bearer(h, 1)).toBe(`Bearer ${ACCESS_1}`);
-    expect(bodyOf(h.http.requests[1])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
+    // The file names event scopes the new app does not hold yet, so apply checks them against Siren's list (CLI pass 2, finding 5).
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
+    expect(bearer(h, 2)).toBe(`Bearer ${ACCESS_1}`);
+    expect(bodyOf(h.http.requests[2])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
     expect(h.file('.env.sandbox').split('\n')).toEqual(
       expect.arrayContaining([`SIREN_BASE_URL=${SANDBOX_BASE_URL}`, `SIREN_API_KEY=${RAW_KEY}`, `SIREN_SIGNING_SECRET=${SIGNING_SECRET}`]),
     );
@@ -381,18 +382,18 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('leaves the env file as it is when a later apply answers no secret, and says when this machine holds no key', async () => {
-    const h = harness([appBefore(), reply(200, app), appBefore(), reply(200, app)], { env: appEnv });
+    const h = harness([appBefore(), AppAnswers.scopes(), reply(200, app), appBefore(), AppAnswers.scopes(), reply(200, app)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     h.write('.env.sandbox', `PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(await h.run(['apps', 'apply', 'siren.app.json', '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe(`PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(h.printed()).not.toContain('siren apps rotate-key');
 
     h.write('.env.sandbox', 'PORT=8787\n');
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`, `GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`, `GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
     expect(h.printed().replace(/\n  /g, " ")).toContain(`siren apps rotate-key ${KEY}`);
   });

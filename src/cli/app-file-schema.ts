@@ -12,6 +12,14 @@ import {
   TOP_FIELDS,
 } from './app-file';
 import { kindLabel } from './app-kinds';
+import { API_KEY_RECORD_SCOPES, ApiKeyScope } from '../api-key-scopes';
+import { WebhookEventType } from '../event-types';
+
+/** The scopes the SDK names, less the wildcards, which Siren gives no app key by name. CLI pass 2, finding 5. */
+const SCOPE_EXAMPLES: readonly string[] = [...new Set<string>([...Object.values(ApiKeyScope), ...API_KEY_RECORD_SCOPES])].filter((scope) => !scope.includes('*'));
+
+/** The webhook events the SDK names, less the wildcard. */
+const EVENT_EXAMPLES: readonly string[] = Object.values(WebhookEventType).filter((event) => event !== '*');
 
 /*
  * The JSON schema of siren.app.json, built from the lists and limits
@@ -84,8 +92,17 @@ function app(): Schema {
     name: { type: 'string', minLength: 1, description: 'The name the dashboard shows.' },
     description: TEXT,
     url: { ...TEXT, description: 'Where Siren sends requests: https, or http to localhost. ${SIREN_APP_URL} is filled from the shell or .env.' },
-    scopes: { ...TEXT_LIST, description: "The app key's scopes." },
-    events: { ...TEXT_LIST, description: 'The events Siren tells the app about.' },
+    // Examples, not an enum: an editor offers them, and a custom event type's own scope still passes.
+    scopes: {
+      ...TEXT_LIST,
+      items: { type: 'string', examples: SCOPE_EXAMPLES },
+      description: "The app key's scopes. siren apps scopes lists the ones your Siren issues, custom event types included.",
+    },
+    events: {
+      ...TEXT_LIST,
+      items: { type: 'string', examples: EVENT_EXAMPLES },
+      description: 'The events Siren tells the app about. siren apps events lists them.',
+    },
     contacts: { ...TEXT_LIST, description: 'Email addresses Siren tells when something is wrong with the app.' },
     features: { type: 'object', propertyNames: KEY_NAME, maxProperties: MAX_FEATURES, additionalProperties: feature(), description: 'Each feature under its feature key.' },
   };

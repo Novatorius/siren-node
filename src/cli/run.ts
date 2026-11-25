@@ -10,6 +10,7 @@ import { firstRun, welcome } from './hook';
 import type { HookCard } from './hook';
 import type { CliIo } from './io';
 import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, httpDetail, resolveTarget } from './targets';
+import { nearest } from './suggest';
 import { Style, styleFor, wrapWords } from './style';
 import { SirenError } from '../errors';
 import { SANDBOX_BASE_URL } from '../http';
@@ -37,6 +38,8 @@ export const COMMANDS = [
   'apps diff',
   'apps list',
   'apps show',
+  'apps scopes',
+  'apps events',
   'apps requests',
   'apps answer',
   'apps resend',
@@ -216,6 +219,30 @@ const SPECS: Record<Command, CommandSpec> = {
     positionals: [0, 1],
     readsOnly: true,
     run: apply.appsDiff,
+  },
+  'apps scopes': {
+    usage: 'apps scopes [flags]',
+    summary: "List the scopes an app's key may hold on this Siren, for \"scopes\" in siren.app.json.",
+    group: 'Apps',
+    short: "List the scopes an app's key may hold",
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren apps scopes', 'siren apps scopes --json'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: apply.appsScopes,
+  },
+  'apps events': {
+    usage: 'apps events [flags]',
+    summary: 'List the events Siren can send an app, for "events" in siren.app.json.',
+    group: 'Apps',
+    short: 'List the events Siren can send an app',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren apps events', 'siren apps events --json'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: apply.appsEvents,
   },
   'apps list': {
     usage: 'apps list [flags]',
@@ -478,30 +505,6 @@ async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
   return { version: CLI_VERSION, where, next, footer: 'siren --help lists every command.' };
 }
 
-/** The nearest of `choices` to `typed` by edit distance, when it is near enough to be a typo. */
-function nearest(typed: string, choices: readonly string[]): string | undefined {
-  let best: string | undefined;
-  let bestDistance = Infinity;
-  for (const choice of choices) {
-    const distance = editDistance(typed, choice);
-    if (distance < bestDistance) {
-      best = choice;
-      bestDistance = distance;
-    }
-  }
-  return bestDistance <= Math.max(2, Math.floor(typed.length / 3)) ? best : undefined;
-}
-
-/** Levenshtein distance. */
-function editDistance(a: string, b: string): number {
-  let row = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i++) {
-    const next = [i];
-    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
-    row = next;
-  }
-  return row[b.length]!;
-}
 
 /** The command a line names, from its words, or {@link CliUsageError} with the nearest real one. */
 function commandNamed(words: readonly string[]): Command {

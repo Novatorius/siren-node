@@ -6,7 +6,7 @@ import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import { RESERVED_APP_KEYS } from '../../resources/apps';
 import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types';
 import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
-import { appChanges, droppedLine } from '../app-changes';
+import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
@@ -14,6 +14,7 @@ import { REPORT_WIDTH, clean, styleFor, unbroken, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import type { StoredSession } from '../credentials';
+import { either, suggestions } from '../suggest';
 import { CliRefusal, CliUsageError, commandLine } from '../targets';
 
 /*
@@ -352,6 +353,7 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
       if (error instanceof NotFoundError) return undefined;
       throw error;
     });
+  await checkNames(run, input, shown, current, params);
   const changes = appChanges(current, params);
   if (current !== undefined && (current.apiKey === null || current.apiKey === undefined) && (params.scopes ?? []).length > 0) {
     run.warn(
@@ -365,6 +367,50 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
   return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath };
+}
+
+/**
+ * CLI pass 2, finding 5: checks each scope and event the file names, and
+ * the app does not hold yet, against the lists the Siren in use serves
+ * (`GET /apps/scopes` and `GET /apps/events`), so a typo is refused before
+ * the plan with the nearest real name, not by Siren after the question.
+ * A list it cannot read, as with a token that may not, leaves the check
+ * to Siren. A wildcard scope such as `*` is Siren's to judge too. Prints
+ * one line per problem, as the file check does, then refuses.
+ */
+async function checkNames(run: CommandContext, input: CommandInput, shown: string, current: App | undefined, params: Plan['params']): Promise<void> {
+  const heldScopes = new Set<string>(current === undefined ? [] : (current.apiKey?.scopes ?? current.scopes ?? []));
+  const heldEvents = new Set<string>(current?.events ?? []);
+  // Compared as Siren stores them, so a scope `*` already covers is not new.
+  const newScopes = storedScopes(params.scopes ?? []).filter((scope) => !heldScopes.has(scope) && !scope.includes('*'));
+  const newEvents = (params.events ?? []).filter((event) => !heldEvents.has(event));
+  const problems: string[] = [];
+  const siren = run.siren();
+  if (newScopes.length > 0) {
+    const groups = await siren.apps.scopes().catch(() => undefined);
+    const known = groups === undefined ? undefined : Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => entry.scope));
+    for (const scope of known === undefined ? [] : newScopes.filter((scope) => !known.includes(scope))) {
+      const offer = suggestions(scope, known!, /:/);
+      problems.push(`scopes: "${clean(scope)}" is not a scope an app's key may hold.${offer.length === 0 ? '' : ` Did you mean ${either(offer)}?`}`);
+    }
+  }
+  if (newEvents.length > 0) {
+    const catalog = await siren.apps.events().catch(() => undefined);
+    const known = catalog?.map((entry) => entry.event);
+    for (const event of known === undefined ? [] : newEvents.filter((event) => !known.includes(event))) {
+      const offer = suggestions(event, known!, /\./);
+      problems.push(`events: Siren sends no event "${clean(event)}".${offer.length === 0 ? '' : ` Did you mean ${either(offer)}?`}`);
+    }
+  }
+  if (problems.length === 0) return;
+  for (const problem of problems) input.io.stderr(`${shown}: ${problem}\n`);
+  const scopesWrong = problems.some((problem) => problem.startsWith('scopes:'));
+  const eventsWrong = problems.some((problem) => problem.startsWith('events:'));
+  const list = scopesWrong && eventsWrong ? 'apps scopes' : scopesWrong ? 'apps scopes' : 'apps events';
+  throw new CliRefusal(`${shown} has ${problems.length === 1 ? 'a problem' : `${problems.length} problems`}, so nothing was sent.`, {
+    fix: run.command(list),
+    fixWords: scopesWrong && eventsWrong ? `and ${run.command('apps events')} list what Siren offers` : 'lists what Siren offers',
+  });
 }
 
 /** The plan as a person reads it: a header with the app and the organization, then one marked line per change. */
@@ -467,6 +513,44 @@ function refuseKindChange(item: AppFeature, uses: number | undefined, wanted: re
   );
 }
 
+
+/**
+ * `siren apps scopes [--json]`: the scopes an app's key may hold on this
+ * Siren, from `GET /apps/scopes`, one line each with what it allows, or the
+ * JSON Siren sent. CLI pass 2, finding 5.
+ */
+export async function appsScopes(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  await run.signedIn();
+  const groups = await run.siren().apps.scopes();
+  if (input.values.json === true) {
+    run.print(JSON.stringify(groups, null, 2));
+    return 0;
+  }
+  const out = styleFor(input.io, 'stdout', {});
+  const rows = Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => [clean(entry.scope), clean(entry.label)]));
+  for (const line of out.table(['SCOPE', 'ALLOWS'], rows, widthOf(input, out))) run.print(line);
+  return 0;
+}
+
+/**
+ * `siren apps events [--json]`: the events Siren can send an app's address,
+ * from `GET /apps/events`, one line each with what it means, in the order
+ * the dashboard groups them, or the JSON Siren sent. CLI pass 2, finding 5.
+ */
+export async function appsEvents(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  await run.signedIn();
+  const catalog = await run.siren().apps.events();
+  if (input.values.json === true) {
+    run.print(JSON.stringify(catalog, null, 2));
+    return 0;
+  }
+  const out = styleFor(input.io, 'stdout', {});
+  const rows = catalog.map((entry) => [clean(entry.event), clean(entry.label)]);
+  for (const line of out.table(['EVENT', 'MEANS'], rows, widthOf(input, out))) run.print(line);
+  return 0;
+}
 
 /** `siren apps list [--json]`: a count line and a table of the apps, or the JSON Siren sent. */
 export async function appsList(input: CommandInput): Promise<number> {
