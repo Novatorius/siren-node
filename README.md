@@ -207,7 +207,7 @@ assert.deepEqual(approved, [sampleEventData('conversion.approved').conversionId]
 `appRequestFromRecord(record)` turns a request Siren stored into a test input, signed again with the
 same id, kind, mode, data and `answerBy`. Save the request with
 `siren apps requests <id> --json > request.json`, which reads it with your signed-in session, then
-read the file. The `--json` flag arrives with the next CLI release.
+read the file.
 
 ```sh
 siren apps requests apr_9f2c4e0b7a1d4c3e8b6f5a2d1c0e9b8a --json > request.json
