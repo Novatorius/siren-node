@@ -219,12 +219,35 @@ describe('a log line', () => {
 
     const lines = entryLines(rich, failed, command);
 
-    expect(lines[0]).toContain('\u001b[31m✗ failed');
+    expect(lines[0]).toContain('\u001b[31m✗\u001b[0m \u001b[1mfailed');
     expect(lines[1]).toContain('The address answered 500.');
-    expect(lines[2]).toContain(`› siren apps requests ${APP_REQUEST_ID}`);
+    expect(lines[2]!.replace(/\u001b\[[\d;]*m/g, '')).toContain(`› siren apps requests ${APP_REQUEST_ID}`);
     const flat = entryLines(plain, failed, command);
     expect(flat.join('\n')).not.toContain('\u001b[');
     expect(flat[0]).toContain('failed');
+  });
+
+  it('cleans every value from Siren, so no escape sequence or control character reaches the screen', () => {
+    const sly = entry({
+      type: 'deli\u001b[2Jvery',
+      status: 'fail\u0007ed',
+      summary: 'ask \u001b]8;;https://evil.example\u0007payout-method',
+      app: 'acme\u009b2J-ledger',
+      reason: 'The address\u001b[1A answered 500.\r\nAgain.',
+      request: `${APP_REQUEST_ID}\u001b[31m`,
+    });
+    const failed = { ...sly, status: 'failed' };
+    for (const style of [rich, plain]) {
+      for (const one of [sly, failed, { ...failed, request: undefined, requestId: 'req_\u001b[2J1' }]) {
+        const text = entryLines(style, one, command).join('\n').replace(/\u001b\[[\d;]*m/g, '');
+        expect(text).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+        for (const line of text.split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+      }
+    }
+    const shown = entryLines(plain, failed, command).join('\n');
+    expect(shown).toContain('ask payout-method  acme-ledger');
+    expect(shown).toContain('The address answered 500. Again.');
+    expect(shown).toContain(`siren apps requests ${APP_REQUEST_ID}`);
   });
 
   it('shows a request with its app and status, and --expand shows the body', () => {

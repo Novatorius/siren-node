@@ -11,8 +11,8 @@ import type { CommandContext, CommandHandler, CommandInput } from '../context';
 import { DELETE_ROUTES, RESOURCE_COMMANDS } from '../resources.generated';
 import type { DeleteRoute, ResourceCommand, ResourceOp, ResourceRoute } from '../resources.generated';
 import { CliRefusal, CliUsageError } from '../targets';
-import { styleFor } from '../style';
-import { clip, recordRows, table, WIDTH } from './resource-output';
+import { clean, styleFor } from '../style';
+import { cell, clip, recordRows, table, WIDTH } from './resource-output';
 
 /*
  * `siren <resource> <op>`, generated from Siren's openapi.json into
@@ -187,7 +187,7 @@ async function listResources(input: CommandInput): Promise<number> {
     style.bold('Next'),
     `  1  ${style.command(`siren ${RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')?.name ?? RESOURCE_COMMANDS[0]?.name ?? 'programs'} list`)}`,
     '',
-    style.rich ? style.dim('› siren get <path> reaches any other route.') : 'siren get <path> reaches any other route.',
+    style.next(style.dim('siren get <path> reaches any other route.')),
   ];
   input.io.stdout(`${lines.join('\n')}\n`);
   return 0;
@@ -519,7 +519,7 @@ async function confirmLiveDelete(input: CommandInput, run: CommandContext, plan:
 /** The organization this run acts in, as apply names it: `Acme (acme), live`. */
 function orgLabel(run: CommandContext): string {
   const session = run.current();
-  return `${session.orgName} (${session.orgSlug ?? session.orgId}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
+  return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
 /** A list in Siren's page envelope: `{items, total, page, perPage, totalPages}`. */
@@ -573,15 +573,15 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const paged = isEnvelope(body) && body.totalPages !== undefined && body.totalPages > 1;
     const page = paged ? style.dim(`  page ${(body as Envelope).page ?? 1} of ${(body as Envelope).totalPages}`) : '';
     const lines = [style.success(`${style.bold(`${rows.length} ${rows.length === 1 ? singular(name) : name}`)}${page}`)];
-    const shown = records.length === rows.length ? table(style, records) : rows.map((row) => clip(`  ${JSON.stringify(row)}`, WIDTH));
+    const shown = records.length === rows.length ? table(style, records) : rows.map((row) => clip(`  ${cell(row)}`, WIDTH));
     if (shown.length > 0) lines.push('', ...shown);
     const firstId = records[0]?.id;
     if (firstId !== undefined && firstId !== null) {
-      const next = plan.resource?.ops.get ? `${name} get ${String(firstId)}` : `get ${plan.outgoing.path}/${String(firstId)}`;
+      const next = plan.resource?.ops.get ? `${name} get ${cell(firstId)}` : `get ${plan.outgoing.path}/${cell(firstId)}`;
       lines.push('', style.bold('Next'), `  1  ${style.command(input.command(next))}`);
     }
     const tip = `--json prints the answer as JSON.${paged ? ' --all reads every page.' : ''}`;
-    lines.push('', style.rich ? style.dim(`› ${tip}`) : tip);
+    lines.push('', style.next(style.dim(tip)));
     out(lines.join('\n'));
     return;
   }
@@ -589,12 +589,12 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
   if (typeof body === 'object' && body !== null) {
     const record = body as Record<string, unknown>;
     const id = record.id;
-    const what = `${singular(name)}${id !== undefined && id !== null ? ` ${String(id)}` : ''}`;
+    const what = `${singular(name)}${id !== undefined && id !== null ? ` ${cell(id)}` : ''}`;
     out(style.report({ headline: `${style.bold(what)}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)} in ${org}`}`, rows: recordRows(record) }));
     return;
   }
 
-  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}${org === undefined ? '' : ` in ${org}`}.`, ...(body !== undefined && body !== null ? { rows: [['answer', clip(typeof body === 'string' ? body : JSON.stringify(body), WIDTH - 11)]] } : {}) }));
+  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}${org === undefined ? '' : ` in ${org}`}.`, ...(body !== undefined && body !== null ? { rows: [['answer', clip(cell(body), WIDTH - 11)]] } : {}) }));
 }
 
 function pastTense(method: HttpMethod): string {
@@ -609,9 +609,9 @@ function pastTense(method: HttpMethod): string {
 export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'words'>, input: Pick<CommandInput, 'command'>): CliRefusal {
   const { method, path } = plan.outgoing;
   const status = error.statusCode ?? 0;
-  const said = error.message.replace(/^Siren: /, '').replace(/\.?$/, '.');
-  const fields = error instanceof BadRequestError && error.fieldErrors.length > 0 ? ` ${error.fieldErrors.map((field) => `${field.field}: ${field.message}`).join(' ')}` : '';
-  const why = `Siren answered ${status}${error.code ? ` ${error.code}` : ''}: ${said}${fields}`;
+  const said = clean(error.message.replace(/^Siren: /, '')).replace(/\.?$/, '.');
+  const fields = error instanceof BadRequestError && error.fieldErrors.length > 0 ? ` ${error.fieldErrors.map((field) => `${clean(field.field)}: ${clean(field.message)}`).join(' ')}` : '';
+  const why = `Siren answered ${status}${error.code ? ` ${clean(error.code)}` : ''}: ${said}${fields}`;
   const list = plan.resource?.ops.list ? `${plan.resource.name} list` : `get /${path.split('/').filter(Boolean)[0] ?? ''}`;
   const help = `${plan.words} --help`;
   const fix: { fix?: string; fixWords?: string } =

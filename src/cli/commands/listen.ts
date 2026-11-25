@@ -6,6 +6,8 @@ import { APP_FILE_NAME, declarationFor, parseAppFile } from '../app-file';
 import { contextOf } from '../context';
 import { orgScope } from '../org';
 import type { CommandContext, CommandInput } from '../context';
+import { REPORT_WIDTH, clean, styleFor, visibleLength, wrapWords } from '../style';
+import type { Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 import { saveSecrets } from './apply';
 
@@ -58,7 +60,7 @@ export interface ListenDelivery {
   body: string;
 }
 
-interface ListenAnswer {
+export interface ListenAnswer {
   request: string;
   status: string;
   answeredBy: string | null;
@@ -133,16 +135,37 @@ function idOf(delivery: ListenDelivery): string {
   return delivery.request?.id ?? delivery.eventId;
 }
 
+/** Text from Siren or a handler on one line, with every control character and escape sequence taken out. */
+function shown(text: string): string {
+  return clean(text.replace(/[\r\n\t]+/g, ' '));
+}
+
+/** `text` cut to `width` characters. */
+function cut(text: string, width: number): string {
+  return [...text].slice(0, width).join('');
+}
+
+/** The answer statuses that mean the ask went wrong. */
+const BAD_ANSWERS: ReadonlySet<string> = new Set(['needs_attention', 'dropped']);
+
 /**
  * One delivery's line: time, kind, feature or event type, the handler's
- * status, the time it took and the id cut to 12 characters. A failure
- * starts its kind with ✗. No line passes 80 columns.
+ * status, the time it took and the id cut to 12 characters. In a terminal
+ * it starts with a green ✓, or a red ✗ for a failure, and plain it has no
+ * symbol. Every value from Siren is cleaned, and no line passes 80 columns.
  */
-export function deliveryLine(at: number, delivery: ListenDelivery, result: Forwarded): string {
+export function deliveryLine(style: Style, at: number, delivery: ListenDelivery, result: Forwarded): string {
   const ok = result.httpStatus !== null && result.httpStatus >= 200 && result.httpStatus < 300;
-  const kind = ok ? kindOf(delivery) : `✗ ${kindOf(delivery)}`;
   const status = result.httpStatus === null ? '---' : String(result.httpStatus);
-  return `${clock(at)}  ${kind.padEnd(7)} ${labelOf(delivery).slice(0, 19).padEnd(19)} ${status.padEnd(4)} ${duration(result.durationMs).padStart(6)}  ${idOf(delivery).slice(0, 12)}`;
+  const rest = `${shown(kindOf(delivery)).padEnd(7)} ${cut(shown(labelOf(delivery)), 19).padEnd(19)} ${status.padEnd(4)} ${duration(result.durationMs).padStart(6)}  ${cut(shown(idOf(delivery)), 12)}`;
+  return ok ? style.success(`${style.dim(clock(at))}  ${rest}`) : style.failure(`${clock(at)}  ${rest}`);
+}
+
+/** The line for an ask's answer the handler posted: time, the feature, Siren's status and the request id. */
+export function answerLine(style: Style, at: number, feature: string, answer: Pick<ListenAnswer, 'request' | 'status'>): string {
+  const status = shown(answer.status);
+  const rest = `${'answer'.padEnd(7)} ${cut(shown(feature), 19).padEnd(19)} ${cut(status, 11).padEnd(11)}  ${cut(shown(answer.request), 12)}`;
+  return BAD_ANSWERS.has(status) ? style.failure(`${clock(at)}  ${rest}`) : style.success(`${style.dim(clock(at))}  ${rest}`);
 }
 
 /**
@@ -257,6 +280,10 @@ export async function listen(input: CommandInput): Promise<number> {
   const say = (line: string) => {
     if (!json) run.print(line);
   };
+  const style = styleFor(io, 'stdout', { json });
+  const err = styleFor(io, 'stderr', { json });
+  // A warning on standard error: amber in a terminal, `siren: ` and the words when plain.
+  const warn = (words: string) => run.warn(err.rich ? err.warning(words) : `siren: ${words}`);
 
   const open = async (): Promise<OpenedSession> =>
     writeRecord<OpenedSession>(http, 'POST', '/listen-sessions', { app: appKey, ...(events === undefined ? {} : { events }), forwardTo: target });
@@ -273,7 +300,7 @@ export async function listen(input: CommandInput): Promise<number> {
   if (json) {
     emit({ type: 'session', id: opened.session.id, app: appKey, address, forwardTo: target, events: opened.session.events, replaced: opened.replaced });
   } else {
-    headline(run, appKey, scope.orgName, target, opened, basename(envPath));
+    run.print(headline(style, appKey, scope.orgName, target, opened, basename(envPath)));
   }
 
   const features = new Map<string, string>();
@@ -295,7 +322,7 @@ export async function listen(input: CommandInput): Promise<number> {
       if (code === 'listen_session_ended' && endedBecause(error) === 'idle') {
         opened = await open();
         if (json) emit({ type: 'reopened', id: opened.session.id, reason: 'idle' });
-        else say(`› Siren heard nothing for ${opened.session.idleTimeoutSeconds} seconds and ended the session, so a new one is open.`);
+        else say(style.warning(`Siren heard nothing for ${opened.session.idleTimeoutSeconds} seconds and ended the session, so a new one is open.`));
         continue;
       }
       if (code === 'listen_session_ended' && endedBecause(error) === 'listen_off') {
@@ -310,7 +337,11 @@ export async function listen(input: CommandInput): Promise<number> {
       if (!(error instanceof ConnectionError || error instanceof ApiError)) throw error;
       outOfReachSince ??= io.now();
       if (io.now() - outOfReachSince >= OUT_OF_REACH_MS) {
-        throw new CliRefusal(`Siren stayed out of reach for ${OUT_OF_REACH_MS / 60000} minutes, so siren listen stopped. Siren sends to the app's address again.`);
+        throw new CliRefusal(`Siren stayed out of reach for ${OUT_OF_REACH_MS / 60000} minutes, so siren listen stopped. Siren sends to the app's address again.`, {
+          why: shown((error as Error).message.replace(/^Siren: /, '')),
+          fix: run.command(`listen --app ${appKey}`),
+          fixWords: 'to start again',
+        });
       }
       tries += 1;
       await io.sleep(Math.min(MAX_BACKOFF_MS, 500 * 2 ** tries));
@@ -339,13 +370,13 @@ export async function listen(input: CommandInput): Promise<number> {
           break;
         } catch (error) {
           if (appErrorCode(error) === 'listen_claim_lost') {
-            run.warn(`siren: Siren had already counted delivery ${delivery.deliveryId} as failed, because its 30 seconds ran out. It sends it again.`);
+            warn(`Siren had already counted delivery ${delivery.deliveryId} as failed, because its 30 seconds ran out. It sends it again.`);
             break;
           }
           if (!reportMayGoAgain(error)) throw error;
           if (attempt >= REPORT_TRIES) {
-            run.warn(
-              `siren: Siren could not record delivery ${delivery.deliveryId} after ${REPORT_TRIES} tries. ` +
+            warn(
+              `Siren could not record delivery ${delivery.deliveryId} after ${REPORT_TRIES} tries. ` +
                 'When its 30 seconds run out, Siren counts a failed attempt and sends it again.',
             );
             break;
@@ -374,15 +405,14 @@ export async function listen(input: CommandInput): Promise<number> {
         });
         continue;
       }
-      say(deliveryLine(io.now(), delivery, result));
-      if (!ok) failureLines(run, delivery, result, nextRetryAt, io.now());
+      say(deliveryLine(style, io.now(), delivery, result));
+      if (!ok) for (const line of failureLines(style, run, delivery, result, nextRetryAt, io.now())) say(line);
     }
     for (const answer of page.answers) {
       if (json) {
         emit({ type: 'answer', at: answer.answeredAt ?? new Date(io.now()).toISOString(), request: answer.request, status: answer.status });
       } else {
-        const label = (features.get(answer.request) ?? '').slice(0, 19).padEnd(19);
-        say(`${clock(io.now())}  ${'answer'.padEnd(7)} ${label} ${answer.status.slice(0, 11).padEnd(11)}  ${answer.request.slice(0, 12)}`);
+        say(answerLine(style, io.now(), features.get(answer.request) ?? '', answer));
       }
     }
     pause = page.nextPollMs > 0 ? page.nextPollMs : pause;
@@ -397,13 +427,19 @@ export async function listen(input: CommandInput): Promise<number> {
     emit({ type: 'closed', forwarded, ok: answeredOk, returned });
     return 0;
   }
+  const where = address === null ? '' : ` to ${shown(address)}`;
   run.print('');
-  run.print(`✓ Stopped listening for ${appKey}`);
-  run.print('');
-  run.print(`  Forwarded   ${forwarded} ${forwarded === 1 ? 'delivery' : 'deliveries'}, ${answeredOk} answered 2xx`);
-  run.print(`  Returned    ${returned} waiting ${returned === 1 ? 'delivery' : 'deliveries'}${address === null ? '' : ` to ${address}`}`);
-  run.print('');
-  run.print(`  › ${run.command(`apps requests --app ${appKey}`)} shows what Siren did next.`);
+  io.stdout(
+    style.report({
+      headline: `Stopped listening for ${style.bold(shown(appKey))}`,
+      rows: [
+        ['Forwarded', `${forwarded} ${forwarded === 1 ? 'delivery' : 'deliveries'}, ${answeredOk} answered 2xx`],
+        ['Returned', `${returned} waiting ${returned === 1 ? 'delivery' : 'deliveries'}${where}`],
+      ],
+      next: [{ text: style.command(run.command(`apps requests --app ${appKey}`)), aside: 'what Siren did next' }],
+      tips: [address === null ? 'The app has no address, so Siren holds nothing for it now.' : `Siren sends new requests to ${shown(address)} now.`],
+    }),
+  );
   return 0;
 }
 
@@ -425,8 +461,8 @@ function endedBecause(error: unknown): string | undefined {
   return typeof data === 'object' && data !== null ? ((data as { endedBecause?: string }).endedBecause ?? undefined) : undefined;
 }
 
-/** The block `siren listen` starts with. */
-function headline(run: CommandContext, appKey: string, orgName: string, target: string, opened: OpenedSession, envName: string): void {
+/** The block `siren listen` starts with: a report with the session's rows and how Ctrl-C ends it. */
+function headline(style: Style, appKey: string, orgName: string, target: string, opened: OpenedSession, envName: string): string {
   const events = opened.session.events;
   const takes =
     events === null
@@ -434,38 +470,41 @@ function headline(run: CommandContext, appKey: string, orgName: string, target: 
       : events.includes('app.request')
         ? `asks, tells${events.length > 1 ? ` and ${events.length - 1} event ${events.length === 2 ? 'type' : 'types'}` : ''}`
         : `${events.length} event ${events.length === 1 ? 'type' : 'types'}`;
-  run.print(`✓ Listening for ${appKey} in ${orgName}`);
-  run.print('');
-  run.print(`  Forwarding  ${target}`);
-  run.print(`  Takes       ${takes}`);
-  run.print(`  Signing     your app's secret, SIREN_SIGNING_SECRET in ${envName}`);
-  run.print(`  Session     ${opened.session.id.slice(0, 12)}, ends ${opened.session.idleTimeoutSeconds}s after the CLI stops`);
-  if (opened.replaced) run.print('  Replaced    another siren listen for this app, which stops');
-  run.print('');
-  run.print(
-    opened.session.address === null
-      ? '  › Ctrl-C stops. The app has no address, so Siren holds nothing for it then.'
-      : `  › Ctrl-C stops. Siren then sends to ${opened.session.address} again.`,
-  );
-  run.print('');
+  const address = opened.session.address;
+  return style.report({
+    headline: `Listening for ${style.bold(shown(appKey))} in ${style.bold(shown(orgName))}`,
+    rows: [
+      ['Forwarding', shown(target)],
+      ['Takes', takes],
+      ['Signing', `your app's secret, SIREN_SIGNING_SECRET in ${shown(envName)}`],
+      ['Session', `${cut(shown(opened.session.id), 12)}, ends ${opened.session.idleTimeoutSeconds}s after the CLI stops`],
+      ...(opened.replaced ? [['Replaced', 'another siren listen for this app, which stops'] as const] : []),
+    ],
+    tips: [address === null ? 'Ctrl-C stops. The app has no address, so Siren holds nothing for it then.' : `Ctrl-C stops. Siren then sends to ${shown(address)} again.`],
+  });
 }
 
-/** The lines under a ✗ line: what went wrong, then the command that sends it again. */
-function failureLines(run: CommandContext, delivery: ListenDelivery, result: Forwarded, nextRetryAt: string | null, now: number): void {
+/**
+ * The lines under a ✗ line: what went wrong, wrapped to fit, then the
+ * command that sends it again, each a › step in a terminal. A command is
+ * never cut, so one that would pass 80 columns under the kind moves left.
+ */
+function failureLines(style: Style, run: CommandContext, delivery: ListenDelivery, result: Forwarded, nextRetryAt: string | null, now: number): string[] {
   const pad = ' '.repeat(10);
-  run.print(`${pad}${failureReason(result)}`);
-  if (delivery.request === null) {
-    run.print(`${pad}› The dashboard's webhook deliveries page shows it.`);
-    return;
-  }
-  const resend = run.command(`apps resend ${delivery.request.id}`);
+  const step = (text: string) => {
+    const line = `${pad}${style.next(text)}`;
+    return visibleLength(line) <= REPORT_WIDTH ? line : `  ${style.next(text)}`;
+  };
+  const lines = wrapWords(shown(failureReason(result)), REPORT_WIDTH - pad.length).map((line) => `${pad}${line}`);
+  if (delivery.request === null) return [...lines, step("The dashboard's webhook deliveries page shows it.")];
+  const resend = style.command(run.command(`apps resend ${shown(delivery.request.id)}`));
   if (result.httpStatus === null) {
-    run.print(`${pad}› Is your server running? Start it, then:`);
+    lines.push(step('Is your server running? Start it, then:'));
   } else if (nextRetryAt !== null) {
     const minutes = Math.max(1, Math.round((Date.parse(nextRetryAt) - now) / 60000));
-    run.print(`${pad}› Siren sends it again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, or now:`);
+    lines.push(step(`Siren sends it again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, or now:`));
   } else {
-    run.print(`${pad}› Siren tried it five times. Send it again with:`);
+    lines.push(step('Siren tried it five times. Send it again with:'));
   }
-  run.print(`${pad}› ${resend}`);
+  return [...lines, step(resend)];
 }

@@ -4,6 +4,8 @@ import type { IncomingHttpHeaders, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { deliveryLine, failureReason, forwardAddress } from '../src/cli/commands/listen';
+import { runCli } from '../src/cli/run';
+import { Style } from '../src/cli/style';
 import type { ListenDelivery } from '../src/cli/commands/listen';
 import { LIVE_BASE_URL } from '../src/cli/targets';
 import { verifyAppRequest } from '../src/resources/app-requests';
@@ -119,10 +121,12 @@ describe('siren listen', () => {
     expect(bodyOf(h.http.requests[2])).toMatchObject({ deliveryId: 812, claim: 'c_7f1e2a9b4c6d8e0f1a2b3c4d', httpStatus: 200, body: '{"received":true}', error: null });
 
     const out = h.out();
-    expect(out).toContain(`✓ Listening for ${KEY}`);
+    expect(out).toContain(`Listening for ${KEY} in`);
+    expect(out).not.toContain('✓');
     expect(out).toMatch(/\d\d:\d\d:\d\d {2}ask {5}acme-ledger {9}200 +\d+ms {2}apr_b79943ff\n/);
-    expect(out).toContain(`✓ Stopped listening for ${KEY}`);
+    expect(out).toContain(`Stopped listening for ${KEY}`);
     expect(out).toContain('Forwarded   1 delivery, 1 answered 2xx');
+    expect(out).toMatch(new RegExp(`Next\\n  1  siren apps requests --app ${KEY} +what Siren did next\\n`));
     for (const line of out.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80);
   });
 
@@ -131,8 +135,9 @@ describe('siren listen', () => {
     const h = harness([opened(), polled([delivery()]), reported('failed', '2026-11-24T19:03:15+00:00'), closed()], stopAtFirstWait);
     h.signedIn();
     expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
-    expect(h.out()).toMatch(/✗ ask {3}acme-ledger {9}500 /);
-    expect(h.out()).toContain('The handler answered 500: The function for payoutMethod acme-ledger failed');
+    expect(h.out()).toMatch(/ask {5}acme-ledger {9}500 /);
+    expect(h.out().replace(/\s+/g, ' ')).toContain('The handler answered 500: The function for payoutMethod acme-ledger failed');
+    for (const line of h.out().split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
     expect(h.out()).toContain(`siren apps resend ${REQUEST}`);
     expect(bodyOf(h.http.requests[2])).toMatchObject({ httpStatus: 500 });
 
@@ -142,7 +147,7 @@ describe('siren listen', () => {
     await new Promise((done) => server!.close(done));
     server = undefined;
     expect(await gone.run(['listen', '--app', KEY, '--forward-to', `localhost:${port}/siren`]), gone.err()).toBe(0);
-    expect(gone.out()).toMatch(/✗ ask {3}acme-ledger {9}--- /);
+    expect(gone.out()).toMatch(/ask {5}acme-ledger {9}--- /);
     expect(gone.out()).toContain(`Nothing answered at localhost:${port} (connection refused).`);
     expect(gone.out()).toContain('Is your server running?');
     expect(bodyOf(gone.http.requests[2])).toMatchObject({ httpStatus: null, error: `Nothing answered at localhost:${port} (connection refused).` });
@@ -216,6 +221,40 @@ describe('siren listen', () => {
     expect(never.err()).toContain('Siren counts a failed attempt and sends it again');
   });
 
+  it('in a terminal: a ✓ report to start and stop, ✓ and ✗ lines, and nothing from Siren or the handler reaches the screen raw', async () => {
+    const local = await handler(() => ({ status: 500, body: JSON.stringify({ error: 'boom\u001b[2J\u001b]8;;https://evil.example\u0007click\u001b]8;;\u0007 here' }) }));
+    const sly = delivery({ request: { id: `${REQUEST}\u001b[31m`, mode: 'ask', kind: 'payoutMethod', feature: 'acme\u001b[2Jledger\u0007' } });
+    const event = delivery({ eventType: 'sale\u001b[1A.created', eventId: 'evt_\u009b2J6a1f', request: null, headers: { 'Content-Type': 'application/json' }, body: '{"id":1}' });
+    const h = harness(
+      [
+        opened({ session: { id: SESSION, app: KEY, address: 'https://acme.example/\u001b[2Jsiren', events: null, forwardTo: null, openedAt: '', idleTimeoutSeconds: 30, nextPollMs: 1000 } }),
+        polled([sly, event], [{ request: `${REQUEST}\u001b[31m`, status: 'answered\u001b[5m', answeredBy: 'app:12', answeredAt: null }]),
+        reported('failed', '2026-11-24T19:03:15+00:00'),
+        reported('failed'),
+        closed(),
+      ],
+      stopAtFirstWait,
+    );
+    h.signedIn();
+    const io = { ...h.io, stdoutTty: true, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } };
+    expect(await runCli(['listen', '--app', KEY, '--forward-to', local.url], io), h.err()).toBe(0);
+
+    const out = h.out();
+    // Only the style module's own color codes are left, and no other control character.
+    const bare = out.replace(/\u001b\[[\d;]*m/g, '');
+    expect(bare).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    expect(bare).toMatch(/^✓ Listening for acme-payouts in /);
+    expect(bare).toMatch(/✗ \d\d:\d\d:\d\d {2}ask {5}acmeledger {10}500 /);
+    expect(bare).toContain('The handler answered 500: boomclick here');
+    expect(bare).toMatch(/› siren apps resend apr_b79943ff/);
+    expect(bare).toMatch(/✗ \d\d:\d\d:\d\d {2}event {3}sale\.created/);
+    expect(bare).toMatch(/✓ \d\d:\d\d:\d\d {2}answer {2}acmeledger {10}answered {5}apr_b79943ff/);
+    expect(bare).toContain('✓ Stopped listening for acme-payouts');
+    expect(bare).toContain('Next');
+    expect(bare).toContain('https://acme.example/siren');
+    for (const line of bare.split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+  });
+
   it('prints one JSON object per line with --json', async () => {
     const local = await handler(() => ({ status: 200, body: '{}' }));
     const h = harness([opened(), polled([delivery()]), reported(), closed(2)], stopAtFirstWait);
@@ -280,6 +319,6 @@ describe('siren listen', () => {
     expect(forwardAddress('https://dev.acme.example/hook')).toBe('https://dev.acme.example/hook');
     expect(failureReason({ httpStatus: 502, body: 'x'.repeat(200), error: null, durationMs: 1 })).toHaveLength('The handler answered 502: '.length + 60);
     const long = delivery({ request: { id: REQUEST, mode: 'tell', kind: 'postConversionAction', feature: 'a-very-long-feature-key-indeed-yes' } });
-    expect(deliveryLine(0, long, { httpStatus: null, body: '', error: 'x', durationMs: 8000 }).length).toBeLessThanOrEqual(80);
+    expect(deliveryLine(new Style({ tty: false, env: {} }), 0, long, { httpStatus: null, body: '', error: 'x', durationMs: 8000 }).length).toBeLessThanOrEqual(80);
   });
 });

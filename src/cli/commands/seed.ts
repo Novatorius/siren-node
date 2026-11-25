@@ -3,7 +3,7 @@ import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { orgScope } from '../org';
 import { onSandbox } from '../sandboxes';
-import { styleFor } from '../style';
+import { clean, styleFor } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 
 /*
@@ -69,7 +69,7 @@ export async function seed(input: CommandInput): Promise<number> {
   }
   const run = contextOf(input);
   const org = await orgScope(run, input, await onSandbox(run, 'seed'), 'seed');
-  const slug = org.orgSlug;
+  const slug = clean(org.orgSlug);
   const http = org.http;
 
   const queued = await writeRecord<{ jobId: string; status: string; sales: number; collaborators: number; months: number }>(http, 'POST', '/sandbox/seed', body);
@@ -80,8 +80,8 @@ export async function seed(input: CommandInput): Promise<number> {
       input.io.stdout(
         style.report({
           headline: `Queued ${queued.sales} sample sales for ${style.bold(slug)}`,
-          rows: [['Job', queued.jobId], ['Months', String(queued.months)]],
-          tips: [`Siren answers GET /jobs/${queued.jobId} with its progress.`],
+          rows: [['Job', clean(queued.jobId)], ['Months', String(queued.months)]],
+          tips: [`Siren answers GET /jobs/${clean(queued.jobId)} with its progress.`],
         }),
       );
     return 0;
@@ -110,9 +110,9 @@ export async function seed(input: CommandInput): Promise<number> {
   }
   if (job.status !== 'complete') {
     progress?.stop(false, `Seeding ${slug} ${job.status === 'failed' ? 'failed' : 'did not finish in ten minutes'}.`);
-    throw new CliRefusal(`The seed job for ${slug} ${job.status === 'failed' ? 'failed' : `is still ${job.status}`}.`, {
-      why: job.errorMessage ?? `${counts.salesSent ?? 0} sales were sent before it stopped.`,
-      note: `Job ${job.jobId}.`,
+    throw new CliRefusal(`The seed job for ${slug} ${job.status === 'failed' ? 'failed' : `is still ${clean(job.status)}`}.`, {
+      why: clean(job.errorMessage ?? `${counts.salesSent ?? 0} sales were sent before it stopped.`),
+      note: `Job ${clean(job.jobId)}.`,
     });
   }
 
@@ -126,8 +126,8 @@ export async function seed(input: CommandInput): Promise<number> {
       ['Sales', `${counts.salesSent ?? 0} sent, ${counts.salesRefused ?? 0} refused`],
       ['Conversions', String(counts.conversions ?? 0)],
       ['Collaborators', `${used} (${made} made, ${used - made} already here)`],
-      ...(counts.firstAt && counts.lastAt ? [['From', `${counts.firstAt.slice(0, 10)} to ${counts.lastAt.slice(0, 10)}`] as const] : []),
-      ...(counts.lastRefusal ? [['Last refusal', counts.lastRefusal] as const] : []),
+      ...(counts.firstAt && counts.lastAt ? [['From', `${clean(counts.firstAt).slice(0, 10)} to ${clean(counts.lastAt).slice(0, 10)}`] as const] : []),
+      ...(counts.lastRefusal ? [['Last refusal', clean(counts.lastRefusal)] as const] : []),
     ],
     next: [{ text: style.command(input.command(`sandbox inbox${org.flag}`)) }, { text: style.command(input.command(`sandbox reset${org.flag}`)), aside: 'clears it again' }],
     tips: ['Seeded sales are test sales. Siren never pays them or reports them.'],

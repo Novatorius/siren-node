@@ -1,6 +1,6 @@
 import { contextOf } from '../context';
 import type { CommandInput } from '../context';
-import { styleFor } from '../style';
+import { clean, styleFor } from '../style';
 import { CliRefusal } from '../targets';
 import { appKeyArgument } from './apply';
 import { orgLabel } from './trigger-client';
@@ -29,7 +29,7 @@ export async function appsTest(input: CommandInput): Promise<number> {
   }
   if (!result.delivered) {
     throw new CliRefusal(`Siren could not reach ${key} in ${orgLabel(run)}.`, {
-      why: `${result.httpStatus === null ? 'No answer' : `HTTP ${result.httpStatus}`}${result.error === null ? '' : `: ${result.error.replace(/\.+$/, '')}`}.`,
+      why: `${result.httpStatus === null ? 'No answer' : `HTTP ${result.httpStatus}`}${result.error === null ? '' : `: ${clean(result.error).replace(/\.+$/, '')}`}.`,
       fix: input.command(`apps show ${key}`),
       fixWords: 'to check its address',
     });
@@ -40,7 +40,7 @@ export async function appsTest(input: CommandInput): Promise<number> {
       headline: `Siren reached ${style.bold(key)} in ${orgLabel(run)}`,
       rows: [
         ['Reply', `HTTP ${result.httpStatus ?? ''}`.trim()],
-        ['Event', result.eventType],
+        ['Event', clean(result.eventType)],
       ],
       next: [{ text: style.command(input.command(`trigger ask ${key} <feature>`)), aside: "a feature's sample ask" }],
     }),

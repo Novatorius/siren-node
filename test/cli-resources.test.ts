@@ -361,3 +361,43 @@ describe('record command helpers', () => {
     expect(apiPath('/programs?status=active')).toEqual({ path: '/programs', query: { status: 'active' } });
   });
 });
+
+describe("what Siren answers, printed", () => {
+  /** Siren's text with an escape sequence, a link and a bell in it, which must never reach the screen. */
+  const sly = (text: string) => `${text}\u001b[2J\u001b]8;;https://evil.example\u0007\u009b1A`;
+  /** Only the style module's own color codes, no other control character, and no line past 80 columns. */
+  const clear = (text: string, width = true) => {
+    const bare = text.replace(/\u001b\[[\d;]*m/g, '');
+    expect(bare).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    if (width) for (const line of bare.split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+    return bare;
+  };
+  const terminal = (h: ReturnType<typeof harness>) => ({ ...h.io, stdoutTty: true, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } });
+
+  it('cleans every cell of a list, every label and value of a record, and a bare answer', async () => {
+    const rows = [{ id: sly('1'), name: sly('Referral program'), status: 'active' }, { id: 2, name: 'Partner\nprogram', status: sly('draft') }];
+    const list = signedIn([reply(200, envelope(rows))]);
+    expect(await runCli(['programs', 'list'], terminal(list))).toBe(0);
+    const shown = clear(list.out());
+    expect(shown).toMatch(/1 +Referral program +active/);
+    expect(shown).toContain('siren programs get 1');
+
+    const one = signedIn([reply(200, { id: sly('7'), [sly('name')]: sly('Referral program'), rules: { note: sly('x') } })]);
+    expect(await runCli(['programs', 'get', '7'], terminal(one))).toBe(0);
+    expect(clear(one.out())).toMatch(/name +Referral program/);
+
+    const plain = signedIn([reply(200, { id: 7, name: sly('Referral program') })]);
+    expect(await plain.run(['programs', 'get', '7'])).toBe(0);
+    expect(plain.out()).not.toContain('\u001b');
+
+    const bare = signedIn([reply(200, sly('pong'))]);
+    expect(await runCli(['get', '/ping'], terminal(bare))).toBe(0);
+    expect(clear(bare.out())).toContain('pong');
+  });
+
+  it("cleans Siren's words in a refusal", async () => {
+    const h = signedIn([reply(404, { error: { message: sly('Program not found.'), code: 'not_found' } })]);
+    expect(await runCli(['programs', 'get', '99'], terminal(h))).toBe(1);
+    expect(clear(h.err())).toContain('Program not found.');
+  });
+});

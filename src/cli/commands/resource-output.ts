@@ -1,9 +1,11 @@
+import { clean } from '../style';
 import type { Style } from '../style';
 
 /*
  * How the record commands lay out Siren's answers, through the style module
  * (src/cli/style.ts): an aligned table for a list, labels and values for one
- * record. Nothing passes 80 columns.
+ * record. Nothing passes 80 columns, and every key and value from Siren is
+ * cleaned of escape sequences and control characters first.
  */
 
 /** The widest line the tool prints. */
@@ -12,12 +14,13 @@ export const WIDTH = 80;
 /** The widest a table column grows before its values are cut. */
 const COLUMN = 30;
 
-/** A value as one short line: text as it is, null as -, objects as compact JSON. */
+/** A value as one short, cleaned line: text as it is, null as -, objects as compact JSON. */
 export function cell(value: unknown): string {
   if (value === null || value === undefined) return '-';
-  if (typeof value === 'string') return value.replace(/\s+/g, ' ');
+  if (typeof value === 'string') return clean(value.replace(/\s+/g, ' '));
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return JSON.stringify(value);
+  // JSON escapes the C0 controls but not the C1 ones.
+  return clean(JSON.stringify(value));
 }
 
 /** Cuts a line to `width` characters, with … at the end when it was longer. */
@@ -55,7 +58,7 @@ export function table(style: Style, rows: readonly Record<string, unknown>[]): s
   const keys = columns(rows);
   if (keys.length === 0) return [];
   const lines = style.table(
-    keys,
+    keys.map((key) => clean(key)),
     rows.map((row) => keys.map((key) => clip(cell(row[key]), COLUMN))),
     WIDTH - 2,
   );
@@ -67,5 +70,5 @@ export function recordRows(record: Record<string, unknown>): Array<readonly [str
   const keys = Object.keys(record).filter((key) => key !== 'id');
   if (keys.length === 0) return [];
   const width = Math.min(24, Math.max(...keys.map((key) => key.length)));
-  return keys.map((key) => [clip(key, width), clip(cell(record[key]), WIDTH - width - 5)] as const);
+  return keys.map((key) => [clip(clean(key), width), clip(cell(record[key]), WIDTH - width - 5)] as const);
 }

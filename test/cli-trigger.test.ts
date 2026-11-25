@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { reply } from './http-fakes';
 import { BASE, bodyOf } from './record-fakes';
 import { harness, session } from './cli-fakes';
+import { SANDBOX_BASE_URL } from '../src/http';
 import { requestRow } from './apps-siren-answers';
 
 /*
@@ -389,5 +390,72 @@ describe('siren simulate', () => {
     h.signedIn();
     expect(await h.run(['simulate', '--json'])).toBe(0);
     expect(JSON.parse(h.out())).toEqual(sale({ simulated: true }));
+  });
+});
+
+describe('what Siren sends, printed', () => {
+  /** Siren's text with an escape sequence, a link and a bell in it, which must never reach the screen. */
+  const sly = (text: string) => `${text}\u001b[2J\u001b]8;;https://evil.example\u0007\u009b1A`;
+  /** No control character is left, only the line breaks, and no line passes 80 columns. */
+  const clear = (text: string) => {
+    expect(text).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    for (const line of text.split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+  };
+  const slySession = () => ({ [SANDBOX_BASE_URL]: session({ orgName: sly('Acme') }) });
+  const slySale = (overrides: Record<string, unknown> = {}) =>
+    sale({
+      message: sly('The sale was recorded.'),
+      collaborator: { id: 42, name: sly('Sam Lee') },
+      conversions: [{ id: 1042, type: sly('sale'), status: sly('pending'), programId: 3, programName: sly('Partner program'), collaboratorId: 42, collaboratorName: sly('Sam'), obligationId: 2210, waitsOn: null }],
+      obligations: [
+        { id: 2210, collaboratorId: 42, collaboratorName: sly('Sam Lee'), programId: 3, value: 750, units: 'USD', status: sly('pending'), holdReason: sly('fraud check') },
+        { id: 2211, collaboratorId: 43, collaboratorName: 'Kim', programId: 4, value: 100, units: sly('pts'), status: 'pending', holdReason: null },
+      ],
+      waits: [{ ...wait('sent'), requestKey: sly(REQUEST), appName: sly('Acme CRM'), featureName: sly('Split the pool'), status: sly('sent') }],
+      ...overrides,
+    });
+
+  it('cleans every value from Siren in trigger, simulate and fixtures', async () => {
+    const h = harness([reply(201, slySale())]);
+    h.signedIn(slySession());
+    expect(await h.run(['trigger', 'sale', '--wait', '0']), h.err()).toBe(0);
+    clear(h.out());
+    expect(h.out()).toContain('Sale recorded in Acme (3), sandbox');
+    expect(h.out()).toMatch(/Collaborator\s+Sam Lee \(42\)/);
+
+    const sim = harness([reply(200, slySale({ simulated: true }))]);
+    sim.signedIn(slySession());
+    expect(await sim.run(['simulate']), sim.err()).toBe(0);
+    clear(sim.out());
+    expect(sim.out()).toMatch(/Programs\s+Partner program/);
+
+    const steps = harness([reply(201, slySale()), reply(202, { test: true, request: { ...requestRow({ id: REQUEST, status: sly('applied') }), data: {}, answer: { note: sly('ok') }, answeredByUser: null } })]);
+    steps.signedIn(slySession());
+    steps.write('flow.json', JSON.stringify({ fixtures: [{ name: 'sale', trigger: 'sale', params: { wait: 0 } }, { name: 'ask', trigger: 'ask', params: { app: 'acme-crm', feature: 'notify', wait: 0 } }] }));
+    expect(await steps.run(['fixtures', 'flow.json']), steps.err()).toBe(0);
+    clear(steps.out());
+    expect(steps.out()).toContain('Ran 2 fixtures in Acme (3), sandbox');
+  });
+
+  it('cleans the request in trigger ask, and the reply and error in apps test', async () => {
+    const asked = { ...requestRow({ id: REQUEST, status: sly('applied') }), data: {}, answer: { reason: sly('Refunded.') }, lastError: sly('Timed out.'), answeredByUser: null };
+    const h = harness([reply(202, { test: true, request: asked })]);
+    h.signedIn(slySession());
+    expect(await h.run(['trigger', 'ask', 'acme-crm', 'split-the-pool', '--wait', '0']), h.err()).toBe(0);
+    clear(h.out());
+    expect(h.out()).toMatch(/Error\s+Timed out\./);
+
+    const ok = harness([reply(200, { delivered: true, httpStatus: 200, error: null, eventType: sly('webhook.test') })]);
+    ok.signedIn(slySession());
+    expect(await ok.run(['apps', 'test', 'acme-crm']), ok.err()).toBe(0);
+    clear(ok.out());
+    expect(ok.out()).toMatch(/Event\s+webhook\.test/);
+
+    const failed = harness([reply(200, { delivered: false, httpStatus: 500, error: sly('Internal Server Error'), eventType: 'webhook.test' })]);
+    failed.signedIn(slySession());
+    expect(await failed.run(['apps', 'test', 'acme-crm'])).toBe(1);
+    // A plain error is one line by design, so only its characters are checked.
+    expect(failed.err()).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    expect(failed.err()).toContain('HTTP 500: Internal Server Error');
   });
 });

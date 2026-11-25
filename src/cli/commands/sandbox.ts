@@ -7,7 +7,7 @@ import type { Membership } from '../session-auth';
 import { borrowOrg, orgScope } from '../org';
 import { SandboxRecords, counted, hostOf, onSandbox, transportOf } from '../sandboxes';
 import type { SandboxCopy } from '../sandboxes';
-import { styleFor } from '../style';
+import { clean, styleFor } from '../style';
 import type { Report } from '../style';
 import { CliRefusal, CliUsageError, LIVE_BASE_URL, resolveTarget } from '../targets';
 
@@ -225,7 +225,7 @@ export async function create(input: CommandInput): Promise<number> {
   const apps = await liveSession.siren().apps.list();
 
   const style = styleFor(input.io, 'stdout', { json });
-  const progress = json ? null : style.spinner(`Making a sandbox organization for ${liveSession.orgName}`, (chunk) => input.io.stdout(chunk));
+  const progress = json ? null : style.spinner(`Making a sandbox organization for ${clean(liveSession.orgName)}`, (chunk) => input.io.stdout(chunk));
 
   const name = text(input.values.name) ?? `${liveSession.orgName} (sandbox)`;
   let org: Membership;
@@ -240,9 +240,11 @@ export async function create(input: CommandInput): Promise<number> {
     progress?.stop(false, 'No sandbox organization was made.');
     throw error;
   }
+  // Siren named the new organization, so its slug is cleaned before any line shows it.
+  const slug = clean(org.orgSlug);
 
   // Apps first, so the recipe's feature references can name the sandbox's own features.
-  progress?.update(`Copying ${counted(apps.length, 'app', 'apps')} into ${org.orgSlug}`);
+  progress?.update(`Copying ${counted(apps.length, 'app', 'apps')} into ${slug}`);
   // Siren decides whether an app may have no address, so the declaration skips the SDK's own check (AP-A4139b).
   const declare = (key: string, body: Record<string, unknown>) =>
     writeRecord<{ features: AppFeature[] }>(scope.http, 'PUT', `/apps/${encodeURIComponent(key)}`, body);
@@ -282,7 +284,7 @@ export async function create(input: CommandInput): Promise<number> {
   }
 
   // Then the setup, with each feature reference turned to the sandbox's own.
-  progress?.update(`Applying ${liveSession.orgName}'s setup to ${org.orgSlug}`);
+  progress?.update(`Applying ${clean(liveSession.orgName)}'s setup to ${slug}`);
   const rewritten = rewriteFeatureRefs(recipe, refs);
   let sent = rewritten.recipe as Record<string, unknown>;
   for (const ref of rewritten.unknown) notCopied.push({ what: `feature ${ref}`, why: 'names a feature that was not copied' });
@@ -302,8 +304,8 @@ export async function create(input: CommandInput): Promise<number> {
       started = await applyRecipe(sent);
     }
   } catch (error) {
-    progress?.stop(false, `Made ${org.orgSlug}, but its setup was not applied.`);
-    throw error instanceof SirenError ? new CliRefusal(`Made ${org.orgSlug}, but Siren refused its setup.`, { why: error.message.replace(/^Siren: /, ''), fix: input.command('sandbox list') }) : error;
+    progress?.stop(false, `Made ${slug}, but its setup was not applied.`);
+    throw error instanceof SirenError ? new CliRefusal(`Made ${slug}, but Siren refused its setup.`, { why: clean(error.message.replace(/^Siren: /, '')), fix: input.command('sandbox list') }) : error;
   }
 
   let detail = started;
@@ -352,21 +354,21 @@ export async function create(input: CommandInput): Promise<number> {
   }
 
   if (failed) {
-    progress?.stop(false, `Made ${org.orgSlug}, but its setup did not finish importing.`);
-    throw new CliRefusal(`The import into ${org.orgSlug} ${detail.status === 'failed' ? 'failed' : 'did not finish in three minutes'}.`, {
-      why: detail.errorMessage ?? `Import ${detail.jobId} is ${detail.status}.`,
-      note: `Its apps were copied. Pass --org ${org.orgSlug} to use it.`,
+    progress?.stop(false, `Made ${slug}, but its setup did not finish importing.`);
+    throw new CliRefusal(`The import into ${slug} ${detail.status === 'failed' ? 'failed' : 'did not finish in three minutes'}.`, {
+      why: clean(detail.errorMessage ?? `Import ${detail.jobId} is ${detail.status}.`),
+      note: `Its apps were copied. Pass --org ${slug} to use it.`,
     });
   }
-  progress?.stop(true, `Copied ${style.bold(liveSession.orgName)} into a sandbox organization`);
+  progress?.stop(true, `Copied ${style.bold(clean(liveSession.orgName))} into a sandbox organization`);
 
   const rows: Array<readonly [string, string]> = [
-    ['Sandbox', `${org.orgSlug} on ${hostOf(copy.baseUrl)}`],
-    ['From', `${copy.from.orgSlug} on ${hostOf(copy.from.baseUrl)}`],
+    ['Sandbox', `${slug} on ${hostOf(copy.baseUrl)}`],
+    ['From', `${clean(copy.from.orgSlug)} on ${hostOf(copy.from.baseUrl)}`],
   ];
   // A copied app has no address, so its asks wait for siren listen or a url the person sets.
-  if (apps.length === 0) rows.push(['Apps', `none on ${copy.from.orgSlug}`]);
-  copiedApps.forEach((app, index) => rows.push([index === 0 ? 'Apps' : '', fit(`${app.key} (no address, run siren listen or set one)`, 62)]));
+  if (apps.length === 0) rows.push(['Apps', `none on ${clean(copy.from.orgSlug)}`]);
+  copiedApps.forEach((app, index) => rows.push([index === 0 ? 'Apps' : '', fit(`${clean(app.key)} (no address, run siren listen or set one)`, 62)]));
   const groups: string[] = [];
   for (const [stanza, label, one, many] of RECORD_STANZAS) {
     const count = stanzas[stanza];
@@ -378,22 +380,22 @@ export async function create(input: CommandInput): Promise<number> {
   if (settings.length > 0) rows.push(['Settings', settings.join(', ')]);
   // The two that always stay behind share a line. Their reasons are the tips.
   rows.push(['Not copied', 'collaborators, API keys, signing secrets']);
-  for (const item of notCopied.slice(2)) rows.push(['', fit(`${item.what}, ${item.why}`, 62)]);
+  for (const item of notCopied.slice(2)) rows.push(['', fit(clean(`${item.what}, ${item.why}`), 62)]);
 
   const report: Report = {
     headline: '',
     rows,
     next: [
-      { text: style.command(input.command(`seed --org ${org.orgSlug} --sales 50`)), aside: 'sample sales' },
+      { text: style.command(input.command(`seed --org ${slug} --sales 50`)), aside: 'sample sales' },
       ...(copiedApps.length === 0
         ? []
-        : [{ text: style.command(input.command(`listen --org ${org.orgSlug}${copiedApps.length === 1 ? ` --app ${copiedApps[0]!.key}` : ''}`)), aside: 'asks, here' }]),
-      { text: style.command(input.command(`sandbox inbox --org ${org.orgSlug}`)) },
+        : [{ text: style.command(input.command(`listen --org ${slug}${copiedApps.length === 1 ? ` --app ${clean(copiedApps[0]!.key)}` : ''}`)), aside: 'asks, here' }]),
+      { text: style.command(input.command(`sandbox inbox --org ${slug}`)) },
     ],
     tips: [
       'Collaborators stay live. siren seed makes sample ones.',
       'The sandbox made its own keys and secrets. None left the live Siren.',
-      `Set SIREN_ORG=${org.orgSlug} to leave out --org.`,
+      `Set SIREN_ORG=${slug} to leave out --org.`,
     ],
   };
   // The spinner printed the headline, so the report starts at its block.
@@ -432,7 +434,7 @@ export async function list(input: CommandInput): Promise<number> {
       '',
       ...lines.map((line) => `  ${line}`),
       '',
-      style.rich ? style.dim(`› ${LIST_TIP}`) : LIST_TIP,
+      style.next(style.dim(LIST_TIP)),
       '',
     ].join('\n'),
   );
@@ -476,7 +478,7 @@ export async function reset(input: CommandInput): Promise<number> {
         fix: input.command(`sandbox reset${org.flag} --confirm ${slug}`),
       });
     }
-    input.io.stderr(`This clears every conversion, obligation, transaction, payout, request and delivery in ${org.orgName} (${slug}). Its setup stays.\n`);
+    input.io.stderr(`This clears every conversion, obligation, transaction, payout, request and delivery in ${clean(org.orgName)} (${clean(slug)}). Its setup stays.\n`);
     typed = (await input.io.prompt(`Type ${slug} to confirm: `)).trim();
   }
   if (typed !== slug) {
@@ -523,14 +525,23 @@ interface InboxEmail {
 function recipientsOf(value: unknown): string {
   const list = Array.isArray(value) ? value : [value];
   return list
-    .map((one) => (typeof one === 'string' ? one : isJsonObject(one) && typeof one.email === 'string' ? one.email : ''))
+    .map((one) => clean(typeof one === 'string' ? one : isJsonObject(one) && typeof one.email === 'string' ? one.email : ''))
     .filter((one) => one !== '')
     .join(', ');
 }
 
 /** `2026-11-24 17:40` from an ISO time, as Siren wrote it. */
 function shortTime(iso: string): string {
-  return iso.replace('T', ' ').slice(0, 16);
+  return clean(iso).replace('T', ' ').slice(0, 16);
+}
+
+/** An email's text part with each line cleaned, so its line breaks stay and nothing else reaches the terminal. */
+function bodyText(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => clean(line.replace(/\t/g, '  ')))
+    .join('\n')
+    .trim();
 }
 
 /** `siren sandbox inbox [<id>]`: the emails the sandbox caught for the organization, or one of them. */
@@ -556,14 +567,14 @@ export async function inbox(input: CommandInput): Promise<number> {
     }
     input.io.stdout(
       style.report({
-        headline: style.bold(email.subject),
+        headline: style.bold(clean(email.subject)),
         rows: [
           ['To', recipientsOf(email.recipients)],
-          ['From', email.fromName ?? ''],
+          ['From', clean(email.fromName ?? '')],
           ['Sent', shortTime(email.createdAt)],
-          ...(email.template ? [['Template', email.template] as const] : []),
+          ...(email.template ? [['Template', clean(email.template)] as const] : []),
         ],
-      }) + `\n${(email.text ?? '').trim() || style.dim('(no text part)')}\n`,
+      }) + `\n${bodyText(email.text ?? '') || style.dim('(no text part)')}\n`,
     );
     return 0;
   }
@@ -576,16 +587,16 @@ export async function inbox(input: CommandInput): Promise<number> {
   }
   const lines = style.table(
     ['#', 'SENT', 'TO', 'SUBJECT'],
-    emails.map((email) => [`#${email.id}`, shortTime(email.createdAt), recipientsOf(email.recipients), email.subject]),
+    emails.map((email) => [`#${clean(String(email.id))}`, shortTime(email.createdAt), recipientsOf(email.recipients), clean(email.subject)]),
     76,
   );
-  const tip = emails.length === 0 ? 'The sandbox keeps each email it sends here. Seeded test sales send none.' : `${input.command(`sandbox inbox${org.flag} ${emails[0]!.id}`)} shows one.`;
+  const tip = emails.length === 0 ? 'The sandbox keeps each email it sends here. Seeded test sales send none.' : `${input.command(`sandbox inbox${org.flag} ${clean(String(emails[0]!.id))}`)} shows one.`;
   input.io.stdout(
     [
-      style.success(`${counted(page.total ?? emails.length, 'email', 'emails')} in ${style.bold(slug)}'s sandbox inbox`),
+      style.success(`${counted(page.total ?? emails.length, 'email', 'emails')} in ${style.bold(clean(slug))}'s sandbox inbox`),
       ...(emails.length === 0 ? [] : ['', ...lines.map((line) => `  ${line}`)]),
       '',
-      style.rich ? style.dim(`› ${tip}`) : tip,
+      style.next(style.dim(tip)),
       '',
     ].join('\n'),
   );

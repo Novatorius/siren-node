@@ -4,7 +4,7 @@ import type { HttpTransport } from '../../http';
 import type { AppRequestDetail } from '../../record-types';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
-import { styleFor } from '../style';
+import { clean, styleFor } from '../style';
 import type { NextStep, Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 
@@ -147,6 +147,18 @@ export class TestActivityClient {
     const found = (list as Array<Record<string, unknown>>).find((entry) => entry !== null && typeof entry === 'object' && entry.key === feature);
     return typeof found?.kind === 'string' ? found.kind : null;
   }
+}
+
+/**
+ * A copy of Siren's answer with every string in it cleaned of escape
+ * sequences and control characters, for printing. `--json` prints the
+ * answer as Siren sent it.
+ */
+export function cleaned<T>(value: T): T {
+  if (typeof value === 'string') return clean(value) as T;
+  if (Array.isArray(value)) return value.map((one: unknown) => cleaned(one)) as T;
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, one]) => [key, cleaned(one)])) as T;
+  return value;
 }
 
 /** The kinds Siren never sends a sample to on a live organization, since an app could pay out on one. */
@@ -365,16 +377,25 @@ export function activityRows(result: ActivityResult): Array<readonly [string, st
 /** "Acme (acme), sandbox": the organization the run acts in, as signedIn() settled it, and its edition. */
 export function orgLabel(run: CommandContext): string {
   const session = run.current();
-  return `${session.orgName} (${session.orgSlug ?? session.orgId}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
+  return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
-/** The report `siren trigger` and each `fixtures` step print for a result. */
-export function activityReport(style: Style, input: CommandInput, run: CommandContext, result: ActivityResult): string {
+/** What to run after a result: the ask a reward waits on, a refund of a sale, or a sale on a visit. */
+export function activityNext(style: Style, input: Pick<CommandInput, 'command'>, raw: ActivityResult): NextStep[] {
+  const result = cleaned(raw);
   const next: NextStep[] = [];
   const open = openWaits(result);
   if (open.length > 0) next.push({ text: style.command(input.command(`apps requests ${open[0]!.requestKey}`)), aside: 'the ask a reward waits on' });
   if (result.event === 'sale' && result.transactionId !== null) next.push({ text: style.command(input.command(`trigger refund --transaction ${result.transactionId}`)) });
   if (result.event === 'visit' && result.opportunityId !== null) next.push({ text: style.command(input.command(`trigger sale --opportunity ${result.opportunityId}`)) });
+  return next;
+}
+
+/** The report `siren trigger` prints for a result. Every value from Siren is cleaned first. */
+export function activityReport(style: Style, input: CommandInput, run: CommandContext, raw: ActivityResult): string {
+  const result = cleaned(raw);
+  const next = activityNext(style, input, result);
+  const open = openWaits(result);
   const tips = [
     ...(open.length > 0 ? ['A reward that waits is settled once the app answers.'] : []),
     ...(result.message !== null && result.message !== '' ? [fit(result.message, WIDTH - 2)] : []),
@@ -382,8 +403,9 @@ export function activityReport(style: Style, input: CommandInput, run: CommandCo
   return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: activityRows(result), next, tips });
 }
 
-/** The report `siren simulate` prints: who would earn what, and no ids, since none of them exist. */
-export function simulationReport(style: Style, run: CommandContext, result: ActivityResult): string {
+/** The report `siren simulate` prints: who would earn what, and no ids, since none of them exist. Every value from Siren is cleaned first. */
+export function simulationReport(style: Style, run: CommandContext, raw: ActivityResult): string {
+  const result = cleaned(raw);
   const programs = [...programNames(result).values()];
   const count = result.obligations.length + result.waits.length;
   const total = result.total === null ? 'A' : `A ${money(result.total)}`;
@@ -424,7 +446,7 @@ export async function triggerAndWait(client: TestActivityClient, io: CliIo, body
   const transactionId = result.transactionId;
   if (transactionId === null || seconds <= 0 || openWaits(result).length === 0) return result;
   const first = result;
-  const spinner = json ? null : styleFor(io, 'stderr', {}).spinner(`Waiting on ${waitName(openWaits(first)[0]!)}`, (line) => io.stderr(line));
+  const spinner = json ? null : styleFor(io, 'stderr', {}).spinner(`Waiting on ${clean(waitName(openWaits(first)[0]!))}`, (line) => io.stderr(line));
   await pollFor(io, seconds, async () => {
     // A read answers no status or message, so the first answer keeps them.
     result = { ...(await client.sale(transactionId)), event: first.event, status: first.status, message: first.message, collaborator: first.collaborator };
@@ -445,12 +467,13 @@ export async function askAndWait(client: TestActivityClient, io: CliIo, app: str
     return !isOpen(request.status, request.mode);
   });
   const open = isOpen(request.status, request.mode);
-  spinner?.stop(!open || request.mode === 'tell', open ? 'No answer yet.' : `The request is ${request.status}.`);
+  spinner?.stop(!open || request.mode === 'tell', open ? 'No answer yet.' : `The request is ${clean(request.status)}.`);
   return request;
 }
 
-/** The report `siren trigger ask` prints for a test request. */
-export function askReport(style: Style, input: CommandInput, run: CommandContext, app: string, feature: string, request: AppRequestDetail): string {
+/** The report `siren trigger ask` prints for a test request. Every value from Siren is cleaned first. */
+export function askReport(style: Style, input: CommandInput, run: CommandContext, app: string, feature: string, raw: AppRequestDetail): string {
+  const request = cleaned(raw);
   const tell = request.mode === 'tell';
   const rows: Array<readonly [string, string]> = [
     ['Request', request.id],

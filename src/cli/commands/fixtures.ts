@@ -5,7 +5,8 @@ import type { CommandInput } from '../context';
 import { styleFor } from '../style';
 import { CliRefusal } from '../targets';
 import { appKeyArgument } from './apply';
-import { TestActivityClient, activityBody, activityRows, askAndWait, assertSandbox, confirmLiveAsk, eventName, orgLabel, triggerAndWait, waitSeconds } from './trigger-client';
+import type { NextStep } from '../style';
+import { TestActivityClient, activityBody, activityNext, activityRows, askAndWait, assertSandbox, cleaned, confirmLiveAsk, eventName, orgLabel, triggerAndWait, waitSeconds } from './trigger-client';
 import { ASK_WAIT_SECONDS, TRIGGER_WAIT_SECONDS, featureKeyArgument } from './trigger';
 
 /*
@@ -127,6 +128,7 @@ export async function fixtures(input: CommandInput): Promise<number> {
   const style = styleFor(io, 'stdout', {});
   const results = new Map<string, unknown>();
   const done: Array<{ name: string; trigger: string; result: unknown }> = [];
+  let next: NextStep[] = [];
 
   for (const [index, step] of steps.entries()) {
     const params = resolveReferences(step.params, results, io.env, `fixtures.${index}.params`) as Record<string, unknown>;
@@ -138,11 +140,15 @@ export async function fixtures(input: CommandInput): Promise<number> {
       await confirmLiveAsk(run, io, client, app, feature, values.yes === true, `fixtures ${input.args[0]} --live --yes`);
       const request = await askAndWait(client, io, app, feature, waitSeconds(params.wait, ASK_WAIT_SECONDS), json);
       result = request;
-      line = `${step.name}  asked ${app} › ${feature} · ${request.status}${request.answer === null ? '' : ` · ${JSON.stringify(request.answer)}`}`;
+      const shown = cleaned(request);
+      line = `${step.name}  asked ${app} › ${feature} · ${shown.status}${shown.answer === null ? '' : ` · ${JSON.stringify(shown.answer)}`}`;
+      next = [{ text: style.command(input.command(`apps requests ${shown.id}`)), aside: 'each send and answer' }];
     } else {
       const activity = await triggerAndWait(client, io, activityBody(step.trigger, params), waitSeconds(params.wait, TRIGGER_WAIT_SECONDS), json);
       result = activity;
-      line = `${step.name}  ${eventName(activity.event).toLowerCase()} · ${activityRows(activity)
+      const shown = cleaned(activity);
+      next = activityNext(style, input, activity);
+      line = `${step.name}  ${eventName(shown.event).toLowerCase()} · ${activityRows(shown)
         .filter(([label]) => label !== '')
         .map(([label, value]) => `${label.toLowerCase()} ${value}`)
         .slice(0, 2)
@@ -154,6 +160,16 @@ export async function fixtures(input: CommandInput): Promise<number> {
   }
 
   if (json) io.stdout(`${JSON.stringify({ steps: done }, null, 2)}\n`);
-  else io.stdout(`\n${style.report({ headline: `Ran ${steps.length} ${steps.length === 1 ? 'fixture' : 'fixtures'} in ${orgLabel(run)}` })}`);
+  else {
+    // The last step's next move, such as the refund of the sale it made.
+    io.stdout(
+      `\n${style.report({
+        headline: `Ran ${steps.length} ${steps.length === 1 ? 'fixture' : 'fixtures'} in ${orgLabel(run)}`,
+        rows: [['File', input.args[0]!]],
+        next,
+        tips: ['--json prints every step\'s answer, for a script to read.'],
+      })}`,
+    );
+  }
   return 0;
 }

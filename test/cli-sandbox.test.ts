@@ -494,3 +494,57 @@ describe('sandbox: the recipe helpers', () => {
     expect(recipe.programs[0]!.sorter).toBe('app:1');
   });
 });
+
+describe('sandbox: what Siren sends, printed', () => {
+  /** Siren's text with an escape sequence, a link and a bell in it, which must never reach the screen. */
+  const sly = (text: string) => `${text}\u001b[2J\u001b]8;;https://evil.example\u0007\u009b1A`;
+  /** Nothing but line breaks among the control characters, and no line past 80 columns. */
+  const clear = (text: string, width = true) => {
+    expect(text).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    if (width) for (const line of text.split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+  };
+
+  it('cleans the organizations in sandbox list and the emails in sandbox inbox', async () => {
+    const h = harness([reply(200, { memberships: [{ ...membershipAcme, orgName: sly('Acme'), orgSlug: sly('acme') }] })]);
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
+    expect(await h.run(['sandbox', 'list']), h.err()).toBe(0);
+    clear(h.out());
+    expect(h.out()).toMatch(/^ {2}acme +Acme/m);
+
+    const email = { id: 31, recipients: [sly('ana@example.com')], subject: sly('Your commission'), fromName: sly('Acme'), template: sly('conversion-approved'), createdAt: sly('2026-11-24T17:40:00+00:00') };
+    const list = harness([reply(200, { emails: [email], total: 1 })]);
+    list.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
+    expect(await list.run(['sandbox', 'inbox', '--org', 'acme']), list.err()).toBe(0);
+    clear(list.out());
+    expect(list.out()).toMatch(/#31 +2026-11-24 17:40 +ana@example\.com +Your commission/);
+
+    const one = harness([reply(200, { ...email, text: `Hello,\r\n${sly('Your commission was approved.')}\n\tThanks` })], { env: { SIREN_ORG: '3' } });
+    one.signedIn();
+    expect(await one.run(['sandbox', 'inbox', '31']), one.err()).toBe(0);
+    clear(one.out());
+    expect(one.out()).toContain('Hello,\nYour commission was approved.\n');
+    expect(one.out()).toMatch(/Template +conversion-approved/);
+  });
+
+  it("cleans the seed's counts and its job's error", async () => {
+    const queued = reply(202, { jobId: sly('seed1'), status: 'queued', sales: 12, collaborators: 3, months: 2 });
+    const done = reply(200, { jobId: 'seed1', status: 'complete', progress: { months: 2, salesSent: 12, salesRefused: 1, conversions: 14, lastRefusal: sly('No program took it.') } });
+    const h = harness([queued, done]);
+    h.signedIn();
+    expect(await h.run(['seed', '--org', '3']), h.err()).toBe(0);
+    clear(h.out());
+    expect(h.out()).toMatch(/Last refusal +No program took it\./);
+
+    const queuedOnly = harness([queued]);
+    queuedOnly.signedIn();
+    expect(await queuedOnly.run(['seed', '--org', '3', '--no-wait']), queuedOnly.err()).toBe(0);
+    clear(queuedOnly.out());
+
+    const failed = harness([queued, reply(200, { jobId: sly('seed1'), status: 'failed', errorMessage: sly('No collaborator could be made.'), progress: {} })]);
+    failed.signedIn();
+    expect(await failed.run(['seed', '--org', '3'])).toBe(1);
+    // A plain error is one line by design, so only its characters are checked.
+    clear(failed.err(), false);
+    expect(failed.err()).toContain('No collaborator could be made.');
+  });
+});
