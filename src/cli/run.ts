@@ -7,6 +7,7 @@ import * as appsTest from './commands/apps-test';
 import * as fixtures from './commands/fixtures';
 import * as simulate from './commands/simulate';
 import * as recipes from './commands/recipes';
+import { fieldProblems, fieldsLine } from './validation';
 import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
@@ -1150,6 +1151,17 @@ function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: s
     return new CliRefusal('Something went wrong inside the tool.', { why: message, fixText: 'Run it again with --verbose, and send the output to Siren support.', detail: stack });
   }
   const detail = httpDetail(error, baseUrl);
+  // A validation failure on any hand-written command gets the same rows as a generated one.
+  const problems = fieldProblems(error);
+  if (problems.length > 0) {
+    return new CliRefusal(`${host} refused it.`, {
+      why: fieldsLine(problems),
+      problems,
+      problemsAs: 'rows',
+      ...(typed.name === undefined ? { fixText: 'Fix them and run again.' } : { fixLead: `Fix ${problems.length === 1 ? 'it' : 'them'} and run again.`, fix: `siren ${typed.name} --help`, fixWords: 'lists what it takes' }),
+      detail,
+    });
+  }
   // Siren's 404s name no key or id, so the tool names the one typed (CLI pass 3, should-fix 10).
   const [first] = typed.args;
   if (error instanceof NotFoundError && first !== undefined && typed.name?.startsWith('apps ') === true) {

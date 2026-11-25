@@ -10,6 +10,7 @@ import { contextOf } from '../context';
 import type { CommandContext, CommandHandler, CommandInput } from '../context';
 import { DELETE_ROUTES, RESOURCE_COMMANDS } from '../resources.generated';
 import type { DeleteRoute, ResourceCommand, ResourceOp, ResourceRoute } from '../resources.generated';
+import { fieldProblems, fieldsLine } from '../validation';
 import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
 import { cell, clip, recordRows, table, WIDTH } from './resource-output';
@@ -493,7 +494,8 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     const refusal = refusalOf(error, plan, input);
     if (!plan.json) throw refusal;
     const fix = refusal.parts.fix === undefined ? null : `${refusal.parts.fix}${refusal.parts.fixWords === undefined ? '' : ` ${refusal.parts.fixWords}`}`;
-    input.io.stderr(`${JSON.stringify({ error: { message: error.message.replace(/^Siren: /, ''), status: error.statusCode, code: error.code ?? null, fix } }, null, 2)}\n`);
+    // Siren's context goes through untouched, so a script sees each failed field (failedValidations) and any other detail.
+    input.io.stderr(`${JSON.stringify({ error: { message: error.message.replace(/^Siren: /, ''), status: error.statusCode, code: error.code ?? null, fix, context: error.data ?? null } }, null, 2)}\n`);
     return 1;
   }
 }
@@ -608,6 +610,22 @@ function pastTense(method: HttpMethod): string {
  */
 export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'words'>, input: Pick<CommandInput, 'command'>): CliRefusal {
   const { method, path } = plan.outgoing;
+  const problems = fieldProblems(error);
+  if (problems.length > 0) {
+    // A validation failure: what was refused, how many fields, then one row a field (lean output, "Validation failures").
+    const op = plan.resource === undefined ? undefined : plan.words.slice(plan.resource.name.length + 1);
+    const thing = plan.resource === undefined ? '' : singular(plan.resource.name);
+    const what =
+      op === 'create' ? `the new ${thing}` : op === 'update' ? `the change to ${thing} ${clean(decodeURIComponent(path.split('/').filter(Boolean).at(-1) ?? ''))}` : `${method} ${path}`;
+    const them = problems.length === 1 ? 'it' : 'them';
+    return new CliRefusal(`Siren refused ${what}.`, {
+      why: fieldsLine(problems),
+      problems,
+      problemsAs: 'rows',
+      ...(plan.resource === undefined ? { fixText: `Fix ${them} and run again.` } : { fixLead: `Fix ${them} and run again.`, fix: `siren ${plan.words} --help`, fixWords: 'lists the fields' }),
+      detail: [`HTTP status: ${error.statusCode ?? 400}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
+    });
+  }
   const status = error.statusCode ?? 0;
   const said = clean(error.message.replace(/^Siren: /, '')).replace(/\.?$/, '.');
   const fields = error instanceof BadRequestError && error.fieldErrors.length > 0 ? ` ${error.fieldErrors.map((field) => `${clean(field.field)}: ${clean(field.message)}`).join(' ')}` : '';

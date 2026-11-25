@@ -235,7 +235,15 @@ export class Style {
       return `siren: ${refusal.message}\n${[...problems.map((problem) => `${problem.at}: ${problem.message}`), ...extra].map((line) => `${line}\n`).join('')}`;
     }
     const lines = [this.failure(refusal.headline), hanging('  ', parts.why)];
-    for (const problem of problems) lines.push(`  ${this.dim(problem.at)}`, hanging('    ', problem.message, '    '));
+    if (parts.problemsAs === 'rows') {
+      const width = Math.max(0, ...problems.map((problem) => problem.at.length)) + 2;
+      for (const problem of problems) {
+        const [first = '', ...rest] = wrapWords(problem.message, Math.max(20, REPORT_WIDTH - 2 - width));
+        lines.push(`  ${this.dim(problem.at)}${' '.repeat(width - problem.at.length)}${first}`, ...rest.map((line) => `${' '.repeat(2 + width)}${line}`));
+      }
+    } else {
+      for (const problem of problems) lines.push(`  ${this.dim(problem.at)}`, hanging('    ', problem.message, '    '));
+    }
     const fix =
       parts.fix === undefined
         ? parts.fixText

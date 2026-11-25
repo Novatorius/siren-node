@@ -135,6 +135,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A validation failure prints one row a field on every command, with each field's needs, in
+  place of one paragraph. `--json` on a generated command now carries Siren's `context`, which held
+  `failedValidations` and was dropped before.
 - `siren recipes`, with `preview`, `apply`, `status`, `imports`, `export`, `catalog`, `show` and
   `fetch`. `apply` previews, asks, applies under an import key made from the recipe, and follows
   the import to its end. `siren.recipes` makes the same calls from code. The package ships

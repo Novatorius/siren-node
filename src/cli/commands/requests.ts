@@ -6,6 +6,7 @@ import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument, appKeyInFolder, orgNamed } from './apply';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
+import { fieldProblems } from '../validation';
 import type { CommandContext, CommandInput } from '../context';
 import { REPORT_WIDTH, clean, hanging, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
@@ -724,6 +725,8 @@ const KNOWN_CODES: ReadonlySet<string> = new Set<string>([...Object.values(AppEr
  */
 function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unknown {
   if (!(error instanceof SirenError) || error.statusCode === undefined) return error;
+  // A validation failure prints one row a field, as every command prints it (run.ts asRefusal).
+  if (fieldProblems(error).length > 0) return error;
   const code = appErrorCode(error);
   if (code === AppErrorCode.NotNeedingAttention) {
     return new CliRefusal("This request doesn't need an answer.", { why: error.message, fix: run.command('apps requests --attention'), fixWords: 'to list the ones that do' });

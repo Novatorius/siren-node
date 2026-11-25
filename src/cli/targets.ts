@@ -280,6 +280,12 @@ export type RefusalParts = {
    * one `place: message` line, as a compiler prints one (CLI pass 3, must-fix 3).
    */
   problems?: ReadonlyArray<{ at: string; message: string }>;
+  /**
+   * `rows` prints the problems as aligned `field  message` rows, for the
+   * fields of a request Siren refused. A file's problems keep the place on
+   * its own line. Piped, both are one `place: message` line each.
+   */
+  problemsAs?: 'rows';
   note?: string;
   detail?: readonly string[];
 } & (

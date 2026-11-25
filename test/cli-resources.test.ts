@@ -255,7 +255,7 @@ describe('siren get, post, put, patch and delete', () => {
   it('prints a refusal as JSON on standard error with --json', async () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await h.run(['get', '/programs/99', '--json'])).toBe(1);
-    expect(JSON.parse(h.err())).toEqual({ error: { message: 'Program not found.', status: 404, code: 'not_found', fix: 'siren get /programs to see what is there' } });
+    expect(JSON.parse(h.err())).toEqual({ error: { message: 'Program not found.', status: 404, code: 'not_found', fix: 'siren get /programs to see what is there', context: null } });
     expect(h.out()).toBe('');
   });
 });
