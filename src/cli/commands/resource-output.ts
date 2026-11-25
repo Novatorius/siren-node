@@ -36,14 +36,34 @@ function scalar(value: unknown): boolean {
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
+const NAME_KEYS = ['name', 'fullName', 'title', 'label', 'email'];
+const MONEY_KEYS = ['amount', 'value', 'total', 'subtotal', 'commission', 'balance', 'onHold', 'share', 'orderTotal'];
+const DATE_KEYS = ['dateCreated', 'createdDate', 'createdAt', 'happenedAt', 'date'];
+
 /**
- * The columns a list shows: `id` first, then the fields every row holds as a
- * scalar, in the first row's order, as many as fit in `width`.
+ * The columns a list shows by default (lean output, section 5): the id, the
+ * name or else the email, the status, the money, the related record by
+ * name, and the date. Relation ids such as `engagementId` are left out. A
+ * record with none of these keeps every scalar field, `id` first.
+ */
+export function defaultColumns(keys: readonly string[]): string[] {
+  const first = (candidates: readonly string[]) => candidates.find((key) => keys.includes(key));
+  const id = first(['id', 'key']);
+  const named = first(NAME_KEYS);
+  const related = keys.find((key) => /[a-z]Name$/.test(key) && key !== named);
+  const chosen = [id, named, keys.includes('status') ? 'status' : undefined, ...MONEY_KEYS.filter((key) => keys.includes(key)), related, first(DATE_KEYS)].filter((key): key is string => key !== undefined);
+  if (chosen.length - (id === undefined ? 0 : 1) < 1) return keys.includes('id') ? ['id', ...keys.filter((key) => key !== 'id')] : [...keys];
+  return chosen;
+}
+
+/**
+ * The columns a list shows: {@link defaultColumns} of the fields every row
+ * holds as a scalar, dropped from the right until they fit in `width`.
  */
 export function columns(rows: readonly Record<string, unknown>[], width: number = WIDTH): string[] {
   if (rows.length === 0) return [];
   const keys = Object.keys(rows[0]!).filter((key) => rows.every((row) => scalar(row[key])));
-  const ordered = keys.includes('id') ? ['id', ...keys.filter((key) => key !== 'id')] : keys;
+  const ordered = defaultColumns(keys);
   const chosen: string[] = [];
   let used = 2;
   for (const key of ordered) {

@@ -25,7 +25,7 @@ describe('a generated list through a pipe', () => {
   it('prints the table alone on standard output, with dates as dates, and the count and Next on standard error', async () => {
     const h = signedIn([reply(200, envelope(programs))]);
     expect(await h.run(['programs', 'list']), h.err()).toBe(0);
-    expect(h.out()).toBe(['id  name              status  units  createdDate', '2   Partner program   draft   usd    Today 09:58', '1   Referral program  active  usd    Mar 2, 2025', ''].join('\n'));
+    expect(h.out()).toBe(['id  name              status  createdDate', '2   Partner program   draft   Today 09:58', '1   Referral program  active  Mar 2, 2025', ''].join('\n'));
     expect(h.err()).toContain('2 programs');
     expect(h.err()).toContain('siren programs get 2');
   });
@@ -120,5 +120,60 @@ describe('review of PR 94', () => {
     const h = signedIn([]);
     expect(await h.run(['post', '/programs', '-d', '__proto__[polluted]=1', '--dry-run'])).toBe(2);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('default columns (lean output, section 5)', () => {
+  const conversions = [
+    { id: 5632, engagementId: 41186, transactionId: 7502, obligationId: null, collaboratorName: 'Shay Okonkwo', amount: 500, obligationAwardType: 'USD', isTest: false, status: 'pending', type: 'sale', dateCreated: '2026-11-17T09:20:41+00:00', dateModified: '2026-11-17T09:20:41+00:00' },
+  ];
+  const registry = [{ code: 'USD', symbol: '$', symbolPosition: 'before', scale: 2, decimalPlaces: 2, type: 'monetary', isDefault: true }];
+
+  it('shows the id, status, money, the related name and the date, and leaves relation ids out, in a pipe as in a terminal', async () => {
+    const h = signedIn([reply(200, envelope(conversions)), reply(200, registry)]);
+    expect(await h.run(['conversions', 'list']), h.err()).toBe(0);
+    expect(h.out()).toBe(['id    status   amount     collaboratorName  dateCreated', '5632  pending  $5.00 USD  Shay Okonkwo      Today 09:20', ''].join('\n'));
+  });
+
+  it('shows the email when a record has no name', async () => {
+    const h = signedIn([reply(200, envelope([{ id: 3, nickname: 'ana', email: 'ana@example.com', status: 'active', referralCode: 'ANA', dateCreated: '2026-11-17T09:20:41+00:00' }]))]);
+    expect(await h.run(['collaborators', 'list']), h.err()).toBe(0);
+    expect(h.out().split('\n')[0]).toBe('id  email            status  dateCreated');
+  });
+
+  it('keeps every column a record has when none of them is a known kind', async () => {
+    const h = signedIn([reply(200, envelope([{ id: 'x', alpha: 1, beta: 2 }]))]);
+    expect(await h.run(['get', '/odd']), h.err()).toBe(0);
+    expect(h.out().split('\n')[0]).toBe('id  alpha  beta');
+  });
+});
+
+describe('query filters as flags (lean output, section 5)', () => {
+  it("sends each route's query parameter from its own flag, in kebab case", async () => {
+    const h = signedIn([reply(200, envelope([]))]);
+    expect(await h.run(['conversions', 'list', '--status', 'pending', '--collaborator-id', '12']), h.err()).toBe(0);
+    expect(queryOf(h)).toEqual({ status: 'pending', collaboratorId: '12' });
+  });
+
+  it('refuses a value the parameter does not take, naming what it takes, and sends nothing', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['conversions', 'list', '--collaborator-id', 'ana'])).toBe(2);
+    expect(h.err()).toContain('--collaborator-id takes a whole number');
+    expect(await h.run(['conversions', 'list', '--order-by', 'name'])).toBe(2);
+    expect(h.err()).toContain('--order-by takes id, engagementId, type, status or dateCreated');
+    expect(h.http.requests).toHaveLength(0);
+  });
+
+  it('lists the filters in help, with the values an enum takes', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['conversions', 'list', '--help'])).toBe(0);
+    expect(h.out()).toContain('--collaborator-id <n>');
+    expect(h.out()).toContain('--order-by <id|engagementId|type|status|dateCreated>');
+  });
+
+  it('asks for no order of its own when --order-by or --order names one', async () => {
+    const h = signedIn([reply(200, envelope([]))]);
+    expect(await h.run(['programs', 'list', '--order', 'asc'])).toBe(0);
+    expect(queryOf(h)).toEqual({ order: 'asc' });
   });
 });

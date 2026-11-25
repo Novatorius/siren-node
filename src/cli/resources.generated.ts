@@ -12,6 +12,8 @@ export interface ResourceRoute {
   readonly query?: readonly string[];
   /** True when the route pages its list with number and offset. */
   readonly paginated?: boolean;
+  /** A read's query parameters, each with its type or the values it takes, which become a list's filter flags. */
+  readonly filters?: readonly { readonly name: string; readonly type: 'string' | 'integer' | 'number' | 'boolean'; readonly values?: readonly string[] }[];
   /** The body fields Siren validates. */
   readonly fields?: readonly string[];
   /** The body fields Siren requires. */
@@ -25,6 +27,8 @@ export type ResourceOp = 'list' | 'get' | 'create' | 'update' | 'delete';
 export interface ResourceCommand {
   readonly name: string;
   readonly ops: Readonly<Partial<Record<ResourceOp, ResourceRoute>>>;
+  /** `POST /<name>/bulk {action, ids}`, when Siren has one, with the actions it takes. */
+  readonly bulk?: { readonly path: string; readonly actions: readonly string[] };
 }
 
 /** Every generated resource, by name, from openapi.json (46 resources). */
@@ -37,6 +41,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/application-forms",
         "query": [
           "propertyId"
+        ],
+        "filters": [
+          {
+            "name": "propertyId",
+            "type": "string"
+          }
         ]
       },
       "get": {
@@ -45,6 +55,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "param": "id",
         "query": [
           "propertyId"
+        ],
+        "filters": [
+          {
+            "name": "propertyId",
+            "type": "string"
+          }
         ]
       },
       "create": {
@@ -124,7 +140,17 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "method",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "currency",
+            "type": "string"
+          },
+          {
+            "name": "method",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -173,7 +199,29 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "number",
           "offset"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "dateIssued",
+              "code",
+              "type",
+              "collaboratorId"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          }
+        ]
       },
       "create": {
         "method": "POST",
@@ -204,7 +252,39 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "s",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "name",
+              "description",
+              "structure",
+              "dateCreated",
+              "dateModified"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          },
+          {
+            "name": "structure",
+            "type": "string"
+          },
+          {
+            "name": "s",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -254,7 +334,27 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "number",
           "offset"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "collaboratorId",
+              "programId"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          }
+        ]
       },
       "create": {
         "method": "POST",
@@ -315,7 +415,56 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "s",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "status",
+              "fullName",
+              "nickname",
+              "email",
+              "dateCreated",
+              "dateModified"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          },
+          {
+            "name": "id",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "fullName",
+            "type": "string"
+          },
+          {
+            "name": "nickname",
+            "type": "string"
+          },
+          {
+            "name": "email",
+            "type": "string"
+          },
+          {
+            "name": "s",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -362,6 +511,22 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/collaborators/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/collaborators/bulk",
+      "actions": [
+        "activate",
+        "reject",
+        "deactivate",
+        "restore",
+        "delete",
+        "permanent_delete",
+        "addToProgram",
+        "removeFromProgram",
+        "addToDistributor",
+        "removeFromDistributor",
+        "sendSignupEmail"
+      ]
     }
   },
   {
@@ -377,7 +542,35 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "number",
           "offset"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "type",
+              "subtype",
+              "configKey"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          },
+          {
+            "name": "type",
+            "type": "string",
+            "values": [
+              "collaborator"
+            ]
+          }
+        ]
       }
     }
   },
@@ -420,7 +613,60 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "from",
           "to"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "engagementId",
+              "type",
+              "status",
+              "dateCreated"
+            ]
+          },
+          {
+            "name": "collaboratorId",
+            "type": "integer"
+          },
+          {
+            "name": "programId",
+            "type": "integer"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "engagementId",
+            "type": "string"
+          },
+          {
+            "name": "type",
+            "type": "string"
+          },
+          {
+            "name": "obligationId",
+            "type": "string"
+          },
+          {
+            "name": "transactionId",
+            "type": "string"
+          },
+          {
+            "name": "noTest",
+            "type": "string"
+          },
+          {
+            "name": "from",
+            "type": "string"
+          },
+          {
+            "name": "to",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -460,6 +706,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/conversions/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/conversions/bulk",
+      "actions": [
+        "approve",
+        "reject",
+        "markPending",
+        "delete",
+        "permanent_delete"
+      ]
     }
   },
   {
@@ -509,6 +765,20 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "collaboratorId",
           "currency",
           "excludeReference"
+        ],
+        "filters": [
+          {
+            "name": "collaboratorId",
+            "type": "integer"
+          },
+          {
+            "name": "currency",
+            "type": "string"
+          },
+          {
+            "name": "excludeReference",
+            "type": "string"
+          }
         ]
       }
     }
@@ -525,7 +795,28 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "number",
           "offset"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "dateCreated",
+              "amount"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          }
+        ]
       }
     }
   },
@@ -541,7 +832,28 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "number",
           "offset"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "dateCreated",
+              "expiresAt"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          }
+        ]
       },
       "create": {
         "method": "POST",
@@ -596,7 +908,28 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "distributorId",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "status",
+              "distributorId",
+              "triggerDate",
+              "dateCreated"
+            ]
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "distributorId",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -619,7 +952,31 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "s",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "name",
+              "status",
+              "dateCreated"
+            ]
+          },
+          {
+            "name": "metricType",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "s",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -684,6 +1041,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/distributors/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/distributors/bulk",
+      "actions": [
+        "activate",
+        "deactivate",
+        "restore",
+        "delete",
+        "permanent_delete"
+      ]
     }
   },
   {
@@ -694,6 +1061,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/docs",
         "query": [
           "slug"
+        ],
+        "filters": [
+          {
+            "name": "slug",
+            "type": "string"
+          }
         ]
       }
     }
@@ -716,7 +1089,58 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "from",
           "to"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "opportunityId",
+              "programId",
+              "collaboratorId",
+              "score",
+              "status",
+              "source",
+              "dateCreated",
+              "dateModified"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "collaboratorId",
+            "type": "string"
+          },
+          {
+            "name": "programId",
+            "type": "string"
+          },
+          {
+            "name": "opportunityId",
+            "type": "string"
+          },
+          {
+            "name": "from",
+            "type": "string"
+          },
+          {
+            "name": "to",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -760,7 +1184,45 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "from",
           "to"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "status",
+              "dateCreated"
+            ]
+          },
+          {
+            "name": "payoutStatus",
+            "type": "string",
+            "values": [
+              "paid",
+              "unpaid",
+              "processing",
+              "failed",
+              "waiting"
+            ]
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "currency",
+            "type": "string"
+          },
+          {
+            "name": "from",
+            "type": "string"
+          },
+          {
+            "name": "to",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -780,6 +1242,15 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/fulfillments/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/fulfillments/bulk",
+      "actions": [
+        "process",
+        "complete",
+        "fail",
+        "delete"
+      ]
     }
   },
   {
@@ -817,6 +1288,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "query": [
           "type",
           "subtype"
+        ],
+        "filters": [
+          {
+            "name": "type",
+            "type": "string"
+          },
+          {
+            "name": "subtype",
+            "type": "string"
+          }
         ]
       },
       "get": {
@@ -838,7 +1319,29 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "number",
           "offset"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "localId",
+              "externalId",
+              "localType",
+              "externalType"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          }
+        ]
       },
       "create": {
         "method": "POST",
@@ -874,7 +1377,53 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "offset",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "id",
+            "type": "integer"
+          },
+          {
+            "name": "distributorId",
+            "type": "integer"
+          },
+          {
+            "name": "collaboratorId",
+            "type": "integer"
+          },
+          {
+            "name": "metricType",
+            "type": "string"
+          },
+          {
+            "name": "dateFrom",
+            "type": "string"
+          },
+          {
+            "name": "dateTo",
+            "type": "string"
+          },
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "score",
+              "dateCreated",
+              "dateModified"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          }
+        ]
       }
     }
   },
@@ -948,7 +1497,57 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "to",
           "earned"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "collaboratorId",
+              "status",
+              "awardType",
+              "value",
+              "dateCreated"
+            ]
+          },
+          {
+            "name": "opportunityId",
+            "type": "integer"
+          },
+          {
+            "name": "id",
+            "type": "string"
+          },
+          {
+            "name": "collaboratorId",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "awardType",
+            "type": "string"
+          },
+          {
+            "name": "payoutId",
+            "type": "string"
+          },
+          {
+            "name": "from",
+            "type": "string"
+          },
+          {
+            "name": "to",
+            "type": "string"
+          },
+          {
+            "name": "earned",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -989,6 +1588,17 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/obligations/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/obligations/bulk",
+      "actions": [
+        "approve",
+        "reject",
+        "markComplete",
+        "restore",
+        "delete",
+        "permanent_delete"
+      ]
     }
   },
   {
@@ -1006,7 +1616,38 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "collaboratorId",
           "status"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "status",
+              "lastTriggered",
+              "dateCreated",
+              "dateModified"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          },
+          {
+            "name": "collaboratorId",
+            "type": "integer"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -1060,13 +1701,55 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "currency",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "fulfillmentId",
+              "collaboratorId",
+              "status",
+              "value",
+              "currency",
+              "dateCreated"
+            ]
+          },
+          {
+            "name": "id",
+            "type": "string"
+          },
+          {
+            "name": "fulfillmentId",
+            "type": "string"
+          },
+          {
+            "name": "collaboratorId",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "currency",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
         "path": "/payouts/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/payouts/bulk",
+      "actions": [
+        "markPaid",
+        "markUnpaid"
+      ]
     }
   },
   {
@@ -1150,7 +1833,37 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "s",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "name",
+              "description",
+              "sorter"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          },
+          {
+            "name": "sorter",
+            "type": "string"
+          },
+          {
+            "name": "s",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -1187,6 +1900,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/program-groups/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/program-groups/bulk",
+      "actions": [
+        "delete"
+      ]
     }
   },
   {
@@ -1208,7 +1927,58 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "s",
           "number"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "engagementType",
+            "type": "string"
+          },
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "name",
+              "description",
+              "incentiveType",
+              "incentiveResolverType",
+              "status",
+              "units",
+              "dateCreated",
+              "dateModified"
+            ]
+          },
+          {
+            "name": "order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC",
+              "asc",
+              "desc"
+            ]
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "incentiveType",
+            "type": "string"
+          },
+          {
+            "name": "incentiveResolverType",
+            "type": "string"
+          },
+          {
+            "name": "units",
+            "type": "string"
+          },
+          {
+            "name": "s",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -1285,6 +2055,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "path": "/programs/{id}",
         "param": "id"
       }
+    },
+    "bulk": {
+      "path": "/programs/bulk",
+      "actions": [
+        "activate",
+        "deactivate",
+        "restore",
+        "delete",
+        "permanent_delete"
+      ]
     }
   },
   {
@@ -1362,7 +2142,60 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "from",
           "to"
         ],
-        "paginated": true
+        "paginated": true,
+        "filters": [
+          {
+            "name": "orderBy",
+            "type": "string",
+            "values": [
+              "id",
+              "status",
+              "dateCreated"
+            ]
+          },
+          {
+            "name": "credited",
+            "type": "string",
+            "values": [
+              "0",
+              "1",
+              "true",
+              "false"
+            ]
+          },
+          {
+            "name": "status",
+            "type": "string"
+          },
+          {
+            "name": "refunded",
+            "type": "string"
+          },
+          {
+            "name": "collaboratorId",
+            "type": "string"
+          },
+          {
+            "name": "currency",
+            "type": "string"
+          },
+          {
+            "name": "attributed",
+            "type": "string"
+          },
+          {
+            "name": "counted",
+            "type": "string"
+          },
+          {
+            "name": "from",
+            "type": "string"
+          },
+          {
+            "name": "to",
+            "type": "string"
+          }
+        ]
       },
       "get": {
         "method": "GET",
@@ -1381,6 +2214,14 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "details"
         ]
       }
+    },
+    "bulk": {
+      "path": "/transactions/bulk",
+      "actions": [
+        "cancel",
+        "refund",
+        "delete"
+      ]
     }
   },
   {

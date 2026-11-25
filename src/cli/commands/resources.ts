@@ -15,6 +15,7 @@ import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
 import { cell, clip, recordRows, table, WIDTH } from './resource-output';
 import { minute, recordView } from '../record-view';
+import { currenciesFor, holdsMoney, withMoney } from '../money';
 import type { ViewSection } from '../record-view';
 
 /*
@@ -92,6 +93,57 @@ function optionsFor(method: HttpMethod, list: boolean): { options: Options; flag
     options: Object.fromEntries(keys.map((key) => [key, OPTIONS[key]!])),
     flags: Object.fromEntries(keys.map((key) => [key, FLAG[key]])),
   };
+}
+
+/** The flags a filter can't take, since a record command or every command already has them. */
+const RESERVED_FLAGS = new Set([...Object.keys(FLAG), 'sandbox', 'live', 'base-url', 'quiet', 'verbose', 'org', 'help', 'yes', 'stdin']);
+
+type Filter = NonNullable<ResourceRoute['filters']>[number];
+
+/** A filter's flag: its name in kebab case, and `s` as `search`. */
+function filterFlag(filter: Filter, route: ResourceRoute): string {
+  const name = filter.name === 's' && !route.filters?.some((other) => other.name === 'search') ? 'search' : filter.name;
+  return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+/** A filter's values as help and refusals show them: each once, lowercase where both cases are listed. */
+function shownValues(filter: Filter): string[] {
+  const values = filter.values ?? [];
+  return values.filter((value) => !(value !== value.toLowerCase() && values.includes(value.toLowerCase())));
+}
+
+/** The list's filter flags, each with its query parameter, leaving out any whose flag another option has. */
+function filtersOf(route: ResourceRoute): Array<{ filter: Filter; flag: string }> {
+  return (route.filters ?? []).map((filter) => ({ filter, flag: filterFlag(filter, route) })).filter(({ flag }) => !RESERVED_FLAGS.has(flag));
+}
+
+/** A filter's help line: `--status <text>`, `--program-id <n>`, `--order <asc|desc>`. */
+function filterHelp(filter: Filter, flag: string): readonly [string, string] {
+  const values = shownValues(filter);
+  const listed = values.join('|');
+  const placeholder = values.length > 0 ? (listed.length <= 50 ? listed : 'value') : filter.type === 'integer' ? 'n' : filter.type === 'number' ? 'number' : filter.type === 'boolean' ? 'true|false' : 'text';
+  const also = values.length > 0 && listed.length > 50 ? `: ${values.join(', ')}` : '';
+  return [`--${flag} <${placeholder}>`, `Sent as ${filter.name}${also}`];
+}
+
+/** "a, b or c". */
+function orList(values: readonly string[]): string {
+  return values.length < 2 ? values.join('') : `${values.slice(0, -1).join(', ')} or ${values.at(-1)}`;
+}
+
+/** The query parameters the filter flags send, each value checked against its type, or `CliUsageError`. */
+function filterQuery(input: CommandInput, route: ResourceRoute): Record<string, string> {
+  const query: Record<string, string> = {};
+  for (const { filter, flag } of filtersOf(route)) {
+    const given = (input.values as Record<string, unknown>)[flag];
+    if (typeof given !== 'string') continue;
+    if (filter.values !== undefined && !filter.values.includes(given)) throw new CliUsageError(`--${flag} takes ${orList(shownValues(filter))}, and ${JSON.stringify(given)} isn't one.`);
+    if (filter.type === 'integer' && !/^-?\d+$/.test(given)) throw new CliUsageError(`--${flag} takes a whole number, and ${JSON.stringify(given)} isn't one.`);
+    if (filter.type === 'number' && !Number.isFinite(Number(given))) throw new CliUsageError(`--${flag} takes a number, and ${JSON.stringify(given)} isn't one.`);
+    if (filter.type === 'boolean' && given !== 'true' && given !== 'false') throw new CliUsageError(`--${flag} takes true or false, and ${JSON.stringify(given)} isn't either.`);
+    query[filter.name] = given;
+  }
+  return query;
 }
 
 /** True when a list route takes both orderBy and order, so the tool can ask for newest first. */
@@ -188,7 +240,11 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
   }
 
   const takesId = route.param !== undefined;
-  const { options, flags } = optionsFor(route.method, op === 'list' && route.paginated === true);
+  const shaped = optionsFor(route.method, op === 'list' && route.paginated === true);
+  // A list's query parameters are flags of their own (lean output, section 5).
+  const filters = op === 'list' ? filtersOf(route) : [];
+  const options: Options = { ...shaped.options, ...Object.fromEntries(filters.map(({ flag }) => [flag, { type: 'string' as const }])) };
+  const flags: Record<string, readonly [string, string]> = { ...shaped.flags, ...Object.fromEntries(filters.map(({ filter, flag }) => [flag, filterHelp(filter, flag)])) };
   const example = `siren ${resource.name} ${op}${takesId ? ' 12' : ''}${op === 'create' || op === 'update' ? ` -d ${route.required?.[0] ?? route.fields?.[0] ?? 'name'}=value` : ''}`;
   return {
     name: `${resource.name} ${op}`,
@@ -329,8 +385,9 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
   const fields = op === 'list' ? fieldsOf(input.values.fields) : undefined;
   const base: Record<string, string> = {};
   if (op === 'list') {
+    Object.assign(base, filterQuery(input, route));
     // Newest first where the route takes an order, unless the line names one (lean output, section 5).
-    const named = pairs(input).map(([key]) => key);
+    const named = [...pairs(input).map(([key]) => key), ...Object.keys(base)];
     if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(base, { orderBy: 'id', order: 'desc' });
     if (fields !== undefined && route.query?.includes('fields')) base.fields = fields.join(',');
   }
@@ -541,7 +598,9 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     // A record view of a record that keeps notes ends with its latest few, read in one more request.
     const noted = !plan.json && plan.resource !== undefined && plan.words === `${plan.resource.name} get` ? NOTED[plan.resource.name] : undefined;
     const notes = noted !== undefined && isObject(body) && body.id !== undefined && body.id !== null ? await latestNotes(transport, noted, String(body.id), input.io.env.TZ) : undefined;
-    print(input, plan, status, body, outgoing.method === 'GET' ? undefined : orgLabel(run), notes);
+    // Amounts beside a currency print as money, read with the organization's currencies. --json and --ids keep Siren's integers.
+    const shown = !plan.json && !plan.ids && holdsMoney(body) ? withMoney(body, await currenciesFor(input.io.configDir, `${run.target.baseUrl} ${run.current().orgId}`, input.io.now(), async () => parseJsonBody(await transport.request({ method: 'GET', path: '/registries/currencies', retriable: true })))) : body;
+    print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run), notes);
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
@@ -693,7 +752,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
       const next = plan.resource?.ops.get ? `${name} get ${cell(firstId)}` : `get ${plan.outgoing.path}/${cell(firstId)}`;
       hints.push('', style.bold('Next'), `  1  ${style.command(input.command(next))}`);
     }
-    const tip = `--json prints the answer as JSON.${paged ? ' --all reads every page.' : ''} --ids prints the ids alone.`;
+    const tip = `--json prints the answer as JSON.${paged ? ' --all reads every page.' : ''} --ids prints the ids alone. --fields picks the columns.`;
     if (!style.rich) {
       // Through a pipe, standard output carries the table alone, and the count, Next and tip go to standard error (lean output, section 5).
       const shown = records.length === rows.length ? table(style, records, { ...dated, indent: false }) : rows.map((row) => cell(row));

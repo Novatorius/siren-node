@@ -66,6 +66,18 @@ function deleteRoutes(spec) {
     });
 }
 
+/** The query parameters the tool sends from its own flags: --limit, --offset and --fields. */
+const CONTROL_QUERY = ['number', 'offset', 'fields'];
+
+/** The bulk route of a resource, `POST /<tag>/bulk {action, ids}`, with the actions it takes. */
+function bulkRoute(spec, tag) {
+  const path = `/${tag}/bulk`;
+  const operation = spec.paths[path]?.post;
+  if (!operation || !runsOnCloud(operation)) return undefined;
+  const actions = operation.requestBody?.content?.['application/json']?.schema?.properties?.action?.enum;
+  return Array.isArray(actions) && actions.length > 0 ? { path, actions: [...actions] } : undefined;
+}
+
 /** One route as the generated file holds it. */
 function route(method, path, operation) {
   const entry = { method, path };
@@ -74,6 +86,17 @@ function route(method, path, operation) {
   const query = (operation.parameters ?? []).filter((p) => p.in === 'query').map((p) => p.name);
   if (query.length > 0) entry.query = query;
   if (query.includes('number') && query.includes('offset')) entry.paginated = true;
+  // A read's query parameters, with the type or values openapi gives, become the list's filter flags.
+  if (method === 'GET') {
+    const filters = (operation.parameters ?? [])
+      .filter((p) => p.in === 'query' && !CONTROL_QUERY.includes(p.name))
+      .map((p) => {
+        const values = Array.isArray(p.schema?.enum) ? [...new Set(p.schema.enum.map(String))] : undefined;
+        const type = ['integer', 'number', 'boolean'].includes(p.schema?.type) ? p.schema.type : 'string';
+        return values ? { name: p.name, type, values } : { name: p.name, type };
+      });
+    if (filters.length > 0) entry.filters = filters;
+  }
   const body = operation.requestBody?.content?.['application/json']?.schema;
   if (body?.properties) entry.fields = Object.keys(body.properties);
   if (body?.required?.length) entry.required = [...body.required];
@@ -103,7 +126,8 @@ export function generate(specText) {
       const found = candidates[op]();
       if (found) ops[op] = found;
     }
-    if (Object.keys(ops).length > 0) resources.push({ name: tag, ops });
+    const bulk = bulkRoute(spec, tag);
+    if (Object.keys(ops).length > 0) resources.push({ name: tag, ops, ...(bulk ? { bulk } : {}) });
   }
 
   const deletes = deleteRoutes(spec);
@@ -123,6 +147,8 @@ export function generate(specText) {
     '  readonly query?: readonly string[];',
     '  /** True when the route pages its list with number and offset. */',
     '  readonly paginated?: boolean;',
+    "  /** A read's query parameters, each with its type or the values it takes, which become a list's filter flags. */",
+    "  readonly filters?: readonly { readonly name: string; readonly type: 'string' | 'integer' | 'number' | 'boolean'; readonly values?: readonly string[] }[];",
     '  /** The body fields Siren validates. */',
     '  readonly fields?: readonly string[];',
     '  /** The body fields Siren requires. */',
@@ -136,6 +162,8 @@ export function generate(specText) {
     'export interface ResourceCommand {',
     '  readonly name: string;',
     '  readonly ops: Readonly<Partial<Record<ResourceOp, ResourceRoute>>>;',
+    '  /** `POST /<name>/bulk {action, ids}`, when Siren has one, with the actions it takes. */',
+    '  readonly bulk?: { readonly path: string; readonly actions: readonly string[] };',
     '}',
     '',
     `/** Every generated resource, by name, from openapi.json (${resources.length} resources). */`,
