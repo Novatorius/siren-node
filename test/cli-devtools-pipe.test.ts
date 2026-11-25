@@ -23,11 +23,12 @@ describe('devtools output: 80 columns in a terminal, whole lines through a pipe'
     expect(rich.fit('short', 20)).toBe('short');
   });
 
-  it("a record list shows every column and whole values through a pipe, and fits 80 columns in a terminal", () => {
+  it("a record list shows the default columns with whole values through a pipe, and fits 80 columns in a terminal", () => {
     const rows = [{ id: 1, name: LONG, description: LONG, status: 'active', units: 'USD', createdAt: '2026-11-25T10:00:00+00:00' }];
     const piped = table(plain, rows).join('\n');
     expect(piped).toContain(LONG);
-    for (const key of ['description', 'status', 'units', 'createdAt']) expect(piped).toContain(key);
+    for (const key of ['id', 'name', 'status', 'createdAt']) expect(piped).toContain(key);
+    expect(piped).not.toContain('description');
     for (const line of table(rich, rows)) expect(visibleLength(line), line).toBeLessThanOrEqual(80);
   });
 
