@@ -175,12 +175,34 @@ export function withoutPaths(recipe: Record<string, unknown>, paths: readonly st
   return copy;
 }
 
+/** The problems of a 422 recipe refusal, from POST /recipes/preview or /recipes/apply, or none for any other error. */
+function recipeProblems(error: unknown): RecipeProblem[] {
+  if (!(error instanceof SirenError) || error.statusCode !== 422 || !isJsonObject(error.data)) return [];
+  return Array.isArray(error.data.errors) ? (error.data.errors as RecipeProblem[]).filter(isJsonObject) : [];
+}
+
+/** True for a problem that names an app's feature, which no recipe may carry. The copy turns or drops those itself. */
+function isAppChoice(problem: RecipeProblem): boolean {
+  return problem.code === 'APP_FEATURE' || /app's feature/.test(problem.message ?? '');
+}
+
 /** The paths of a 422 recipe refusal that name an app's feature, which a recipe cannot carry. */
 function appFeaturePaths(error: unknown): string[] {
-  if (!(error instanceof SirenError) || error.statusCode !== 422 || !isJsonObject(error.data)) return [];
-  const problems = Array.isArray(error.data.errors) ? (error.data.errors as RecipeProblem[]) : [];
-  const app = problems.filter((problem) => typeof problem.path === 'string' && (problem.code === 'APP_FEATURE' || /app's feature/.test(problem.message ?? '')));
-  return app.length === problems.length ? app.map((problem) => problem.path!) : [];
+  const problems = recipeProblems(error);
+  const app = problems.filter((problem) => typeof problem.path === 'string' && isAppChoice(problem));
+  return app.length > 0 && app.length === problems.length ? app.map((problem) => problem.path!) : [];
+}
+
+/**
+ * The first field Siren refused, as `path: message`, and how many more,
+ * such as "programGroups.group_1.sorter: Invalid sorter 'alphabetical'.
+ * Valid values: newestBindingWins, oldestBindingWins." Siren's words are
+ * cleaned first.
+ */
+function refusedFields(problems: readonly RecipeProblem[]): string {
+  const [first, ...rest] = problems;
+  const line = `${clean(first?.path ?? 'The recipe')}: ${clean(first?.message ?? 'refused')}`;
+  return rest.length === 0 ? line : `${line} Siren refused ${counted(rest.length, 'more field', 'more fields')} too.`;
 }
 
 /**
@@ -218,6 +240,22 @@ export async function create(input: CommandInput): Promise<number> {
   );
   const recipe = exported.recipe as Record<string, unknown>;
   const apps = await liveSession.siren().apps.list();
+
+  // All or nothing. Siren has no route that deletes a sandbox organization, so the setup is checked on the
+  // sandbox before one is made. POST /recipes/preview runs apply's own validation and makes nothing. Only a
+  // refused field of the setup stops the copy here. App choices are the copy's to turn or drop, and any other
+  // failure leaves the check to the apply, which validates again.
+  const copyName = `Copy of ${liveSession.orgName}`;
+  const fixLive = {
+    fixLead: `Fix it in ${clean(liveSession.orgName)} on ${hostOf(live.target.baseUrl)}, then run`,
+    fix: input.command(`sandbox create --from ${from}`),
+  };
+  try {
+    await writeRecord(transportOf(run), 'POST', '/recipes/preview', { ...recipe, configurationOnly: true, name: copyName });
+  } catch (error) {
+    const fields = recipeProblems(error).filter((problem) => !isAppChoice(problem));
+    if (fields.length > 0) throw new CliRefusal(`Siren would refuse ${clean(liveSession.orgName)}'s setup, so nothing was made.`, { why: refusedFields(fields), ...fixLive });
+  }
 
   const style = styleFor(input.io, 'stdout', { json });
   const progress = json ? null : style.spinner(`Making a sandbox organization for ${clean(liveSession.orgName)}`, (chunk) => input.io.stdout(chunk));
@@ -285,7 +323,7 @@ export async function create(input: CommandInput): Promise<number> {
   for (const ref of rewritten.unknown) notCopied.push({ what: `feature ${ref}`, why: 'names a feature that was not copied' });
   const http = scope.http;
   const applyRecipe = (body: Record<string, unknown>) =>
-    writeRecord<ImportDetail>(http, 'POST', '/recipes/apply', { ...body, configurationOnly: true, name: `Copy of ${liveSession.orgName}` });
+    writeRecord<ImportDetail>(http, 'POST', '/recipes/apply', { ...body, configurationOnly: true, name: copyName });
   let started: ImportDetail;
   try {
     try {
@@ -300,7 +338,14 @@ export async function create(input: CommandInput): Promise<number> {
     }
   } catch (error) {
     progress?.stop(false, `Made ${slug}, but its setup was not applied.`);
-    throw error instanceof SirenError ? new CliRefusal(`Made ${slug}, but Siren refused its setup.`, { why: clean(error.message.replace(/^Siren: /, '')), fix: input.command('sandbox list') }) : error;
+    if (!(error instanceof SirenError)) throw error;
+    // The check above passed, so the sandbox refused something only the new organization shows. It stays, and the person is told so.
+    const fields = recipeProblems(error).filter((problem) => !isAppChoice(problem));
+    throw new CliRefusal(`Made ${slug}, but Siren refused its setup.`, {
+      why: fields.length > 0 ? refusedFields(fields) : clean(error.message.replace(/^Siren: /, '')),
+      note: `Siren cannot delete a sandbox organization, so ${slug} stays, with ${copiedApps.length > 0 ? 'its apps and ' : ''}no setup.`,
+      ...fixLive,
+    });
   }
 
   let detail = started;

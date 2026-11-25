@@ -1,7 +1,7 @@
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { COMMANDS } from '../src/cli/run';
+import { COMMANDS, runCli } from '../src/cli/run';
 import { rewriteFeatureRefs, withoutPaths } from '../src/cli/commands/sandbox';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
@@ -61,10 +61,36 @@ function declaredOnSandbox() {
   });
 }
 
-function copyReplies(apply = reply(202, { success: true, jobId: 'job1', status: 'queued' })) {
+/** A recipe refusal as Siren's 422 sends it, from POST /recipes/preview or /recipes/apply. */
+function recipeRefused(errors: Array<Record<string, string>>) {
+  return reply(422, { error: { message: 'Recipe validation failed.', context: { type: 'RECIPE_VALIDATION_FAILED', errors } } });
+}
+
+/** A field Siren's validator refuses, as the dev data generator's sorter is (contract/devtools-generator-sorter-bug.md). */
+const BAD_SORTER = {
+  path: 'programGroups.group_1.sorter',
+  message: "Invalid sorter 'alphabetical'. Valid values: newestBindingWins, oldestBindingWins.",
+  code: 'UNKNOWN_VALUE',
+};
+
+/**
+ * What POST /recipes/preview answers for the exported recipe: Siren refuses
+ * every `app:` choice in any recipe (code APP_FEATURE), and the copy turns or
+ * drops those after it makes the apps, so this refusal lets the copy go on.
+ */
+const APP_CHOICES = [
+  { path: 'programs.0.postConversionActions.0.type', message: "Invalid post conversion action 'app:11'. A recipe names only built-in choices.", code: 'APP_FEATURE' },
+  { path: 'programs.1.sorter', message: "Invalid sorter 'app:12'. A recipe names only built-in choices.", code: 'APP_FEATURE' },
+];
+function previewOnlyAppChoices() {
+  return recipeRefused(APP_CHOICES);
+}
+
+function copyReplies(apply = reply(202, { success: true, jobId: 'job1', status: 'queued' }), preview = previewOnlyAppChoices()) {
   return [
     exported(),
     reply(200, [appRecord()]),
+    preview,
     reply(201, { org: sandboxOrg }),
     AuthAnswers.tokens(ACCESS_2, REFRESH_2),
     declaredOnSandbox(),
@@ -92,6 +118,7 @@ describe('sandbox: siren sandbox create', () => {
     expect(h.paths()).toEqual([
       'GET /recipes/export',
       'GET /apps',
+      'POST /recipes/preview',
       'POST /sandbox/orgs',
       'POST /auth/switch-org',
       `PUT /apps/${APP_KEY}`,
@@ -110,8 +137,11 @@ describe('sandbox: siren sandbox create', () => {
     expect(include).not.toContain('collaborators');
     expect(include).not.toContain('mappings');
 
-    expect(bodyOf(h.http.requests[2])).toEqual({ name: 'Acme (sandbox)' });
-    const declared = bodyOf(h.http.requests[4]) as Record<string, unknown>;
+    // The setup is checked on the sandbox, in the person's own organization there, before anything is made.
+    expect(bodyOf(h.http.requests[2])).toMatchObject({ configurationOnly: true, programGroups: [{ name: 'All' }] });
+    expect(h.http.bearers()[2]).toBe(`Bearer ${ACCESS_1}`);
+    expect(bodyOf(h.http.requests[3])).toEqual({ name: 'Acme (sandbox)' });
+    const declared = bodyOf(h.http.requests[5]) as Record<string, unknown>;
     expect(declared).toMatchObject({ name: 'Acme' });
     // No sandbox ask may reach the client's real server, so the copy has no address.
     expect(declared).not.toHaveProperty('url');
@@ -120,14 +150,14 @@ describe('sandbox: siren sandbox create', () => {
     expect((declared.features as Array<Record<string, unknown>>).map((feature) => feature.key)).toEqual(['notify-crm', 'acme-ledger']);
     expect((declared.features as Array<Record<string, unknown>>)[1]).toMatchObject({ currencies: ['USD'], answerWindowMinutes: 1 });
 
-    const applied = bodyOf(h.http.requests[5]) as Record<string, unknown>;
+    const applied = bodyOf(h.http.requests[6]) as Record<string, unknown>;
     expect(applied.configurationOnly).toBe(true);
     expect(JSON.stringify(applied.programs)).toContain('"app:111"');
     expect(JSON.stringify(applied.programs)).toContain('"app:112"');
     expect(JSON.stringify(applied)).not.toMatch(/"app:1[12]"/);
 
     // The new organization's token served this run only. Both sessions keep their organization, and the copy is on record.
-    expect(h.http.bearers().slice(4)).toEqual([`Bearer ${ACCESS_2}`, `Bearer ${ACCESS_2}`, `Bearer ${ACCESS_2}`]);
+    expect(h.http.bearers().slice(5)).toEqual([`Bearer ${ACCESS_2}`, `Bearer ${ACCESS_2}`, `Bearer ${ACCESS_2}`]);
     expect(h.credentials().sessions[SANDBOX_BASE_URL]).toMatchObject({ orgId: 3, accessToken: ACCESS_1 });
     expect(h.credentials().sessions[LIVE]).toMatchObject({ orgId: 9 });
     const recordPath = join(h.configDir, 'sandboxes.json');
@@ -163,13 +193,13 @@ describe('sandbox: siren sandbox create', () => {
       },
     });
     const replies = copyReplies();
-    replies.splice(4, 1, refused, reply(201, { ...appRecord(), id: 70, features: [], rawKey: RAW_KEY, signingSecret: null }));
+    replies.splice(5, 1, refused, reply(201, { ...appRecord(), id: 70, features: [], rawKey: RAW_KEY, signingSecret: null }));
     const h = harness(replies, { edition: sandboxFirst });
     signedInBoth(h);
 
     expect(await h.run(['sandbox', 'create', '--from', 'acme', '--json']), h.err()).toBe(0);
-    expect(h.paths().slice(4, 6)).toEqual([`PUT /apps/${APP_KEY}`, `PUT /apps/${APP_KEY}`]);
-    const second = bodyOf(h.http.requests[5]) as Record<string, unknown>;
+    expect(h.paths().slice(5, 7)).toEqual([`PUT /apps/${APP_KEY}`, `PUT /apps/${APP_KEY}`]);
+    const second = bodyOf(h.http.requests[6]) as Record<string, unknown>;
     expect(second).not.toHaveProperty('url');
     expect(second).not.toHaveProperty('events');
     expect(second.features).toEqual([]);
@@ -188,17 +218,75 @@ describe('sandbox: siren sandbox create', () => {
       },
     });
     const replies = copyReplies(refused);
-    replies.splice(6, 0, reply(202, { success: true, jobId: 'job1', status: 'queued' }));
+    replies.splice(7, 0, reply(202, { success: true, jobId: 'job1', status: 'queued' }));
     const h = harness(replies, { edition: sandboxFirst });
     signedInBoth(h);
 
     expect(await h.run(['sandbox', 'create', '--from', 'acme', '--json']), h.err()).toBe(0);
-    const second = bodyOf(h.http.requests[6]) as { programs: Array<Record<string, unknown>> };
+    const second = bodyOf(h.http.requests[7]) as { programs: Array<Record<string, unknown>> };
     expect(second.programs[1]).toEqual({ name: 'Affiliates' });
     expect(JSON.stringify(second.programs[0])).toContain('app:111');
     const answer = JSON.parse(h.out()) as { notCopied: Array<{ what: string }>; import: { status: string } };
     expect(answer.import.status).toBe('complete');
     expect(answer.notCopied.map((item) => item.what)).toContain('app choice at programs.1.sorter');
+  });
+
+  it("checks the setup on the sandbox first, and when Siren would refuse a field makes nothing and names the field", async () => {
+    const preview = recipeRefused([...APP_CHOICES, BAD_SORTER]);
+    const h = harness(copyReplies(undefined, preview), { edition: sandboxFirst });
+    signedInBoth(h);
+
+    expect(await h.run(['sandbox', 'create', '--from', 'acme'])).toBe(1);
+    // All or nothing: no organization, no app and no import on the sandbox.
+    expect(h.paths()).toEqual(['GET /recipes/export', 'GET /apps', 'POST /recipes/preview']);
+    expect(existsSync(join(h.configDir, 'sandboxes.json'))).toBe(false);
+    const err = h.err().replace(/\s+/g, ' ');
+    expect(err).toContain("Siren would refuse Acme's setup, so nothing was made.");
+    expect(err).toContain("programGroups.group_1.sorter: Invalid sorter 'alphabetical'. Valid values: newestBindingWins, oldestBindingWins.");
+    // The app choices are not the person's to fix. The copy handles them.
+    expect(err).not.toContain('app:12');
+    expect(err).toContain('Fix it in Acme on siren.acme.example, then run siren sandbox create --from acme');
+
+    // In a terminal it is the three-part error: a red ✗ headline, Siren's reason wrapped to 80 columns, and the fix.
+    const tty = harness(copyReplies(undefined, preview), { edition: sandboxFirst });
+    signedInBoth(tty);
+    expect(await runCli(['sandbox', 'create', '--from', 'acme'], { ...tty.io, stderrTty: true, env: { ...tty.io.env, TERM: 'xterm-256color' } })).toBe(1);
+    const lines = tty.err().replace(/\u001b\[[\d;]*m/g, '').trimEnd().split('\n');
+    expect(lines[0]).toBe("✗ Siren would refuse Acme's setup, so nothing was made.");
+    expect(lines[1]).toBe("  programGroups.group_1.sorter: Invalid sorter 'alphabetical'. Valid values:");
+    expect(lines[2]).toBe('  newestBindingWins, oldestBindingWins.');
+    expect(lines[3]).toBe('› Fix it in Acme on siren.acme.example, then run siren sandbox create --from acme.');
+  });
+
+  it('names how many more fields Siren refused when there are several', async () => {
+    const more = { ...BAD_SORTER, path: 'programGroups.group_2.sorter', message: "Invalid sorter 'random'. Valid values: newestBindingWins, oldestBindingWins." };
+    const h = harness(copyReplies(undefined, recipeRefused([BAD_SORTER, more, { ...more, path: 'programGroups.group_3.sorter' }])), { edition: sandboxFirst });
+    signedInBoth(h);
+    expect(await h.run(['sandbox', 'create', '--from', 'acme'])).toBe(1);
+    const err = h.err().replace(/\s+/g, ' ');
+    expect(err).toContain("programGroups.group_1.sorter: Invalid sorter 'alphabetical'.");
+    expect(err).toContain('Siren refused 2 more fields too.');
+  });
+
+  it('goes on to the copy when the preview fails for another reason, since the apply checks the setup again', async () => {
+    const h = harness(copyReplies(undefined, reply(403, { error: { message: 'Forbidden.' } })), { edition: sandboxFirst });
+    signedInBoth(h);
+    expect(await h.run(['sandbox', 'create', '--from', 'acme', '--json']), h.err()).toBe(0);
+    expect(h.paths()).toContain('POST /sandbox/orgs');
+  });
+
+  it("says plainly that the new organization stays, empty, when Siren refuses the setup only after it is made", async () => {
+    const h = harness(copyReplies(recipeRefused([BAD_SORTER]), reply(200, { success: true, preview: {} })), { edition: sandboxFirst });
+    signedInBoth(h);
+
+    expect(await h.run(['sandbox', 'create', '--from', 'acme'])).toBe(1);
+    expect(h.paths().slice(-2)).toEqual([`PUT /apps/${APP_KEY}`, 'POST /recipes/apply']);
+    const err = h.err().replace(/\s+/g, ' ');
+    expect(err).toContain('Made acme-sandbox, but Siren refused its setup.');
+    expect(err).toContain("programGroups.group_1.sorter: Invalid sorter 'alphabetical'.");
+    // Siren has no route that deletes a sandbox organization, so the tool says what is left and what to do.
+    expect(err).toContain('Siren cannot delete a sandbox organization, so acme-sandbox stays, with its apps and no setup.');
+    expect(err).toContain('Fix it in Acme on siren.acme.example, then run siren sandbox create --from acme');
   });
 
   it('reads another of the person\'s live organizations on a token for this run only', async () => {

@@ -208,9 +208,10 @@ export class Style {
     const extra = [...(note === undefined ? [] : [note]), ...(verbose ? (detail ?? []) : [])];
     if (!this.rich) return `siren: ${refusal.message}\n${extra.map((line) => `${line}\n`).join('')}`;
     const lines = [this.failure(refusal.headline)];
-    if (why !== undefined) lines.push(`  ${why}`);
+    // Siren's reasons can be long, such as a recipe field with its valid values, so the why and the notes wrap at 80 columns.
+    if (why !== undefined) for (const line of wrapWords(why, REPORT_WIDTH - 2)) lines.push(`  ${line}`);
     if (fix !== undefined) lines.push(`${this.green('›')} ${fixLead ?? 'Run'} ${this.command(fix)}${fixWords === undefined ? '' : ` ${fixWords}`}.`);
-    for (const line of extra) lines.push(this.dim(line));
+    for (const note of extra) for (const line of wrapWords(note, REPORT_WIDTH)) lines.push(this.dim(line));
     return `${lines.join('\n')}\n`;
   }
 
