@@ -339,6 +339,17 @@ describe('siren listen', () => {
     expect(live.paths()).toEqual([]);
   });
 
+  it("runs on a sandbox only, as its help says, since a live Siren refuses a listen session: --live or not, nothing is sent", async () => {
+    for (const flags of [[], ['--live']]) {
+      const h = harness([], { edition: 'production' });
+      h.signedIn({ [LIVE_BASE_URL]: session({ edition: 'production' }) });
+      expect(await h.run(['listen', '--app', KEY, '--forward-to', 'localhost:8787/siren', ...flags])).toBe(1);
+      expect(h.err()).toContain('siren listen runs on a sandbox only.');
+      expect(h.err()).not.toContain('needs --live');
+      expect(h.paths()).toEqual([]);
+    }
+  });
+
   it('reads an address with no scheme as http, cuts a long reason, keeps lines within 80 columns in a terminal and whole through a pipe', () => {
     expect(forwardAddress('localhost:8787/siren')).toBe('http://localhost:8787/siren');
     expect(forwardAddress('https://dev.acme.example/hook')).toBe('https://dev.acme.example/hook');

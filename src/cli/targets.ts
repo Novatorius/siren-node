@@ -102,12 +102,12 @@ export const LIVE_WRITES = [
   'apps off',
   'apps delete',
   // The developer tools that can act on a live organization with --live.
-  'listen',
   'trigger ask',
   'fixtures',
   'apps test',
   // The developer tools that act on a sandbox alone. Their target is never live, so a hint to one never gains --live,
   // and they are listed so the table's readsOnly and offline marks still name every command that sends a change.
+  'listen',
   'trigger',
   'sandbox create',
   'sandbox list',

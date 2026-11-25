@@ -12,6 +12,7 @@ import { CliRefusal, CliUsageError } from '../targets';
 import { saveSecrets } from './apply';
 import { idLabeller, whole } from './requests';
 import type { IdLabel } from './requests';
+import { assertSandbox } from './trigger-client';
 
 /*
  * `siren listen`: while it runs, Siren sends one app's asks, tells and
@@ -288,6 +289,8 @@ export async function listen(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   // The organization comes from --org, SIREN_ORG, "org" in the app file, or the only one.
   if (file !== undefined) run.appFilePath = file.path;
+  // Siren's live Cloud refuses a listen session (403 listen_live_refused), so a live target is refused here, before --live is asked for.
+  await assertSandbox(run, 'listen');
   const session = await run.signedIn();
   const scope = await orgScope(run, input, session, 'listen');
   // Short request ids when Siren finds requests by their start (CLI pass 3), from one idPrefix call at the first request.
