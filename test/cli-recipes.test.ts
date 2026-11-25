@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { importKeyOf, handoffToken, progressLine } from '../src/cli/commands/recipes';
 import { runCli } from '../src/cli/run';
+import type { RecipePreview } from '../src/resources/recipes';
 import { harness } from './cli-fakes';
 import { reply } from './http-fakes';
 import { PREVIEW, RECIPE, importDetail } from './recipes-fixtures';
@@ -213,5 +215,54 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
 
   it('progressLine names each section with work, in plain words', () => {
     expect(progressLine({ perStanzaTotals: { programs: 3, collaboratorGroups: 2, collaborators: 40, products: 0 }, perStanzaProcessed: { programs: 3, collaboratorGroups: 2, collaborators: 18 }, processedItems: 23, totalItems: 45 })).toBe('Programs 3/3 · Groups 2/2 · People 18/40');
+  });
+});
+
+describe('siren recipes: export, then preview of the same file', () => {
+  // Recorded from the PR 1250 preview: the export of its programs, and Siren's preview of that recipe.
+  const recorded = JSON.parse(readFileSync(new URL('./fixtures/recipes/programs-round-trip.json', import.meta.url), 'utf8')) as { exported: Record<string, unknown>; preview: RecipePreview };
+
+  it("previews what export wrote, with Siren's samples as objects, and names a few by name", async () => {
+    const h = harness([reply(200, { success: true, recipe: recorded.exported, skipped: {} }), reply(200, { success: true, preview: recorded.preview })]);
+    h.signedIn();
+    expect(await h.run(['recipes', 'export', '--include', 'programs']), h.err()).toBe(0);
+    h.write('export.json', h.out());
+    const before = h.out().length;
+    expect(await h.run(['recipes', 'preview', 'export.json']), h.err()).toBe(0);
+    expect(bodyAt(h, 1)).toEqual(recorded.exported);
+    const shown = h.out().slice(before);
+    expect(shown).toContain('export.json would make these');
+    expect(shown).toMatch(/Programs +19: Referral Program, Creator Program, Influencer Program, …/);
+  });
+});
+
+describe('an error inside the tool', () => {
+  it('prints its stack with --verbose, and keeps it out without', async () => {
+    // A preview whose sections are no list fails inside the tool, which is the case --verbose is for.
+    const broken = () => harness([reply(200, { success: true, preview: { ...PREVIEW, sections: 7 } })]);
+    const quiet = broken();
+    quiet.signedIn();
+    quiet.write(FILE, JSON.stringify(RECIPE));
+    expect(await quiet.run(['recipes', 'preview', FILE])).toBe(1);
+    expect(quiet.err()).toContain('Something went wrong inside the tool.');
+    expect(quiet.err()).not.toMatch(/\n\s+at /);
+
+    const loud = broken();
+    loud.signedIn();
+    loud.write(FILE, JSON.stringify(RECIPE));
+    expect(await loud.run(['recipes', 'preview', FILE, '--verbose'])).toBe(1);
+    expect(loud.err()).toMatch(/\n\s*at .+recipes/);
+  });
+});
+
+describe('siren recipes catalog when Siren cannot reach Beacon', () => {
+  it("says Siren couldn't reach Beacon and that only the catalog needs it, for catalog and show", async () => {
+    for (const words of [['recipes', 'catalog'], ['recipes', 'show', 'gold-partners']]) {
+      const h = harness([reply(502, { error: { message: 'Could not load recipes from Beacon.', context: { type: 'BEACON_UNAVAILABLE' } } })]);
+      h.signedIn();
+      expect(await h.run(words)).toBe(1);
+      expect(h.err()).toContain("Siren couldn't reach Beacon, which serves the ready-made recipes.");
+      expect(h.err()).toContain('Only the catalog needs Beacon.');
+    }
   });
 });

@@ -12,8 +12,8 @@ export const PREVIEW = {
   description: null,
   version: '1.0.0',
   sections: [
-    { type: 'programs', label: 'Programs', count: 1, samples: ['Gold partners'], category: 'setup' },
-    { type: 'collaborators', label: 'Collaborators', count: 1, samples: ['ana@example.com'], category: 'people' },
+    { type: 'programs', label: 'Programs', count: 1, samples: [{ key: 'gold', name: 'Gold partners', meta: ['saleTransactionPercentage', 'active'] }], category: 'setup' },
+    { type: 'collaborators', label: 'Collaborators', count: 1, samples: [{ key: 'ana', name: 'ana@example.com', meta: [] }], category: 'people' },
   ],
   variables: [],
 };

@@ -1145,7 +1145,9 @@ function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: s
     return new CliRefusal(`Lost the connection to ${host}.`, { why: message, fixText: 'Try again. --verbose shows the request.', detail: httpDetail(error, baseUrl) });
   }
   if (!(error instanceof SirenError)) {
-    return new CliRefusal('Something went wrong inside the tool.', { why: message, fixText: 'Run it again with --verbose, and send the output to Siren support.' });
+    // --verbose adds the stack, which is what support needs from a fault inside the tool.
+    const stack = error instanceof Error && typeof error.stack === 'string' ? error.stack.split('\n').slice(1).map((line) => line.trimEnd()) : [];
+    return new CliRefusal('Something went wrong inside the tool.', { why: message, fixText: 'Run it again with --verbose, and send the output to Siren support.', detail: stack });
   }
   const detail = httpDetail(error, baseUrl);
   // Siren's 404s name no key or id, so the tool names the one typed (CLI pass 3, should-fix 10).

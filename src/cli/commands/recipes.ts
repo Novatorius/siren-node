@@ -7,7 +7,7 @@ import type { Recipe, RecipeCatalogFilters, RecipeImport, RecipePreview, RecipeP
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { REPORT_WIDTH, clean, styleFor } from '../style';
-import { CliRefusal, CliUsageError } from '../targets';
+import { CliRefusal, CliUsageError, hostName } from '../targets';
 import { orgNamed } from './apply';
 
 /*
@@ -16,6 +16,15 @@ import { orgNamed } from './apply';
  * The design is review/cli-dx/lean-output.md in the run folder, "siren
  * recipes". Siren serves these routes to a signed-in session only.
  */
+
+/**
+ * Siren's text, cleaned for a terminal. Any value is taken, since a field a
+ * type calls text can come back as a number or a list from another Siren,
+ * and a recipe command must never fail on how it prints an answer.
+ */
+function say(value: unknown): string {
+  return clean(typeof value === 'string' ? value : value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value));
+}
 
 /** How often apply asks after its import, in milliseconds. */
 export const IMPORT_POLL_MS = 2000;
@@ -91,7 +100,7 @@ function refusalOf(error: unknown, read: ReadRecipe, again: string): unknown {
   if (problems.length === 0) return error;
   return new CliRefusal(`${read.shown} has ${problems.length === 1 ? 'a problem' : `${problems.length} problems`}.`, {
     why: 'Siren checks a recipe before it makes anything, so nothing was made.',
-    problems: problems.map((problem) => ({ at: clean(problem.path ?? 'recipe'), message: problemMessage(problem) })),
+    problems: problems.map((problem) => ({ at: say(problem.path ?? 'recipe'), message: problemMessage(problem) })),
     fixLead: read.fileName === undefined ? 'Fix the recipe, then run' : `Fix ${problems.length === 1 ? 'it' : 'them'} in ${read.shown}, then run`,
     fix: again,
     fixWords: 'again',
@@ -101,7 +110,7 @@ function refusalOf(error: unknown, read: ReadRecipe, again: string): unknown {
 /** A problem's words: Siren's plain message for a missing integration or plan, else its message. */
 function problemMessage(problem: RecipeProblem): string {
   const words = typeof problem.humanMessage === 'string' && problem.humanMessage !== '' ? problem.humanMessage : (problem.message ?? 'Siren refused it.');
-  return clean(words);
+  return say(words);
 }
 
 /** The preview flags Siren reads as import options. */
@@ -114,9 +123,14 @@ function sectionRows(preview: RecipePreview): Array<[string, string]> {
   return preview.sections
     .filter((section) => section.count > 0)
     .map((section) => {
-      const samples = section.samples.slice(0, 3).map(clean);
+      // Siren names each example as {key, name, meta}. A plain string is read as a name, so an older Siren still prints.
+      const samples = (Array.isArray(section.samples) ? section.samples : [])
+        .slice(0, 3)
+        .map((sample: unknown) => (typeof sample === 'string' ? sample : typeof sample === 'object' && sample !== null ? String((sample as { name?: unknown; key?: unknown }).name ?? (sample as { key?: unknown }).key ?? '') : String(sample)))
+        .filter((name) => name !== '')
+        .map(clean);
       const more = section.count > samples.length ? ', …' : '';
-      return [clean(section.label), `${section.count}${samples.length > 0 ? `: ${samples.join(', ')}${more}` : ''}`];
+      return [say(String(section.label)), `${section.count}${samples.length > 0 ? `: ${samples.join(', ')}${more}` : ''}`];
     });
 }
 
@@ -143,7 +157,7 @@ export async function recipesPreview(input: CommandInput): Promise<number> {
       .report({
         headline: `${out.bold(read.shown)} would make ${preview.sections.some((section) => section.count > 0) ? 'these' : 'nothing'} in ${orgNamed(run.current())}.`,
         mark: false,
-        rows: [...sectionRows(preview), ...preview.variables.map((variable) => [`Needs`, `${clean(variable.name)} (a ${clean(variable.type)}, --var ${clean(variable.key)}=<id>)`] as [string, string])],
+        rows: [...sectionRows(preview), ...preview.variables.map((variable) => [`Needs`, `${say(variable.name)} (a ${say(variable.type)}, --var ${say(variable.key)}=<id>)`] as [string, string])],
         next: [{ text: out.command(run.command(`recipes apply ${given}`)), aside: 'apply it, after asking' }],
       })
       .replace(/\n$/, ''),
@@ -190,14 +204,14 @@ export async function recipesApply(input: CommandInput): Promise<number> {
   const unanswered = preview.variables.filter((variable) => answers[variable.key] === undefined);
   if (unanswered.length > 0 && !io.interactive) {
     throw new CliRefusal(`${read.shown} uses ${unanswered.length === 1 ? 'a record' : `${unanswered.length} records`} it doesn't make.`, {
-      why: `Name ${unanswered.length === 1 ? 'it' : 'each'} by id: ${unanswered.map((variable) => `${clean(variable.key)} (a ${clean(variable.type)})`).join(', ')}.`,
-      fix: run.command(`recipes apply ${given} --var ${unanswered.map((variable) => `${clean(variable.key)}=<id>`).join(',')}`),
+      why: `Name ${unanswered.length === 1 ? 'it' : 'each'} by id: ${unanswered.map((variable) => `${say(variable.key)} (a ${say(variable.type)})`).join(', ')}.`,
+      fix: run.command(`recipes apply ${given} --var ${unanswered.map((variable) => `${say(variable.key)}=<id>`).join(',')}`),
     });
   }
   for (const variable of unanswered) {
-    const typed = (await io.prompt(`${clean(variable.name)}, the id of a ${clean(variable.type)}: `)).trim();
+    const typed = (await io.prompt(`${say(variable.name)}, the id of a ${say(variable.type)}: `)).trim();
     if (!/^\d+$/.test(typed) || Number(typed) < 1) {
-      throw new CliRefusal('Nothing applied.', { why: `${clean(variable.name)} needs the id of a ${clean(variable.type)}, a whole number.`, fix: again, fixWords: 'to be asked again' });
+      throw new CliRefusal('Nothing applied.', { why: `${say(variable.name)} needs the id of a ${say(variable.type)}, a whole number.`, fix: again, fixWords: 'to be asked again' });
     }
     answers[variable.key] = Number(typed);
   }
@@ -265,7 +279,7 @@ export async function recipesApply(input: CommandInput): Promise<number> {
 export function progressLine(job: Pick<RecipeImport, 'perStanzaTotals' | 'perStanzaProcessed' | 'processedItems' | 'totalItems'>): string {
   const sections = Object.entries(job.perStanzaTotals).filter(([, total]) => total > 0);
   if (sections.length === 0) return `${job.processedItems}/${job.totalItems}`;
-  return sections.map(([section, total]) => `${SECTION_WORDS[section] ?? clean(section)} ${job.perStanzaProcessed[section] ?? 0}/${total}`).join(' · ');
+  return sections.map(([section, total]) => `${SECTION_WORDS[section] ?? say(section)} ${job.perStanzaProcessed[section] ?? 0}/${total}`).join(' · ');
 }
 
 /** Asks after the import every {@link IMPORT_POLL_MS} until it ends, with a progress line, then prints its report. Ctrl-C stops the watching, not the import. */
@@ -309,14 +323,14 @@ function printImport(run: CommandContext, input: CommandInput, job: RecipeImport
     rows.push(['People', `${people.added} added, ${people.updated} updated, ${people.skipped} skipped, ${people.failed} failed${people.emailed > 0 ? `, ${people.emailed} emailed` : ''}`]);
   }
   const failures = [
-    ...job.collaboratorResults.filter((row) => row.outcome === 'failed').map((row) => `${clean(String(row.email ?? row.key ?? 'someone'))}: ${clean(String(row.reason ?? row.message ?? 'failed'))}`),
-    ...job.programResults.filter((row) => row.outcome === 'failed' || row.outcome === 'drafted').map((row) => `${clean(String(row.key ?? 'a program'))}: ${clean(String(row.reason ?? row.message ?? row.outcome))}`),
+    ...job.collaboratorResults.filter((row) => row.outcome === 'failed').map((row) => `${say(String(row.email ?? row.key ?? 'someone'))}: ${say(String(row.reason ?? row.message ?? 'failed'))}`),
+    ...job.programResults.filter((row) => row.outcome === 'failed' || row.outcome === 'drafted').map((row) => `${say(String(row.key ?? 'a program'))}: ${say(String(row.reason ?? row.message ?? row.outcome))}`),
   ];
   const ended = job.status === 'complete';
   const headline = ended ? (job.failedItems === 0 ? `Applied ${out.bold(shown)}.` : `Applied ${out.bold(shown)}, with ${job.failedItems} failed.`) : `Importing ${out.bold(shown)} failed.`;
   const text = out.report({ headline, mark: ended && job.failedItems === 0, rows, tips: failures.length > 0 ? failures.slice(0, 10) : undefined }).replace(/\n$/, '');
   run.print(text);
-  if (job.errorMessage) run.print(out.warning(clean(job.errorMessage)));
+  if (job.errorMessage) run.print(out.warning(say(job.errorMessage)));
   if (failures.length > 10) run.print(out.dim(`${failures.length - 10} more failed. ${run.command(`recipes status ${job.jobId} --json`)} lists them all.`));
 }
 
@@ -333,10 +347,10 @@ export async function recipesStatus(input: CommandInput): Promise<number> {
   }
   const out = styleFor(input.io, 'stdout', input.values);
   if (job.status !== 'complete' && job.status !== 'failed') {
-    run.print(out.report({ headline: `Import ${job.jobId} is ${clean(job.status)}.`, mark: false, rows: [['Progress', progressLine(job)]] }).replace(/\n$/, ''));
+    run.print(out.report({ headline: `Import ${job.jobId} is ${say(job.status)}.`, mark: false, rows: [['Progress', progressLine(job)]] }).replace(/\n$/, ''));
     return 0;
   }
-  printImport(run, input, job, job.source?.fileName ? clean(job.source.fileName) : `import ${job.jobId}`);
+  printImport(run, input, job, job.source?.fileName ? say(job.source.fileName) : `import ${job.jobId}`);
   return 0;
 }
 
@@ -364,7 +378,7 @@ export async function recipesImports(input: CommandInput): Promise<number> {
     return 0;
   }
   const width = out.rich ? Math.min(input.io.screen?.size?.columns ?? REPORT_WIDTH, REPORT_WIDTH) : Number.POSITIVE_INFINITY;
-  const rows = items.map((item) => [item.jobId, item.dateCreated.slice(0, 16).replace('T', ' '), clean(item.status), `${item.processedItems}/${item.totalItems}`, clean(item.source?.fileName ?? item.source?.kind ?? '')]);
+  const rows = items.map((item) => [item.jobId, say(item.dateCreated).slice(0, 16).replace('T', ' '), say(item.status), `${item.processedItems}/${item.totalItems}`, say(item.source?.fileName ?? item.source?.kind ?? '')]);
   for (const line of out.table(['ID', 'STARTED', 'STATUS', 'DONE', 'FROM'], rows, width)) run.print(line);
   run.print(out.next(`${out.command(run.command(`recipes status ${items[0]!.jobId}`))} shows one.`));
   return 0;
@@ -378,7 +392,7 @@ export async function recipesExport(input: CommandInput): Promise<number> {
   if (input.values.sizes === true) {
     const sizes = await recipes.exportSizes();
     if (input.values.json === true) run.print(JSON.stringify(sizes, null, 2));
-    else for (const [section, count] of Object.entries(sizes)) run.print(`${clean(section)}  ${count}`);
+    else for (const [section, count] of Object.entries(sizes)) run.print(`${say(section)}  ${count}`);
     return 0;
   }
   const include = typeof input.values.include === 'string' ? input.values.include.split(',').map((part) => part.trim()).filter((part) => part !== '') : [];
@@ -388,7 +402,7 @@ export async function recipesExport(input: CommandInput): Promise<number> {
   const left = Object.entries(exported.skipped).filter(([, rows]) => Array.isArray(rows) && rows.length > 0);
   if (left.length > 0) {
     const err = styleFor(input.io, 'stderr', input.values);
-    const line = `Left out: ${left.map(([section, rows]) => `${(rows as unknown[]).length} ${clean(section)}`).join(', ')}, such as drafts.`;
+    const line = `Left out: ${left.map(([section, rows]) => `${(rows as unknown[]).length} ${say(section)}`).join(', ')}, such as drafts.`;
     input.io.stderr(`${err.rich ? err.dim(line) : `siren: ${line}`}\n`);
   }
   return 0;
@@ -409,12 +423,32 @@ function catalogFilters(values: CommandInput['values']): RecipeCatalogFilters {
   return filters;
 }
 
+/**
+ * Siren's catalog, or a refusal that says what a 502 means there: Siren
+ * reads the catalog from Beacon, and Beacon didn't answer. Nothing else in
+ * `siren recipes` needs Beacon, so the refusal says so.
+ */
+async function catalogOf(run: CommandContext, filters: RecipeCatalogFilters = {}) {
+  try {
+    return await run.siren().recipes.catalog(filters);
+  } catch (error) {
+    if (error instanceof SirenError && error.statusCode === 502) {
+      throw new CliRefusal("Siren couldn't reach Beacon, which serves the ready-made recipes.", {
+        why: `${hostName(run.target.baseUrl)} said: ${say(error.message.replace(/^Siren: /, ''))} Only the catalog needs Beacon. Preview, apply, status and export work as before.`,
+        fixText: 'Try the catalog again in a few minutes.',
+        detail: [`HTTP status: 502`],
+      });
+    }
+    throw error;
+  }
+}
+
 /** `siren recipes catalog`: Beacon's ready-made recipes, with whether each fits this organization. */
 export async function recipesCatalog(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const filters = catalogFilters(input.values);
   await run.signedIn();
-  const catalog = await run.siren().recipes.catalog(filters);
+  const catalog = await catalogOf(run, filters);
   if (input.values.json === true) {
     run.print(JSON.stringify(catalog.recipes.map(({ recipe: _recipe, ...entry }) => entry), null, 2));
     return 0;
@@ -424,11 +458,11 @@ export async function recipesCatalog(input: CommandInput): Promise<number> {
     run.print('No ready-made recipes match.');
     return 0;
   }
-  const rows = catalog.recipes.map((entry) => [clean(String(entry.id ?? '')), clean(String(entry.name ?? '')), entry.fits ? 'yes' : entry.requiredPlan ? `needs ${clean(entry.requiredPlan)}` : 'no']);
+  const rows = catalog.recipes.map((entry) => [say(String(entry.id ?? '')), say(String(entry.name ?? '')), entry.fits ? 'yes' : entry.requiredPlan ? `needs ${say(entry.requiredPlan)}` : 'no']);
   const width = out.rich ? Math.min(input.io.screen?.size?.columns ?? REPORT_WIDTH, REPORT_WIDTH) : Number.POSITIVE_INFINITY;
   for (const line of out.table(['ID', 'NAME', 'FITS'], rows, width)) run.print(line);
   const first = catalog.recipes.find((entry) => typeof entry.id === 'string');
-  if (first !== undefined) run.print(out.next(`${out.command(run.command(`recipes show ${clean(String(first.id))} > recipe.json`))} saves one to edit and apply.`));
+  if (first !== undefined) run.print(out.next(`${out.command(run.command(`recipes show ${say(String(first.id))} > recipe.json`))} saves one to edit and apply.`));
   return 0;
 }
 
@@ -437,10 +471,10 @@ export async function recipesShow(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const id = input.args[0]!;
   await run.signedIn();
-  const catalog = await run.siren().recipes.catalog();
+  const catalog = await catalogOf(run);
   const entry = catalog.recipes.find((candidate) => candidate.id === id);
   if (entry === undefined || entry.recipe === undefined) {
-    throw new CliRefusal(`The catalog has no recipe ${clean(id)}.`, { why: "Beacon's catalog, as Siren serves it, names no recipe with that id.", fix: run.command('recipes catalog'), fixWords: 'to list them' });
+    throw new CliRefusal(`The catalog has no recipe ${say(id)}.`, { why: "Beacon's catalog, as Siren serves it, names no recipe with that id.", fix: run.command('recipes catalog'), fixWords: 'to list them' });
   }
   run.print(JSON.stringify(entry.recipe, null, 2));
   return 0;
@@ -463,7 +497,7 @@ export async function recipesFetch(input: CommandInput): Promise<number> {
     run.print(JSON.stringify(await run.siren().recipes.fetch(token), null, 2));
   } catch (error) {
     if (error instanceof SirenError && error.statusCode === 422) {
-      throw new CliRefusal("Siren couldn't read that handoff.", { why: `${clean(error.message.replace(/^Siren: /, ''))}`, fixText: 'Ask Beacon for a new handoff link, since each one expires.' });
+      throw new CliRefusal("Siren couldn't read that handoff.", { why: `${say(error.message.replace(/^Siren: /, ''))}`, fixText: 'Ask Beacon for a new handoff link, since each one expires.' });
     }
     throw error;
   }

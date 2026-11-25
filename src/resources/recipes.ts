@@ -5,13 +5,26 @@ import { isJsonObject, readObject, writeRecord, writeRecordResent } from './reco
 /** A recipe: a JSON object with Siren's recipe sections, as recipe.schema.json describes. */
 export type Recipe = Record<string, unknown>;
 
-/** One section of a recipe preview: how many records of one kind it makes, with a few names. */
+/** One record a preview names as an example: its key in the recipe, its name, and a few words about it, such as its rate type and status. */
+export interface RecipePreviewSample {
+  key: string;
+  name: string;
+  meta: string[];
+}
+
+/**
+ * One section of a recipe preview: how many records of one kind it makes,
+ * with a few examples (Siren's RecipePreviewSection). A section a listener
+ * said something about also carries `entries`, and some carry more detail.
+ */
 export interface RecipePreviewSection {
   type: string;
   label: string;
   count: number;
-  samples: string[];
+  samples: RecipePreviewSample[];
   category: string;
+  entries?: unknown[];
+  [detail: string]: unknown;
 }
 
 /** One record a recipe uses but does not make. The importer names it in `variableAnswers`. */

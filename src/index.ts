@@ -175,6 +175,7 @@ export type {
   RecipeOutcomes,
   RecipePreview,
   RecipePreviewOptions,
+  RecipePreviewSample,
   RecipePreviewSection,
   RecipeProblem,
   RecipeSource,
