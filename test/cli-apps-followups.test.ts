@@ -75,35 +75,37 @@ const ONE = 'apps-request-one-200-needs-attention';
 const ONE_ID = 'apr_e221f712e2dd08c2daa566d3ac5ce340';
 
 describe('apps-sdk-followups-1: siren apps requests <id> reads the one request', () => {
-  it('reads it with GET /apps/requests/{id}, and shows its line, the data Siren sent, and that no one has answered', async () => {
+  it('reads it with GET /apps/requests/{id}, and shows its state and why, the data Siren sent, and that a tell takes no answer', async () => {
     const h = harness([renamedReply(ONE), reply(200, [appRecord({ id: 1 })]), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/requests/${ONE_ID}`, 'GET /apps', 'GET /apps/acme-payouts/deliveries']);
     const out = h.out();
-    expect(out.split('\n')[0]).toBe(
-      `${ONE_ID}  needs_attention  tell Post-conversion action (postConversionAction)  app:1  conversion 2  1 send  2026-11-17T12:21:12+00:00  Could not connect to the host.`,
-    );
-    expect(out).toContain(`The data Siren sent:\n${JSON.stringify(renamedBody<{ data: unknown }>(ONE).data, null, 2)}\n`);
-    expect(out).toContain('A tell takes no answer.');
+    expect(out.split('\n')[0]).toBe(ONE_ID);
+    expect(out).toContain('  State     needs attention: Could not connect to the host.\n');
+    expect(out).toContain('  Kind      tell · Post-conversion action (postConversionAction)\n');
+    expect(out).toContain('  Answer    a tell takes none\n');
+    expect(out).toContain('\nDATA\n');
+    for (const key of Object.keys(renamedBody<{ data: Record<string, unknown> }>(ONE).data)) expect(out).toContain(`\n  ${key}  `);
     expect(out).not.toContain('not among the latest 50');
   });
 
   it('shows the answer Siren took and the person who gave it, or that the app gave it', async () => {
-    const body = capturedBody<Record<string, unknown>>(ONE);
+    const body = renamedBody<Record<string, unknown>>(ONE);
     const byPerson = { ...body, mode: 'ask', status: 'applied', answer: { outcome: 'paid', reference: 'TX-1' }, answeredBy: 'user:5', answeredAt: '2026-11-17T12:40:00+00:00', answeredByUser: { id: 5, email: 'jane@store.invalid' } };
     const h = harness([reply(200, byPerson), reply(200, []), reply(200, { ...byPerson, answeredBy: 'app:1', answeredByUser: null }), reply(200, [])]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.out()).toContain('The answer Siren took, from jane@store.invalid (user 5) at 2026-11-17T12:40:00+00:00:\n{\n  "outcome": "paid",\n  "reference": "TX-1"\n}\n');
+    expect(h.out()).toContain('  Answer    {"outcome":"paid","reference":"TX-1"}\n');
+    expect(h.out()).toMatch(/ {2}From {6}jane@store\.invalid at Nov 17 \d\d:40\n/);
     const before = h.out().length;
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.out().slice(before)).toContain('The answer Siren took, from the app at 2026-11-17T12:40:00+00:00:');
+    expect(h.out().slice(before)).toMatch(/ {2}From {6}the app at Nov 17 \d\d:40\n/);
 
     const waiting = harness([reply(200, { ...body, mode: 'ask', status: 'sent' }), reply(200, [])]);
     waiting.signedIn();
     expect(await waiting.run(['apps', 'requests', ONE_ID]), waiting.err()).toBe(0);
-    expect(waiting.out()).toContain('No answer yet.');
+    expect(waiting.out()).toMatch(/ {2}Answer {4}none yet/);
   });
 
   it('shows a request older than the latest 50, since it no longer looks among them', async () => {

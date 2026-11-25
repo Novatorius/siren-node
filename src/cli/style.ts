@@ -23,6 +23,7 @@ const BOLD = '\u001b[1m';
 const DIM = '\u001b[2m';
 const RED = '\u001b[31m';
 const AMBER = '\u001b[33m';
+const CYAN = '\u001b[36m';
 const CLEAR_LINE = '\u001b[2K';
 const HIDE_CURSOR = '\u001b[?25l';
 const SHOW_CURSOR = '\u001b[?25h';
@@ -45,6 +46,8 @@ export interface NextStep {
  */
 export interface Report {
   headline: string;
+  /** False for a view, whose headline gets no ✓, since nothing was done. */
+  mark?: boolean;
   rows?: ReadonlyArray<readonly [string, string]>;
   next?: readonly NextStep[];
   tips?: readonly string[];
@@ -145,6 +148,10 @@ export class Style {
     return this.paint(AMBER, text);
   }
 
+  cyan(text: string): string {
+    return this.paint(CYAN, text);
+  }
+
   dim(text: string): string {
     return this.paint(DIM, text);
   }
@@ -201,7 +208,7 @@ export class Style {
    * keeps the layout and drops the symbols and escape codes.
    */
   report(report: Report): string {
-    const lines = [this.success(report.headline)];
+    const lines = [report.mark === false ? report.headline : this.success(report.headline)];
     const rows = report.rows ?? [];
     if (rows.length > 0) {
       const width = Math.max(...rows.map(([label]) => label.length)) + 3;

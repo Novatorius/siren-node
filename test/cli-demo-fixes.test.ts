@@ -42,24 +42,24 @@ describe('demo fix 2: apps requests shows a request that needs attention, howeve
   const recent = Array.from({ length: 50 }, (_, at) => requestRow({ id: `apr_${String(at).padStart(32, '0')}`, appId: 9, status: 'delivered', createdAt: '2026-11-24T10:00:00+00:00' }));
 
   it('lists an app\'s request that needs attention though the latest 50 are all another app\'s', async () => {
-    const h = harness([reply(200, { requests: recent }), reply(200, appRecord()), reply(200, { requests: [attention] })]);
+    const h = harness([reply(200, [appRecord()]), reply(200, { requests: recent }), reply(200, { requests: [attention] })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(attention.id);
-    expect(h.out()).not.toContain('No requests yet.');
+    expect(h.out()).toContain('ec16a240');
+    expect(h.out()).not.toContain('No requests');
   });
 
   it('shows it in the list for every app too, once', async () => {
-    const h = harness([reply(200, { requests: [attention, ...recent.slice(0, 2)] }), reply(200, { requests: [attention] })]);
+    const h = harness([reply(200, [appRecord()]), reply(200, { requests: [attention, ...recent.slice(0, 2)] }), reply(200, { requests: [attention] })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
-    expect(h.out().split(attention.id)).toHaveLength(2);
+    expect(h.out().split('\nec16a240')).toHaveLength(2);
   });
 
-  it('says which requests it looked through when an app has none there', async () => {
-    const h = harness([reply(200, { requests: recent }), reply(200, appRecord()), reply(200, { requests: [] })]);
+  it('says in one short line when an app has none there, and names the command that watches for them', async () => {
+    const h = harness([reply(200, [appRecord()]), reply(200, { requests: recent }), reply(200, { requests: [] })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(`No requests for ${APP_KEY} among the organization's latest 50, and none of its requests needs attention.`);
+    expect(h.out()).toBe(`No requests for ${APP_KEY} yet.\nsiren apps requests --app ${APP_KEY} --follow watches for them.\n`);
   });
 });

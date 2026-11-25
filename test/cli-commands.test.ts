@@ -528,26 +528,28 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     // The plain list reads the latest requests, then those that need attention (demo fix 2).
     const none = () => reply(200, { requests: [] });
     const h = harness([
+      reply(200, [app]),
       reply(200, { requests: [row, other] }),
       none(),
+      reply(200, [app]),
       reply(200, { requests: [row, other] }),
-      reply(200, app),
       none(),
+      reply(200, [app]),
       none(),
     ]);
     h.signedIn();
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
-    expect(h.out()).toContain(REQUEST);
-    expect(h.out()).toContain(other.id);
+    expect(h.out()).toContain(REQUEST.slice(4, 12));
+    expect(h.out()).toContain(other.id.slice(4, 12));
 
     const before = h.out().length;
     expect(await h.run(['apps', 'requests', '--app', KEY]), h.err()).toBe(0);
-    expect(h.out().slice(before)).toContain(REQUEST);
-    expect(h.out().slice(before)).not.toContain(other.id);
+    expect(h.out().slice(before)).toContain(REQUEST.slice(4, 12));
+    expect(h.out().slice(before)).not.toContain(other.id.slice(4, 12));
 
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', 'GET /apps/requests', `GET /apps/${KEY}`, 'GET /apps/requests', 'GET /apps/requests']);
-    expect(new URL(h.http.requests[5]!.url).searchParams.get('status')).toBe('needs_attention');
+    expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps', 'GET /apps/requests']);
+    expect(new URL(h.http.requests[7]!.url).searchParams.get('status')).toBe('needs_attention');
   });
 
   it('shows one request: the data Siren sent, each send, and what the app answered', async () => {
@@ -579,27 +581,26 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     h.signedIn();
     expect(await h.run(['apps', 'requests', REQUEST]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', `GET /apps/${KEY}/deliveries`]);
-    expect(h.out()).toContain(`${REQUEST}.1`);
+    expect(h.out()).toMatch(/\n1  failed +500  +upstream timeout\n/);
     expect(h.out()).toContain('upstream timeout');
     expect(h.out()).toContain('{"received":true}');
-    expect(h.out()).toContain('"payoutId": 88');
+    expect(h.out()).toContain('  payoutId  88');
     expect(h.out()).not.toContain('someone else');
   });
 
   it('follows the requests, printing each change once, until Ctrl-C, which exits 130', async () => {
-    const page = (entries: unknown[], nextCursor: string) => reply(200, { entries, nextCursor, nextPollMs: 1000 });
-    const delivered = { id: 'request_1_delivered', type: 'request', at: '2026-11-17T09:15:03.000Z', status: 'ok', summary: 'ask payout-method', durationMs: null, httpStatus: null, reason: null, requestStatus: 'delivered', request: { ...row, status: 'delivered' } };
-    const h = harness([reply(200, { requests: [row] }), reply(200, { requests: [] }), page([], 'eyJoIjp7fX0'), page([delivered], 'eyJoIjp7ImEiOjF9fQ'), page([], 'eyJoIjp7ImEiOjF9fQ')], {
-      onSleep: (count, abort) => count === 3 && abort(),
-    });
+    const h = harness(
+      [reply(200, [app]), ...[row, row, { ...row, status: 'answered' }].flatMap((polled) => [reply(200, { requests: [polled] }), reply(200, { requests: [] })])],
+      { onSleep: (count, abort) => count === 3 && abort() },
+    );
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(130);
-    // The list reads the latest requests and those that need attention (demo fix 2), then the feed is read three times.
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', 'GET /logs', 'GET /logs', 'GET /logs']);
-    const lines = h.out().split('\n').filter((line) => line.includes(REQUEST));
+    // The apps once, then each poll reads the latest requests and those that need attention (demo fix 2).
+    expect(h.http.requests).toHaveLength(7);
+    const lines = h.out().split('\n').filter((line) => line.includes(REQUEST.slice(4, 12)));
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('sent');
-    expect(lines[1]).toContain('delivered');
+    expect(lines[0]).toContain('waiting');
+    expect(lines[1]).toContain('answered');
   });
 
   it('posts an answer with the session, from --body or --file, and says when Siren already had it', async () => {
@@ -612,7 +613,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`, `POST /apps/requests/${REQUEST}/answer`]);
     expect(bearer(h, 0)).toBe(`Bearer ${ACCESS_1}`);
     expect(bodyOf(h.http.requests[1])).toEqual({ outcome: 'paid', reference: 'acme-88' });
-    expect(h.out()).toMatch(/accepted/i);
+    expect(h.out()).toContain(`Answered ${REQUEST.slice(4, 12)}`);
     expect(h.out()).toMatch(/already/i);
   });
 
@@ -658,6 +659,6 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     h.signedIn();
     expect(await h.run(['apps', 'resend', REQUEST]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`POST /apps/requests/${REQUEST}/resend`]);
-    expect(h.out()).toContain(REQUEST);
+    expect(h.out()).toContain(`Sent ${REQUEST.slice(4, 12)} again`);
   });
 });
