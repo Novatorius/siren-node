@@ -26,7 +26,8 @@ const RAW_KEY = `sk_test_${'5e'.repeat(32)}`;
 const SIGNING_SECRET = '7d'.repeat(32);
 const sandboxFirst = (read: number) => (read === 1 ? 'sandbox' : 'production');
 
-const liveSession = session({ edition: 'production', baseUrl: LIVE, orgId: 9, orgName: 'Acme', orgSlug: 'acme' });
+// Login keeps the person's memberships, so the resolver reads them without asking Siren.
+const liveSession = session({ edition: 'production', baseUrl: LIVE, orgId: 9, orgName: 'Acme', orgSlug: 'acme', memberships: [{ ...membershipAcme, orgId: 9 }] });
 const sandboxOrg = { orgId: 42, orgName: 'Acme (sandbox)', orgSlug: 'acme-sandbox', role: 'admin' };
 
 /** A recipe as `GET /recipes/export` answers it, with one program that names the live app's feature 11. */
@@ -217,7 +218,7 @@ describe('sandbox: siren sandbox create', () => {
     signedInBoth(h);
     expect(await h.run(['sandbox', 'create', '--from', 'globex'])).toBe(1);
     expect(h.paths()).toEqual(['GET /auth/memberships']);
-    expect(h.err()).toContain('You are not in an organization called globex on siren.acme.example.');
+    expect(h.err()).toContain('You are not in an organization named globex. Yours are acme (Acme).');
     expect(h.err()).toContain('siren orgs --base-url https://siren.acme.example/siren/v1 --live');
   });
 
@@ -367,11 +368,13 @@ describe('sandbox: siren seed', () => {
   });
 
   it('queues the seed with the counts asked for in the person\'s only organization, waits on its job, and reports it', async () => {
-    const h = harness([reply(200, { memberships: [membershipAcme] }), queued, running, done]);
-    h.signedIn();
+    const h = harness([queued, running, done]);
+    // A session login made names its organization's slug.
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await h.run(['seed', '--sales', '12', '--collaborators', '3', '--months', '2', '--seed', '7']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /auth/memberships', 'POST /sandbox/seed', 'GET /jobs/seed1', 'GET /jobs/seed1']);
-    expect(bodyOf(h.http.requests[1])).toEqual({ sales: 12, collaborators: 3, months: 2, seed: 7 });
+    // The session's own organization is the only one, so nothing is asked before the seed.
+    expect(h.paths()).toEqual(['POST /sandbox/seed', 'GET /jobs/seed1', 'GET /jobs/seed1']);
+    expect(bodyOf(h.http.requests[0])).toEqual({ sales: 12, collaborators: 3, months: 2, seed: 7 });
     const out = h.out();
     expect(out).toContain('Seeded acme with 2 months of sales');
     expect(out).toMatch(/Sales +12 sent, 0 refused/);
@@ -462,13 +465,12 @@ describe('sandbox: which organization a command acts on', () => {
   });
 
   it('asks for --org when the person is in several and named none, before anything else is sent', async () => {
-    const h = harness([both()]);
-    h.signedIn();
+    const h = harness([]);
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ memberships: [membershipAcme, sandboxOrg] }) });
     expect(await h.run(['seed'])).toBe(1);
-    expect(h.paths()).toEqual(['GET /auth/memberships']);
-    expect(h.err()).toContain('You are in 2 organizations on sandbox.sirenaffiliates.com, so siren seed needs one named.');
-    expect(h.err()).toContain('SIREN_ORG');
-    expect(h.err()).toContain('siren sandbox list');
+    expect(h.paths()).toEqual([]);
+    expect(h.err()).toContain('You belong to 2 organizations: ');
+    expect(h.err()).toContain('Pick one with --org <slug>, SIREN_ORG');
   });
 
   it('refuses an organization the person is not in', async () => {
@@ -476,8 +478,7 @@ describe('sandbox: which organization a command acts on', () => {
     h.signedIn();
     expect(await h.run(['sandbox', 'reset', '--confirm', 'globex'])).toBe(1);
     expect(h.paths()).toEqual(['GET /auth/memberships']);
-    expect(h.err()).toContain('You are not in an organization called globex');
-    expect(h.err()).toContain('SIREN_ORG names it');
+    expect(h.err()).toContain('You are not in an organization named globex.');
   });
 });
 
