@@ -31,6 +31,8 @@ export interface OrgWanted {
   name: string;
   source: 'flag' | 'env' | 'file';
   from: string;
+  /** The app file's "org" when SIREN_ORG won over it, and the file's name, for {@link orgOverruled}. */
+  overruled?: { name: string; from: string };
 }
 
 /** The organization a command acts in, and where its name came from. */
@@ -66,9 +68,22 @@ export function orgNamed(input: CommandInput): { name: string; source: 'flag' | 
 export async function orgWanted(flag: string | undefined, env: NodeJS.ProcessEnv, appFile: { path: string; shown: string }): Promise<OrgWanted | undefined> {
   if (flag !== undefined && flag.trim() !== '') return { name: flag.trim(), source: 'flag', from: '--org' };
   const fromEnv = env.SIREN_ORG;
-  if (fromEnv !== undefined && fromEnv.trim() !== '') return { name: fromEnv.trim(), source: 'env', from: 'SIREN_ORG' };
   const fromFile = await orgInFile(appFile.path);
+  if (fromEnv !== undefined && fromEnv.trim() !== '') {
+    return { name: fromEnv.trim(), source: 'env', from: 'SIREN_ORG', ...(fromFile === undefined ? {} : { overruled: { name: fromFile, from: appFile.shown } }) };
+  }
   return fromFile === undefined ? undefined : { name: fromFile, source: 'file', from: appFile.shown };
+}
+
+/**
+ * The app file's "org" when SIREN_ORG won over it and names another
+ * organization than `chosen`, or undefined. Both name the same one when
+ * the file's name is `chosen`'s slug or id.
+ */
+export function orgOverruled(wanted: OrgWanted | undefined, chosen: StoredMembership): { name: string; from: string } | undefined {
+  const file = wanted?.overruled;
+  if (file === undefined || findOrg([chosen], file.name) !== undefined) return undefined;
+  return file;
 }
 
 /**

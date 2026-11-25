@@ -215,7 +215,10 @@ terminal and refuses elsewhere with the list (`CommandContext.wantedOrg` and `pi
 src/cli/context.ts). When the chosen organization differs from the one the tokens act in, the tool
 calls `POST /auth/switch-org` and holds the new pair in memory for that run, refreshes included
 (src/cli/org.ts). The stored session never changes, so two folders can act in two organizations
-at once.
+at once. When `SIREN_ORG` and the file's `org` name different organizations, a write refuses
+before it sends, naming both, with the fix to pass `--org` or unset `SIREN_ORG`. A read goes ahead
+in the `SIREN_ORG` organization with a dim `›` note on stderr that names the one it passed over
+(`checkOrgSources` in src/cli/context.ts, CLI pass 3, should-fix 5).
 A personal access token acts in the organization it was made in, and the tool refuses when a flag,
 the variable or the file names another. Every question before a write names the organization, as
 `Apply to Acme (acme), live? [y/N]`.

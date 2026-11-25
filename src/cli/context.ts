@@ -5,7 +5,7 @@ import { CredentialStore } from './credentials';
 import type { StoredMembership, StoredSession } from './credentials';
 import { basename, join } from 'node:path';
 import { APP_FILE_NAME } from './app-file';
-import { findOrg, membershipsOf, orgFrom, orgWanted, settleOrg } from './org';
+import { findOrg, membershipsOf, orgFrom, orgOverruled, orgWanted, settleOrg } from './org';
 import type { OrgChoice, OrgWanted } from './org';
 import type { CliIo } from './io';
 import { SessionAuthClient } from './session-auth';
@@ -13,6 +13,7 @@ import type { Edition, Membership, PersonalToken, SessionTokens } from './sessio
 import { SANDBOX_BASE_URL } from '../http';
 import { CliRefusal, LIVE_BASE_URL, assertEditionAllowed, assertSessionMatches, commandLine, hostName } from './targets';
 import type { Target } from './targets';
+import { clean, styleFor } from './style';
 
 /** How long before the access token's `exp` the tool refreshes it, in seconds. */
 const REFRESH_EARLY_SECONDS = 60;
@@ -236,14 +237,36 @@ export class CommandContext {
     const kept = orgFrom(membershipsOf(session), wanted);
     if (pick && kept === 'several') this.orgChoice = await settleOrg(this.io, membershipsOf(session), undefined, this.command('orgs'));
     else if (pick && typeof kept === 'object') this.orgChoice = kept;
+    if (this.orgChoice !== undefined) this.checkOrgSources(wanted, this.orgChoice.org);
     const edition = await this.targetEdition();
     assertSessionMatches(this.target, session, edition);
     if (!(this.readsOnly && edition === 'production')) assertEditionAllowed(this.target, edition, this.retry);
     this.adopt(session);
     // A name the kept list lacks, which the person may have joined since login: ask Siren.
-    if (pick && this.orgChoice === undefined) this.orgChoice = await settleOrg(this.io, await this.memberships(), wanted, this.command('orgs'));
+    if (pick && this.orgChoice === undefined) {
+      this.orgChoice = await settleOrg(this.io, await this.memberships(), wanted, this.command('orgs'));
+      this.checkOrgSources(wanted, this.orgChoice.org);
+    }
     if (this.orgChoice !== undefined && this.orgChoice.org.orgId !== session.orgId) await this.borrow(this.orgChoice.org);
     return this.current();
+  }
+
+  /**
+   * CLI pass 3, should-fix 5. SIREN_ORG wins over the app file's "org".
+   * When they name different organizations, a write refuses before it
+   * sends, since a change in the wrong organization is hard to take back,
+   * and a read goes ahead with a dim note on stderr that says which won.
+   */
+  private checkOrgSources(wanted: OrgWanted | undefined, chosen: StoredMembership): void {
+    const file = orgOverruled(wanted, chosen);
+    if (file === undefined || wanted === undefined) return;
+    if (!this.readsOnly) {
+      throw new CliRefusal(`SIREN_ORG names ${clean(wanted.name)}, and ${file.from} names ${clean(file.name)}.`, {
+        why: "A change goes to one organization, so the tool won't guess which you meant.",
+        fixText: `Pass --org to pick one, or unset SIREN_ORG to use ${file.from}.`,
+      });
+    }
+    this.warn(styleFor(this.io, 'stderr', {}).dim(`› SIREN_ORG names ${clean(wanted.name)}, so this reads ${clean(wanted.name)}, not ${clean(file.name)} from ${file.from}.`));
   }
 
   /**
@@ -270,6 +293,7 @@ export class CommandContext {
     const wanted = await this.wanted();
     const kept = orgFrom(membershipsOf(session), wanted);
     this.orgChoice = typeof kept === 'object' ? kept : await settleOrg(this.io, kept === 'several' ? membershipsOf(session) : await this.memberships(), wanted, list);
+    this.checkOrgSources(wanted, this.orgChoice.org);
     return this.orgChoice;
   }
 
@@ -285,6 +309,7 @@ export class CommandContext {
     const own = { orgId: session.orgId, orgName: session.orgName, orgSlug: session.orgSlug ?? '', role: session.role };
     if (wanted === undefined || findOrg([own], wanted.name) !== undefined) {
       this.orgChoice = { org: own, source: wanted?.source ?? 'only' };
+      this.checkOrgSources(wanted, own);
       return;
     }
     throw new CliRefusal(`SIREN_TOKEN acts in ${session.orgSlug ?? session.orgName}, and ${wanted.from} names ${wanted.name}.`, {

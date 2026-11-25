@@ -217,3 +217,54 @@ describe('orgs: "org" in siren.app.json', () => {
     expect(JSON.parse(one.file('siren.app.json')).org).toBeUndefined();
   });
 });
+
+/*
+ * CLI pass 3, should-fix 5, as the coordinator ruled: the order stays
+ * --org, SIREN_ORG, then the file. When SIREN_ORG and the file's "org"
+ * name different organizations, a write refuses before sending, naming
+ * both and the fix. A read goes ahead and says on stderr which one won.
+ */
+describe('orgs: SIREN_ORG and the app file disagree', () => {
+  const ENV = { SIREN_ORG: 'acme' };
+
+  it('refuses a write before sending anything, naming both and the way out', async () => {
+    const h = harness([reply(200, appRecord())], { env: ENV });
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    h.write('siren.app.json', appFile('acme-two'));
+    expect(await h.run(['apps', 'off', APP_KEY])).toBe(1);
+    expect(h.http.requests).toHaveLength(0);
+    expect(h.err()).toBe(
+      'siren: SIREN_ORG names acme, and siren.app.json names acme-two. A change goes to one organization, so the tool won\'t guess which you meant. ' +
+        'Pass --org to pick one, or unset SIREN_ORG to use siren.app.json.\n',
+    );
+  });
+
+  it('acts on a write when --org settles it', async () => {
+    const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, appRecord())], { env: ENV });
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    h.write('siren.app.json', appFile('acme-two'));
+    expect(await h.run(['apps', 'off', APP_KEY, '--org', 'acme-two']), h.err()).toBe(0);
+    expect(h.err()).toBe('');
+  });
+
+  it('reads in the SIREN_ORG organization, and says so in a dim note on stderr', async () => {
+    const h = harness([reply(200, [appRecord()])], { env: ENV });
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    h.write('siren.app.json', appFile('acme-two'));
+    expect(await h.run(['apps', 'list', '--json']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['GET /apps']);
+    expect(h.err()).toBe('› SIREN_ORG names acme, so this reads acme, not acme-two from siren.app.json.\n');
+    expect(() => JSON.parse(h.out())).not.toThrow();
+  });
+
+  it('says nothing when both name the same organization, by slug or by id', async () => {
+    for (const named of ['acme', '3']) {
+      const h = harness([reply(200, [appRecord()]), reply(200, appRecord())], { env: { SIREN_ORG: named } });
+      h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+      h.write('siren.app.json', appFile('acme'));
+      expect(await h.run(['apps', 'list']), h.err()).toBe(0);
+      expect(await h.run(['apps', 'off', APP_KEY]), h.err()).toBe(0);
+      expect(h.err()).toBe('');
+    }
+  });
+});

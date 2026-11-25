@@ -2227,8 +2227,11 @@ Each command acts in one of your organizations. It takes `--org <slug>` first, t
 then `org` in siren.app.json, then your only organization. With none of those it asks in a
 terminal, and elsewhere it stops and lists your organizations. When the organization differs from
 the one your session acts in, the tool switches to it with Siren's switch call for that command
-only, so two folders can act in two organizations at once. Every question
-before a write names the organization, such as `Apply to Acme (acme), live? [y/N]`.
+only, so two folders can act in two organizations at once. When `SIREN_ORG` and the file name
+different organizations, a change stops before it sends anything and asks you to pass `--org` or
+unset `SIREN_ORG`. A read goes ahead in the `SIREN_ORG` organization and notes the one it passed
+over. Every question before a write names the organization, such as `Apply to Acme (acme), live?
+[y/N]`.
 
 A script or a CI job logs in with no browser and no password. Make a personal access token under
 API keys in the Siren dashboard, then set it as `SIREN_TOKEN`. The tool sends it in place of a
