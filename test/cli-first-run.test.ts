@@ -209,7 +209,7 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);
     expect(h.out()).toContain('.env');
     expect(h.out()).toContain('Your editor completes them.');
-    expect(h.out()).toMatch(/tunnel/);
+    expect(h.out()).toContain('run your handler on an https address');
   });
 
   it('keeps the two env files out of git by name, so .env.example can still be committed', async () => {

@@ -78,7 +78,7 @@ describe('siren apps init: the success output', () => {
         "  1  Set SIREN_APP_URL to your handler's https address   in .env or your shell",
         '  2  siren apps apply',
         '',
-        'Running the handler on this machine? Use a tunnel such as cloudflared.',
+        'Siren sends requests only to https, so run your handler on an https address.',
         'Add features in siren.app.json. Your editor completes them.',
         '',
       ].join('\n'),

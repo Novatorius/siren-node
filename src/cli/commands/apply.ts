@@ -103,7 +103,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
         { text: "Set SIREN_APP_URL to your handler's https address", aside: 'in .env or your shell' },
         { text: style.command(input.command('apps apply')) },
       ],
-      tips: ['Running the handler on this machine? Use a tunnel such as cloudflared.', `Add features in ${APP_FILE_NAME}. Your editor completes them.`],
+      tips: ['Siren sends requests only to https, so run your handler on an https address.', `Add features in ${APP_FILE_NAME}. Your editor completes them.`],
     }),
   );
   return 0;
@@ -328,7 +328,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
         { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
       ]
     : [];
-  run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${session.orgName}`, rows, next, tips }).replace(/\n$/, ''));
+  run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${clean(session.orgName)}`, rows, next, tips }).replace(/\n$/, ''));
   return 0;
 }
 
