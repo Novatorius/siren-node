@@ -27,7 +27,7 @@ export interface ResourceCommand {
   readonly ops: Readonly<Partial<Record<ResourceOp, ResourceRoute>>>;
 }
 
-/** Every generated resource, by name, from openapi.json (48 resources). */
+/** Every generated resource, by name, from openapi.json (46 resources). */
 export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
   {
     "name": "application-forms",
@@ -580,15 +580,6 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "method": "GET",
         "path": "/customers/{id}",
         "param": "id"
-      }
-    }
-  },
-  {
-    "name": "demo-login",
-    "ops": {
-      "create": {
-        "method": "POST",
-        "path": "/demo-login"
       }
     }
   },
@@ -1351,19 +1342,6 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
     }
   },
   {
-    "name": "settings",
-    "ops": {
-      "list": {
-        "method": "GET",
-        "path": "/settings"
-      },
-      "create": {
-        "method": "POST",
-        "path": "/settings"
-      }
-    }
-  },
-  {
     "name": "test-sales",
     "ops": {
       "list": {
@@ -1465,5 +1443,161 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "param": "id"
       }
     }
+  }
+];
+
+/** One DELETE route, with the path parameter that names the record it deletes, when it has one. */
+export interface DeleteRoute {
+  readonly path: string;
+  readonly param?: string;
+}
+
+/** Every DELETE route in openapi.json (38 routes). */
+export const DELETE_ROUTES: readonly DeleteRoute[] = [
+  {
+    "path": "/application-forms/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/apps/{app}/items/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/apps/{key}",
+    "param": "key"
+  },
+  {
+    "path": "/apps/{key}/key",
+    "param": "key"
+  },
+  {
+    "path": "/auth/collaborator-links/{orgId}",
+    "param": "orgId"
+  },
+  {
+    "path": "/auth/invites/{inviteId}",
+    "param": "inviteId"
+  },
+  {
+    "path": "/auth/members/{userId}",
+    "param": "userId"
+  },
+  {
+    "path": "/autofulfillers/{currency}",
+    "param": "currency"
+  },
+  {
+    "path": "/collaborator-aliases"
+  },
+  {
+    "path": "/collaborator-groups/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/collaborator-groups/{id}/members/{collaboratorId}",
+    "param": "collaboratorId"
+  },
+  {
+    "path": "/collaborator-programs"
+  },
+  {
+    "path": "/collaborators/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/collaborators/{id}/invitation",
+    "param": "id"
+  },
+  {
+    "path": "/collaborators/{id}/stores/{propertyId}",
+    "param": "propertyId"
+  },
+  {
+    "path": "/connect/webhook"
+  },
+  {
+    "path": "/conversions/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/coupon-codes"
+  },
+  {
+    "path": "/coupons/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/credit-holds/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/currencies/custom/{code}",
+    "param": "code"
+  },
+  {
+    "path": "/customers/{id}/collaborators/{collaboratorId}",
+    "param": "collaboratorId"
+  },
+  {
+    "path": "/distributors/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/fulfillments/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/inbound/{sourceSlug}",
+    "param": "sourceSlug"
+  },
+  {
+    "path": "/inbound/{sourceSlug}/test-deliveries",
+    "param": "sourceSlug"
+  },
+  {
+    "path": "/mappings"
+  },
+  {
+    "path": "/notes/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/notifications/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/obligations/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/orgs/{id}/logo",
+    "param": "id"
+  },
+  {
+    "path": "/program-groups/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/programs/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/properties/{propertyId}/integrations/{sourceSlug}",
+    "param": "sourceSlug"
+  },
+  {
+    "path": "/properties/{propertyId}/integrations/{sourceSlug}/test-deliveries",
+    "param": "sourceSlug"
+  },
+  {
+    "path": "/test-sales"
+  },
+  {
+    "path": "/test-sales/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/webhooks/{id}",
+    "param": "id"
   }
 ];

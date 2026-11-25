@@ -8,8 +8,8 @@ import { parseJsonBody } from '../../http';
 import type { HttpMethod } from '../../http';
 import { contextOf } from '../context';
 import type { CommandContext, CommandHandler, CommandInput } from '../context';
-import { RESOURCE_COMMANDS } from '../resources.generated';
-import type { ResourceCommand, ResourceOp, ResourceRoute } from '../resources.generated';
+import { DELETE_ROUTES, RESOURCE_COMMANDS } from '../resources.generated';
+import type { DeleteRoute, ResourceCommand, ResourceOp, ResourceRoute } from '../resources.generated';
 import { CliRefusal, CliUsageError } from '../targets';
 import { styleFor } from '../style';
 import { clip, recordRows, table, WIDTH } from './resource-output';
@@ -242,21 +242,50 @@ interface Plan {
 /** `siren get|post|put|patch|delete <path>`. */
 async function sendRaw(input: CommandInput, method: HttpMethod): Promise<number> {
   const { path, query } = apiPath(input.args[0]!);
+  const deleteId = method === 'DELETE' ? recordIdOf(path) : undefined;
   const outgoing = await outgoingOf(input, method, path, query);
-  const last = path.split('/').filter(Boolean).pop();
   return send(input, {
     outgoing,
     json: input.values.json === true,
     dryRun: input.values['dry-run'] === true,
     all: input.values.all === true,
-    ...(method === 'DELETE' && last !== undefined ? { deleteId: decodeURIComponent(last) } : {}),
+    ...(deleteId !== undefined ? { deleteId } : {}),
     words: method.toLowerCase(),
   });
+}
+
+/**
+ * The id of the record a raw delete removes: the value at the last parameter
+ * of the DELETE route in openapi.json that the path matches. A path that
+ * matches no DELETE route, or one whose route has no parameter, names no
+ * record, and is refused before anything is asked or sent.
+ */
+export function recordIdOf(path: string): string {
+  const given = path.split('/').filter(Boolean);
+  const matches = DELETE_ROUTES.filter((route) => {
+    const parts = route.path.split('/').filter(Boolean);
+    return parts.length === given.length && parts.every((part, i) => /^\{[^}]+\}$/.test(part) || part === given[i]);
+  });
+  // A route with more fixed segments is the closer match.
+  const fixed = (route: DeleteRoute) => route.path.split('/').filter((part) => part !== '' && !part.startsWith('{')).length;
+  const route = matches.sort((a, b) => fixed(b) - fixed(a))[0];
+  const at = route?.param === undefined ? -1 : route.path.split('/').filter(Boolean).indexOf(`{${route.param}}`);
+  if (route === undefined || at < 0) {
+    throw new CliUsageError(
+      `siren delete needs a path that names one record, such as /programs/7. ${route === undefined ? `Siren has no DELETE route at ${path}` : `${path} names no record`}, so nothing was sent.`,
+    );
+  }
+  try {
+    return decodeURIComponent(given[at]!);
+  } catch {
+    return given[at]!;
+  }
 }
 
 /** `siren <resource> <op> [id]`. */
 async function sendResource(input: CommandInput, resource: ResourceCommand, op: ResourceOp, route: ResourceRoute): Promise<number> {
   const id = input.args[0];
+  if (id !== undefined && /^\.{1,2}$/.test(fullyDecoded(id))) throw new CliUsageError(`${JSON.stringify(id)} is not a record id. Give the id Siren lists, such as 7.`);
   const path = route.param !== undefined && id !== undefined ? route.path.replace(`{${route.param}}`, encodeURIComponent(id)) : route.path;
   const outgoing = await outgoingOf(input, route.method, path, {});
   return send(input, {
@@ -273,16 +302,59 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
 /**
  * A path as the tool sends it: after /siren/v1, with a leading slash, and
  * its query string split off. A full address is refused, since the session
- * goes only to the Siren the command targets.
+ * goes only to the Siren the command targets, and so is a path whose `..`
+ * segments climb out of /siren/v1 (see {@link insideApi}).
  */
 export function apiPath(given: string): { path: string; query: Record<string, string> } {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(given)) {
     throw new CliUsageError(`Give a path such as /programs, not an address. The tool sends it to the Siren you target, with --base-url to choose another.`);
   }
   const [rawPath, search = ''] = given.split('?', 2) as [string, string?];
-  let path = `/${rawPath.replace(/^\/+/, '')}`.replace(/\/+$/, '') || '/';
+  let path = `/${rawPath.replace(/^[/\\]+/, '')}`.replace(/\/+$/, '') || '/';
   path = path.replace(/^\/siren\/v1(?=\/|$)/, '') || '/';
-  return { path, query: Object.fromEntries(new URLSearchParams(search)) };
+  return { path: insideApi(path, given), query: Object.fromEntries(new URLSearchParams(search)) };
+}
+
+/** A path segment decoded until it stops changing, so `%252e` reads as `.`. */
+function fullyDecoded(segment: string): string {
+  let current = segment;
+  for (let i = 0; i < 5; i++) {
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return current;
+    }
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
+}
+
+/**
+ * The path with its `.` and `..` segments resolved, the way a URL parser and
+ * a web server would. A dot written as `%2e`, or encoded twice, counts, and
+ * so does a backslash or an encoded slash between segments. A path that
+ * climbs above /siren/v1 is refused, since the bearer token would go to
+ * whatever else the host serves, such as WordPress's own REST API.
+ */
+export function insideApi(path: string, given: string = path): string {
+  const kept: string[] = [];
+  for (const segment of path.split(/[/\\]/)) {
+    const pieces = fullyDecoded(segment).split(/[/\\]/);
+    if (pieces.length > 1 && pieces.some((piece) => piece === '.' || piece === '..')) {
+      throw new CliUsageError(`${given} leaves /siren/v1 through an encoded slash, so nothing was sent. Give a path such as /programs/7.`);
+    }
+    const decoded = pieces[0]!;
+    if (decoded === '' || decoded === '.') continue;
+    if (decoded === '..') {
+      if (kept.length === 0) throw new CliUsageError(`${given} leaves /siren/v1, so nothing was sent. Give a path under it, such as /programs/7.`);
+      kept.pop();
+      continue;
+    }
+    kept.push(segment);
+  }
+  return `/${kept.join('/')}`;
 }
 
 /** A `-d` value as Siren gets it: a JSON number, true, false or null as that, anything else as text. */
@@ -327,7 +399,8 @@ function count(flag: string, value: unknown, least: number): number | undefined 
 }
 
 /** What a command line sends: the method, path, query and body its flags make. */
-async function outgoingOf(input: CommandInput, method: HttpMethod, path: string, query: Record<string, string>): Promise<Outgoing> {
+async function outgoingOf(input: CommandInput, method: HttpMethod, given: string, query: Record<string, string>): Promise<Outgoing> {
+  const path = insideApi(given);
   const fields = pairs(input);
   const limit = count('--limit', input.values.limit, 1);
   const offset = count('--offset', input.values.offset, 0);

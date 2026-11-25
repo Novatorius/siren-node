@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- `openapi.yaml` is gone. `openapi.json` replaces it, a byte copy of the spec Siren writes from its
+  REST controllers, so it lists the routes Siren serves on Cloud and WordPress and marks each with
+  `x-siren-platforms`. Its named schemas drop from 50 to 2, `Error` and `ListEnvelope`. Request
+  bodies and record answers are written inline on each operation, and answers Siren does not declare
+  are open and listed under `x-siren-open-routes`. Code generators should read `openapi.json` for
+  paths, parameters and request bodies, and take response models from this package's exported
+  TypeScript types, which cover what the spec leaves open.
 - Siren calls a feature a feature everywhere now (Alex's ruling M104), and the SDK follows with no
   old name kept. A request carries `request.feature` (`kind`, `key`, `id`) in place of `item`, and
   a body that holds `item` and no `feature` is refused as not a version 1 request. The feature

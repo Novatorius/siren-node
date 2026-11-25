@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -6,26 +7,34 @@ import { describe, expect, it } from 'vitest';
  * writes from its REST controllers (`composer openapi`). It replaced the
  * hand-written openapi.yaml, which had drifted from Siren. Contract:
  * contract/devtools-resources.md in the devtools run folder, section 3.
+ *
+ * openapi.source.json records the Siren commit and the SHA-256 of the bytes
+ * scripts/copy-openapi.mjs copied. The hash check runs on every run, CI
+ * included. With SIREN_OPENAPI set to Siren's file, the bytes are compared
+ * with it too.
  */
 
 const text = readFileSync(new URL('../openapi.json', import.meta.url), 'utf8');
+const source = JSON.parse(readFileSync(new URL('../openapi.source.json', import.meta.url), 'utf8')) as { from: string; sirenCommit: string; sha256: string };
 const spec = JSON.parse(text) as {
   openapi: string;
   info: { version: string };
   servers: Array<{ url: string }>;
   tags: Array<{ name: string }>;
-  paths: Record<string, Record<string, { operationId: string; tags: string[]; 'x-siren-editions': string[] }>>;
+  paths: Record<string, Record<string, { operationId: string; tags: string[]; 'x-siren-editions': string[]; 'x-siren-platforms': string[] }>>;
   'x-siren-open-routes': { request: string[]; response: string[] };
 };
 
 describe("openapi.json, Siren's spec", () => {
-  it("is byte for byte the copy Siren wrote, when SIREN_OPENAPI names Siren's file", () => {
-    const siren = process.env.SIREN_OPENAPI;
-    if (siren === undefined || siren === '') {
-      console.warn('Skipped the byte check: set SIREN_OPENAPI to the path of Siren\'s docs/api/openapi.json, or contract/openapi.json in the run folder.');
-      return;
-    }
-    expect(text === readFileSync(siren, 'utf8'), `openapi.json differs from ${siren}. Copy Siren's file over it, then run node scripts/generate-cli-resources.mjs.`).toBe(true);
+  it('is byte for byte the copy openapi.source.json records, so a hand edit fails', () => {
+    expect(source.from).toBe('docs/api/openapi.json');
+    expect(source.sirenCommit).toMatch(/^[0-9a-f]{40}$/);
+    expect(createHash('sha256').update(text).digest('hex'), `openapi.json is not the copy of Siren ${source.sirenCommit} that openapi.source.json records. Run node scripts/copy-openapi.mjs <Siren checkout>.`).toBe(source.sha256);
+  });
+
+  it.runIf(Boolean(process.env.SIREN_OPENAPI))("is byte for byte Siren's file, when SIREN_OPENAPI names it", () => {
+    const siren = process.env.SIREN_OPENAPI!;
+    expect(text === readFileSync(siren, 'utf8'), `openapi.json differs from ${siren}. Run node scripts/copy-openapi.mjs <Siren checkout>.`).toBe(true);
   });
 
   it('is OpenAPI 3.1 written the way Siren writes it, with one trailing newline', () => {
@@ -45,6 +54,7 @@ describe("openapi.json, Siren's spec", () => {
         expect(ids.has(operation.operationId)).toBe(false);
         ids.add(operation.operationId);
         expect(operation['x-siren-editions'].length).toBeGreaterThan(0);
+        expect(operation['x-siren-platforms'].length).toBeGreaterThan(0);
       }
     }
   });
@@ -54,6 +64,11 @@ describe("openapi.json, Siren's spec", () => {
     expect(spec.paths['/webhooks']?.post).toBeUndefined();
     expect(spec.paths['/programs']?.get).toBeDefined();
     expect(spec.paths['/apps/requests/{requestKey}/answer']?.post ?? spec.paths['/apps/requests/{key}/answer']?.post).toBeDefined();
+  });
+
+  it('holds no operator, demo or sandbox route, and names no Siren class', () => {
+    for (const path of Object.keys(spec.paths)) expect(path).not.toMatch(/^\/(provisioning|demo-control|demo-login|demo|sandbox|generator)(\/|$)/);
+    for (const word of ['adminPassword', 'x-siren-operator-only', 'x-siren-controller', 'x-siren-model', 'Siren\\\\']) expect(text).not.toContain(word);
   });
 
   it('lists the routes whose schemas Siren does not declare', () => {

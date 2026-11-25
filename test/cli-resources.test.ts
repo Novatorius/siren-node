@@ -180,6 +180,55 @@ describe('siren get, post, put, patch and delete', () => {
     expect(h.sent()).toEqual([]);
   });
 
+  it('refuses a path that leaves /siren/v1, plain or encoded, and sends nothing', async () => {
+    for (const path of [
+      '/../../wp-json/wp/v2/users',
+      '/programs/../../../wp-json/wp/v2/users',
+      '/siren/v1/../../wp-json',
+      '/%2e%2e/%2E%2E/wp-json',
+      '/.%2e/wp-json',
+      '/%252e%252e/wp-json',
+      '/..\\..\\wp-json',
+      '/programs/..%2F..%2Fwp-json',
+      '/programs/%2e%2e%5c%2e%2e%5cwp-json',
+    ]) {
+      const h = signedIn([]);
+      expect(await h.run(['get', path]), path).toBe(2);
+      expect(h.err(), path).toContain('leaves /siren/v1');
+      expect(h.sent(), path).toEqual([]);
+    }
+  });
+
+  it('resolves dot segments that stay inside /siren/v1', async () => {
+    const h = signedIn([reply(200, { id: 8 })]);
+    expect(await h.run(['get', '/programs/./7/../8'])).toBe(0);
+    expect(h.paths()).toEqual(['GET /programs/8']);
+  });
+
+  it('refuses a record id that is a dot segment', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['programs', 'get', '..'])).toBe(2);
+    expect(h.err()).toContain('is not a record id');
+    expect(h.sent()).toEqual([]);
+  });
+
+  it('refuses a raw delete that names no record, before asking or sending', async () => {
+    for (const path of ['/programs', '/coupon-codes', '/programs/7/frobnicate']) {
+      const h = signedInLive([reply(200, {})], { env: { SIREN_BASE_URL: LIVE }, interactive: true, typed: ['programs'] });
+      expect(await h.run(['delete', path, '--live']), path).toBe(2);
+      expect(h.err(), path).toContain('needs a path that names one record');
+      expect(h.prompts, path).toEqual([]);
+      expect(h.paths(), path).toEqual([]);
+    }
+  });
+
+  it('asks for the record id, not the last path segment, before a live raw delete', async () => {
+    const h = signedInLive([reply(200, {})], { env: { SIREN_BASE_URL: LIVE }, interactive: true, typed: ['app_1'] });
+    expect(await h.run(['delete', '/apps/app_1/key', '--live'])).toBe(0);
+    expect(h.prompts[0]).toBe('This deletes app_1 from Acme (3), live. Type app_1 to delete it: ');
+    expect(h.paths()).toEqual(['DELETE /apps/app_1/key']);
+  });
+
   it('prints a refusal in three parts: what, why, and the command that helps', async () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await h.run(['programs', 'get', '99'])).toBe(1);
