@@ -44,7 +44,8 @@ describe('finding 8: --live only on a command that changes a live organization',
   it('names every command that is no read and works online, and logout needs none', () => {
     for (const command of COMMANDS) {
       const spec = COMMAND_SPECS[command];
-      const changes = spec.readsOnly !== true && spec.offline !== true && command !== 'logout';
+      // A liveSafe write, such as a note, changes no program, reward or payout, so it takes no --live.
+      const changes = spec.readsOnly !== true && spec.offline !== true && spec.liveSafe !== true && command !== 'logout';
       expect(LIVE_WRITES.includes(command as never), command).toBe(changes);
     }
   });

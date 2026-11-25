@@ -58,7 +58,8 @@ describe('siren collaborators get, as a record view', () => {
     );
     // Through a pipe, Next goes to standard error, so standard output is the record alone.
     expect(h.err()).toContain('siren programs get 1');
-    expect(h.err()).toContain('siren notes list -d sourceType=collaborator -d sourceId=1');
+    expect(h.err()).toContain('siren notes --on collaborator:1');
+    expect(h.err()).toContain('siren collaborators note 1 "<text>"');
   });
 
   it('keeps every line within 80 columns in a terminal, and puts Next on standard output there', async () => {

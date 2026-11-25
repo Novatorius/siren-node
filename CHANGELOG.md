@@ -135,6 +135,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `siren notes --on <type:id>` lists a record's notes, newest first. `siren <resource> note <id>
+  <text>` adds one, and `siren notes edit` and `siren notes delete` change and remove one. A live
+  organization takes a note without `--live`, since a note changes no program, reward or payout.
+  The generated `siren notes list`, `create`, `update` and `delete` are gone.
 - A generated `get`, such as `siren collaborators get 1`, prints a record view: the record's name
   in the headline, aligned rows, a nested object as dotted rows, and each list of objects as its
   own section, one line an item, never cut mid-value. `collaborators get` and `programs get` end

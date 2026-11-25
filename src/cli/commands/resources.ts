@@ -638,7 +638,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     }
     // A record read prints as a record view (lean-output.md, section 1).
     const view = recordView(style, record, { what: singular(name), words: name, zone: input.io.env.TZ, resources: RESOURCE_COMMANDS.filter((resource) => resource.ops.get !== undefined).map((resource) => resource.name) }, notes === undefined ? [] : [notes]);
-    const next = [...view.next, ...(notes !== undefined && plan.resource !== undefined ? [`notes list -d sourceType=${NOTED[plan.resource.name]} -d sourceId=${cell(id)}`] : [])];
+    const next = [...view.next, ...(notes !== undefined && plan.resource !== undefined ? [`notes --on ${NOTED[plan.resource.name]}:${cell(id)}`, `${plan.resource.name} note ${cell(id)} "<text>"`] : [])];
     out(view.lines.join('\n'));
     if (next.length > 0) {
       const steps = ['', style.bold('Next'), ...next.map((words, at) => `  ${at + 1}  ${style.command(input.command(words))}`)].join('\n');

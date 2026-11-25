@@ -2257,6 +2257,25 @@ tool takes `$schema` out before it sends the recipe, since Siren takes no other 
 top. In code, `siren.recipes` makes the same calls: `preview`, `apply`, `import`, `imports`,
 `export`, `exportSizes`, `catalog` and `fetch`.
 
+### Notes
+
+A note is a line of text on a record, such as a collaborator or a program. People write them, and
+Siren writes one each time something happens to the record, so a record's notes are also its
+history. A note changes no program, reward or payout, so a live organization takes one without
+`--live`.
+
+| Command | What it does |
+| --- | --- |
+| `siren notes --on <type:id>` | Lists a record's notes, newest first, one line each with its time and id. `--on program` with no id reads every program's notes. `--search`, `--since` and `--limit` narrow the list. |
+| `siren <resource> note <id> <text>` | Adds a note to a record, such as `siren collaborators note 1 "Called about the March payout"`. `--stdin` reads the text from standard input. `siren notes add collaborator:1 <text>` is the same. |
+| `siren notes edit <id> <text>` | Changes the text of a note you wrote. `--revision` refuses the change when the note changed since you read it. |
+| `siren notes delete <id>` | Deletes a note you wrote, or any note as an admin, after asking. `--yes` skips that. The record's notes keep a line saying a note was deleted. |
+
+The types are collaborator, obligation, conversion, payout, fulfillment, engagement, transaction,
+program, opportunity, distribution, distributor, org, collaborator_group, program_group, property,
+customer, coupon, product, application_form, notification and notification_rule. Siren reads one
+record's notes at a time, so a second `--on` is refused.
+
 A record read, such as `siren collaborators get 1`, puts the record's name in the headline and
 prints its fields as aligned rows. Each list in it, such as a collaborator's programs, is its own
 section with one line for each, the first 10 shown and the rest counted. A collaborator or a

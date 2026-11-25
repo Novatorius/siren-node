@@ -27,7 +27,7 @@ export interface ResourceCommand {
   readonly ops: Readonly<Partial<Record<ResourceOp, ResourceRoute>>>;
 }
 
-/** Every generated resource, by name, from openapi.json (47 resources). */
+/** Every generated resource, by name, from openapi.json (46 resources). */
 export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
   {
     "name": "application-forms",
@@ -888,57 +888,6 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
       "create": {
         "method": "POST",
         "path": "/move-emails"
-      }
-    }
-  },
-  {
-    "name": "notes",
-    "ops": {
-      "list": {
-        "method": "GET",
-        "path": "/notes",
-        "query": [
-          "sourceType",
-          "sourceId",
-          "number",
-          "offset",
-          "order",
-          "search",
-          "from",
-          "to"
-        ],
-        "paginated": true
-      },
-      "create": {
-        "method": "POST",
-        "path": "/notes",
-        "fields": [
-          "sourceType",
-          "sourceId",
-          "body"
-        ],
-        "required": [
-          "sourceType",
-          "sourceId",
-          "body"
-        ]
-      },
-      "update": {
-        "method": "PUT",
-        "path": "/notes/{id}",
-        "param": "id",
-        "fields": [
-          "body",
-          "revision"
-        ],
-        "required": [
-          "body"
-        ]
-      },
-      "delete": {
-        "method": "DELETE",
-        "path": "/notes/{id}",
-        "param": "id"
       }
     }
   },

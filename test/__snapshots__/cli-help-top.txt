@@ -54,6 +54,12 @@ RECIPES
   recipes show        Print one ready-made recipe
   recipes fetch       Print the recipe a Beacon handoff carries
 
+NOTES
+  notes               List a record's notes
+  notes add           Add a note to a record
+  notes edit          Change a note you wrote
+  notes delete        Delete a note
+
 RECORDS
   <resource> <op>     List, get, create, update or delete a record
   get <path>          Read any route, such as get /programs
