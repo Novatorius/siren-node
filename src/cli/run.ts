@@ -2,6 +2,10 @@ import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
 import * as apply from './commands/apply';
 import * as logs from './commands/logs';
+import * as appsTest from './commands/apps-test';
+import * as fixtures from './commands/fixtures';
+import * as simulate from './commands/simulate';
+import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
 import * as session from './commands/session';
@@ -48,6 +52,11 @@ export const COMMANDS = [
   'apps off',
   'apps delete',
   'logs tail',
+  'apps test',
+  'trigger',
+  'trigger ask',
+  'fixtures',
+  'simulate',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -56,7 +65,7 @@ export type Command = (typeof COMMANDS)[number];
 type Options = NonNullable<ParseArgsConfig['options']>;
 
 /** The headings `siren --help` lists the commands under, in order. */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Logs', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -111,6 +120,23 @@ const GUIDE_URL = 'https://github.com/Novatorius/siren-node#command-line-tool';
 const APP_FILE_FLAG = ['--app-file <path>', 'The app file beside the env file, if apply saved none'] as const;
 const YES_FLAG = ['--yes', 'Skip the question. Needed with no terminal'] as const;
 const JSON_FLAG = ['--json', 'Print JSON for a script, and nothing else'] as const;
+
+/** The options `trigger` and `simulate` share. */
+const ACTIVITY_OPTIONS: Options = {
+  collaborator: { type: 'string' },
+  program: { type: 'string' },
+  amount: { type: 'string' },
+  currency: { type: 'string' },
+  add: { type: 'string', multiple: true },
+};
+
+const ACTIVITY_FLAGS: Readonly<Record<string, readonly [string, string]>> = {
+  collaborator: ['--collaborator <id>', 'Who to credit, the oldest active one if left out'],
+  program: ['--program <id>', 'Credit someone in this program'],
+  amount: ['--amount <49.99>', "The sale's total or the refund's part, 10.00 by default"],
+  currency: ['--currency <code>', "A currency code, the organization's own if left out"],
+  add: ['--add <key=value>', 'Set one field of the event. Repeat it for more'],
+};
 
 const SPECS: Record<Command, CommandSpec> = {
   signup: {
@@ -342,7 +368,7 @@ const SPECS: Record<Command, CommandSpec> = {
   'logs tail': {
     usage: 'logs tail [flags]',
     summary: "Print what happens in the organization as it happens: app requests, deliveries, webhooks, events and API calls. Ctrl-C stops.",
-    group: 'Logs',
+    group: 'Developer tools',
     short: 'Watch requests, deliveries and API calls live',
     options: {
       app: { type: 'string' },
@@ -374,6 +400,68 @@ const SPECS: Record<Command, CommandSpec> = {
     positionals: [0, 0],
     readsOnly: true,
     run: logs.logsTail,
+  },
+  'apps test': {
+    usage: 'apps test <key> [--json]',
+    summary: "Send the app's address one signed test delivery, and print what it answered.",
+    group: 'Developer tools',
+    short: "Send the app's address a test delivery",
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren apps test acme-payouts'],
+    positionals: [1, 1],
+    run: appsTest.appsTest,
+  },
+  trigger: {
+    usage: 'trigger <sale|refund|visit|event> [flags]',
+    summary: 'Make a sale, refund, visit or custom event in a sandbox, and print who earns what.',
+    group: 'Developer tools',
+    short: 'Make test activity in a sandbox',
+    options: { ...ACTIVITY_OPTIONS, opportunity: { type: 'string' }, transaction: { type: 'string' }, wait: { type: 'string' }, json: { type: 'boolean' } },
+    flags: {
+      ...ACTIVITY_FLAGS,
+      opportunity: ['--opportunity <id>', "A visit's opportunity to sell on, a new visit if left out"],
+      transaction: ['--transaction <id>', 'The sale a refund undoes, the newest if left out'],
+      wait: ['--wait <seconds>', "How long to wait on an app's answer, 30 by default"],
+      json: JSON_FLAG,
+    },
+    examples: ['siren trigger sale --amount 49.99', 'siren trigger refund --transaction 3307'],
+    positionals: [1, 1],
+    run: trigger.trigger,
+  },
+  'trigger ask': {
+    usage: 'trigger ask <app> <feature> [--wait <seconds>] [--yes] [--json]',
+    summary: "Send one feature its kind's sample ask, marked as a test, and print the answer. Nothing acts on it.",
+    group: 'Developer tools',
+    short: "Send a feature a test ask",
+    options: { wait: { type: 'string' }, yes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: { wait: ['--wait <seconds>', 'How long to wait for the answer, 60 by default'], yes: ['--yes', 'Send a live sample without asking'], json: JSON_FLAG },
+    examples: ['siren trigger ask acme-crm split-the-pool'],
+    positionals: [2, 2],
+    run: trigger.triggerAsk,
+  },
+  fixtures: {
+    usage: 'fixtures <file.json> [--yes] [--json]',
+    summary: "Run a file of trigger steps in order, each able to read an earlier step's answer.",
+    group: 'Developer tools',
+    short: 'Run a file of trigger steps',
+    options: { yes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: { yes: ['--yes', 'Send live sample asks without asking'], json: JSON_FLAG },
+    examples: ['siren fixtures checkout.json'],
+    positionals: [1, 1],
+    run: fixtures.fixtures,
+  },
+  simulate: {
+    usage: 'simulate [flags]',
+    summary: "Run a sale through your organization's programs, keep nothing, and print who would earn what.",
+    group: 'Developer tools',
+    short: 'Show who a sale would pay, writing nothing',
+    options: { ...ACTIVITY_OPTIONS, json: { type: 'boolean' } },
+    flags: { ...ACTIVITY_FLAGS, json: JSON_FLAG },
+    examples: ['siren simulate --amount 49.99', 'siren simulate --program 3 --collaborator 42'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: simulate.simulate,
   },
 };
 
@@ -559,6 +647,9 @@ function editDistance(a: string, b: string): number {
 
 /** The command a line names, from its words, or {@link CliUsageError} with the nearest real one. */
 function commandNamed(words: readonly string[]): Command {
+  // A first word that is a command alone and starts a two-word one, such as trigger and trigger ask, is the two-word one when its second word matches.
+  const pair = `${words[0] ?? ''} ${words[1] ?? ''}`.trim();
+  if (words[0] !== 'apps' && (COMMANDS as readonly string[]).includes(pair)) return pair as Command;
   const name = words[0] === 'apps' || words[0] === 'logs' ? `${words[0]} ${words[1] ?? ''}`.trim() : (words[0] ?? '');
   if ((COMMANDS as readonly string[]).includes(name)) return name as Command;
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
