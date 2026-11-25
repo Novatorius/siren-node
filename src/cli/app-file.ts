@@ -122,11 +122,16 @@ export interface AppFileProblem {
  * A JSON mistake answers one problem, at the character the reader stopped
  * at, with the path empty. No problem's message holds a value from the file
  * or the environment, so printing the problems prints no filled address.
+ *
+ * With `urlMayBeUnset`, for a sandbox where `siren listen` carries the
+ * requests, an app may go without a url: a url whose variable is not set is
+ * left out, and features need no url. `unset` names those variables.
  */
 export function parseAppFile(
   text: string,
   env: Readonly<Record<string, string | undefined>>,
-): { file: AppFile; problems: []; filled: string[] } | { file: null; problems: AppFileProblem[] } {
+  options: { urlMayBeUnset?: boolean } = {},
+): { file: AppFile; problems: []; filled: string[]; unset?: string[] } | { file: null; problems: AppFileProblem[] } {
   const reader = new JsonReader(text);
   let value: unknown;
   try {
@@ -136,11 +141,11 @@ export function parseAppFile(
     throw error;
   }
 
-  const check = new AppFileCheck(reader.places, env);
+  const check = new AppFileCheck(reader.places, env, options.urlMayBeUnset === true);
   const file = check.run(value);
   const problems = [...reader.problems, ...check.problems];
   if (file === null || problems.length > 0) return { file: null, problems };
-  return { file, problems: [], filled: [...check.filled] };
+  return { file, problems: [], filled: [...check.filled], ...(check.unset.size > 0 ? { unset: [...check.unset] } : {}) };
 }
 
 /**
@@ -551,10 +556,13 @@ class AppFileCheck {
   readonly filled = new Set<string>();
   /** Paths whose placeholder could not be filled, so their own checks would only repeat the problem. */
   private readonly unfilled = new Set<string>();
+  /** The url variables left unset where a url may be, by name. */
+  readonly unset = new Set<string>();
 
   constructor(
     private readonly places: ReadonlyMap<string, Place>,
     private readonly env: Readonly<Record<string, string | undefined>>,
+    private readonly urlMayBeUnset = false,
   ) {}
 
   run(value: unknown): AppFile | null {
@@ -622,6 +630,7 @@ class AppFileCheck {
       this.problem(`${path}.description`, this.where(`${path}.description`), `${path}.description must be text.`);
     }
     const urlPath = `${path}.url`;
+    if (this.unset.size > 0 && this.unfilled.has(urlPath)) delete app.url;
     if (app.url !== undefined && !this.unfilled.has(urlPath) && (typeof app.url !== 'string' || !isAppUrl(app.url))) {
       this.problem(
         urlPath,
@@ -646,7 +655,7 @@ class AppFileCheck {
       this.problem(`${path}.features`, this.where(`${path}.features`), `${path}.features holds ${count} features, and an app may hold at most ${MAX_FEATURES}.`);
     }
     const needAddress = Object.values(features).some((item) => !isObject(item) || item.kind !== FeatureKind.CustomEvent);
-    if (app.url === undefined && needAddress) {
+    if (app.url === undefined && needAddress && !this.urlMayBeUnset) {
       this.problem(
         `${path}.features`,
         this.where(`${path}.features`),
@@ -822,6 +831,11 @@ class AppFileCheck {
         return '';
       }
       const set = this.env[name];
+      if ((set === undefined || set === '') && this.urlMayBeUnset) {
+        this.unset.add(name);
+        complete = false;
+        return '';
+      }
       if (set === undefined || set === '') {
         this.problem(path, where, `${path} needs the environment variable ${name}, which is not set. Set it in your shell, or in .env beside the app file.`);
         complete = false;

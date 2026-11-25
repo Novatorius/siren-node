@@ -5,6 +5,7 @@ import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { bodyOf } from './record-fakes';
 import { harness, session } from './cli-fakes';
+import { LIVE_BASE_URL } from '../src/cli/targets';
 import { APP_KEY, AppAnswers, PartAnswers, PlanFields, appRecord, itemPage } from './apps-siren-answers';
 import { capturedReply } from './cloud-captures';
 
@@ -58,11 +59,12 @@ describe('apps-sdk-container item 3: a key-only app from the file', () => {
     expect(h.printed()).not.toContain(SIGNING_SECRET);
   });
 
-  it('refuses a file with features and no url before anything is sent', async () => {
-    const h = harness([reply(201, keyOnly)]);
-    h.signedIn();
+  // A sandbox takes features with no url for siren listen (test/cli-listen.test.ts). A live Siren refuses them.
+  it('refuses a file with features and no url on a live Siren before anything is sent', async () => {
+    const h = harness([reply(201, keyOnly)], { edition: 'production' });
+    h.signedIn({ [LIVE_BASE_URL]: session({ edition: 'production' }) });
     h.write('siren.app.json', appFile({ name: 'Acme', features: { notify: { kind: 'postConversionAction', name: 'Tell me' } } }));
-    expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
+    expect(await h.run(['apps', 'apply', '--yes', '--live'])).toBe(1);
     expect(h.http.requests).toHaveLength(0);
     expect(h.err()).toContain('has features and no url');
   });

@@ -23,6 +23,7 @@ REQUESTS
   apps requests       List what Siren sent, or show one request
   apps answer         Answer an ask by hand
   apps resend         Send a request again
+  listen              Send the app's requests to this machine
 
 LOGS
   logs tail           Watch requests, deliveries and API calls live

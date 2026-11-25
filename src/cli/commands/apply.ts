@@ -89,6 +89,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
     await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
   }
   const style = styleFor(io, 'stdout', {});
+  const live = values.live === true;
   io.stdout(
     style.report({
       headline: `Created ${style.bold(APP_FILE_NAME)}`,
@@ -98,11 +99,15 @@ export async function appsInit(input: CommandInput): Promise<number> {
         ['Feature', `notify · ${kindName('postConversionAction')}`],
         ...(missing.length > 0 ? [['Ignored', `${missing.join(', ')} (added to .gitignore)`] as const] : []),
       ],
-      next: [
-        { text: "Set SIREN_APP_URL to your handler's https address", aside: 'in .env or your shell' },
-        { text: style.command(input.command('apps apply')) },
+      // A live Siren refuses siren listen, so its first app needs SIREN_APP_URL.
+      next: live
+        ? [{ text: style.command(input.command('apps apply')) }]
+        : [{ text: style.command(input.command('apps apply')) }, { text: style.command(input.command('listen --forward-to localhost:<port>/<path>')) }],
+      tips: [
+        ...(live ? [] : ['On a sandbox, leave SIREN_APP_URL unset. siren listen sends requests here.']),
+        'A live organization needs SIREN_APP_URL set to an https address.',
+        `Add features in ${APP_FILE_NAME}. Your editor completes them.`,
       ],
-      tips: ['Running the handler on this machine? Use a tunnel such as cloudflared.', `Add features in ${APP_FILE_NAME}. Your editor completes them.`],
     }),
   );
   return 0;
@@ -206,7 +211,12 @@ export async function appsApply(input: CommandInput): Promise<number> {
   // The shell wins over .env beside the file, as Node's --env-file and dotenv do.
   const fromFile = await appVariablesIn(dirname(path));
   const shell = (name: string) => io.env[name] !== undefined && io.env[name] !== '';
-  const parsed = parseAppFile(text, { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) });
+  const variables = { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) };
+  let parsed = parseAppFile(text, variables);
+  // On a sandbox, siren listen carries the requests, so an app may go without a url.
+  run.appFilePath = path;
+  const withoutUrl = parsed.file === null ? parseAppFile(text, variables, { urlMayBeUnset: true }) : undefined;
+  if (withoutUrl?.file && (await run.signedIn()).edition !== 'production') parsed = withoutUrl;
   if (parsed.file === null) {
     for (const problem of parsed.problems) {
       const at = problem.path === '' || problem.message.startsWith(problem.path) ? '' : `${problem.path}: `;
@@ -215,9 +225,10 @@ export async function appsApply(input: CommandInput): Promise<number> {
     throw new CliRefusal(`${shown} has ${parsed.problems.length === 1 ? 'a problem' : `${parsed.problems.length} problems`}, so nothing was sent.`);
   }
 
-  run.appFilePath = path;
   const session = await run.signedIn();
   const { key, params } = declarationFor(parsed.file);
+  const listens = params.url == null && session.edition !== 'production';
+  for (const name of parsed.unset ?? []) run.print(`${name} is not set, so ${key} has no address. On a sandbox, siren listen sends its requests to your machine.`);
   if (params.url != null && onThisMachine(params.url)) {
     run.warn(
       "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
@@ -300,6 +311,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
     const envName = basename(envPath);
     run.print('Next:');
     run.print(`  Run your handler with its key: node --env-file=${envName} server.js, or load ${envName} as your framework does.`);
+    if (listens) run.print(`  Send Siren's requests to it: ${run.command('listen --forward-to localhost:<port>/<path>')}`);
     // A read, which needs no --live.
     run.print(`  Watch what Siren sends it: ${commandLine(run.target, 'apps requests --follow', false)}`);
     return 0;
@@ -650,7 +662,7 @@ interface ShownSecrets {
  * the file is revoked. Never
  * prints either value, and answers false.
  */
-async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<boolean> {
+export async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<boolean> {
   const { rawKey, signingSecret } = secrets;
   const both = rawKey !== undefined && signingSecret !== undefined;
   try {
