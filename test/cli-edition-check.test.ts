@@ -102,15 +102,17 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(await apply.run(['apps', 'list']), apply.err()).toBe(0);
     expect(apply.sent()).toEqual(['GET /auth/signup-options', 'GET /apps']);
 
-    const follow = harness([reply(200, { requests: [requestRow()] })], { onSleep: (count, abort) => count === 3 && abort() });
+    const follow = harness([reply(200, [app]), reply(200, { requests: [requestRow()] })], { onSleep: (count, abort) => count === 3 && abort() });
     follow.signedIn();
-    expect(await follow.run(['apps', 'requests', '--attention', '--follow']), follow.err()).toBe(0);
+    expect(await follow.run(['apps', 'requests', '--attention', '--follow']), follow.err()).toBe(130);
     const polls = follow.paths().filter((path) => path === 'GET /apps/requests').length;
     expect(polls).toBeGreaterThan(1);
     expect(follow.editionReads).toHaveLength(polls);
     expect(follow.sent()[0]).toBe('GET /auth/signup-options');
     expect(follow.sent().filter((path) => path !== 'GET /auth/signup-options')).toEqual(follow.paths());
-    for (let at = 0; at < follow.sent().length; at += 2) expect(follow.sent()[at], `request ${at}`).toBe('GET /auth/signup-options');
+    // The apps are read once, with the first poll. After that each edition read comes just before its poll.
+    const polled = follow.sent().filter((path) => path !== 'GET /apps');
+    for (let at = 0; at < polled.length; at += 2) expect(polled[at], `request ${at}`).toBe('GET /auth/signup-options');
 
     const login = harness([AuthAnswers.oneOrg(), reply(200, [app])], { stdin: PASSWORD });
     expect(await login.run(['login', '--email', EMAIL, '--password-stdin']), login.err()).toBe(0);
@@ -118,15 +120,16 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
   });
 
   it('stops a follow run within one poll when the target turns live, with the line every other command gives', async () => {
-    const h = harness([reply(200, { requests: [requestRow()] }), reply(200, { requests: [requestRow()] }), reply(200, { requests: [requestRow()] })], {
+    const h = harness([reply(200, [app]), reply(200, { requests: [requestRow()] }), reply(200, { requests: [requestRow()] }), reply(200, { requests: [requestRow()] })], {
       edition: (read) => (read <= 2 ? 'sandbox' : 'production'),
       onSleep: (count, abort) => count === 5 && abort(),
     });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--attention', '--follow'])).toBe(1);
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests']);
+    expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests']);
     expect(h.editionReads).toHaveLength(3);
-    const followed = h.err();
+    expect(h.err()).toMatch(/^Watching Acme \(3\), sandbox for requests\. Ctrl-C stops\.\n/);
+    const followed = h.err().replace(/^Watching .*\n/, '');
 
     const other = harness([reply(200, [app])], { edition: 'production' });
     other.signedIn();
@@ -139,13 +142,13 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
   });
 
   it('stops a follow run within one poll when a live target turns into a sandbox', async () => {
-    const h = harness([reply(200, { requests: [] }), reply(200, { requests: [] })], {
+    const h = harness([reply(200, []), reply(200, { requests: [] }), reply(200, { requests: [] })], {
       edition: (read) => (read === 1 ? 'production' : 'sandbox'),
       onSleep: (count, abort) => count === 5 && abort(),
     });
     h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE }) });
     expect(await h.run(['apps', 'requests', '--attention', '--follow', '--live', '--base-url', BASE])).toBe(1);
-    expect(h.paths()).toEqual(['GET /apps/requests']);
+    expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests']);
     expect(h.err()).toContain('is now a sandbox Siren, and your session was made when it was a live one');
   });
 

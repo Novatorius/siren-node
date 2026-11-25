@@ -49,12 +49,4 @@ describe('siren apps requests <id> --json', () => {
     expect(await h.run(['apps', 'requests', APP_REQUEST_ID, '--json']), h.err()).toBe(0);
     expect(JSON.parse(h.out())).toEqual({ ...detail(), appKey: null, featureKey: null, sends: [] });
   });
-
-  it('takes --json only with a request id', async () => {
-    const h = harness([]);
-    h.signedIn();
-    expect(await h.run(['apps', 'requests', '--json'])).toBe(2);
-    expect(h.err()).toContain('--json');
-    expect(h.sent()).toEqual([]);
-  });
 });

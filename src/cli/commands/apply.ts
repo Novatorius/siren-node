@@ -110,7 +110,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
 }
 
 /** "Acme (acme), live": the organization a write acts in, and whether it is live, for the question before the write. */
-function orgNamed(session: { orgName: string; orgSlug?: string; orgId: number; edition: string }): string {
+export function orgNamed(session: { orgName: string; orgSlug?: string; orgId: number; edition: string }): string {
   return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
@@ -434,9 +434,7 @@ export async function appsShow(input: CommandInput): Promise<number> {
     ...(typeof prefix === 'string' && prefix !== '' ? [['Key', `${prefix}…`] as const] : [['Key', out.dim('none')] as const]),
     ...(events.length > 0 ? [['Events', `${clean(events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
   ];
-  const report = out.report({ headline: `${out.bold(clean(app.key))}  ${clean(app.name)}`, rows });
-  // A report leads with ✓, which says something was done. A view has nothing to mark.
-  run.print(report.replace(/^(\S*✓\S* )?/, '').replace(/\n$/, ''));
+  run.print(out.report({ headline: `${out.bold(clean(app.key))}  ${clean(app.name)}`, rows, mark: false }).replace(/\n$/, ''));
   if (app.features.length > 0) {
     run.print('');
     const features = app.features.map((item) => [

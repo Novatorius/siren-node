@@ -18,12 +18,12 @@ import { APP_KEY, APP_REQUEST_ID, appRecord } from './apps-siren-answers';
 const big = JSON.stringify({ outcome: 'paid', note: 'x'.repeat(17_000) });
 
 const CASES: Array<{ argv: string[]; says: string }> = [
-  { argv: ['apps', 'answer', 'apr_xyz', '--body', '{"outcome":"paid"}'], says: 'A request id is apr_ and 32 lowercase hex characters, and "apr_xyz" is not one.' },
+  { argv: ['apps', 'answer', 'apr_xyz', '--body', '{"outcome":"paid"}'], says: '"apr_xyz" isn\'t a request id. Request ids look like apr_ec16a240198d5bc956c9a55c01103dd4' },
   { argv: ['apps', 'answer', APP_REQUEST_ID, '--body', '{"reference":"x"}'], says: 'The answer needs a text outcome, such as {"outcome":"paid"}.' },
   { argv: ['apps', 'answer', APP_REQUEST_ID, '--body', '{"outcome":""}'], says: 'The answer needs a text outcome' },
   { argv: ['apps', 'answer', APP_REQUEST_ID, '--body', big], says: 'The answer is longer than 16384 bytes as JSON, which Siren refuses.' },
-  { argv: ['apps', 'resend', 'apr_xyz'], says: 'A request id is apr_ and 32 lowercase hex characters, and "apr_xyz" is not one.' },
-  { argv: ['apps', 'requests', 'apr_xyz'], says: 'A request id is apr_ and 32 lowercase hex characters, and "apr_xyz" is not one.' },
+  { argv: ['apps', 'resend', 'apr_xyz'], says: '"apr_xyz" isn\'t a request id. Request ids look like apr_ec16a240198d5bc956c9a55c01103dd4' },
+  { argv: ['apps', 'requests', 'apr_xyz'], says: '"apr_xyz" isn\'t a request id. Request ids look like apr_ec16a240198d5bc956c9a55c01103dd4' },
   { argv: ['apps', 'show', 'Acme_Payouts'], says: 'An app key is lowercase letters and digits joined by single dashes, at most 64 characters and never requests, events, scopes or kinds, and "Acme_Payouts" is not one.' },
   { argv: ['apps', 'on', 'requests'], says: '"requests" is not one.' },
   { argv: ['apps', 'off', 'acme--payouts'], says: '"acme--payouts" is not one.' },
