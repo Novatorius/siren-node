@@ -21,7 +21,7 @@ since it gains the handler on its own branch.
 |---|---|---|
 | `siren.apps.requestHandler(options)` | Serves `POST /` at the app's address, then sends `POST /apps/requests/{id}/answer` with the app's key, scope: the app's own key | src/resources/app-request-handler.ts, src/resources/apps.ts |
 | `siren.apps.splitPool(pool, weights)` | None | src/resources/app-amounts.ts, src/resources/apps.ts |
-| `AppDistributionQuestion`, `AppDistributionMetric`, `AppDistributionAnswer`, `AppFeatureFunctions`, `AppRequestFunction`, `AppEventFunction`, `AppSplitPool`, `AppSplitWeights` | None | src/record-types.ts |
+| `DistributionResolverQuestion`, `AppDistributionMetric`, `DistributionResolverAnswer`, `AppFeatureFunctions`, `AppRequestFunction`, `AppEventFunction`, `AppSplitPool`, `AppSplitWeights` | None | src/record-types.ts |
 | `AppRequestHandler`, `AppRequestHandlerOptions`, `AppRequestInput`, `AppRequestReply` and the mount types | None | src/resources/app-request-handler.ts, exported from src/index.ts |
 | `AppTell<D>` and `AppAsk<D>` | None | src/record-types.ts. `D` defaults to `Record<string, unknown>`, so existing code compiles. |
 
@@ -64,11 +64,13 @@ secret or the request body.
 `on()` takes only the 13 kinds Siren sends, `FEATURE_KIND_NAMES` in
 app-feature-kinds.ts, and any the `extraKinds` option names. It refuses
 another kind when the function is registered, and `featureKindProblem()`
-words what to write instead. The types take the same kinds, through
-`AppHandledKind<X>`, where `X` is the extra kinds.
+words what to write instead, as `AppHandlerError`. The types take
+`FeatureKind` and the extra kinds, so a typo's compile error names
+`FeatureKind`. `customEvent` passes the types, since it is a `FeatureKind`,
+and the runtime check refuses it, pointing at `events.ingest()`.
 
 `on(kind, key, fn)` wins over `on(kind, fn)` for its own key. Naming the same
-feature, kind or event twice throws `SirenError`, so a copy and paste slip
+feature, kind or event twice throws `AppHandlerError`, a `SirenError`, so a copy and paste slip
 does not silently drop a function. The handler routes by the envelope's
 `mode`, so a payout method's ask works with no change.
 
@@ -203,6 +205,35 @@ and pass-1-builder-spec.md in the apps run folder) changed these:
 - `prepare` runs scripts/prepare.mjs, which builds with tsup when it is
   installed, keeps a built `dist` when it is not, and otherwise says to run
   `npm ci` first, so an install from a local folder works.
+
+## Types and one surface, DX pass 3
+
+review/sdk-dx/pass-3-review.md and pass-3-builder-spec.md in the apps run
+folder changed these, the same in the PHP and Python SDKs:
+
+- Each kind's types are named from the kind: `<Kind>Question`, `<Kind>Answer`
+  and `<Kind>Tell`. scripts/feature-kind.mjs writes `FeatureQuestions`,
+  `FeatureAnswers` and `FeatureTells` into src/feature-kind.ts from the kinds
+  snapshot, and `AppFeatureFunctions` in record-types.ts is mapped from them,
+  so no list of kinds is written by hand.
+- `appRequest()` returns `AppTestRequest<K>`, which carries `kind`, and
+  `simulate()` has an overload that types `answer` as `FeatureAnswer<K>`.
+  `simulate()` answers `status`, `body`, `answer` and `error` every time,
+  with null for no answer and no error. The answer is the one the handler
+  would post, so it is null after `later()` and beside any error.
+- `apps.requestHandler()` answers `AppRequestHandler`, an interface with no
+  type argument over `AppRequestHandlerWith<never>`, and `on()` returns
+  `this`, so an editor prints `AppRequestHandler` and a typo's error names
+  `FeatureKind`. `AppFunctionFor<'customEvent'>` is `never`, so
+  `customEvent` still fails to type-check.
+- `AppHandlerError`, a `SirenError`, is what the handler and the testing
+  helpers throw for a mistake in the code that uses them.
+- `appRequestFrom()` sets `isAsk` and reads an empty `args` list as `{}`
+  (`readData()`), since Siren encodes an engagement type's empty settings as
+  `[]` until it writes an object.
+- test/apps-dx-pass-3.test.ts runs the TypeScript compiler, strict, on the
+  README's samples and on Siren's request fixture with `satisfies`, so a
+  sample that stops compiling or a field Siren adds fails a test.
 
 ## Left open
 

@@ -1,6 +1,8 @@
-import { SignatureVerificationError, SirenError, ValidationError } from '../errors';
+import { AppHandlerError, SignatureVerificationError, SirenError, ValidationError } from '../errors';
 import type { HttpTransport } from '../http';
+import type { FeatureAnswers, FeatureKind, FeatureTells } from '../feature-kind';
 import type { AppAnswerLater, AppAsk, AppEventFunction, AppFeatureFunctions, AppRequest, AppRequestFunction } from '../record-types';
+import type { AppTestRequest } from '../testing';
 import { sirenAnswerProblem } from './app-answer-rules';
 import { featureKindProblem } from './app-feature-kinds';
 import type { WebhookEvent, WebhookHeaders } from '../types';
@@ -85,20 +87,32 @@ export interface AppRequestInput {
 }
 
 /**
- * What `simulate()` answers: the reply the handler would send, its body
- * parsed, and for an ask the answer the function returned. `error` is what
- * `onError` would get: a function that threw or returned nothing, an
- * answer the post would refuse, an answer Siren's answer route would
- * refuse (a `ValidationError` with code `app_answer_invalid` and Siren's
- * words), or an answer address on another Siren. `simulate()` never throws
- * for a function's failure.
+ * What `simulate()` answers, the same four fields in the PHP and Python
+ * SDKs: the reply's status, its body parsed, the answer the handler would
+ * post, and the error `onError` would get. `A` is the kind's answer type
+ * when the request came from `appRequest()`.
  */
-export interface AppSimulation {
+export interface AppSimulation<A = unknown> {
   status: number;
   body: Record<string, unknown>;
-  answer?: unknown;
-  error?: unknown;
+  /**
+   * The answer an ask's function returned, once it passed the post's check
+   * and Siren's answer rules for the kind. Null for a tell, after
+   * `answers.later()`, beside a refused answer, and on any error.
+   */
+  answer: A | null;
+  /**
+   * What `onError` would get, or null: a function that threw or returned
+   * nothing (`AppHandlerError`), an answer the post would refuse, an answer
+   * Siren's answer route would refuse (a `ValidationError` with code
+   * `app_answer_invalid` and Siren's words), or an answer address on another
+   * Siren. `simulate()` never throws for a function's failure.
+   */
+  error: unknown;
 }
+
+/** The answer type `simulate()` gives a request `appRequest()` built for `K`: the kind's answer, `never` for a tell, and `unknown` for a kind this SDK doesn't know. */
+export type AppSimulatedAnswer<K extends string> = K extends keyof FeatureAnswers ? FeatureAnswers[K] : K extends keyof FeatureTells ? never : unknown;
 
 /**
  * What `handle()` answers: the reply to send, and for an ask, the work to
@@ -160,11 +174,17 @@ export interface AppFastifyInstance {
 /** `answers.fastify`, a Fastify plugin. Register it with `{ path }`. */
 export type AppFastifyPlugin = (instance: AppFastifyInstance, options: { path?: string }, done: (error?: Error) => void) => void;
 
-/** The function `on` takes for `kind`, typed by the kind when Siren names it in {@link AppFeatureFunctions}. */
-export type AppFunctionFor<K extends string> = K extends keyof AppFeatureFunctions ? AppFeatureFunctions[K] : AppRequestFunction;
-
-/** The kinds `on()` takes: every kind Siren sends, and `X`, the kinds the `extraKinds` option names. */
-export type AppHandledKind<X extends string = never> = keyof AppFeatureFunctions | X;
+/**
+ * The function `on` takes for `kind`, typed by the kind when Siren sends it
+ * ({@link AppFeatureFunctions}). `customEvent` is a {@link FeatureKind} that
+ * Siren never sends, so no function fits it, and `on()` refuses it at run
+ * time too. A kind `extraKinds` names takes an {@link AppRequestFunction}.
+ */
+export type AppFunctionFor<K extends string> = K extends keyof AppFeatureFunctions
+  ? AppFeatureFunctions[K]
+  : K extends FeatureKind
+    ? never
+    : AppRequestFunction;
 
 /**
  * The handler `apps.requestHandler()` answers. Mount it as it is:
@@ -180,9 +200,11 @@ export type AppHandledKind<X extends string = never> = keyof AppFeatureFunctions
  *
  * Called with Node's `(req, res)` it writes the reply. Called with a Web
  * `Request` it answers a `Response`, and takes `ctx.waitUntil` from its
- * third argument. `X` is the kinds the `extraKinds` option names.
+ * third argument. `X` is the kinds the `extraKinds` option names: the
+ * handler `apps.requestHandler()` answers without them is
+ * {@link AppRequestHandler}.
  */
-export interface AppRequestHandler<X extends string = never> {
+export interface AppRequestHandlerWith<X extends string> {
   (req: AppNodeRequest, res: NodeResponseLike, next?: unknown): Promise<void>;
   // The Web signature stays last: Next.js 13 to 15 type-check a route's
   // `POST` against the last call signature (test/types/next-route.ts).
@@ -195,11 +217,11 @@ export interface AppRequestHandler<X extends string = never> {
    * error, which `onError` gets. Refuses a kind Siren never sends, saying
    * what to write instead, and a feature already handled. Chainable.
    */
-  on<K extends AppHandledKind<X>>(kind: K, key: string, fn: AppFunctionFor<K>): AppRequestHandler<X>;
+  on<K extends FeatureKind | X>(kind: K, key: string, fn: AppFunctionFor<K>): this;
   /** Hands the requests for every feature of `kind` that no `on(kind, key, fn)` names to `fn`. Chainable. */
-  on<K extends AppHandledKind<X>>(kind: K, fn: AppFunctionFor<K>): AppRequestHandler<X>;
+  on<K extends FeatureKind | X>(kind: K, fn: AppFunctionFor<K>): this;
   /** Hands a webhook event of `type`, sent to the same address, to `fn`. Refuses a type already handled. Chainable. */
-  onEvent(type: string, fn: AppEventFunction): AppRequestHandler<X>;
+  onEvent(type: string, fn: AppEventFunction): this;
   /**
    * What an ask's function returns when the app will answer later with
    * `apps.requests.answer()`. The handler then posts nothing and reports
@@ -213,12 +235,21 @@ export interface AppRequestHandler<X extends string = never> {
    * nothing and calls no `onError`. An ask's function runs at once, and its
    * answer gets the check the post would give it, then the checks Siren's
    * answer route runs for the kind. For tests, with `appRequest()` from
-   * `@novatorius/siren/testing`.
+   * `@novatorius/siren/testing`, which types the answer by the kind.
    */
+  simulate<K extends string>(input: AppTestRequest<K>): Promise<AppSimulation<AppSimulatedAnswer<K>>>;
+  /** Runs the whole handler on any signed request, as above. The answer is untyped. */
   simulate(input: AppRequestInput): Promise<AppSimulation>;
   /** A Fastify plugin with its own raw body parser, scoped to the plugin. */
   readonly fastify: AppFastifyPlugin;
 }
+
+/**
+ * The handler `apps.requestHandler()` answers. `on()` takes every kind
+ * Siren sends, and its function's request and answer are typed by the
+ * kind. See {@link AppRequestHandlerWith} for mounting it.
+ */
+export interface AppRequestHandler extends AppRequestHandlerWith<never> {}
 
 /** A body the handler cannot check. */
 const UNREADABLE = Symbol('unreadable');
@@ -243,8 +274,8 @@ const LATER = Object.freeze({}) as AppAnswerLater;
 
 /** What a simulated request collects instead of posting or calling onError. */
 interface Simulation {
-  answer?: unknown;
-  error?: unknown;
+  answer: unknown;
+  error: unknown;
 }
 
 /**
@@ -277,7 +308,7 @@ export function createAppRequestHandler<X extends string = never>(
   http: Pick<HttpTransport, 'request' | 'urlFor'>,
   options: AppRequestHandlerOptions<X> = {},
   defaults: { toleranceSeconds: number; maxAnswerBytes: number },
-): AppRequestHandler<X> {
+): AppRequestHandlerWith<X> {
   const method = 'apps.requestHandler()';
   if (!isJsonObject(options)) {
     throw new SirenError(`${method} takes its options as an object, such as { signingSecret: process.env.SIREN_SIGNING_SECRET }.`);
@@ -401,9 +432,11 @@ export function createAppRequestHandler<X extends string = never>(
     }
     if (sim !== undefined) {
       try {
-        sim.answer = await fn(asked);
-        const answer = givenAnswer(sim.answer, asked);
-        if (answer !== LATER) simulatedAnswer(answer, asked);
+        const answer = givenAnswer(await fn(asked), asked);
+        if (answer !== LATER) {
+          simulatedAnswer(answer, asked);
+          sim.answer = answer;
+        }
       } catch (error) {
         sim.error = error;
       }
@@ -531,35 +564,35 @@ export function createAppRequestHandler<X extends string = never>(
   };
 
   const api = {
-    on(kind: unknown, keyOrFn: unknown, maybeFn?: unknown): AppRequestHandler<X> {
+    on(kind: unknown, keyOrFn: unknown, maybeFn?: unknown): AppRequestHandlerWith<X> {
       const wide = maybeFn === undefined && typeof keyOrFn === 'function';
       if (typeof kind !== 'string' || kind === '') {
-        throw new SirenError('answers.on() takes a feature kind first, such as distributionResolver.');
+        throw new AppHandlerError('answers.on() takes a feature kind first, such as distributionResolver.');
       }
       const problem = featureKindProblem(kind, extra);
-      if (problem !== undefined) throw new SirenError(problem);
+      if (problem !== undefined) throw new AppHandlerError(problem);
       if (wide) {
-        if (kinds.has(kind)) throw new SirenError(`answers.on() already has a function for every ${kind}.`);
+        if (kinds.has(kind)) throw new AppHandlerError(`answers.on() already has a function for every ${kind}.`);
         kinds.set(kind, keyOrFn as AppRequestFunction);
         return self;
       }
       if (typeof keyOrFn !== 'string' || keyOrFn === '') {
-        throw new SirenError("answers.on() takes the feature's key second, such as split-by-score, or the function alone for every key.");
+        throw new AppHandlerError("answers.on() takes the feature's key second, such as split-by-score, or the function alone for every key.");
       }
       if (typeof maybeFn !== 'function') {
-        throw new SirenError(`answers.on() needs a function for ${kind} ${keyOrFn}.`);
+        throw new AppHandlerError(`answers.on() needs a function for ${kind} ${keyOrFn}.`);
       }
       const id = featureKey(kind, keyOrFn);
-      if (features.has(id)) throw new SirenError(`answers.on() already has a function for ${kind} ${keyOrFn}.`);
+      if (features.has(id)) throw new AppHandlerError(`answers.on() already has a function for ${kind} ${keyOrFn}.`);
       features.set(id, maybeFn as AppRequestFunction);
       return self;
     },
-    onEvent(type: unknown, fn: unknown): AppRequestHandler<X> {
+    onEvent(type: unknown, fn: unknown): AppRequestHandlerWith<X> {
       if (typeof type !== 'string' || type === '') {
-        throw new SirenError('answers.onEvent() takes an event type first, such as conversion.approved.');
+        throw new AppHandlerError('answers.onEvent() takes an event type first, such as conversion.approved.');
       }
-      if (typeof fn !== 'function') throw new SirenError(`answers.onEvent() needs a function for ${type}.`);
-      if (events.has(type)) throw new SirenError(`answers.onEvent() already has a function for ${type}.`);
+      if (typeof fn !== 'function') throw new AppHandlerError(`answers.onEvent() needs a function for ${type}.`);
+      if (events.has(type)) throw new AppHandlerError(`answers.onEvent() already has a function for ${type}.`);
       events.set(type, fn as AppEventFunction);
       return self;
     },
@@ -568,17 +601,17 @@ export function createAppRequestHandler<X extends string = never>(
     },
     handle(input: AppRequestInput): Promise<AppRequestReply> {
       if (!isJsonObject(input)) {
-        throw new SirenError('answers.handle() takes { method, headers, rawBody }.');
+        throw new AppHandlerError('answers.handle() takes { method, headers, rawBody }.');
       }
       const raw = input.rawBody;
       return respond(input.method, input.headers, async () => (typeof raw === 'string' || raw instanceof Uint8Array ? raw : UNREADABLE));
     },
     async simulate(input: AppRequestInput): Promise<AppSimulation> {
       if (!isJsonObject(input)) {
-        throw new SirenError('answers.simulate() takes { method, headers, rawBody }, such as appRequest() from @novatorius/siren/testing answers.');
+        throw new AppHandlerError('answers.simulate() takes { method, headers, rawBody }, such as appRequest() from @novatorius/siren/testing answers.');
       }
       const raw = input.rawBody;
-      const sim: Simulation = {};
+      const sim: Simulation = { answer: null, error: null };
       const result = await respond(
         input.method,
         input.headers,
@@ -588,13 +621,13 @@ export function createAppRequestHandler<X extends string = never>(
       return {
         status: result.status,
         body: JSON.parse(result.body) as Record<string, unknown>,
-        ...('answer' in sim ? { answer: sim.answer } : {}),
-        ...('error' in sim ? { error: sim.error } : {}),
+        answer: sim.error === null ? sim.answer : null,
+        error: sim.error,
       };
     },
     fastify,
   };
-  const self = Object.assign(handler, api) as unknown as AppRequestHandler<X>;
+  const self = Object.assign(handler, api) as unknown as AppRequestHandlerWith<X>;
   return self;
 }
 
@@ -604,7 +637,7 @@ export function createAppRequestHandler<X extends string = never>(
  */
 function givenAnswer(answer: unknown, asked: AppAsk): unknown {
   if (answer !== undefined && answer !== null) return answer;
-  throw new SirenError(
+  throw new AppHandlerError(
     `The function for ${asked.feature.kind} ${asked.feature.key} returned nothing. ` +
       'Return the answer, or return answers.later() when you will answer with apps.requests.answer().',
   );
@@ -639,7 +672,10 @@ function settled(error: unknown): boolean {
 /**
  * When Siren sends a failed ask again, from its `answerBy`, and how to
  * resend it sooner: `siren apps resend` (src/cli/commands/requests.ts,
- * appsResend) or Needs attention in Siren Cloud. The time is in UTC, with
+ * appsResend). Siren's resend route takes a pending ask
+ * (ResendAppRequest.php), while Siren Cloud offers Send again only once
+ * the ask needs attention (apps.ts resendAction()), so the line names the
+ * command alone. The time is in UTC, with
  * the day when it is not today. A `answerBy` that is not a date leaves the
  * time out.
  */
@@ -653,7 +689,7 @@ function nextSend(request: AppAsk): string {
   }
   return (
     `Siren sends it again${when === '' ? '' : `${when},`} when its answer window closes. ` +
-    `Resend it sooner from Needs attention in Siren Cloud, or with \`siren apps resend ${request.id}\`.`
+    `Resend it sooner with \`siren apps resend ${request.id}\`.`
   );
 }
 

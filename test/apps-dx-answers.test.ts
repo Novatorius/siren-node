@@ -109,8 +109,8 @@ describe('DX pass 2, finding 3: an ask says "answer later" with answers.later()'
     expect(forgot.status).toBe(200);
     expect((forgot.error as Error).message).toBe(NOTHING);
     const later = await answers.simulate(ask('payoutMethod', 'acme-ledger'));
-    expect(later.answer).toBe(answers.later());
-    expect(later.error).toBeUndefined();
+    expect(later.answer).toBeNull();
+    expect(later.error).toBeNull();
   });
 
   it("ignores what a tell's function returns", async () => {
@@ -118,7 +118,7 @@ describe('DX pass 2, finding 3: an ask says "answer later" with answers.later()'
     answers.on('postConversionAction', (() => ({ outcome: 'ignored' })) as never);
     const result = await answers.simulate(ask('postConversionAction', 'tell-the-crm'));
     expect(result.status).toBe(200);
-    expect(result.error).toBeUndefined();
+    expect(result.error).toBeNull();
     expect(errors).toHaveLength(0);
   });
 });
@@ -133,7 +133,7 @@ function closes(seconds: number): string {
 describe('DX pass 2, finding 4: the default line for a failed ask says when Siren sends it again', () => {
   const next = (t: number) =>
     `Siren sends it again after ${closes(t + 3600)}, when its answer window closes. ` +
-    `Resend it sooner from Needs attention in Siren Cloud, or with \`siren apps resend ${ID}\`.`;
+    `Resend it sooner with \`siren apps resend ${ID}\`.`;
 
   it('names the time for a function that throws', async () => {
     const { answers } = setup([], false);
@@ -197,7 +197,7 @@ describe('DX pass 2, finding 4: the default line for a failed ask says when Sire
     const body = { ...features.kinds.distributionResolver!.request, answerBy: 'soon', answerUrl: `${BASE}/apps/requests/${ID}/answer` };
     await (await answers.handle(signedBy(body))).after!();
     expect(log.mock.calls[0]![1]).toBe(
-      `Siren sends it again when its answer window closes. Resend it sooner from Needs attention in Siren Cloud, or with \`siren apps resend ${ID}\`.`,
+      `Siren sends it again when its answer window closes. Resend it sooner with \`siren apps resend ${ID}\`.`,
     );
   });
 });
@@ -215,7 +215,7 @@ describe("DX pass 2, from pass 1: simulate() checks an answer as Siren's answer 
     expect(sampleData(kind)).toEqual(features.kinds[kind]!.request.data);
     answers.on(kind as never, (() => answerFor(kind)) as never);
     const result = await answers.simulate(ask(kind, 'a-key'));
-    expect(result.error).toBeUndefined();
+    expect(result.error).toBeNull();
     expect(result.answer).toEqual(features.kinds[kind]!.answer);
   });
 

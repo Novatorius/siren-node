@@ -50,6 +50,7 @@ export {
   UnexpectedResponseError,
   ConnectionError,
   SignatureVerificationError,
+  AppHandlerError,
 } from './errors';
 export type { SirenErrorDetails, FailedValidation } from './errors';
 export type {
@@ -136,10 +137,12 @@ export { SettingsResource } from './resources/settings';
 export { PayoutsResource } from './resources/payouts';
 export { FulfillmentsResource } from './resources/fulfillments';
 export { FeatureKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
+export type { FeatureQuestions, FeatureAnswers, FeatureTells, FeatureQuestion, FeatureAnswer, FeatureTell } from './feature-kind';
 export { AppSource } from './taxonomy';
 export { AppErrorCode, appErrorCode } from './errors';
 export type {
   AppRequestHandler,
+  AppRequestHandlerWith,
   AppRequestHandlerOptions,
   AppRequestInput,
   AppRequestReply,
@@ -151,7 +154,7 @@ export type {
   AppFastifyRequest,
   AppFastifyReply,
   AppFunctionFor,
-  AppHandledKind,
+  AppSimulatedAnswer,
 } from './resources/app-request-handler';
 export {
   AppsResource,

@@ -3,7 +3,7 @@ import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppErrorCode, ConflictError, appErrorCode } from '../src/errors';
 import { AppsResource } from '../src/resources/apps';
-import type { AppRewardAnswer, AppRewardQuestion } from '../src/record-types';
+import type { IncentiveResolverAnswer, IncentiveResolverQuestion } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
@@ -21,7 +21,7 @@ const URL = 'https://acme.example/siren';
 const USD = { id: 'USD', symbol: '$', position: 'before', name: 'US Dollar', scale: 2, decimalPlaces: 2, type: 'monetary' };
 
 /** Siren's example question, from the feature contracts fixture. */
-const QUESTION: AppRewardQuestion = {
+const QUESTION: IncentiveResolverQuestion = {
   reason: 'sale',
   program: { id: 3, name: 'Partner program', status: 'active' },
   conversionType: 'sale',
@@ -58,8 +58,8 @@ describe('apps-c16-2: the incentive resolver kind', () => {
     const rewards: Record<string, number | null> = {};
     const total = QUESTION.conversions.reduce((sum, conversion) => sum + conversion.score, 0);
     for (const conversion of QUESTION.conversions) rewards[String(conversion.conversionId)] = Math.floor((QUESTION.pool.value * conversion.score) / total);
-    const answer: AppRewardAnswer = { outcome: 'rewards', units: QUESTION.pool.units, rewards };
-    const nothing: AppRewardAnswer = { outcome: 'rewards', units: 'USD', rewards: { '1042': 1500, '1043': null } };
+    const answer: IncentiveResolverAnswer = { outcome: 'rewards', units: QUESTION.pool.units, rewards };
+    const nothing: IncentiveResolverAnswer = { outcome: 'rewards', units: 'USD', rewards: { '1042': 1500, '1043': null } };
 
     const accepted = { status: 'accepted', duplicate: false };
     const over = transportOver([reply(200, accepted), reply(200, accepted)]);

@@ -1057,7 +1057,7 @@ which Siren stores at scale 2 and shows with 0 decimal places, is ¥100.
 | --- | --- | --- |
 | `siren.apps.shownAmount(value, currency)` | Answers `{ amount, decimal, text }`. Sends nothing. | src/resources/apps.ts, src/resources/app-amounts.ts |
 | `AppCurrency` | The currency a tell carries, every field present. It extends `ProgramCurrency`, the same shape `programs.currencyTypes()` lists. | src/record-types.ts |
-| `AppConversionApprovedData`, `AppAllocationCompletedData` | The data of the two tells. | src/record-types.ts |
+| `PostConversionActionTell`, `PostAllocationActionTell` | The data of the two tells. | src/record-types.ts |
 | `ShownAmount` | What `shownAmount` answers. | src/record-types.ts |
 
 `shownAmount` copies Siren's `CurrencyAmountService` (lib/Commerce/Services/CurrencyAmountService.php):

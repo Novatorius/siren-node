@@ -44,8 +44,9 @@ vi.mock('express', async (importOriginal) => {
 });
 
 // Each sample loads the SDK from source on its first import, which can pass
-// Vitest's 5 seconds on a busy machine.
-vi.setConfig({ testTimeout: 30_000 });
+// Vitest's 5 seconds on a busy machine, and took 50 seconds under a load
+// average of 40.
+vi.setConfig({ testTimeout: 120_000 });
 
 interface FeatureFixture {
   kinds: Record<string, { request: Record<string, unknown>; answer: Record<string, unknown> | null }>;
