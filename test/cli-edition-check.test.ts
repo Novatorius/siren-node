@@ -95,7 +95,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(h.err()).toContain('Run siren login to sign in again.');
   });
 
-  // The follow runs here pass --attention, which reads one list, then follows GET /logs.
+  // The follow runs here pass --attention, which reads one list a poll. The plain list also reads the attention list (demo fix 2).
   it('reads the edition once per command, before anything else, and again before each poll while following', async () => {
     const apply = harness([reply(200, [app])]);
     apply.signedIn();
@@ -232,8 +232,7 @@ describe('apps-cli: the edition check against a Cloud whose edition changes betw
 
     const before = cloud.seen.length;
     const following = runBuilt(cli, ['apps', 'requests', '--attention', '--follow', ...base], config);
-    // The list is read once, then the feed. Flip the edition once the feed has been read.
-    const polls = () => cloud.seen.slice(before).filter((request) => request.path === '/logs');
+    const polls = () => cloud.seen.slice(before).filter((request) => request.path === '/apps/requests');
     while (polls().length < 1) await new Promise((resolve) => setTimeout(resolve, 50));
     cloud.edition = 'production';
     const flippedAt = cloud.seen.length;

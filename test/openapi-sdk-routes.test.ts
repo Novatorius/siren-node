@@ -36,10 +36,6 @@ const KNOWN_UNSERVED: Record<string, string> = {
   'POST /api-keys': 'apiKeys.create() is deprecated, as above.',
   'GET /api-keys/scopes': 'apiKeys.scopes() is deprecated since an app holds its key, and Siren answers 404. Removing it is a breaking change.',
   'DELETE /api-keys/{id}': 'apiKeys.revoke() is deprecated, as above.',
-  'POST /apps/{id}/features': 'Siren serves /apps/{app}/items until pkt/apps-feature-rename merges. Then openapi.json is copied again and these four leave the list.',
-  'GET /apps/{id}/features/{id}': 'The feature rename, as above.',
-  'PATCH /apps/{id}/features/{id}': 'The feature rename, as above.',
-  'DELETE /apps/{id}/features/{id}': 'The feature rename, as above.',
 };
 
 /** The known entry a sent line falls under, if any. */

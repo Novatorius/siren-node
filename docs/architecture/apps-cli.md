@@ -430,8 +430,9 @@ played.
   `CommandContext` keeps the answer for the
   run, so a refresh and a second call use it. `apps requests --follow` reads it again before each
   poll after the first (`recheckEdition()`), so a target that changes edition during the run stops
-  it with the same one line before the session is sent there again. `logs tail` does the same.
-  That costs one more GET for each read of the feed. `apps init` sends nothing and reads nothing.
+  it with the same one line before the session is sent there again. That costs one more GET every
+  2 seconds while following. `logs tail` does the same before each read of the feed.
+  `apps init` sends nothing and reads nothing.
 - A live edition needs `--live` to sign up, sign in, and change anything: `apply`, `answer`,
   `resend`, `rotate-key`, `rotate-secret`, `add-key`, `on`, `off` and `delete`, whatever address
   chose it. The reads, `whoami`, `orgs`, `use`, `apps list`, `apps show` and `apps requests`, need

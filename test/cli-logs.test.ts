@@ -10,7 +10,7 @@ import { SANDBOX_BASE_URL } from '../src/http';
 import { APP_REQUEST_ID, appRecord, requestRow } from './apps-siren-answers';
 
 /*
- * `siren logs tail` and `siren apps requests --follow` over `GET /logs`
+ * `siren logs tail` over `GET /logs`
  * (contract/devtools-logs.md, section 6).
  */
 
@@ -264,40 +264,6 @@ describe('a log line', () => {
   it('reads --since as a time back from now, or as a time', () => {
     expect(sinceOf('2h', NOW_MS)).toBe(new Date(NOW_MS - 7_200_000).toISOString());
     expect(sinceOf(new Date(NOW_MS - 1000).toISOString(), NOW_MS)).toBe(new Date(NOW_MS - 1000).toISOString());
-  });
-});
-
-describe('siren apps requests --follow', () => {
-  it('prints the list, then follows the feed for requests, printing each change once, and exits 130 on Ctrl-C', async () => {
-    const row = requestRow();
-    const change = (status: string) =>
-      entry({ id: `request_1_${status}`, type: 'request', summary: 'ask payout-method', requestStatus: status, request: { ...requestRow({ status }), feature: undefined, item: 'app:12' } });
-    const h = harness(
-      [reply(200, { requests: [row] }), reply(200, { requests: [] }), page([], CURSOR_1), page([change('delivered')], CURSOR_2), page([], CURSOR_2)],
-      { onSleep: (count, abort) => count === 3 && abort() },
-    );
-    h.signedIn();
-
-    expect(await h.run(['apps', 'requests', '--follow']), h.err()).toBe(130);
-
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', 'GET /logs', 'GET /logs', 'GET /logs']);
-    expect(queryOf(h, 2)).toEqual({ type: 'request' });
-    const lines = h.out().split('\n').filter((line) => line.includes(APP_REQUEST_ID));
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('sent');
-    expect(lines[1]).toContain('delivered');
-    expect(lines[1]).toContain('app:12');
-  });
-
-  it('passes --app and reads --attention as failed', async () => {
-    const h = harness(
-      [reply(200, { requests: [] }), reply(200, appRecord()), page([], CURSOR_1)],
-      { onSleep: (count, abort) => count === 1 && abort() },
-    );
-    h.signedIn();
-
-    expect(await h.run(['apps', 'requests', '--follow', '--attention', '--app', 'acme-payouts']), h.err()).toBe(130);
-    expect(queryOf(h, 2)).toEqual({ type: 'request', app: 'acme-payouts', status: 'failed' });
   });
 });
 
