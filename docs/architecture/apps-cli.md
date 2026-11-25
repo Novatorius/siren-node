@@ -521,7 +521,12 @@ once, and sends nothing.
   grammar.
 - Any other recipe stanza, such as `programs`, is refused by name. Recipes made of apps and
   programs wait for slice 12. Any other key is refused as not a recipe key.
-- `apps` holds exactly one app, keyed by its app key.
+- `apps` holds exactly one app, keyed by its app key. A file with more hears that a folder holds
+  one app, since the env file beside it keeps one app's key. The map stays because a Siren recipe
+  maps each key to its record, so the CLI and the dashboard can share the file. CLI pass 2,
+  finding 4 asked for a flat file instead, and was declined for that reason. `apps init` and
+  `apps pull` write a top `description` that calls the file a recipe and names `siren apps apply`,
+  and the schema's text for `apps` says why it is a map.
 - An app takes `name`, `description`, `url`, `scopes`, `events`, `contacts` and `features`, and
   nothing else. Its key is never `requests`, `events`, `scopes` or `kinds`, which Siren keeps for its own routes.
   `url` is optional, and an app with none is a key-only app (slice C6). When given, it starts with

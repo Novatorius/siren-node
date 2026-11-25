@@ -424,7 +424,7 @@
           ]
         }
       },
-      "description": "One app, under its app key."
+      "description": "One app under its app key. A Siren recipe maps each key to its record, so apps is a map. It holds one app, since the env file beside siren.app.json keeps that one app's key."
     }
   }
 }

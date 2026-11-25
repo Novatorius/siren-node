@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseAppFile } from '../src/cli/app-file';
+import { RECIPE_NOTE, parseAppFile } from '../src/cli/app-file';
 import { COMMANDS } from '../src/cli/run';
 import { resolveTarget } from '../src/cli/targets';
 import { SANDBOX_BASE_URL } from '../src/http';
@@ -204,7 +204,8 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     const file = JSON.parse(h.file('siren.app.json')) as Record<string, any>;
     expect(file.$schema).toMatch(/^https:\/\/unpkg\.com\/@novatorius\/siren@[\d.]+\/siren\.app\.schema\.json$/);
     expect(file.name).toBeUndefined();
-    expect(file.description).toBeUndefined();
+    // Pass 2, finding 4: the top description says the file is a Siren recipe and names what sends it.
+    expect(file.description).toBe(RECIPE_NOTE);
     const features = Object.values(file.apps[APP_KEY].features) as Array<{ kind: string }>;
     expect(features.map((feature) => feature.kind)).toEqual(['postConversionAction']);
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);

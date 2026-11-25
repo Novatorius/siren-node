@@ -6,7 +6,7 @@ import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import { RESERVED_APP_KEYS } from '../../resources/apps';
 import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types';
 import { FeatureKind } from '../../taxonomy';
-import { APP_FILE_NAME, APP_FILE_SCHEMA_PATH, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
+import { APP_FILE_NAME, APP_FILE_SCHEMA_PATH, RECIPE_NOTE, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
 import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
@@ -212,7 +212,7 @@ function pulledFile(app: App, org: string | undefined, urlEnv: boolean): Record<
     ...(Array.isArray(app.contacts) && app.contacts.length > 0 ? { contacts: [...app.contacts] } : {}),
     ...(Object.keys(features).length > 0 ? { features } : {}),
   };
-  return { $schema: APP_FILE_SCHEMA_PATH, version: 1, ...(org === undefined ? {} : { org }), apps: { [app.key]: body } };
+  return { $schema: APP_FILE_SCHEMA_PATH, version: 1, ...(org === undefined ? {} : { org }), description: RECIPE_NOTE, apps: { [app.key]: body } };
 }
 
 /** One feature for the file: its kind and name, its description when it has one, and the settings its kind takes. */
