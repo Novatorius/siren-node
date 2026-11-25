@@ -94,6 +94,19 @@ describe('the generated resource commands', () => {
     expect(JSON.parse(raw.out()).body).toEqual({ name: '2026' });
   });
 
+  it('clears a nullable field with -d key=null, and refuses null for a field Siren never takes empty', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['application-forms', 'update', '3', '-d', 'confirmationUrl=null', '--dry-run', '--json'])).toBe(0);
+    expect(JSON.parse(h.out()).body).toEqual({ confirmationUrl: null });
+    const raw = signedIn([]);
+    expect(await raw.run(['put', '/application-forms/3', '-d', 'confirmationUrl=null', '--dry-run', '--json'])).toBe(0);
+    expect(JSON.parse(raw.out()).body).toEqual({ confirmationUrl: null });
+    const refused = signedIn([]);
+    expect(await refused.run(['application-forms', 'update', '3', '-d', 'name=null', '--dry-run'])).toBe(2);
+    expect(refused.err()).toContain("name can't be cleared with null");
+    expect(refused.http.requests).toHaveLength(0);
+  });
+
   it('updates with the method the spec names for the route', async () => {
     const programsCommand = RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')!;
     const h = signedIn([reply(200, { id: 1, name: 'Renamed' })]);

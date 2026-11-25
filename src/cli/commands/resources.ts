@@ -470,15 +470,25 @@ export function insideApi(path: string, given: string = path): string {
   return `/${kept.join('/')}`;
 }
 
-/** A `-d` value as Siren gets it: a JSON number, true, false or null as that, anything else as text. */
-export function fieldValue(text: string, type?: string): unknown {
-  // Where openapi types the field, the type decides, so a name such as 2026 stays text (review of PR 94).
-  if (type === 'string') return text;
-  if ((type === 'integer' || type === 'number') && text.trim() !== '' && Number.isFinite(Number(text))) return Number(text);
-  if (type === 'boolean' && (text === 'true' || text === 'false')) return text === 'true';
+/**
+ * A `-d` value as Siren gets it: a JSON number, true, false or null as that,
+ * anything else as text. Where openapi types the field, the type decides, so
+ * a name such as 2026 stays text (review of PR 94). `null` clears a field
+ * openapi marks nullable, and is refused for a typed field it doesn't, since
+ * Siren would store the word.
+ */
+export function fieldValue(text: string, type?: string, key = 'The field'): unknown {
+  const nullable = type === undefined || type.endsWith('|null');
+  const base = type?.replace(/\|null$/, '');
+  if (text === 'null') {
+    if (nullable) return null;
+    throw new CliUsageError(`${key} can't be cleared with null, since Siren's route takes a ${base === 'string' ? 'text' : base} value there. Give it a value.`);
+  }
+  if (base === 'string') return text;
+  if ((base === 'integer' || base === 'number') && text.trim() !== '' && Number.isFinite(Number(text))) return Number(text);
+  if (base === 'boolean' && (text === 'true' || text === 'false')) return text === 'true';
   if (text === 'true') return true;
   if (text === 'false') return false;
-  if (text === 'null') return null;
   if (/^-?(0|[1-9]\d*)(\.\d+)?$/.test(text) && Number.isSafeInteger(Math.trunc(Number(text)))) return Number(text);
   return text;
 }
@@ -560,7 +570,7 @@ async function outgoingOf(input: CommandInput, method: HttpMethod, given: string
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new CliUsageError('--data must be a JSON object, with the fields as its keys.');
     body = parsed as Record<string, unknown>;
   }
-  for (const [key, value] of fields) setNested(body, key, fieldValue(value, types[key.replace(/\[([^\]]*)\]/g, '.$1').replace(/^\./, '')]));
+  for (const [key, value] of fields) setNested(body, key, fieldValue(value, types[key.replace(/\[([^\]]*)\]/g, '.$1').replace(/^\./, '')], key));
   return { method, path, query, body };
 }
 

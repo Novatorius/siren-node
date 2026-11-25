@@ -16,7 +16,7 @@ export interface ResourceRoute {
   readonly filters?: readonly { readonly name: string; readonly type: 'string' | 'integer' | 'number' | 'boolean'; readonly values?: readonly string[] }[];
   /** The body fields Siren validates. */
   readonly fields?: readonly string[];
-  /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. */
+  /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. `|null` marks one Siren takes null for. */
   readonly types?: Readonly<Record<string, string>>;
   /** The body fields Siren requires. */
   readonly required?: readonly string[];
@@ -82,11 +82,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "name": "string",
-          "slug": "string",
+          "slug": "string|null",
           "enabled": "boolean",
           "approveExisting": "boolean",
           "submitMessage": "string",
-          "confirmationUrl": "string"
+          "confirmationUrl": "string|null"
         },
         "required": [
           "name",
@@ -115,11 +115,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "name": "string",
-          "slug": "string",
+          "slug": "string|null",
           "enabled": "boolean",
           "approveExisting": "boolean",
           "submitMessage": "string",
-          "confirmationUrl": "string"
+          "confirmationUrl": "string|null"
         }
       },
       "delete": {
@@ -331,7 +331,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "types": {
           "name": "string",
           "structure": "string",
-          "description": "string"
+          "description": "string|null"
         },
         "required": [
           "name",
@@ -349,7 +349,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "name": "string",
-          "description": "string",
+          "description": "string|null",
           "structure": "string"
         }
       },
@@ -534,7 +534,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "trackingId"
         ],
         "types": {
-          "fullName": "string",
+          "fullName": "string|null",
           "nickname": "string"
         },
         "required": [
@@ -742,8 +742,8 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "type": "string",
-          "transactionId": "integer",
-          "obligationId": "integer"
+          "transactionId": "integer|null",
+          "obligationId": "integer|null"
         },
         "required": [
           "engagementId",
@@ -764,8 +764,8 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "type": "string",
-          "transactionId": "integer",
-          "obligationId": "integer"
+          "transactionId": "integer|null",
+          "obligationId": "integer|null"
         }
       },
       "delete": {
@@ -938,7 +938,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "amount": "integer",
           "token": "string",
           "platformId": "string",
-          "ttl": "integer"
+          "ttl": "integer|null"
         },
         "required": [
           "collaboratorId",
@@ -1082,8 +1082,8 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "name": "string",
           "description": "string",
           "distributionPoolResolver": "string",
-          "revenuePercentage": "integer",
-          "collaboratorGroupId": "integer"
+          "revenuePercentage": "integer|null",
+          "collaboratorGroupId": "integer|null"
         },
         "required": [
           "name",
@@ -1118,10 +1118,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "name": "string",
-          "description": "string",
+          "description": "string|null",
           "distributionPoolResolver": "string",
-          "revenuePercentage": "integer",
-          "collaboratorGroupId": "integer"
+          "revenuePercentage": "integer|null",
+          "collaboratorGroupId": "integer|null"
         }
       },
       "delete": {
@@ -1660,7 +1660,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "payoutId"
         ],
         "types": {
-          "payoutId": "integer"
+          "payoutId": "integer|null"
         },
         "required": [
           "collaboratorId",
@@ -1682,7 +1682,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "awardType": "string",
-          "payoutId": "integer"
+          "payoutId": "integer|null"
         }
       },
       "delete": {
@@ -1873,7 +1873,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "name": "string",
-          "expiresInDays": "integer"
+          "expiresInDays": "integer|null"
         },
         "required": [
           "name"
@@ -2009,7 +2009,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "name": "string",
-          "description": "string"
+          "description": "string|null"
         }
       },
       "delete": {
@@ -2135,12 +2135,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "types": {
           "name": "string",
           "description": "string",
-          "incentiveTypeArgs.transactionPercent": "number",
-          "incentiveTypeArgs.leadRequalificationDays": "integer",
-          "incentiveTypeArgs.autoApprove": "boolean",
-          "expirationDays": "integer",
-          "programGroupId": "integer",
-          "collaboratorGroupId": "integer"
+          "incentiveTypeArgs.transactionPercent": "number|null",
+          "incentiveTypeArgs.leadRequalificationDays": "integer|null",
+          "incentiveTypeArgs.autoApprove": "boolean|null",
+          "expirationDays": "integer|null",
+          "programGroupId": "integer|null",
+          "collaboratorGroupId": "integer|null"
         },
         "required": [
           "name",
@@ -2178,13 +2178,13 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "name": "string",
-          "description": "string",
-          "incentiveTypeArgs.transactionPercent": "number",
-          "incentiveTypeArgs.leadRequalificationDays": "integer",
-          "incentiveTypeArgs.autoApprove": "boolean",
-          "expirationDays": "integer",
-          "programGroupId": "integer",
-          "collaboratorGroupId": "integer"
+          "description": "string|null",
+          "incentiveTypeArgs.transactionPercent": "number|null",
+          "incentiveTypeArgs.leadRequalificationDays": "integer|null",
+          "incentiveTypeArgs.autoApprove": "boolean|null",
+          "expirationDays": "integer|null",
+          "programGroupId": "integer|null",
+          "collaboratorGroupId": "integer|null"
         }
       },
       "delete": {
@@ -2250,7 +2250,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "types": {
           "collaboratorId": "integer",
           "value": "integer",
-          "currency": "string"
+          "currency": "string|null"
         },
         "required": [
           "collaboratorId",
@@ -2353,8 +2353,8 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "bindingDataType"
         ],
         "types": {
-          "bindingId": "string",
-          "bindingDataType": "string"
+          "bindingId": "string|null",
+          "bindingDataType": "string|null"
         },
         "required": [
           "details"
@@ -2399,7 +2399,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "targetUrl": "string",
-          "description": "string"
+          "description": "string|null"
         }
       },
       "delete": {

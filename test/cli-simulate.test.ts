@@ -181,6 +181,62 @@ describe('siren simulate <scenario.json|->', () => {
   });
 });
 
+describe('siren simulate, when Siren refuses the recipe or the tool cannot read amounts', () => {
+  const document = { recipe: { programs: {} }, actions: [] };
+  const invalid = {
+    ...result,
+    validation: { valid: false, errors: [{ path: 'programs.a.engagementTypes.0.type', message: 'Invalid engagementType' }] },
+    actions: [],
+    ledgers: { opportunities: [], engagements: [], conversions: [], obligations: [], transactions: [] },
+    why: [],
+    skipped: [],
+  };
+
+  it("prints each recipe problem from Siren's 422, and its whole body with --json", async () => {
+    const h = signedIn([reply(422, invalid)]);
+    h.write('flow.json', JSON.stringify(document));
+    expect(await h.run(['simulate', 'flow.json'])).toBe(1);
+    expect(h.out()).toContain('Recipe problems');
+    expect(h.out()).toContain('programs.a.engagementTypes.0.type: Invalid engagementType');
+    expect(h.out()).toContain('Nothing was written.');
+    const json = signedIn([reply(422, invalid)]);
+    json.write('flow.json', JSON.stringify(document));
+    expect(await json.run(['simulate', 'flow.json', '--json'])).toBe(1);
+    expect(JSON.parse(json.out())).toEqual(invalid);
+  });
+
+  it("refuses price= when the organization's currencies can't be read, rather than guess the decimal places", async () => {
+    const h = signedIn([reply(404, { error: { message: 'Not found.' } })]);
+    expect(await h.run(['simulate', '--referred-by', '39', '--line', 'name=Mug price=25.00'])).toBe(1);
+    expect(h.err()).toContain("can't read this organization's currencies");
+    expect(h.err()).toContain('value=');
+    expect(posts(h)).toHaveLength(0);
+  });
+
+  it("sends value= as stored units on the older sale route, read in the organization's own currency", async () => {
+    const PTS = { code: 'PTS', symbol: 'pts', symbolPosition: 'after', scale: 0, decimalPlaces: 0, type: 'internal', isDefault: true };
+    const sale = { event: 'sale', simulated: true, status: 'created', message: null, opportunityId: null, transactionId: null, total: '500', currency: 'PTS', collaborator: { id: 39, name: 'Sam Referrer' }, conversions: [], obligations: [], waits: [] };
+    const h = signedIn([reply(404, { error: { message: 'Not found.' } }), reply(200, [PTS]), reply(200, sale)]);
+    expect(await h.run(['simulate', '--referred-by', '39', '--line', 'name=Mug value=500']), h.err()).toBe(0);
+    expect(bodyAt(h, 2)).toEqual({ collaboratorId: 39, amount: '500' });
+
+    const blind = signedIn([reply(404, { error: { message: 'Not found.' } }), reply(404, { error: { message: 'Not found.' } })]);
+    expect(await blind.run(['simulate', '--referred-by', '39', '--line', 'name=Mug value=500'])).toBe(1);
+    expect(blind.err()).toContain("can't read this organization's currencies");
+    expect(posts(blind)).toHaveLength(1);
+  });
+
+  it('refuses a name that matches more than one person, or a full page of search results, and asks for an email or id', async () => {
+    const people = (count: number, name: string) => Array.from({ length: count }, (_, at) => ({ id: at + 1, email: `p${at}@example.com`, fullName: at === 0 ? name : `Person ${at}` }));
+    const full = signedIn([reply(200, { items: people(25, 'Sam Lee'), total: 40 })]);
+    expect(await full.run(['simulate', '--referred-by', 'Sam Lee', '--line', 'name=Mug value=1500', '--print-scenario'])).toBe(1);
+    expect(full.err()).toContain('email or id');
+    const two = signedIn([reply(200, { items: [{ id: 1, fullName: 'Sam Lee' }, { id: 2, fullName: 'Sam Lee' }], total: 2 })]);
+    expect(await two.run(['simulate', '--referred-by', 'Sam Lee', '--line', 'name=Mug value=1500', '--print-scenario'])).toBe(1);
+    expect(two.err()).toContain('email or id');
+  });
+});
+
 describe('siren simulate on a Siren without scenario simulation', () => {
   it('falls back to the sale route for a referred sale from flags, and says so', async () => {
     const sale = { event: 'sale', simulated: true, status: 'created', message: null, opportunityId: null, transactionId: null, total: '125.00', currency: 'USD', collaborator: { id: 39, name: 'Sam Referrer' }, conversions: [], obligations: [], waits: [] };

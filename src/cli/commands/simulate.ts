@@ -43,6 +43,17 @@ interface Action {
   payload: Record<string, unknown>;
 }
 
+/** How many people a --referred-by search reads. */
+const SEARCH_PAGE = 25;
+
+/** The refusal when the registry can't be read, so a stored amount can't be worked out. */
+function unreadCurrencies(what: string): CliRefusal {
+  return new CliRefusal("The tool can't read this organization's currencies.", {
+    why: `Siren answered no currency registry, so the tool can't tell how many decimal places ${what} has, and won't guess.`,
+    fixText: 'Give each --line its amount as value= in stored units, such as value=2500 for $25.00, or try again in a moment.',
+  });
+}
+
 const LINE_KEYS = ['name', 'sku', 'type', 'qty', 'price', 'value', 'category'];
 
 /** `sku=TEE name="Tee shirt" qty=2 price=25.00` as its key and value pairs. */
@@ -112,13 +123,19 @@ async function collaboratorKey(given: string, signIn: () => Promise<Transport>):
   if (/^\d+$/.test(given)) return `collaborator_${given}`;
   if (/^collaborator_\d+$/.test(given)) return given;
   const transport = await signIn();
-  const body = await parseJsonBody(await transport.request({ method: 'GET', path: '/collaborators', query: { s: given, number: '25' }, retriable: true }));
+  const body = await parseJsonBody(await transport.request({ method: 'GET', path: '/collaborators', query: { s: given, number: String(SEARCH_PAGE) }, retriable: true }));
   const items = (Array.isArray(body) ? body : typeof body === 'object' && body !== null && Array.isArray((body as { items?: unknown }).items) ? (body as { items: unknown[] }).items : []) as Array<Record<string, unknown>>;
   const wanted = given.trim().toLowerCase();
   const same = (value: unknown) => typeof value === 'string' && value.trim().toLowerCase() === wanted;
-  const found = items.filter((item) => same(item.email) || same(item.fullName) || same(item.nickname) || same(item.name));
+  // An email names one person. A name can name several, and a full page may hide another, so either asks for an email or id.
+  const byEmail = items.filter((item) => same(item.email));
+  if (byEmail.length === 1) return `collaborator_${clean(String(byEmail[0]!.id))}`;
+  const found = items.filter((item) => same(item.fullName) || same(item.nickname) || same(item.name));
   if (found.length === 0) throw new CliRefusal(`No collaborator matches ${clean(given)}.`, { why: '--referred-by takes an id, an export key such as collaborator_12, or an email or name that names one person.', fixText: 'Check the spelling, or give the id siren collaborators list shows.' });
-  if (found.length > 1) throw new CliRefusal(`${found.length} collaborators match ${clean(given)}.`, { why: `They are ${found.map((item) => clean(String(item.id))).join(', ')}.`, fixText: 'Give the id of the one you mean.' });
+  if (found.length > 1 || items.length >= SEARCH_PAGE) {
+    const why = found.length > 1 ? `${found.length} collaborators are named ${clean(given)}: ${found.map((item) => clean(String(item.id))).join(', ')}.` : `Siren found ${SEARCH_PAGE} or more people for ${clean(given)}, so another may have the same name.`;
+    throw new CliRefusal(`${clean(given)} may not name one person.`, { why, fixText: 'Give their email or id with --referred-by.' });
+  }
   return `collaborator_${clean(String(found[0]!.id))}`;
 }
 
@@ -157,7 +174,10 @@ async function writeScenario(input: CommandInput, signIn: () => Promise<Transpor
   let items: LineItem[] = [];
   let definition: CurrencyDefinition | undefined;
   if (lines.length > 0) {
-    definition = lines.some((line) => /(^|\s)price=/.test(line)) ? await currencyOf() : undefined;
+    if (lines.some((line) => /(^|\s)price=/.test(line))) {
+      definition = await currencyOf();
+      if (definition === undefined) throw unreadCurrencies('price=');
+    }
     items = lines.map((line) => lineOf(line, definition));
     collaborator = referredBy === undefined ? undefined : await collaboratorKey(referredBy, signIn);
     actions.push({ type: 'site_visited', as: 'visit', payload: collaborator === undefined ? {} : { collaborator } });
@@ -216,10 +236,11 @@ export async function simulate(input: CommandInput): Promise<number> {
   const http = await signIn();
   let result: Record<string, unknown>;
   try {
-    result = (await parseJsonBody(await http.request({ method: 'POST', path: '/simulations/scenario', body: document, retriable: false }))) as Record<string, unknown>;
+    // A 422 carries the whole result with each recipe problem in validation.errors, so it is an answer to print.
+    result = (await parseJsonBody(await http.request({ method: 'POST', path: '/simulations/scenario', body: document, retriable: false, answers: [422] }))) as Record<string, unknown>;
   } catch (error) {
     const missing = error instanceof NotFoundError && /^(?:siren: )?not found\.?$/i.test(error.message.trim());
-    if (missing && written?.plainSale !== undefined) return olderSale(input, run, written.plainSale);
+    if (missing && written?.plainSale !== undefined) return olderSale(input, run, written.plainSale, async () => resolveCurrencyDefinition(null, await registry()));
     if (missing) {
       throw new CliRefusal("This Siren doesn't have scenario simulation yet.", {
         why: 'It answers no /simulations/scenario route. Its older sale simulation takes one referred sale from --referred-by and --line, and no file, coupon or close.',
@@ -236,7 +257,8 @@ export async function simulate(input: CommandInput): Promise<number> {
     throw error;
   }
 
-  const failed = Array.isArray(result.actions) && result.actions.some((action) => typeof action === 'object' && action !== null && typeof (action as { error?: unknown }).error === 'string');
+  const invalid = ((result.validation ?? {}) as { valid?: unknown }).valid === false;
+  const failed = invalid || (Array.isArray(result.actions) && result.actions.some((action) => typeof action === 'object' && action !== null && typeof (action as { error?: unknown }).error === 'string'));
   if (values.json === true) {
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return failed ? 1 : 0;
@@ -247,8 +269,11 @@ export async function simulate(input: CommandInput): Promise<number> {
 }
 
 /** A referred sale on a Siren with only the older route: one total, through POST /simulations/sale. */
-async function olderSale(input: CommandInput, run: CommandContext, sale: NonNullable<Written['plainSale']>): Promise<number> {
-  const amount = toShownAmount(sale.total, sale.definition).toFixed(currencyScale(sale.definition));
+async function olderSale(input: CommandInput, run: CommandContext, sale: NonNullable<Written['plainSale']>, currencyOf: () => Promise<CurrencyDefinition | undefined>): Promise<number> {
+  // The older route takes the total in the currency's units, so value= lines need the organization's scale.
+  const definition = sale.definition ?? (await currencyOf());
+  if (definition === undefined) throw unreadCurrencies('the total');
+  const amount = toShownAmount(sale.total, definition).toFixed(currencyScale(definition));
   input.io.stderr('siren: This Siren has no scenario simulation, so this is its older sale simulation: one total, with no line items.\n');
   const answer = await new TestActivityClient(run).simulate({ collaboratorId: sale.collaboratorId, amount });
   if (input.values.json === true) input.io.stdout(`${JSON.stringify(answer, null, 2)}\n`);
@@ -389,7 +414,12 @@ export function scenarioReport(org: string, result: Record<string, unknown>, def
   }
   const errors = ((result.validation ?? {}) as { errors?: unknown }).errors;
   if (Array.isArray(errors) && errors.length > 0) {
-    lines.push('', 'Recipe problems', ...errors.flatMap((problem) => wrapped(typeof problem === 'string' ? problem : JSON.stringify(problem))));
+    const row = (problem: unknown) => {
+      if (typeof problem === 'string') return problem;
+      const { path, message } = (problem ?? {}) as { path?: unknown; message?: unknown };
+      return typeof message === 'string' ? `${typeof path === 'string' && path !== '' ? `${path}: ` : ''}${message}` : JSON.stringify(problem);
+    };
+    lines.push('', 'Recipe problems', ...errors.flatMap((problem) => wrapped(row(problem))));
   }
 
   lines.push('', 'Nothing was written.');

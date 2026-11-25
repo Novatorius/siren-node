@@ -38,6 +38,8 @@ function scalar(value: unknown): boolean {
 
 const NAME_KEYS = ['name', 'fullName', 'title', 'label', 'email'];
 const MONEY_KEYS = ['amount', 'value', 'total', 'subtotal', 'commission', 'balance', 'onHold', 'share', 'orderTotal'];
+/** The fields that name an amount's currency, in the order Siren pairs them. */
+const CURRENCY_KEYS = ['currency', 'units', 'awardType', 'obligationAwardType'];
 const DATE_KEYS = ['dateCreated', 'createdDate', 'createdAt', 'happenedAt', 'date'];
 
 /**
@@ -63,7 +65,11 @@ export function defaultColumns(keys: readonly string[]): string[] {
 export function columns(rows: readonly Record<string, unknown>[], width: number = WIDTH): string[] {
   if (rows.length === 0) return [];
   const keys = Object.keys(rows[0]!).filter((key) => rows.every((row) => scalar(row[key])));
-  const ordered = defaultColumns(keys);
+  // An amount left as Siren stores it, with no registry to draw it, keeps its currency beside it, so 1840 never shows without a unit.
+  const ordered = defaultColumns(keys).flatMap((key) => {
+    const unit = MONEY_KEYS.includes(key) && rows.some((row) => typeof row[key] === 'number') ? (key === 'orderTotal' ? ['orderCurrency'] : CURRENCY_KEYS).find((candidate) => keys.includes(candidate)) : undefined;
+    return unit === undefined ? [key] : [key, unit];
+  });
   const chosen: string[] = [];
   let used = 2;
   for (const key of ordered) {

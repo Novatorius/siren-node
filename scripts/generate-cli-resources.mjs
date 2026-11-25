@@ -104,7 +104,9 @@ function route(method, path, operation) {
     const types = {};
     for (const [name, property] of Object.entries(body.properties)) {
       const listed = (Array.isArray(property?.type) ? property.type : [property?.type]).filter((type) => typeof type === 'string' && type !== 'null');
-      if (listed.length === 1 && ['string', 'integer', 'number', 'boolean'].includes(listed[0])) types[name] = listed[0];
+      // `|null` marks a field Siren takes null for, so -d key=null clears it.
+      const nullable = Array.isArray(property?.type) && property.type.includes('null');
+      if (listed.length === 1 && ['string', 'integer', 'number', 'boolean'].includes(listed[0])) types[name] = nullable ? `${listed[0]}|null` : listed[0];
     }
     if (Object.keys(types).length > 0) entry.types = types;
   }
@@ -160,7 +162,7 @@ export function generate(specText) {
     "  readonly filters?: readonly { readonly name: string; readonly type: 'string' | 'integer' | 'number' | 'boolean'; readonly values?: readonly string[] }[];",
     '  /** The body fields Siren validates. */',
     '  readonly fields?: readonly string[];',
-    '  /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. */',
+    '  /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. `|null` marks one Siren takes null for. */',
     '  readonly types?: Readonly<Record<string, string>>;',
     '  /** The body fields Siren requires. */',
     '  readonly required?: readonly string[];',
