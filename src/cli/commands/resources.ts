@@ -14,6 +14,8 @@ import { fieldProblems, fieldsLine } from '../validation';
 import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
 import { cell, clip, recordRows, table, WIDTH } from './resource-output';
+import { minute, recordView } from '../record-view';
+import type { ViewSection } from '../record-view';
 
 /*
  * `siren <resource> <op>`, generated from Siren's openapi.json into
@@ -487,7 +489,10 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     if (plan.all && outgoing.method === 'GET' && isEnvelope(body)) {
       body = await allPages(body, outgoing.query, async (query) => (await request(query)).body);
     }
-    print(input, plan, status, body, outgoing.method === 'GET' ? undefined : orgLabel(run));
+    // A record view of a record that keeps notes ends with its latest few, read in one more request.
+    const noted = !plan.json && plan.resource !== undefined && plan.words === `${plan.resource.name} get` ? NOTED[plan.resource.name] : undefined;
+    const notes = noted !== undefined && isObject(body) && body.id !== undefined && body.id !== null ? await latestNotes(transport, noted, String(body.id), input.io.env.TZ) : undefined;
+    print(input, plan, status, body, outgoing.method === 'GET' ? undefined : orgLabel(run), notes);
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
@@ -560,7 +565,42 @@ async function allPages(first: Envelope, query: Record<string, string>, read: (q
 }
 
 /** Prints Siren's answer: JSON, a table, a record, or one line. */
-function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string): void {
+/** The resources whose record view ends with its notes, with Siren's sourceType for each. */
+const NOTED: Readonly<Record<string, string>> = { collaborators: 'collaborator', programs: 'program' };
+
+/** How many notes a record view shows. */
+const VIEW_NOTES = 3;
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A record's latest notes as a view section, newest first, or undefined
+ * when the read fails, so a notes fault never hides the record.
+ */
+async function latestNotes(transport: ReturnType<typeof createHttpTransport>, sourceType: string, sourceId: string, zone: string | undefined): Promise<ViewSection | undefined> {
+  try {
+    const response = await transport.request({
+      method: 'GET',
+      path: '/notes',
+      query: { sourceType, sourceId, number: String(VIEW_NOTES), order: 'desc', fields: 'id,renderedContent,creationSource,dateCreated' },
+      retriable: true,
+    });
+    const body = await parseJsonBody(response);
+    const items = (Array.isArray(body) ? body : isEnvelope(body) ? body.items : []).filter(isObject);
+    const counted = isEnvelope(body) && typeof body.total === 'number' ? body.total : Number(response.headers.get('x-siren-estimated-count') ?? items.length);
+    const total = Number.isFinite(counted) ? Math.max(counted, items.length) : items.length;
+    if (total === 0) return undefined;
+    const lines = items.map((note) => `${typeof note.dateCreated === 'string' ? minute(note.dateCreated, zone) : ''}  ${clean(String(note.renderedContent ?? note.content ?? ''))}`.trim());
+    if (total > items.length) lines.push(`and ${total - items.length} more`);
+    return { title: `notes (${total})`, lines };
+  } catch {
+    return undefined;
+  }
+}
+
+function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string, notes?: ViewSection): void {
   const out = (text: string) => input.io.stdout(text.endsWith('\n') ? text : `${text}\n`);
   if (plan.json) {
     out(JSON.stringify(plan.all && isEnvelope(body) ? body.items : (body ?? null), null, 2));
@@ -591,8 +631,21 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
   if (typeof body === 'object' && body !== null) {
     const record = body as Record<string, unknown>;
     const id = record.id;
-    const what = `${singular(name)}${id !== undefined && id !== null ? ` ${cell(id)}` : ''}`;
-    out(style.report({ headline: `${style.bold(what)}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)} in ${org}`}`, rows: recordRows(style, record) }));
+    if (plan.outgoing.method !== 'GET') {
+      const what = `${singular(name)}${id !== undefined && id !== null ? ` ${cell(id)}` : ''}`;
+      out(style.report({ headline: `${style.bold(what)} ${pastTense(plan.outgoing.method)} in ${org}`, rows: recordRows(style, record) }));
+      return;
+    }
+    // A record read prints as a record view (lean-output.md, section 1).
+    const view = recordView(style, record, { what: singular(name), words: name, zone: input.io.env.TZ, resources: RESOURCE_COMMANDS.filter((resource) => resource.ops.get !== undefined).map((resource) => resource.name) }, notes === undefined ? [] : [notes]);
+    const next = [...view.next, ...(notes !== undefined && plan.resource !== undefined ? [`notes list -d sourceType=${NOTED[plan.resource.name]} -d sourceId=${cell(id)}`] : [])];
+    out(view.lines.join('\n'));
+    if (next.length > 0) {
+      const steps = ['', style.bold('Next'), ...next.map((words, at) => `  ${at + 1}  ${style.command(input.command(words))}`)].join('\n');
+      // Through a pipe, Next goes to standard error, so standard output carries the record alone.
+      if (style.rich) out(steps);
+      else input.io.stderr(`${steps}\n`);
+    }
     return;
   }
 

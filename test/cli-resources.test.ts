@@ -75,11 +75,11 @@ describe('the generated resource commands', () => {
     for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
   });
 
-  it('shows one program as labels and values', async () => {
-    const h = signedIn([reply(200, programs[0])]);
+  it('shows one program as a record view, its name in the headline, and reads its notes', async () => {
+    const h = signedIn([reply(200, programs[0]), reply(200, [], { 'x-siren-estimated-count': '0' })]);
     expect(await h.run(['programs', 'get', '1'])).toBe(0);
-    expect(h.paths()).toEqual(['GET /programs/1']);
-    expect(h.out()).toBe('program 1\n\n  name     Referral program\n  status   active\n  units    usd\n');
+    expect(h.paths()).toEqual(['GET /programs/1', 'GET /notes']);
+    expect(h.out()).toBe('program 1 · Referral program\n\n  status  active\n  units   usd\n');
   });
 
   it('prints Siren\'s answer as JSON with --json, and nothing else', async () => {

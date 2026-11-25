@@ -2257,6 +2257,13 @@ tool takes `$schema` out before it sends the recipe, since Siren takes no other 
 top. In code, `siren.recipes` makes the same calls: `preview`, `apply`, `import`, `imports`,
 `export`, `exportSizes`, `catalog` and `fetch`.
 
+A record read, such as `siren collaborators get 1`, puts the record's name in the headline and
+prints its fields as aligned rows. Each list in it, such as a collaborator's programs, is its own
+section with one line for each, the first 10 shown and the rest counted. A collaborator or a
+program ends with its latest three notes. Next names the commands that open what it points to.
+Through a pipe the record goes to standard output and Next to standard error, and `--json` prints
+Siren's answer whole.
+
 When Siren refuses a request's fields, every command prints one row a field under what was
 refused, such as `email  must be a valid email address of 254 characters or fewer`. A field with
 no value says only that it is required, and a field that takes set values lists them. Through a

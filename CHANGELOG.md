@@ -135,6 +135,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A generated `get`, such as `siren collaborators get 1`, prints a record view: the record's name
+  in the headline, aligned rows, a nested object as dotted rows, and each list of objects as its
+  own section, one line an item, never cut mid-value. `collaborators get` and `programs get` end
+  with the record's latest notes. Through a pipe, Next goes to standard error.
 - A validation failure prints one row a field on every command, with each field's needs, in
   place of one paragraph. `--json` on a generated command now carries Siren's `context`, which held
   `failedValidations` and was dropped before.
