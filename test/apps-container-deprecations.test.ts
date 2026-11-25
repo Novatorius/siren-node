@@ -4,11 +4,11 @@ import { Siren } from '../src/client';
 import { FakeHttpClient } from './http-fakes';
 
 /*
- * Slice C6 item 2: the old key and webhook calls stay, each marked
+ * Slice C6 item 2: the old webhook subscription calls stay, each marked
  * deprecated in its doc comment with the app call that replaces it, since an
  * app holds its key and its address now (docs/architecture/apps-own-parts.md
- * on Siren's int/preview-apps). Siren removes the old routes in slice C5,
- * and these calls go with them.
+ * on Siren's int/preview-apps). The key calls and the subscription create,
+ * whose routes Siren removed in slice C5, are gone (apps-dx-pass-4-fold.test.ts).
  */
 
 function source(file: string): string {
@@ -31,15 +31,10 @@ function docOf(text: string, className: string, name: string): string {
 }
 
 const REPLACED: Array<[string, string, string, string]> = [
-  ['api-keys.ts', 'ApiKeysResource', 'create', 'apps.createKey()'],
-  ['api-keys.ts', 'ApiKeysResource', 'list', 'apps.list()'],
-  ['api-keys.ts', 'ApiKeysResource', 'scopes', 'apps.scopes()'],
-  ['api-keys.ts', 'ApiKeysResource', 'revoke', 'apps.revokeKey()'],
   ['webhooks.ts', 'WebhookSubscriptionsResource', 'retrieve', 'apps.retrieve()'],
   ['webhooks.ts', 'WebhookSubscriptionsResource', 'update', 'apps.update()'],
   ['webhooks.ts', 'WebhookSubscriptionsResource', 'test', 'apps.test()'],
   ['webhooks.ts', 'WebhookSubscriptionsResource', 'deliveries', 'apps.deliveries()'],
-  ['webhooks.ts', 'WebhookSubscriptionsResource', 'create', 'apps.create()'],
   ['webhooks.ts', 'WebhookSubscriptionsResource', 'events', 'apps.events()'],
   ['webhooks.ts', 'WebhookSubscriptionsResource', 'list', 'apps.list()'],
   ['webhooks.ts', 'WebhookSubscriptionsResource', 'delete', 'apps.update()'],
@@ -58,7 +53,7 @@ describe('apps-sdk-container: the old key and webhook calls', () => {
     const siren = new Siren({ accessToken: 't', baseUrl: 'https://siren.invalid/siren/v1', httpClient: new FakeHttpClient([]) });
     const methods = (value: object) =>
       Object.getOwnPropertyNames(Object.getPrototypeOf(value)).filter((key) => key !== 'constructor').sort();
-    expect(methods(siren.apiKeys)).toEqual(REPLACED.filter(([, c]) => c === 'ApiKeysResource').map(([, , n]) => n).sort());
+    expect('apiKeys' in siren).toBe(false);
     expect(methods(siren.webhooks.subscriptions)).toEqual(
       REPLACED.filter(([, c]) => c === 'WebhookSubscriptionsResource').map(([, , n]) => n).sort(),
     );
@@ -78,7 +73,7 @@ describe('apps-sdk-container: the old key and webhook calls', () => {
     const text = note.slice(0, note.indexOf(' #', 4) > 0 ? note.indexOf(' #', 4) : undefined);
     expect(text).toMatch(/deprecated/);
     // Siren removed /api-keys (404) and POST /webhooks (405) on feat/apps (pass 4 follow-ups).
-    expect(text).toMatch(/Siren has removed/);
+    expect(text).toMatch(/Siren removed/);
     expect(text).toMatch(/404/);
     expect(text).toMatch(/405/);
     for (const call of ['siren.apiKeys', 'siren.webhooks.subscriptions', 'apps.createKey()', 'apps.update()', 'apps.deliveries()']) {

@@ -190,7 +190,7 @@ export const FulfillmentStatus = {
 /** Union of the {@link FulfillmentStatus} strings. */
 export type FulfillmentStatus = (typeof FulfillmentStatus)[keyof typeof FulfillmentStatus];
 
-/** Statuses an API key can hold (`siren.apiKeys`). */
+/** Statuses an API key can hold, as Siren stores them. */
 export const ApiKeyStatus = {
   Active: 'active',
   Revoked: 'revoked',

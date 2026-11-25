@@ -140,6 +140,18 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
     expect(posted).toEqual([]);
   });
 
+  it('5.1 and 5.2 write nothing on a test request, and still reply 200', async () => {
+    const addToCrm = vi.fn(async () => undefined);
+    const noteShare = vi.fn(async () => undefined);
+    vi.stubGlobal('addToCrm', addToCrm);
+    vi.stubGlobal('noteShare', noteShare);
+    expect(await sirenSends(await load('post-conversion-action'), 'postConversionAction', true)).toEqual({ status: 200, body: {} });
+    expect(await sirenSends(await load('post-allocation-action'), 'postAllocationAction', true)).toEqual({ status: 200, body: {} });
+    expect(addToCrm).not.toHaveBeenCalled();
+    expect(noteShare).not.toHaveBeenCalled();
+    expect(posted).toEqual([]);
+  });
+
   it('5.3 distributionResolver: the ask gets its 200 at once, and Siren receives the fixture answer', async () => {
     const url = await load('distribution-resolver');
     expect(await sirenSends(url, 'distributionResolver')).toEqual({ status: 200, body: {} });

@@ -55,8 +55,8 @@ export const ErrorCode = {
   /** 401: the organization revoked or deleted the connected site's connection. A {@link SiteDisconnectedError}. */
   SiteDisconnected: 'site_disconnected',
   /**
-   * 401: the route does not accept an API key, such as every `/api-keys`
-   * route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
+   * 401: the route does not accept an API key, such as every `/apps` and
+   * `/webhooks` route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
    */
   ApiKeyNotAccepted: 'api_key_not_accepted',
   /**
@@ -331,7 +331,7 @@ export class AuthenticationError extends SirenError {
 
 /**
  * 401 with `code` `api_key_not_accepted` — the key may be valid, but the route
- * takes a signed-in dashboard session instead, as every `apiKeys` route does.
+ * takes a signed-in dashboard session instead, as every `/apps` and `/webhooks` route does.
  * Retrying with the same key fails again.
  */
 export class ApiKeyNotAcceptedError extends AuthenticationError {

@@ -8,7 +8,6 @@ import {
   SANDBOX_BASE_URL,
   HttpTransport,
 } from './http';
-import { ApiKeysResource } from './resources/api-keys';
 import { AppsResource } from './resources/apps';
 import { CollaboratorGroupsResource } from './resources/collaborator-groups';
 import { CollaboratorsResource } from './resources/collaborators';
@@ -67,8 +66,6 @@ export class Siren {
   readonly events: EventsResource;
   /** Verify inbound webhook signatures and manage subscriptions. */
   readonly webhooks: WebhooksResource;
-  /** Manage API keys. Takes a signed-in dashboard session's token. */
-  readonly apiKeys: ApiKeysResource;
   /** Conversions: list, read, write and recover a lost create. An API key reads with `ledger:conversions:read`. */
   readonly conversions: ConversionsResource;
   /** Transactions: list, read, write and recover a lost credit. An API key reads with `ledger:transactions:read`. */
@@ -161,7 +158,6 @@ export class Siren {
 
     this.events = new EventsResource(http);
     this.webhooks = new WebhooksResource(http);
-    this.apiKeys = new ApiKeysResource(http);
     this.conversions = new ConversionsResource(http);
     this.transactions = new TransactionsResource(http);
     this.obligations = new RecordsResource(http, '/obligations');

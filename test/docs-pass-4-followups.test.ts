@@ -73,13 +73,10 @@ describe('pass 4 follow-up: routes Siren no longer serves', () => {
     }
   });
 
-  it('marks each dead call in the parity table with what Siren answers', () => {
+  it('leaves the removed calls out of the parity table, since both SDKs dropped them', () => {
     const table = section(README, '## Parity with the PHP SDK');
-    const rows = table.split('\n').filter((line) => line.startsWith('| `$siren->apiKeys->') || line.startsWith('| `$siren->webhooks->subscriptions->create()`'));
-    expect(rows).toHaveLength(5);
-    for (const row of rows) {
-      expect(row, row).toMatch(/\b40[45]\b/);
-    }
+    const rows = table.split('\n').filter((line) => line.includes('apiKeys') || line.includes('subscriptions->create()'));
+    expect(rows).toEqual([]);
   });
 
   it('gives an app its address through the apps calls, with a signed-in session', () => {

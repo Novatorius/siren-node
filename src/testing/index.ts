@@ -197,14 +197,16 @@ export function webhookEvent(type: string, data?: Record<string, unknown>, optio
 /** Options for {@link appRequestFromRecord}. */
 export interface AppRecordRequestOptions {
   /**
-   * The feature's key. A stored request names its feature as `app:{id}`
-   * only, so give the key `siren apps show <app>` lists beside it. A raw
-   * request body names it already.
+   * The feature's key. A request saved with `siren apps requests <id> --json`
+   * carries it as `featureKey`, and a raw request body names it already, so
+   * neither needs this. Give it for a saved request whose `featureKey` is
+   * null, because its app is gone, or for a record that names its feature as
+   * `app:{id}` only. `siren apps show <app>` lists each feature's key.
    */
   key?: string;
   /** The signing secret. Defaults to `SIREN_SIGNING_SECRET` from the environment. */
   secret?: string;
-  /** The app's key. Defaults to the record's `app`, then `my-app`. */
+  /** The app's key. Defaults to the record's `app` or `appKey`, then `my-app`. */
   app?: string;
   /** The Siren the request comes from, as for {@link appRequest}. */
   baseUrl?: string;
@@ -215,10 +217,12 @@ export interface AppRecordRequestOptions {
 /**
  * A stored request as a test input: the same id, kind, mode, data and
  * `answerBy` Siren sent, signed again so `answers.simulate()` takes it.
- * `record` is what `apps.requests.retrieve(id)` answers (Siren's
- * `GET /apps/requests/{requestKey}`, AppRequestSerializer::toDetail()),
- * the same row the command-line tool reads for `siren apps requests <id>`,
- * or a raw request body as Siren sent it. Either one parsed, or its JSON text.
+ * `record` is what `siren apps requests <id> --json` saves: Siren's
+ * `GET /apps/requests/{requestKey}` detail with the app's and feature's keys
+ * beside it as `appKey` and `featureKey`. It also takes that detail alone, as
+ * a signed-in `apps.requests.retrieve(id)` answers it, or a raw request body
+ * as Siren sent it. Either one parsed, or its JSON text. Throws
+ * `AppHandlerError` when it cannot find the feature's key.
  */
 export function appRequestFromRecord(record: unknown, options: AppRecordRequestOptions = {}): AppTestRequest<string> {
   const method = 'appRequestFromRecord()';
@@ -231,7 +235,7 @@ export function appRequestFromRecord(record: unknown, options: AppRecordRequestO
     }
   }
   if (typeof row !== 'object' || row === null || Array.isArray(row)) {
-    throw new AppHandlerError(`${method} takes a stored request as an object, such as what apps.requests.retrieve(id) answers.`);
+    throw new AppHandlerError(`${method} takes a stored request as an object, such as what \`siren apps requests <id> --json\` saves.`);
   }
   const given = row as Record<string, unknown>;
   const feature = given.feature;
@@ -239,9 +243,15 @@ export function appRequestFromRecord(record: unknown, options: AppRecordRequestO
   const kind = envelope?.kind ?? given.kind;
   const featureId = envelope?.id ?? feature;
   if (typeof given.id !== 'string' || typeof kind !== 'string' || (given.mode !== 'ask' && given.mode !== 'tell')) {
-    throw new AppHandlerError(`${method} needs the record's id, kind and mode, as apps.requests.retrieve(id) answers them.`);
+    throw new AppHandlerError(`${method} needs the record's id, kind and mode, as \`siren apps requests <id> --json\` saves them.`);
   }
-  const key = options.key ?? (typeof envelope?.key === 'string' ? envelope.key : undefined);
+  const savedKey = typeof given.featureKey === 'string' ? given.featureKey : undefined;
+  const key = options.key ?? (typeof envelope?.key === 'string' ? envelope.key : savedKey);
+  if ((key === undefined || key === '') && 'featureKey' in given && given.featureKey === null) {
+    throw new AppHandlerError(
+      `${method} needs the feature's key: the saved request's featureKey is null, since its app is gone, and it names its feature as ${String(featureId)}. Pass { key }.`,
+    );
+  }
   if (key === undefined || key === '') {
     throw new AppHandlerError(
       `${method} needs the feature's key: the record names its feature as ${String(featureId)}, without the key. Pass { key }, which \`siren apps show <app>\` lists beside each feature.`,
@@ -256,7 +266,7 @@ export function appRequestFromRecord(record: unknown, options: AppRecordRequestO
     type: 'app.request',
     mode: given.mode,
     ...(given.test === true ? { test: true } : {}),
-    app: options.app ?? (typeof given.app === 'string' ? given.app : 'my-app'),
+    app: options.app ?? (typeof given.app === 'string' ? given.app : typeof given.appKey === 'string' ? given.appKey : 'my-app'),
     feature: { kind, key, id: typeof featureId === 'string' ? featureId : 'app:1' },
     createdAt: typeof given.createdAt === 'string' ? given.createdAt : new Date(t * 1000).toISOString().replace(/\.\d{3}Z$/, '+00:00'),
   };

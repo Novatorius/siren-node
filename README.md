@@ -96,7 +96,9 @@ import { Siren } from '@novatorius/siren'
 const siren = new Siren()
 const answers = siren.apps.requestHandler()
 
-answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
+answers.on('postConversionAction', 'tell-the-crm', async ({ id, data, test }) => {
+  // A test request, such as one siren trigger ask sent: write nothing.
+  if (test) return
   // Siren may send it twice, so add it once, keyed by id.
   await addToCrm(id, data.conversion, data.reward)
 })
@@ -167,7 +169,7 @@ check answers in a test.
 ### Test requests
 
 `siren trigger ask <app> <feature>` makes Siren send a feature's sample request now, marked as a test
-with `"test": true`, on a sandbox or a live Siren. Your function reads it as `request.test`, which is
+with `"test": true`. On a live Siren it needs `--live` and a yes, and it refuses a payout method. Your function reads it as `request.test`, which is
 false on every real request. Siren checks a test ask's answer by the kind's own rules and applies
 nothing. A handler must never move money or write records on a test request. Answer it as usual, so
 Siren checks the answer, and stop there, as the payout method sample does.
@@ -200,19 +202,26 @@ assert.deepEqual(approved, [sampleEventData('conversion.approved').conversionId]
 
 ### Replay a stored request
 
-`appRequestFromRecord(record, { key })` turns a request Siren stored into a test input, signed
-again with the same id, kind, mode, data and `answerBy`. `record` is what
-`siren.apps.requests.retrieve(id)` answers, the row `siren apps requests <id>` shows, as an object or
-its JSON text. That row names its feature as `app:12` without the key, so pass the key
-`siren apps show <app>` lists beside the feature. A raw request body, as your app logged it, names
-its key already.
+`appRequestFromRecord(record)` turns a request Siren stored into a test input, signed again with the
+same id, kind, mode, data and `answerBy`. Save the request with
+`siren apps requests <id> --json > request.json`, which reads it with your signed-in session, then
+read the file. The `--json` flag arrives with the next CLI release.
+
+```sh
+siren apps requests apr_9f2c4e0b7a1d4c3e8b6f5a2d1c0e9b8a --json > request.json
+```
 
 ```js
+import { readFileSync } from 'node:fs'
 import { appRequestFromRecord } from '@novatorius/siren/testing'
 
-const stored = await siren.apps.requests.retrieve('apr_9f2c4e0b7a1d4c3e8b6f5a2d1c0e9b8a')
-const { answer, error } = await answers.simulate(appRequestFromRecord(stored, { key: 'split-by-score' }))
+const { answer, error } = await answers.simulate(appRequestFromRecord(readFileSync('request.json', 'utf8')))
 ```
+
+The saved file names the app and the feature by key, as `appKey` and `featureKey`, so the helper
+needs nothing more. When the app is gone, both are null: pass the feature's key as
+`appRequestFromRecord(record, { key })`. A raw request body, as your app logged it, works the same
+way. A missing key throws `AppHandlerError`.
 
 `simulate` then runs your function on the exact question Siren asked, so a refused or failed answer
 can be fixed in a test before you resend the request with `siren apps resend <id>`.
@@ -220,16 +229,22 @@ can be fixed in a test before you resend the request with `siren apps resend <id
 ## Develop on your machine
 
 Siren can send a sandbox app's requests to the handler on your laptop with no tunnel and no public
-address. `listen` and `trigger` arrive with the command-line tool's next release.
+address. `listen` and `trigger` arrive with the command-line tool's next release, and so does
+`siren apps apply` on a sandbox declaring an app with no `url`.
 
-1. Use a sandbox key, one that starts `sk_test_`. On a sandbox, `siren apps apply` declares the app
-   with no `url` and writes its key and signing secret to `.env.sandbox`, which the handler reads.
-2. Start your app, then run `siren listen --forward-to localhost:3000/siren`. While it runs, Siren
-   sends that app's asks, tells and webhook events to your handler, signed with the app's own
-   secret, and prints each reply. Your handler posts an ask's answer to Siren as it always does.
-   Listening works only on a sandbox Siren.
-3. In another terminal, `siren trigger ask <app> <feature>` sends a real sample request for one
-   feature through it.
+1. With a sandbox key, one that starts `sk_test_`, run `siren apps apply`. On a sandbox it declares
+   the app with no `url` and writes its key to `.env.sandbox` as `SIREN_API_KEY`. An app with no
+   address gets no signing secret yet.
+2. In its own terminal, run `siren listen --forward-to localhost:3000/siren` and leave it open. When
+   it first opens a session it writes the signing secret to `.env.sandbox` as
+   `SIREN_SIGNING_SECRET`. While it runs, Siren sends that app's asks, tells and webhook events to
+   your handler, signed with that secret, and listen prints each reply. Your handler posts an ask's
+   answer to Siren as it always does. Listening works only on a sandbox Siren.
+3. Start your app with the file loaded: `node --env-file=.env.sandbox app.js`. Nothing reads
+   `.env.sandbox` by itself, and `new Siren()` and `requestHandler()` read only the process
+   environment. Restart the app whenever listen says it saved a new secret.
+4. In another terminal, `siren trigger ask <app> <feature>` sends a real sample request for one
+   feature through it. On a live Siren it needs `--live` and a yes, and it refuses a payout method.
 
 Set `logger: console` on the handler while you work, and it writes one line per request with its
 status and time.
@@ -245,7 +260,9 @@ import { Siren } from '@novatorius/siren'
 const siren = new Siren()
 export const answers = siren.apps.requestHandler()
 
-answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
+answers.on('postConversionAction', 'tell-the-crm', async ({ id, data, test }) => {
+  // A test request, such as one siren trigger ask sent: write nothing.
+  if (test) return
   // Siren may send it twice, so add it once, keyed by id.
   await addToCrm(id, data.conversion, data.reward)
 })
@@ -363,8 +380,9 @@ lists: `on('distributionResolver', ...)` gets `AppAsk<DistributionResolverQuesti
 `DistributionResolverAnswer`. Each type is named from its kind, the same in all three SDKs:
 `<Kind>Question` and `<Kind>Answer` for an ask, and `<Kind>Tell` for a tell, so
 `FeatureQuestion<'distributionResolver'>` and `FeatureAnswer<'distributionResolver'>` name the same
-two. Every request has `isAsk`, true for an ask, and an ask's `answerBy` is an ISO 8601 time, as
-Siren sends it. A tell's function returns nothing. An ask's function returns the answer.
+two. Every request has `isAsk`, true for an ask, and `test`, true only on a test request such as
+one `siren trigger ask` sent. A function that writes, calls another system or pays returns before
+it does when `test` is true. An ask's `answerBy` is an ISO 8601 time, as Siren sends it. A tell's function returns nothing. An ask's function returns the answer.
 When the app will answer later with `apps.requests.answer()`, return `answers.later()`. When an
 ask's function returns nothing, `onError` gets an error that says so, and nothing is posted.
 
@@ -448,7 +466,9 @@ A tell, sent after an allocation completes for a distributor that picks this act
 `distributor`.
 
 ```js
-answers.on('postAllocationAction', 'note-the-share', async ({ id, data }) => {
+answers.on('postAllocationAction', 'note-the-share', async ({ id, data, test }) => {
+  // A test request, such as one siren trigger ask sent: write nothing.
+  if (test) return
   // Siren may send it twice, so note it once, keyed by id.
   await noteShare(id, data.allocation)
 })
@@ -1480,7 +1500,6 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->webhooks->constructEvent()` | `siren.webhooks.constructEvent()` |  |
 | `$siren->webhooks->constructEventFromHeaders()` | none | Node leaves it out. `constructEvent` takes the request headers, a Fetch `Headers` or Node's `req.headers`, as its fourth argument and reads the event and delivery from them, which is what this PHP method adds. |
 | `$siren->webhooks->verifySignature()` | `siren.webhooks.verifySignature()` |  |
-| `$siren->webhooks->subscriptions->create()` | `siren.webhooks.subscriptions.create()` | Both send `POST /webhooks`, which Siren answers with 405. Use `apps.create()` or `apps.update()`. |
 | `$siren->webhooks->subscriptions->events()` | `siren.webhooks.subscriptions.events()` |  |
 | `$siren->webhooks->subscriptions->list()` | `siren.webhooks.subscriptions.list()` |  |
 | `$siren->webhooks->subscriptions->delete()` | `siren.webhooks.subscriptions.delete()` |  |
@@ -1488,10 +1507,6 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->webhooks->subscriptions->update()` | `siren.webhooks.subscriptions.update()` |  |
 | `$siren->webhooks->subscriptions->test()` | `siren.webhooks.subscriptions.test()` |  |
 | `$siren->webhooks->subscriptions->deliveries()` | `siren.webhooks.subscriptions.deliveries()` | Throws `UnexpectedResponseError` for a body that is not a list or a row that is not an object. PHP keeps each member of what it decoded that is an array, as its `events()` does, so it drops a row that is not an array, reads each array member of a JSON object as a row, and answers `[]` for a body that is not JSON. |
-| `$siren->apiKeys->create()` | `siren.apiKeys.create()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.create()` or `apps.createKey()`. |
-| `$siren->apiKeys->list()` | `siren.apiKeys.list()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.list()`. |
-| `$siren->apiKeys->scopes()` | `siren.apiKeys.scopes()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.scopes()`. |
-| `$siren->apiKeys->revoke()` | `siren.apiKeys.revoke()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.revokeKey()`. |
 | `$siren->conversions->list()` | `siren.conversions.list()` |  |
 | `$siren->conversions->retrieve()` | `siren.conversions.retrieve()` |  |
 | `$siren->conversions->create()` | `siren.conversions.create()` | Sends only the five fields Siren reads and refuses any other key, and refuses an `engagementId`, `transactionId` or `obligationId` that is not a positive whole number, where PHP sends the array as given. After a lost answer, `recoverCreate` sends it again only when Siren holds no such conversion. |
@@ -1600,9 +1615,9 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->settings->value()` | `siren.settings.value()` | Also refuses a name holding a comma, with one message, since Siren reads a comma as "any of". |
 
 `ApiKeyRecordScope` and `ApiKeyRecordScope::ALL` in PHP match Node's `ApiKeyRecordScope` and
-`API_KEY_RECORD_SCOPES`, with the same thirty strings in the same order. PHP keeps Siren's constant
+`API_KEY_RECORD_SCOPES`, with the same twenty-eight strings in the same order. PHP keeps Siren's constant
 names, such as `ApiKeyRecordScope::FULFILLMENTS_READ`, where Node writes them in Pascal case, such
-as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the eleven scopes Node's
+as `ApiKeyRecordScope.FulfillmentsRead`. PHP's `ApiKeyScope` names the nine scopes Node's
 `ApiKeyScope` does.
 
 ### Node methods the PHP SDK does not have yet
@@ -1731,17 +1746,14 @@ An API key does what its scopes allow. `ApiKeyScope` names each one:
 | `ApiKeyScope.LedgerObligationsRead` (`ledger:obligations:read`) | `obligations.list()` |
 | `ApiKeyScope.LedgerPayoutsRead` (`ledger:payouts:read`) | `payouts.list()`, `payouts.retrieve()` |
 
-The two webhook scopes are retired: `ApiKeyScope.WebhookSubscriptionsRead`
-(`webhook-subscriptions:read`) and `WebhookSubscriptionsManage` (`webhook-subscriptions:manage`),
-and their `ApiKeyRecordScope` names `WebhooksRead` and `WebhooksManage`. Siren refuses them on a new
-key with a 422, and a key that still holds one opens nothing, because no API key may use a
-`/webhooks` route.
+The two webhook scopes, `webhook-subscriptions:read` and `webhook-subscriptions:manage`, are
+retired, and the SDK no longer names them. Siren refuses them on a new key with a 422, and a key that
+still holds one opens nothing, because no API key may use a `/webhooks` route.
 
-`ApiKeyRecordScope` names all thirty record scopes Siren issues, in the order the dashboard offers
+`ApiKeyRecordScope` names all twenty-eight record scopes Siren issues, in the order the dashboard offers
 them, and `API_KEY_RECORD_SCOPES` lists them. Each name is the constant's name in Siren's
 `ApiKeyRecordScopes` in Pascal case, so `FULFILLMENTS_READ` is `ApiKeyRecordScope.FulfillmentsRead`.
-The ledger scopes above carry the same strings under both names, and the list still holds the two
-retired webhook scopes, `WebhooksRead` and `WebhooksManage`.
+The ledger scopes above carry the same strings under both names.
 
 | Group | `ApiKeyRecordScope` names |
 |---|---|
@@ -2135,16 +2147,15 @@ that goes out of Siren needs Pro, so on Plus an outward feature and the events r
 
 ### The old key and webhook calls
 
-`siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated. An app holds its key and its
-address now, and Siren has removed the old routes for making them. Every `siren.apiKeys` call
-reaches `/api-keys`, which Siren answers with 404, and `siren.webhooks.subscriptions.create()`
-sends `POST /webhooks`, which Siren answers with 405. Use `apps.create()` or `apps.update()` for an
-address and its events, `apps.createKey()`, `apps.rotateKey()` and `apps.revokeKey()` for a key,
-`apps.scopes()` for the scopes a key may hold, `apps.deliveries()` for deliveries and `apps.test()`
-for a test. The other `siren.webhooks.subscriptions` calls still reach Siren with a signed-in
-session, and Siren refuses them for an address an app owns. These calls go in a later release.
-`siren.webhooks.constructEvent()` and `verifySignature()` stay, since an app's address receives
-events signed the same way.
+`siren.apiKeys` and `siren.webhooks.subscriptions.create()` are gone. An app holds its key and its
+address now, and Siren removed the routes they called: `/api-keys` answers 404 and `POST /webhooks`
+answers 405. Use `apps.declare()` or `siren apps apply` for an app with its address and scopes,
+`apps.create()` or `apps.update()` for an address and its events, `apps.createKey()`,
+`apps.rotateKey()` and `apps.revokeKey()` or `siren apps rotate-key` for a key, and `apps.scopes()`
+for the scopes a key may hold. The other `siren.webhooks.subscriptions` calls are deprecated. They
+still reach Siren with a signed-in session, and Siren refuses them for an address an app owns. Use
+`apps.deliveries()` for deliveries and `apps.test()` for a test. `siren.webhooks.constructEvent()`
+and `verifySignature()` stay, since an app's address receives events signed the same way.
 
 ### The sandbox
 

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- `siren.apiKeys` (`create`, `list`, `scopes` and `revoke`) and
+  `siren.webhooks.subscriptions.create()` are removed, with `ApiKeysResource`, `ApiKey`,
+  `CreatedApiKey`, `CreateApiKeyParams`, `CreatedWebhookSubscription` and
+  `CreateWebhookSubscriptionParams`. Siren removed the routes they called: `/api-keys` answers 404
+  and `POST /webhooks` answers 405. Declare an app with `apps.declare()` or `siren apps apply`, make,
+  replace or revoke its key with `apps.createKey()`, `apps.rotateKey()` and `apps.revokeKey()` or
+  `siren apps rotate-key`, list the scopes a key may hold with `apps.scopes()`, and give an app its
+  address with `apps.create()` or `apps.update()`. The retired `webhook-subscriptions:read` and
+  `webhook-subscriptions:manage` scopes leave `ApiKeyScope` (`WebhookSubscriptionsRead`,
+  `WebhookSubscriptionsManage`) and `ApiKeyRecordScope` (`WebhooksRead`, `WebhooksManage`).
 - The handler's default `onError` writes one string per failure through the new `logger` option,
   in place of `console.error(prefix, error)`. The line holds the error's class, message and code,
   with a nested cause folded in as "(cause: ...)". A stack trace follows only when your own
@@ -118,6 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `appRequestFromRecord()` reads a request saved with `siren apps requests <id> --json` and takes
+  the feature's key from its `featureKey`, so `{ key }` is needed only when the app is gone.
 - A `logger` option on `apps.requestHandler()`, taking anything with `debug`, `info`, `warn` and
   `error`, such as `console`, pino or winston. The handler writes one `debug` line per request it
   handled, with its name, status and time. Refused signatures and slow tells go to `warn`, and every

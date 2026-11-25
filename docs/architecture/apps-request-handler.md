@@ -135,10 +135,12 @@ An ask needs no timer: its reply comes before its function runs.
 
 `@novatorius/siren/testing` signs requests as `WebhookSignature::headers()`
 signs them. `appRequest(kind, key)` builds one from Siren's sample question.
-`appRequestFromRecord(record, { key })` signs a stored request again with its
-id, kind, mode, data and `answerBy`, from what `apps.requests.retrieve(id)`
-answers. That row names its feature as `app:{id}` without the key, so the key
-is an option. `webhookEvent(type, data?)` signs an event with `X-Siren-Event`
+`appRequestFromRecord(record)` signs a stored request again with its id,
+kind, mode, data and `answerBy`, from the file `siren apps requests <id> --json`
+saves: Siren's request detail with `appKey` and `featureKey` beside it. Siren's
+detail names its feature as `app:{id}` only, so the helper takes the key from
+`featureKey`, and `{ key }` covers a request whose app is gone, where both
+keys are null. A missing key throws `AppHandlerError`. `webhookEvent(type, data?)` signs an event with `X-Siren-Event`
 set to the type and an `evt_` delivery id, and no `Idempotency-Key`, which
 Siren sends only for keyed deliveries. Its default data is
 `sampleEventData(type)`, from src/testing/event-samples.ts, which
