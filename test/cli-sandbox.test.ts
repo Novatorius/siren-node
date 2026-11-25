@@ -111,7 +111,10 @@ describe('sandbox: siren sandbox create', () => {
 
     expect(bodyOf(h.http.requests[2])).toEqual({ name: 'Acme (sandbox)' });
     const declared = bodyOf(h.http.requests[4]) as Record<string, unknown>;
-    expect(declared).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
+    expect(declared).toMatchObject({ name: 'Acme' });
+    // No sandbox ask may reach the client's real server, so the copy has no address.
+    expect(declared).not.toHaveProperty('url');
+    expect(JSON.stringify(declared)).not.toContain('acme.example');
     expect(declared).not.toHaveProperty('rawKey');
     expect((declared.features as Array<Record<string, unknown>>).map((feature) => feature.key)).toEqual(['notify-crm', 'acme-ledger']);
     expect((declared.features as Array<Record<string, unknown>>)[1]).toMatchObject({ currencies: ['USD'], answerWindowMinutes: 1 });
@@ -140,7 +143,8 @@ describe('sandbox: siren sandbox create', () => {
     const out = h.out();
     expect(out).toContain('Copied Acme into a sandbox organization');
     expect(out).toContain('acme-sandbox on sandbox.sirenaffiliates.com');
-    expect(out).toContain('1 copied (2 features)');
+    expect(out).toMatch(/Apps +acme-payouts \(no address, run siren listen or set one\)/);
+    expect(out).toContain('siren listen --org acme-sandbox --app acme-payouts');
     expect(out).toContain('collaborators');
     expect(out).toContain('1 programs, the export leaves them out');
     expect(out).toContain('siren seed --org acme-sandbox --sales 50');
@@ -148,6 +152,31 @@ describe('sandbox: siren sandbox create', () => {
     expect(out).toContain('Set SIREN_ORG=acme-sandbox to leave out --org.');
     expect(out).not.toContain('using');
     for (const line of out.split('\n')) expect([...line].length).toBeLessThanOrEqual(80);
+  });
+
+  it('keeps only the features that need no address when the sandbox refuses an app with none', async () => {
+    const refused = reply(422, {
+      error: {
+        message: 'acme-payouts has features that need an address.',
+        context: { reason: 'app_items_need_key_and_address', app: APP_KEY, missing: ['address'], field: 'items' },
+      },
+    });
+    const replies = copyReplies();
+    replies.splice(4, 1, refused, reply(201, { ...appRecord(), id: 70, features: [], rawKey: RAW_KEY, signingSecret: null }));
+    const h = harness(replies, { edition: sandboxFirst });
+    signedInBoth(h);
+
+    expect(await h.run(['sandbox', 'create', '--from', 'acme', '--json']), h.err()).toBe(0);
+    expect(h.paths().slice(4, 6)).toEqual([`PUT /apps/${APP_KEY}`, `PUT /apps/${APP_KEY}`]);
+    const second = bodyOf(h.http.requests[5]) as Record<string, unknown>;
+    expect(second).not.toHaveProperty('url');
+    expect(second).not.toHaveProperty('events');
+    expect(second.features).toEqual([]);
+    const answer = JSON.parse(h.out()) as { copied: { apps: unknown[] }; notCopied: Array<{ what: string; why: string }> };
+    expect(answer.copied.apps).toEqual([{ key: APP_KEY, features: 0 }]);
+    expect(answer.notCopied).toContainEqual({ what: 'acme-payouts: 2 features', why: 'this sandbox needs an address for them' });
+    // Their references in the recipe name features that were not copied, so the copy lists those too.
+    expect(answer.notCopied.map((item) => item.what)).toContain('feature app:11');
   });
 
   it('leaves out an app choice a recipe cannot carry, says so, and applies the rest', async () => {

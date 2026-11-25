@@ -352,7 +352,7 @@ const SPECS: Record<Command, CommandSpec> = {
   'sandbox create': {
     usage: 'sandbox create --from <live org> [flags]',
     summary:
-      "Copy a live organization's setup into a new sandbox organization: apps and their features, programs, groups and settings. Collaborators, keys and secrets stay on the live Siren.",
+      "Copy a live organization's setup into a new sandbox organization: apps and their features, programs, groups and settings. Collaborators, keys, secrets and app addresses stay on the live Siren.",
     group: 'Sandbox',
     short: 'Copy a live setup into a sandbox',
     options: { from: { type: 'string' }, 'live-url': { type: 'string' }, name: { type: 'string' }, json: { type: 'boolean' } },

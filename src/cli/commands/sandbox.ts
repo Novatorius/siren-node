@@ -1,5 +1,5 @@
 import { isJsonObject, readObject, writeRecord } from '../../resources/record-requests';
-import { SirenError } from '../../errors';
+import { AppErrorCode, SirenError, appErrorCode } from '../../errors';
 import type { App, AppFeature } from '../../record-types';
 import { CommandContext, contextOf } from '../context';
 import type { CommandInput } from '../context';
@@ -98,12 +98,33 @@ async function liveContext(run: CommandContext, input: CommandInput): Promise<Co
   return new CommandContext(input.io, target, true);
 }
 
-/** The declaration that makes the same app on another Siren: its parts and its active features, never a key or secret. */
-export function declarationOf(app: App, features: readonly AppFeature[]): Record<string, unknown> {
+/**
+ * The feature kinds an app may hold with no address, as Siren's
+ * AppItemKindCatalog::needs() lists them. Every other kind needs one.
+ */
+const NEEDS_NO_ADDRESS: ReadonlySet<string> = new Set(['customEvent']);
+
+/** True for Siren's refusal of features or events because the app has no address. */
+function needsAnAddress(error: unknown): boolean {
+  if (!(error instanceof SirenError) || error.statusCode !== 422) return false;
+  // Siren's feat/apps still sends the code by its old name, app_items_need_key_and_address.
+  const code = appErrorCode(error);
+  if (code === AppErrorCode.FeaturesNeedKeyAndAddress || code === 'app_items_need_key_and_address') return true;
+  const data = error.data as { field?: unknown } | undefined;
+  return data?.field === 'events';
+}
+
+/**
+ * The declaration that makes the same app on another Siren: its parts and
+ * its active features, never a key, a secret or the live address. A sandbox
+ * ask must never reach the client's real server, so the copy has no url
+ * (AP-A4139b). Its events go with it when `events` is true.
+ */
+export function declarationOf(app: App, features: readonly AppFeature[], events = true): Record<string, unknown> {
   return {
     name: app.name,
     description: app.description,
-    ...(app.url ? { url: app.url, events: app.events } : {}),
+    ...(events && app.events !== undefined && app.events.length > 0 ? { events: app.events } : {}),
     ...(app.apiKey !== null && app.apiKey !== undefined ? { scopes: app.scopes } : {}),
     ...(app.contacts !== undefined && app.contacts.length > 0 ? { contacts: app.contacts } : {}),
     features: features.map((feature) => {
@@ -222,7 +243,9 @@ export async function create(input: CommandInput): Promise<number> {
 
   // Apps first, so the recipe's feature references can name the sandbox's own features.
   progress?.update(`Copying ${counted(apps.length, 'app', 'apps')} into ${org.orgSlug}`);
-  const sandboxSiren = scope.siren();
+  // Siren decides whether an app may have no address, so the declaration skips the SDK's own check (AP-A4139b).
+  const declare = (key: string, body: Record<string, unknown>) =>
+    writeRecord<{ features: AppFeature[] }>(scope.http, 'PUT', `/apps/${encodeURIComponent(key)}`, body);
   const refs = new Map<string, string>();
   const copiedApps: Array<{ key: string; features: number }> = [];
   const notCopied: NotCopied[] = [];
@@ -230,12 +253,26 @@ export async function create(input: CommandInput): Promise<number> {
     const features = app.features.filter((feature) => feature.status !== 'archived');
     try {
       // The answer holds the sandbox's new key and secret. Neither is read.
-      const declared = await sandboxSiren.apps.declare(app.key, declarationOf(app, features) as never);
+      let declared: { features: AppFeature[] };
+      try {
+        declared = await declare(app.key, declarationOf(app, features));
+      } catch (error) {
+        // A sandbox without listen's empty address (AP-A4118) refuses features and events with no url.
+        // The copy then keeps the features that need no address, and lists the rest.
+        if (!needsAnAddress(error)) throw error;
+        const kept = features.filter((feature) => NEEDS_NO_ADDRESS.has(feature.kind));
+        declared = await declare(app.key, declarationOf(app, kept, false));
+        const left = features.length - kept.length;
+        if (left > 0) notCopied.push({ what: `${app.key}: ${counted(left, 'feature', 'features')}`, why: 'this sandbox needs an address for them' });
+        if (app.events !== undefined && app.events.length > 0) notCopied.push({ what: `${app.key} events`, why: 'this sandbox needs an address for them' });
+      }
+      // A Siren from before the feature rename answers `items`, which names no twin.
+      const twins = Array.isArray(declared.features) ? declared.features : [];
       for (const feature of features) {
-        const twin = declared.features.find((one) => one.key === feature.key && one.kind === feature.kind);
+        const twin = twins.find((one) => one.key === feature.key && one.kind === feature.kind);
         if (twin !== undefined) refs.set(feature.ref ?? `app:${feature.id}`, twin.ref ?? `app:${twin.id}`);
       }
-      copiedApps.push({ key: app.key, features: features.length });
+      copiedApps.push({ key: app.key, features: twins.length });
     } catch (error) {
       if (!(error instanceof SirenError)) throw error;
       notCopied.push({ what: `app ${app.key}`, why: error.message.replace(/^Siren: /, '') });
@@ -323,12 +360,13 @@ export async function create(input: CommandInput): Promise<number> {
   }
   progress?.stop(true, `Copied ${style.bold(liveSession.orgName)} into a sandbox organization`);
 
-  const features = copiedApps.reduce((sum, app) => sum + app.features, 0);
   const rows: Array<readonly [string, string]> = [
     ['Sandbox', `${org.orgSlug} on ${hostOf(copy.baseUrl)}`],
     ['From', `${copy.from.orgSlug} on ${hostOf(copy.from.baseUrl)}`],
-    ['Apps', apps.length === 0 ? `none on ${copy.from.orgSlug}` : `${copiedApps.length} copied (${counted(features, 'feature', 'features')})`],
   ];
+  // A copied app has no address, so its asks wait for siren listen or a url the person sets.
+  if (apps.length === 0) rows.push(['Apps', `none on ${copy.from.orgSlug}`]);
+  copiedApps.forEach((app, index) => rows.push([index === 0 ? 'Apps' : '', fit(`${app.key} (no address, run siren listen or set one)`, 62)]));
   const groups: string[] = [];
   for (const [stanza, label, one, many] of RECORD_STANZAS) {
     const count = stanzas[stanza];
@@ -347,6 +385,9 @@ export async function create(input: CommandInput): Promise<number> {
     rows,
     next: [
       { text: style.command(input.command(`seed --org ${org.orgSlug} --sales 50`)), aside: 'sample sales' },
+      ...(copiedApps.length === 0
+        ? []
+        : [{ text: style.command(input.command(`listen --org ${org.orgSlug}${copiedApps.length === 1 ? ` --app ${copiedApps[0]!.key}` : ''}`)), aside: 'asks, here' }]),
       { text: style.command(input.command(`sandbox inbox --org ${org.orgSlug}`)) },
     ],
     tips: [
