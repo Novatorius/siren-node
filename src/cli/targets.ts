@@ -114,6 +114,7 @@ export const LIVE_WRITES = [
   'sandbox reset',
   'sandbox inbox',
   'seed',
+  'recipes apply',
 ] as const;
 
 /** A raw route call that changes a record, such as `post /programs`, or a generated record command that does, such as `programs delete 7`. */

@@ -89,7 +89,8 @@
     "LICENSE",
     "openapi.json",
     "scripts/prepare.mjs",
-    "siren.app.schema.json"
+    "siren.app.schema.json",
+    "siren.recipe.schema.json"
   ],
   "sideEffects": false,
   "scripts": {
@@ -99,6 +100,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "recipe-schema:copy": "node scripts/copy-recipe-schema.mjs",
     "prepare": "node scripts/prepare.mjs"
   },
   "devDependencies": {

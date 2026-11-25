@@ -135,6 +135,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `siren recipes`, with `preview`, `apply`, `status`, `imports`, `export`, `catalog`, `show` and
+  `fetch`. `apply` previews, asks, applies under an import key made from the recipe, and follows
+  the import to its end. `siren.recipes` makes the same calls from code. The package ships
+  `siren.recipe.schema.json`, a copy of Siren's recipe schema, for editor completion.
 - `apps.requests.list()` takes `limit` (1 to 100) and `before` (a request id) to page through every
   request, as `GET /apps/requests` now reads them.
 - `apps.requests.list({ idPrefix })` finds requests by the start of their id, `apr_` and 4 to 32

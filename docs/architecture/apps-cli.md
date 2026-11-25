@@ -182,6 +182,24 @@ an object, has no text `outcome`, or is longer than 16384 bytes. Before, `siren 
 apr_xyz` exited 1 with the SDK's line, which named `apps.requests.answer()` (e2e step 11d), and
 `requests --app <bad key>` sent the list before it refused. test/cli-arguments.test.ts covers each.
 
+### Recipes
+
+`siren recipes` (src/cli/commands/recipes.ts) sends Siren's recipe routes through
+`siren.recipes` (src/resources/recipes.ts), read from Siren feat/apps 76d5bbdf83,
+lib/Recipes/Service/Rest. Siren serves them to a signed-in session only, so each command is
+`sessionOnly`. `preview` is the check, since Siren's validation also refuses a store integration
+or plan the recipe needs, which a schema alone can't see. `apply` previews, asks for each
+variable that `--var` didn't name, asks before it applies, and sends `importKey` as `cli-` and the
+SHA-256 of the recipe's JSON with sorted keys. Siren then runs that recipe once in an org, a
+lost connection sends it again safely, and a second apply gets 409 naming the earlier job.
+`--again` sends no key. It then asks `GET /recipes/imports/{jobId}` every 2 seconds, and Ctrl-C
+stops the watching with 130 while the import goes on. `fetch` takes a Beacon handoff token,
+because `POST /recipes/fetch` reads a signed JWT, and `show` prints a catalog recipe from the
+catalog's own `payload`. The package ships `siren.recipe.schema.json`, which
+scripts/copy-recipe-schema.mjs copies from Siren's lib/Recipes/Core/recipe.schema.json, and
+test/recipe-schema.test.ts checks it against the recorded hash. The tool takes a file's
+`$schema` out before sending, since the schema allows no other key at a recipe's top.
+
 ### Confirmation and plan answers
 
 Each answer gets one line that says what to do next, and the tool never prints Siren's

@@ -6,6 +6,7 @@ import * as logs from './commands/logs';
 import * as appsTest from './commands/apps-test';
 import * as fixtures from './commands/fixtures';
 import * as simulate from './commands/simulate';
+import * as recipes from './commands/recipes';
 import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
@@ -71,6 +72,14 @@ export const COMMANDS = [
   'sandbox reset',
   'sandbox inbox',
   'seed',
+  'recipes preview',
+  'recipes apply',
+  'recipes status',
+  'recipes imports',
+  'recipes export',
+  'recipes catalog',
+  'recipes show',
+  'recipes fetch',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -84,7 +93,7 @@ type Options = NonNullable<ParseArgsConfig['options']>;
  * commands that test an app against Siren. Records holds the commands
  * generated from Siren's API, which {@link recordRows} lists.
  */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Records', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Records', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -635,6 +644,151 @@ const SPECS: Record<Command, CommandSpec> = {
     positionals: [0, 0],
     run: seed.seed,
   },
+  'recipes preview': {
+    usage: 'recipes preview <file|-> [flags]',
+    summary: "Show what a recipe would make in this organization, and write nothing. Siren checks it as apply does, so a recipe that previews cleanly applies. - reads it from standard input. Needs siren login: an API key can't use recipes yet.",
+    group: 'Recipes',
+    short: 'Show what a recipe would make',
+    options: { 'configuration-only': { type: 'boolean' }, paused: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: {
+      'configuration-only': ['--configuration-only', 'Leave out the people, mappings and group members'],
+      paused: ['--paused', 'Make every program and distributor inactive'],
+      json: ['--json', "Print Siren's preview as JSON"],
+    },
+    examples: ['siren recipes preview launch.recipe.json', 'siren recipes export | siren recipes preview -'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesPreview,
+  },
+  'recipes apply': {
+    usage: 'recipes apply <file|-> [flags]',
+    summary: "Preview a recipe, ask, apply it, and follow the import to its end. Siren applies the same recipe once, so a retry never imports it twice, and --again applies it again as an update. Needs siren login: an API key can't apply recipes yet.",
+    group: 'Recipes',
+    short: 'Preview, ask, then apply a recipe',
+    options: {
+      yes: { type: 'boolean' },
+      var: { type: 'string' },
+      again: { type: 'boolean' },
+      'configuration-only': { type: 'boolean' },
+      paused: { type: 'boolean' },
+      'no-wait': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      yes: YES_FLAG,
+      var: ['--var <key=id,…>', 'The record each of its variables uses, by id'],
+      again: ['--again', 'Apply it again, as an update, though it was applied before'],
+      'configuration-only': ['--configuration-only', 'Leave out the people, mappings and group members'],
+      paused: ['--paused', 'Make every program and distributor inactive'],
+      'no-wait': ['--no-wait', 'Print the import id and stop, without following it'],
+      json: ['--json', 'Print the preview, or the finished import, as JSON'],
+    },
+    examples: ['siren recipes apply launch.recipe.json', 'siren recipes show gold-partners | siren recipes apply - --yes'],
+    positionals: [1, 1],
+    sessionOnly: true,
+    run: recipes.recipesApply,
+  },
+  'recipes status': {
+    usage: 'recipes status <importId> [--json]',
+    summary: 'Show one recipe import: how far each section got, the people added, updated, skipped and failed, and each failure.',
+    group: 'Recipes',
+    short: 'Show one recipe import',
+    options: { json: { type: 'boolean' } },
+    flags: { json: ['--json', 'Print the whole import, with every person, as JSON'] },
+    examples: ['siren recipes status 7f3a9c'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesStatus,
+  },
+  'recipes imports': {
+    usage: 'recipes imports [--limit <n>] [--json]',
+    summary: "List this organization's recent recipe imports, newest first.",
+    group: 'Recipes',
+    short: 'List recent recipe imports',
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many, 1 to 100. Siren sends 25 unless told'], json: JSON_FLAG },
+    examples: ['siren recipes imports --limit 5'],
+    positionals: [0, 0],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesImports,
+  },
+  'recipes export': {
+    usage: 'recipes export [--include <sections>] [--sizes]',
+    summary: "Print this organization's setup as a recipe, to save, edit, or apply elsewhere. What it leaves out, such as drafts, is named on standard error.",
+    group: 'Recipes',
+    short: "Print this organization's setup as a recipe",
+    options: { include: { type: 'string' }, sizes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: {
+      include: ['--include <a,b>', 'Only these sections, such as programs,collaboratorGroups'],
+      sizes: ['--sizes', 'Print how many records each section holds, and no recipe'],
+      json: ['--json', 'With --sizes, print the counts as JSON'],
+    },
+    examples: ['siren recipes export > setup.recipe.json', 'siren recipes export --include programs,programGroups'],
+    positionals: [0, 0],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesExport,
+  },
+  'recipes catalog': {
+    usage: 'recipes catalog [filters] [--json]',
+    summary: "List Beacon's ready-made recipes, with whether each fits this organization's store and plan.",
+    group: 'Recipes',
+    short: 'List ready-made recipes',
+    options: {
+      type: { type: 'string' },
+      goal: { type: 'string' },
+      tier: { type: 'string' },
+      integrations: { type: 'string' },
+      features: { type: 'string' },
+      search: { type: 'string' },
+      limit: { type: 'string' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      type: ['--type <type>', 'Such as affiliate or referral'],
+      goal: ['--goal <goal>', 'What the program is for'],
+      tier: ['--tier <tier>', 'The plan it needs'],
+      integrations: ['--integrations <a,b>', 'The stores and tools it works with'],
+      features: ['--features <a,b>', 'The Siren features it needs'],
+      search: ['--search <words>', 'Words in its name or description'],
+      limit: ['--limit <n>', 'How many, 1 to 100'],
+      json: JSON_FLAG,
+    },
+    examples: ['siren recipes catalog --type referral', 'siren recipes catalog --search partners'],
+    positionals: [0, 0],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesCatalog,
+  },
+  'recipes show': {
+    usage: 'recipes show <catalogId>',
+    summary: 'Print one ready-made recipe from the catalog, to save, edit and apply.',
+    group: 'Recipes',
+    short: 'Print one ready-made recipe',
+    options: {},
+    flags: {},
+    examples: ['siren recipes show gold-partners > partners.recipe.json'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesShow,
+  },
+  'recipes fetch': {
+    usage: 'recipes fetch <token|link>',
+    summary: 'Print the recipe a Beacon handoff carries, from its token or the link Beacon gave.',
+    group: 'Recipes',
+    short: 'Print the recipe a Beacon handoff carries',
+    options: {},
+    flags: {},
+    examples: ['siren recipes fetch <link> > beacon.recipe.json'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesFetch,
+  },
 };
 
 /** The command table, for tests that hold other lists to it. */
@@ -731,6 +885,20 @@ function helpText(style: Style): string {
 }
 
 /** The text `siren apps` prints: the app and request commands, in the same shape. */
+/** The words that start a two-word command, such as `apps` in `siren apps list`. */
+const GROUP_WORDS = ['apps', 'logs', 'sandbox', 'recipes'] as const;
+
+/** The text `siren recipes` prints: what recipes are for, and the commands. */
+function recipesHelpText(style: Style): string {
+  return [
+    ...wrap("Preview and apply a recipe, a file that sets up programs, groups and people at once, follow its import, and export this organization's setup as one. Needs siren login: an API key can't use recipes yet.", HELP_WIDTH),
+    '',
+    ...section(style, 'Usage', ['  siren recipes <command> [flags]']),
+    ...section(style, 'Recipes', commandRows(style, COMMANDS.filter((command) => command.startsWith('recipes ')))),
+    ...section(style, 'Learn more', learnMore(style, true)),
+  ].join('\n');
+}
+
 function appsHelpText(style: Style): string {
   const apps = COMMANDS.filter((command) => command.startsWith('apps ') && SPECS[command].group !== 'Requests');
   const requests = COMMANDS.filter((command) => SPECS[command].group === 'Requests');
@@ -793,7 +961,7 @@ function commandNamed(words: readonly string[]): Command {
   // A first word that is a command alone and starts a two-word one, such as trigger and trigger ask, is the two-word one when its second word matches.
   const pair = `${words[0] ?? ''} ${words[1] ?? ''}`.trim();
   if (words[0] !== 'apps' && (COMMANDS as readonly string[]).includes(pair)) return pair as Command;
-  const name = words[0] === 'apps' || words[0] === 'logs' || words[0] === 'sandbox' ? `${words[0]} ${words[1] ?? ''}`.trim() : (words[0] ?? '');
+  const name = (GROUP_WORDS as readonly string[]).includes(words[0] ?? '') ? `${words[0]} ${words[1] ?? ''}`.trim() : (words[0] ?? '');
   if ((COMMANDS as readonly string[]).includes(name)) return name as Command;
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
   // CLI pass 3, should-fix 6: "app list" means apps list, so a group word near apps is read as apps with the rest of the line.
@@ -804,8 +972,8 @@ function commandNamed(words: readonly string[]): Command {
   }
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
   const guesses = started.length > 0 && started.length <= 4 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
-  const group = words[0] === 'apps' && words.length > 1 ? 'siren apps' : 'siren';
-  const word = group === 'siren apps' ? (words[1] ?? '') : name;
+  const group: CommandUnknown['group'] = (words[0] === 'apps' || words[0] === 'recipes') && words.length > 1 ? `siren ${words[0]}` : 'siren';
+  const word = group === 'siren' ? name : (words[1] ?? '');
   throw new CommandUnknown(group, word, guesses);
 }
 
@@ -863,6 +1031,10 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     }
     if (words[0] === 'apps' && words.length === 1) {
       io.stdout(appsHelpText(styleFor(io, 'stdout', {})));
+      return 0;
+    }
+    if (words[0] === 'recipes' && words.length === 1) {
+      io.stdout(recipesHelpText(styleFor(io, 'stdout', {})));
       return 0;
     }
 
@@ -993,7 +1165,7 @@ function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: s
 /** A command name the tool does not know, with the group it was typed in and the nearest real commands. */
 class CommandUnknown extends CliUsageError {
   constructor(
-    readonly group: 'siren' | 'siren apps',
+    readonly group: 'siren' | 'siren apps' | 'siren recipes',
     readonly word: string,
     guesses: readonly string[],
   ) {

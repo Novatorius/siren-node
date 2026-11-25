@@ -35,6 +35,7 @@ describe('help: siren --help', () => {
       'REQUESTS',
       'DEVELOPER TOOLS',
       'SANDBOX',
+      'RECIPES',
       'RECORDS',
       'ACCOUNT',
       'FLAGS',
@@ -61,7 +62,7 @@ describe('help: siren --help', () => {
 
   it('lists every command once, on one line, with its name and a short summary aligned', async () => {
     const text = await helpOf(['--help']);
-    const listed = text.split('\n').filter((line) => /^ {2}((apps|logs|trigger|sandbox) )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
+    const listed = text.split('\n').filter((line) => /^ {2}((apps|logs|trigger|sandbox|recipes) )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
     const names = listed.map((line) => line.trim().split(/ {2,}/)[0]);
     // RECORDS adds `resources` beside its lines with arguments, which the pattern skips.
     expect([...names].sort()).toEqual([...COMMANDS, 'resources'].sort());
@@ -73,6 +74,9 @@ describe('help: siren --help', () => {
     const apps = await helpOf(['apps']);
     expect(sections(apps)).toEqual(['USAGE', 'APPS', 'REQUESTS', 'LEARN MORE']);
     expect(apps).not.toContain('  login');
+    const recipes = await helpOf(['recipes']);
+    expect(sections(recipes)).toEqual(['USAGE', 'RECIPES', 'LEARN MORE']);
+    expect(recipes).toContain("an API key can't use recipes yet");
   });
 });
 

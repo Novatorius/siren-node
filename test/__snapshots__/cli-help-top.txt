@@ -44,6 +44,16 @@ SANDBOX
   sandbox inbox       Read the sandbox's caught emails
   seed                Fill a sandbox with sample sales
 
+RECIPES
+  recipes preview     Show what a recipe would make
+  recipes apply       Preview, ask, then apply a recipe
+  recipes status      Show one recipe import
+  recipes imports     List recent recipe imports
+  recipes export      Print this organization's setup as a recipe
+  recipes catalog     List ready-made recipes
+  recipes show        Print one ready-made recipe
+  recipes fetch       Print the recipe a Beacon handoff carries
+
 RECORDS
   <resource> <op>     List, get, create, update or delete a record
   get <path>          Read any route, such as get /programs
