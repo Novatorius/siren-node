@@ -13,7 +13,7 @@
  *
  * Only routes the spec marks as running on Siren Cloud (`x-siren-platforms`)
  * become commands, so WordPress-only routes such as /settings do not. Tags
- * that hand-written commands own (apps, auth, notes and the developer tools) are left
+ * that hand-written commands own (apps, auth, notes, condition sets, enrollers and the developer tools) are left
  * out, as are tags whose name is already a command. Siren keeps operator and sandbox routes out of
  * the public spec, and the operator mark is still checked here.
  *
@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 export const SKIPPED_TAGS = [
   'apps', 'auth', 'get', 'post', 'put', 'patch', 'delete', 'help', 'version', 'login', 'logout', 'signup', 'whoami', 'orgs', 'use',
   'listen', 'listen-sessions', 'logs', 'trigger', 'test-activity', 'simulate', 'simulations', 'fixtures', 'sandbox', 'seed',
-  'notes',
+  'notes', 'condition-sets', 'enrollers', 'enroller-triggers',
 ];
 
 const OPS = ['list', 'get', 'create', 'update', 'delete'];

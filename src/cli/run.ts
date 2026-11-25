@@ -6,6 +6,8 @@ import * as logs from './commands/logs';
 import * as appsTest from './commands/apps-test';
 import * as fixtures from './commands/fixtures';
 import * as simulate from './commands/simulate';
+import * as conditionSets from './commands/condition-sets';
+import * as enrollers from './commands/enrollers';
 import * as notes from './commands/notes';
 import * as recipes from './commands/recipes';
 import { fieldProblems, fieldsLine } from './validation';
@@ -86,6 +88,16 @@ export const COMMANDS = [
   'notes add',
   'notes edit',
   'notes delete',
+  'condition-sets list',
+  'condition-sets get',
+  'condition-sets matches',
+  'condition-sets create',
+  'condition-sets conditions',
+  'enrollers list',
+  'enrollers get',
+  'enrollers log',
+  'enrollers run',
+  'enrollers create',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -99,7 +111,7 @@ type Options = NonNullable<ParseArgsConfig['options']>;
  * commands that test an app against Siren. Records holds the commands
  * generated from Siren's API, which {@link recordRows} lists.
  */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Notes', 'Records', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Notes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -855,6 +867,123 @@ const SPECS: Record<Command, CommandSpec> = {
     liveSafe: true,
     run: notes.notesDelete,
   },
+  'condition-sets list': {
+    usage: 'condition-sets list [--json]',
+    summary: 'List the condition sets, the saved lists of conditions Siren checks each day, such as joined in the last 30 days, with when Siren last checked each.',
+    group: 'Condition sets',
+    short: 'List the condition sets',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets list'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: conditionSets.conditionSetsList,
+  },
+  'condition-sets get': {
+    usage: 'condition-sets get <id> [--json]',
+    summary: "Show one condition set: its conditions in Siren's words, when Siren last checked it, and the enrollers that use it.",
+    group: 'Condition sets',
+    short: 'Show one condition set',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets get 1'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: conditionSets.conditionSetsGet,
+  },
+  'condition-sets matches': {
+    usage: 'condition-sets matches (<id> | <file> | -) [--limit <n>] [--json]',
+    summary: 'Count who matches a condition set now and name the first few. Given a file, or - for standard input, it counts who would match conditions not yet saved, and saves nothing.',
+    group: 'Condition sets',
+    short: 'Count and name who matches now',
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many people to name, 1 to 25 (5)'], json: JSON_FLAG },
+    examples: ['siren condition-sets matches 1', 'siren condition-sets matches draft.json'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: conditionSets.conditionSetsMatches,
+  },
+  'condition-sets create': {
+    usage: 'condition-sets create (<file> | -) [--json]',
+    summary: 'Make a condition set from JSON with name and conditions. siren condition-sets conditions lists the conditions and the values each takes, and siren condition-sets matches <file> counts its matches before you make it.',
+    group: 'Condition sets',
+    short: 'Make a condition set from JSON',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets create joined-this-month.json'],
+    positionals: [1, 1],
+    run: conditionSets.conditionSetsCreate,
+  },
+  'condition-sets conditions': {
+    usage: 'condition-sets conditions [--json]',
+    summary: 'List the conditions a set can use, each with its sentence and the values it takes.',
+    group: 'Condition sets',
+    short: 'List the conditions a set can use',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets conditions'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: conditionSets.conditionSetsConditions,
+  },
+  'enrollers list': {
+    usage: 'enrollers list [--status <status>] [--json]',
+    summary: 'List the enrollers, the rules that add people to programs, distributors and groups, or take them out, when something happens to them.',
+    group: 'Enrollers',
+    short: 'List the enrollers',
+    options: { status: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { status: ['--status <status>', 'Only enrollers in this status, such as active'], json: JSON_FLAG },
+    examples: ['siren enrollers list', 'siren enrollers list --status active'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: enrollers.enrollersList,
+  },
+  'enrollers get': {
+    usage: 'enrollers get <id> [--json]',
+    summary: 'Show one enroller: what starts it, what it does, and its latest log lines.',
+    group: 'Enrollers',
+    short: 'Show one enroller',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren enrollers get 1'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: enrollers.enrollersGet,
+  },
+  'enrollers log': {
+    usage: 'enrollers log <id> [--limit <n>] [--json]',
+    summary: 'Show what an enroller did, newest first: who it added or took out, and why it skipped someone.',
+    group: 'Enrollers',
+    short: 'Show what an enroller did',
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many lines, 1 to 100 (20)'], json: JSON_FLAG },
+    examples: ['siren enrollers log 1'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: enrollers.enrollersLog,
+  },
+  'enrollers run': {
+    usage: 'enrollers run <id> [--yes] [--json]',
+    summary: "Run an enroller now on everyone who matches. It says how many people would move first, then asks. It moves people, so a live organization needs --live.",
+    group: 'Enrollers',
+    short: 'Run an enroller now',
+    options: { yes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: { yes: YES_FLAG, json: JSON_FLAG },
+    examples: ['siren enrollers run 2'],
+    positionals: [1, 1],
+    run: enrollers.enrollersRun,
+  },
+  'enrollers create': {
+    usage: 'enrollers create (<file> | -) [--json]',
+    summary: 'Make an enroller from JSON: name, triggerId and triggerArgs, and the programs, distributors or groups it adds people to or takes them out of. siren enrollers get <id> --json shows the fields.',
+    group: 'Enrollers',
+    short: 'Make an enroller from JSON',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren enrollers create welcome.json'],
+    positionals: [1, 1],
+    run: enrollers.enrollersCreate,
+  },
 };
 
 /** The command table, for tests that hold other lists to it. */
@@ -952,7 +1081,7 @@ function helpText(style: Style): string {
 
 /** The text `siren apps` prints: the app and request commands, in the same shape. */
 /** The words that start a two-word command, such as `apps` in `siren apps list`. */
-const GROUP_WORDS = ['apps', 'logs', 'sandbox', 'recipes'] as const;
+const GROUP_WORDS = ['apps', 'logs', 'sandbox', 'recipes', 'condition-sets', 'enrollers'] as const;
 
 /** The text `siren recipes` prints: what recipes are for, and the commands. */
 function recipesHelpText(style: Style): string {
@@ -961,6 +1090,22 @@ function recipesHelpText(style: Style): string {
     '',
     ...section(style, 'Usage', ['  siren recipes <command> [flags]']),
     ...section(style, 'Recipes', commandRows(style, COMMANDS.filter((command) => command.startsWith('recipes ')))),
+    ...section(style, 'Learn more', learnMore(style, true)),
+  ].join('\n');
+}
+
+/** What `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
+const GROUP_SUMMARIES = {
+  'condition-sets': "Condition sets are saved lists of conditions Siren checks each day, such as joined in the last 30 days. See who matches one now, and make one from JSON. Siren's plan must include them.",
+  enrollers: 'Enrollers add people to programs, distributors and groups, or take them out, when something happens to them. See what each does and did, and run one now. A Siren without enrollers says so.',
+} as const;
+
+function groupHelpText(style: Style, group: keyof typeof GROUP_SUMMARIES): string {
+  return [
+    ...wrap(GROUP_SUMMARIES[group], HELP_WIDTH),
+    '',
+    ...section(style, 'Usage', [`  siren ${group} <command> [flags]`]),
+    ...section(style, group === 'enrollers' ? 'Enrollers' : 'Condition sets', commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
     ...section(style, 'Learn more', learnMore(style, true)),
   ].join('\n');
 }
@@ -1107,6 +1252,10 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     }
     if (words[0] === 'recipes' && words.length === 1) {
       io.stdout(recipesHelpText(styleFor(io, 'stdout', {})));
+      return 0;
+    }
+    if ((words[0] === 'condition-sets' || words[0] === 'enrollers') && words.length === 1) {
+      io.stdout(groupHelpText(styleFor(io, 'stdout', {}), words[0]));
       return 0;
     }
 

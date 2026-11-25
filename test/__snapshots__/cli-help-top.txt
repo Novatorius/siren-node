@@ -60,6 +60,20 @@ NOTES
   notes edit          Change a note you wrote
   notes delete        Delete a note
 
+CONDITION SETS
+  condition-sets list        List the condition sets
+  condition-sets get         Show one condition set
+  condition-sets matches     Count and name who matches now
+  condition-sets create      Make a condition set from JSON
+  condition-sets conditions  List the conditions a set can use
+
+ENROLLERS
+  enrollers list      List the enrollers
+  enrollers get       Show one enroller
+  enrollers log       Show what an enroller did
+  enrollers run       Run an enroller now
+  enrollers create    Make an enroller from JSON
+
 RECORDS
   <resource> <op>     List, get, create, update or delete a record
   get <path>          Read any route, such as get /programs

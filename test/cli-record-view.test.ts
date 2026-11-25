@@ -132,3 +132,14 @@ describe('recordView', () => {
     expect(view.next).toEqual(['programs get 7']);
   });
 });
+
+describe('Siren dates', () => {
+  it('reads a date without a zone as UTC, as Siren stores it, whatever the machine zone', async () => {
+    const { day, minute, sirenDate } = await import('../src/cli/record-view');
+    expect(sirenDate('2026-11-24 16:10:00').toISOString()).toBe('2026-11-24T16:10:00.000Z');
+    expect(sirenDate('2026-11-24T16:10:00+02:00').toISOString()).toBe('2026-11-24T14:10:00.000Z');
+    expect(minute('2026-11-24 23:30:00', 'UTC')).toBe('Nov 24 23:30');
+    expect(day('2026-11-24 23:30:00', 'UTC')).toBe('Nov 24, 2026');
+    expect(day('2026-11-24', 'UTC')).toBe('Nov 24, 2026');
+  });
+});

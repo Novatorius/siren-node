@@ -115,6 +115,10 @@ export const LIVE_WRITES = [
   'sandbox inbox',
   'seed',
   'recipes apply',
+  // A set or an enroller decides who moves, and a run moves people in and out of programs, distributors and groups.
+  'condition-sets create',
+  'enrollers create',
+  'enrollers run',
 ] as const;
 
 /** A raw route call that changes a record, such as `post /programs`, or a generated record command that does, such as `programs delete 7`. */

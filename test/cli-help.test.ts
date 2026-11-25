@@ -37,6 +37,8 @@ describe('help: siren --help', () => {
       'SANDBOX',
       'RECIPES',
       'NOTES',
+      'CONDITION SETS',
+      'ENROLLERS',
       'RECORDS',
       'ACCOUNT',
       'FLAGS',
@@ -63,7 +65,7 @@ describe('help: siren --help', () => {
 
   it('lists every command once, on one line, with its name and a short summary aligned', async () => {
     const text = await helpOf(['--help']);
-    const listed = text.split('\n').filter((line) => /^ {2}((apps|logs|trigger|sandbox|recipes|notes) )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
+    const listed = text.split('\n').filter((line) => /^ {2}((apps|logs|trigger|sandbox|recipes|notes|condition-sets|enrollers) )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
     const names = listed.map((line) => line.trim().split(/ {2,}/)[0]);
     // RECORDS adds `resources` beside its lines with arguments, which the pattern skips.
     expect([...names].sort()).toEqual([...COMMANDS, 'resources'].sort());

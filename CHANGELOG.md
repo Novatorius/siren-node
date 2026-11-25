@@ -135,6 +135,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `siren condition-sets` lists, shows and makes condition sets, and `siren condition-sets matches`
+  counts who matches one now and names the first few, or counts the matches of conditions not yet
+  saved. `siren enrollers` lists and shows enrollers, prints their log, makes one from JSON, and
+  runs one now after saying how many people would move. A Siren or a plan without them gets a
+  refusal that says which.
 - `siren notes --on <type:id>` lists a record's notes, newest first. `siren <resource> note <id>
   <text>` adds one, and `siren notes edit` and `siren notes delete` change and remove one. A live
   organization takes a note without `--live`, since a note changes no program, reward or payout.
@@ -593,6 +598,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A Siren date without a zone, such as `2026-11-24 15:51:48`, is read as UTC, as Siren stores it,
+  rather than as the machine's own time.
 - The prepare script sends tsup's output to standard error, so `npm pack --json` prints JSON alone
   under every npm version. On a dry run with dist already built, it keeps that dist rather than
   rebuild it, since a dry run writes nothing.

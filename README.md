@@ -2276,6 +2276,30 @@ program, opportunity, distribution, distributor, org, collaborator_group, progra
 customer, coupon, product, application_form, notification and notification_rule. Siren reads one
 record's notes at a time, so a second `--on` is refused.
 
+### Condition sets and enrollers
+
+A condition set is a saved list of conditions Siren checks each day, such as "joined in the last 30
+days". An enroller is a rule that adds people to programs, distributors and collaborator groups, or
+takes them out, when something happens to them, such as starting to match a condition set.
+
+| Command | What it does |
+| --- | --- |
+| `siren condition-sets list` | Lists the sets, with how many conditions each has and when Siren last checked it. |
+| `siren condition-sets get <id>` | Shows one set's conditions in Siren's own words, such as `Joined less than 30 days ago`, and the enrollers that use it. |
+| `siren condition-sets matches <id>` | Counts who matches now and names the first five. `--limit` names up to 25. Given a file, or `-`, it counts who would match conditions not yet saved, and saves nothing. |
+| `siren condition-sets create <file\|->` | Makes a set from JSON with `name` and `conditions`. |
+| `siren condition-sets conditions` | Lists the conditions a set can use and the values each takes. |
+| `siren enrollers list` | Lists the enrollers, with their status and what starts each. `--status` narrows the list. |
+| `siren enrollers get <id>` | Shows what starts an enroller, what it does, and its latest log lines. |
+| `siren enrollers log <id>` | Shows what an enroller did, newest first. |
+| `siren enrollers run <id>` | Says how many people a run would move, asks, then runs the enroller on everyone who matches now. `--yes` skips the question. |
+| `siren enrollers create <file\|->` | Makes an enroller from JSON, in the fields `siren enrollers get <id> --json` shows. |
+
+A set needs a plan that includes condition sets, and an enroller a plan that includes enrollers.
+Enrollers arrive in a newer Siren than condition sets. A Siren without one of them, or a plan
+without it, gets a refusal that says which. Making a set or an enroller, and running one, need
+`--live` on a live organization, since they move people.
+
 A record read, such as `siren collaborators get 1`, puts the record's name in the headline and
 prints its fields as aligned rows. Each list in it, such as a collaborator's programs, is its own
 section with one line for each, the first 10 shown and the rest counted. A collaborator or a

@@ -66,9 +66,20 @@ function isScalar(value: unknown): value is string | number | boolean | null {
 /** An ISO date and time, as Siren writes `createdDate`. */
 const ISO = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 
+/**
+ * A Siren date as a Date. Siren writes some with a zone, such as
+ * `2026-11-25T18:57:27+00:00`, and some without, such as
+ * `2026-11-24 15:51:48`. It stores every one in UTC, so a date without a
+ * zone is read as UTC, never as the machine's own time.
+ */
+export function sirenDate(iso: string): Date {
+  const text = iso.trim().replace(' ', 'T');
+  return new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) || !/T\d/.test(text) ? text : `${text}Z`);
+}
+
 /** `2026-11-25T18:57:27+00:00` as `Nov 25, 2026` in `zone`. */
 export function day(iso: string, zone: string | undefined): string {
-  const date = new Date(iso.replace(' ', 'T'));
+  const date = sirenDate(iso);
   if (Number.isNaN(date.getTime())) return clean(iso);
   const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
   try {
@@ -80,7 +91,7 @@ export function day(iso: string, zone: string | undefined): string {
 
 /** `2026-11-25T19:29:37+00:00` as `Nov 25 19:29` in `zone`, as `apps requests` prints a time. */
 export function minute(iso: string, zone: string | undefined): string {
-  const date = new Date(iso.replace(' ', 'T'));
+  const date = sirenDate(iso);
   if (Number.isNaN(date.getTime())) return clean(iso);
   const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
   let format: Intl.DateTimeFormat;

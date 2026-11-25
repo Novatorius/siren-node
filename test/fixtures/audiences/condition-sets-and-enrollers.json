@@ -1,0 +1,1745 @@
+{
+  "recordedFrom": "PR 1181 preview (int/enrollers-thin 4c83fd7), 2026-11-25",
+  "sets": [
+    {
+      "id": 1,
+      "name": "Example: in the Creator Circle group",
+      "conditions": [
+        {
+          "id": "in_collaborator_group",
+          "args": {
+            "groupIds": [
+              2
+            ]
+          }
+        }
+      ],
+      "sourceKey": null,
+      "lastCheckedAt": "2026-11-24T16:06:40+00:00",
+      "archivedAt": null
+    }
+  ],
+  "set1": {
+    "id": 1,
+    "name": "Example: in the Creator Circle group",
+    "conditions": [
+      {
+        "id": "in_collaborator_group",
+        "args": {
+          "groupIds": [
+            2
+          ]
+        }
+      }
+    ],
+    "sourceKey": null,
+    "lastCheckedAt": "2026-11-24T16:06:40+00:00",
+    "archivedAt": null
+  },
+  "matches1": {
+    "count": 3,
+    "more": false
+  },
+  "people1": {
+    "collaboratorIds": [
+      39,
+      177,
+      195
+    ],
+    "nextCursor": null,
+    "unjudged": 0
+  },
+  "uses1": {
+    "usedBy": [
+      {
+        "type": "enroller",
+        "id": 2,
+        "name": "Example: add people who match",
+        "enabled": true,
+        "onlyWhileMatching": true,
+        "status": "active"
+      }
+    ],
+    "uses": {
+      "enrollers": [
+        2
+      ]
+    }
+  },
+  "conditions": [
+    {
+      "id": "last_engagement_days",
+      "name": "Engaged recently, or not",
+      "description": "Clicks, visits and coupon uses, across all your programs",
+      "summaryTemplate": "Last engagement {comparison} {days} days ago",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "When",
+          "min": null,
+          "max": null,
+          "default": "more_than",
+          "choices": [
+            {
+              "key": "more_than",
+              "label": "More than"
+            },
+            {
+              "key": "less_than",
+              "label": "Less than"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "Days",
+          "min": 1,
+          "max": 3650,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days ago"
+        }
+      ]
+    },
+    {
+      "id": "last_conversion_days",
+      "name": "Converted recently, or not",
+      "description": "Sales and leads they referred, across all your programs",
+      "summaryTemplate": "Last conversion {comparison} {days} days ago",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "When",
+          "min": null,
+          "max": null,
+          "default": "more_than",
+          "choices": [
+            {
+              "key": "more_than",
+              "label": "More than"
+            },
+            {
+              "key": "less_than",
+              "label": "Less than"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "Days",
+          "min": 1,
+          "max": 3650,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days ago"
+        }
+      ]
+    },
+    {
+      "id": "last_reward_days",
+      "name": "Earned recently, or not",
+      "description": "Rewards they earned, across all your programs",
+      "summaryTemplate": "Last reward {comparison} {days} days ago",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "When",
+          "min": null,
+          "max": null,
+          "default": "more_than",
+          "choices": [
+            {
+              "key": "more_than",
+              "label": "More than"
+            },
+            {
+              "key": "less_than",
+              "label": "Less than"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "Days",
+          "min": 1,
+          "max": 3650,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days ago"
+        }
+      ]
+    },
+    {
+      "id": "joined_days",
+      "name": "Joined recently, or long ago",
+      "description": "When you approved them",
+      "summaryTemplate": "Joined {comparison} {days} days ago",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "When",
+          "min": null,
+          "max": null,
+          "default": "less_than",
+          "choices": [
+            {
+              "key": "more_than",
+              "label": "More than"
+            },
+            {
+              "key": "less_than",
+              "label": "Less than"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "Days",
+          "min": 1,
+          "max": 3650,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days ago"
+        }
+      ]
+    },
+    {
+      "id": "earnings_total",
+      "name": "Earnings",
+      "description": "Approved and paid rewards in one currency",
+      "summaryTemplate": "Earned {comparison} {amount} {currency} in the last {days} days",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "Earned",
+          "min": null,
+          "max": null,
+          "default": "at_least",
+          "choices": [
+            {
+              "key": "at_least",
+              "label": "At least"
+            },
+            {
+              "key": "under",
+              "label": "Under"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "amount",
+          "type": "money",
+          "label": "Amount",
+          "min": 0,
+          "max": 100000000,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "In the last",
+          "min": 0,
+          "max": 3650,
+          "default": 0,
+          "choices": [],
+          "required": false,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "sales_total",
+      "name": "Sales brought in",
+      "description": "Counts the sales a collaborator brought in, in one currency.",
+      "summaryTemplate": "Brought in {comparison} {amount} {currency} in sales {window}",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "Brought in",
+          "min": null,
+          "max": null,
+          "default": "at_least",
+          "choices": [
+            {
+              "key": "at_least",
+              "label": "At least"
+            },
+            {
+              "key": "under",
+              "label": "Under"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "amount",
+          "type": "money",
+          "label": "Amount",
+          "min": 0,
+          "max": 100000000,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "window",
+          "type": "choice",
+          "label": "Counted",
+          "min": null,
+          "max": null,
+          "default": "total",
+          "choices": [
+            {
+              "key": "total",
+              "label": "In total"
+            },
+            {
+              "key": "days_30",
+              "label": "In the last 30 days"
+            },
+            {
+              "key": "days_90",
+              "label": "In the last 90 days"
+            },
+            {
+              "key": "days_365",
+              "label": "In the last 365 days"
+            }
+          ],
+          "required": false,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "unpaid_balance",
+      "name": "Unpaid balance",
+      "description": "Approved rewards not paid yet, in one currency",
+      "summaryTemplate": "Has at least {amount} {currency} unpaid",
+      "capability": null,
+      "args": [
+        {
+          "key": "amount",
+          "type": "money",
+          "label": "At least",
+          "min": 1,
+          "max": 100000000,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "reward_count",
+      "name": "Few or no rewards yet",
+      "description": "Rewards they earned, across all your programs",
+      "summaryTemplate": "Has had fewer than {fewerThan} rewards",
+      "capability": null,
+      "args": [
+        {
+          "key": "fewerThan",
+          "type": "int",
+          "label": "Fewer than",
+          "min": 1,
+          "max": 100000,
+          "default": 1,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "engagement_count",
+      "name": "Few or no engagements yet",
+      "description": "Clicks, visits and coupon uses, across all your programs",
+      "summaryTemplate": "Has had fewer than {fewerThan} engagements",
+      "capability": null,
+      "args": [
+        {
+          "key": "fewerThan",
+          "type": "int",
+          "label": "Fewer than",
+          "min": 1,
+          "max": 100000,
+          "default": 1,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "account_not_set_up",
+      "name": "Hasn't set up their account",
+      "description": "They haven't made a password or signed in yet",
+      "summaryTemplate": "Hasn't set up their account",
+      "capability": null,
+      "args": []
+    },
+    {
+      "id": "payouts_not_set_up",
+      "name": "Hasn't set up payouts",
+      "description": "You pay this currency through Stripe or PayPal, and they haven't connected one",
+      "summaryTemplate": "Hasn't set up payouts in {currency}",
+      "capability": null,
+      "args": [
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "in_collaborator_group",
+      "name": "In a collaborator group",
+      "description": "Any of the groups you pick",
+      "summaryTemplate": "In {groupIds}",
+      "capability": "collaborator-groups",
+      "args": [
+        {
+          "key": "groupIds",
+          "type": "ids",
+          "label": "Groups",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": "collaborator_group"
+        }
+      ]
+    },
+    {
+      "id": "in_program_for_days",
+      "name": "In a program for at least a number of days",
+      "description": "Has stayed in a program, without a break, for at least the days you choose",
+      "summaryTemplate": "In {program} for at least {days} days",
+      "capability": null,
+      "args": [
+        {
+          "key": "program",
+          "type": "records",
+          "label": "Program",
+          "min": 1,
+          "max": 1,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": "program"
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "For at least",
+          "min": 1,
+          "max": 3650,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "engagements_fell",
+      "name": "Engagements fell",
+      "description": "Fewer clicks, visits and coupon uses lately than in the same number of days before, across all your programs",
+      "summaryTemplate": "Engagements in the last {days} days fell {share} against the {days} days before",
+      "capability": null,
+      "args": [
+        {
+          "key": "share",
+          "type": "choice",
+          "label": "Fell",
+          "min": null,
+          "max": null,
+          "default": "half",
+          "choices": [
+            {
+              "key": "quarter",
+              "label": "By a quarter or more"
+            },
+            {
+              "key": "half",
+              "label": "By half or more"
+            },
+            {
+              "key": "three_quarters",
+              "label": "By three quarters or more"
+            },
+            {
+              "key": "all",
+              "label": "To none"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "Each period",
+          "min": 7,
+          "max": 365,
+          "default": 60,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "rewards_fell",
+      "name": "Rewards fell",
+      "description": "Fewer rewards lately than in the same number of days before, across all your programs",
+      "summaryTemplate": "Rewards in the last {days} days fell {share} against the {days} days before",
+      "capability": null,
+      "args": [
+        {
+          "key": "share",
+          "type": "choice",
+          "label": "Fell",
+          "min": null,
+          "max": null,
+          "default": "half",
+          "choices": [
+            {
+              "key": "quarter",
+              "label": "By a quarter or more"
+            },
+            {
+              "key": "half",
+              "label": "By half or more"
+            },
+            {
+              "key": "three_quarters",
+              "label": "By three quarters or more"
+            },
+            {
+              "key": "all",
+              "label": "To none"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "Each period",
+          "min": 7,
+          "max": 365,
+          "default": 60,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "payout_below_average",
+      "name": "Latest payout below their average",
+      "description": "Their latest paid payout was smaller than the average of the ones before it, in the same currency",
+      "summaryTemplate": "Latest payout was below the average of the {count} before it",
+      "capability": null,
+      "args": [
+        {
+          "key": "count",
+          "type": "int",
+          "label": "Payouts before it to average",
+          "min": 2,
+          "max": 12,
+          "default": 3,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "reward_count_in_days",
+      "name": "Rewards in recent days",
+      "description": "How many rewards they earned lately, across all your programs",
+      "summaryTemplate": "Earned {comparison} {count} rewards in the last {days} days",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "Earned",
+          "min": null,
+          "max": null,
+          "default": "at_least",
+          "choices": [
+            {
+              "key": "at_least",
+              "label": "At least"
+            },
+            {
+              "key": "fewer_than",
+              "label": "Fewer than"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "count",
+          "type": "int",
+          "label": "Rewards",
+          "min": 1,
+          "max": 100000,
+          "default": 10,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "In the last",
+          "min": 1,
+          "max": 365,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "program_reward_count_in_days",
+      "name": "Rewards in one program in recent days",
+      "description": "How many rewards they earned lately through a program you choose",
+      "summaryTemplate": "Earned {comparison} {count} rewards in {program} in the last {days} days",
+      "capability": null,
+      "args": [
+        {
+          "key": "program",
+          "type": "records",
+          "label": "Program",
+          "min": 1,
+          "max": 1,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": "program"
+        },
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "Earned",
+          "min": null,
+          "max": null,
+          "default": "at_least",
+          "choices": [
+            {
+              "key": "at_least",
+              "label": "At least"
+            },
+            {
+              "key": "fewer_than",
+              "label": "Fewer than"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "count",
+          "type": "int",
+          "label": "Rewards",
+          "min": 1,
+          "max": 100000,
+          "default": 10,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "In the last",
+          "min": 1,
+          "max": 365,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "earnings_in_days",
+      "name": "Earnings in recent days",
+      "description": "Approved and paid rewards lately across all your programs, in one currency",
+      "summaryTemplate": "Earned {comparison} {amount} {currency} in the last {days} days",
+      "capability": null,
+      "args": [
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "Earned",
+          "min": null,
+          "max": null,
+          "default": "at_least",
+          "choices": [
+            {
+              "key": "at_least",
+              "label": "At least"
+            },
+            {
+              "key": "under",
+              "label": "Under"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "amount",
+          "type": "money",
+          "label": "Amount",
+          "min": 0,
+          "max": 100000000,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "In the last",
+          "min": 1,
+          "max": 365,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "program_earnings_in_days",
+      "name": "Earnings in one program in recent days",
+      "description": "Approved and paid rewards lately through a program you choose, in one currency",
+      "summaryTemplate": "Earned {comparison} {amount} {currency} in {program} in the last {days} days",
+      "capability": null,
+      "args": [
+        {
+          "key": "program",
+          "type": "records",
+          "label": "Program",
+          "min": 1,
+          "max": 1,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": "program"
+        },
+        {
+          "key": "comparison",
+          "type": "choice",
+          "label": "Earned",
+          "min": null,
+          "max": null,
+          "default": "at_least",
+          "choices": [
+            {
+              "key": "at_least",
+              "label": "At least"
+            },
+            {
+              "key": "under",
+              "label": "Under"
+            }
+          ],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "amount",
+          "type": "money",
+          "label": "Amount",
+          "min": 0,
+          "max": 100000000,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "days",
+          "type": "int",
+          "label": "In the last",
+          "min": 1,
+          "max": 365,
+          "default": 30,
+          "choices": [],
+          "required": true,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    }
+  ],
+  "collaborators": [
+    {
+      "id": 39,
+      "status": "active",
+      "fullName": "Marcus Bell",
+      "nickname": "marcus",
+      "email": "hw.marcus@example.com",
+      "referralCode": "CGV",
+      "programs": [
+        {
+          "id": 10,
+          "name": "Premium Partner"
+        }
+      ],
+      "distributors": [
+        {
+          "id": 2,
+          "name": "Monthly Bonus Pool"
+        }
+      ],
+      "createdDate": "2025-08-11T12:30:00+00:00",
+      "modifiedDate": "2025-08-11T12:30:00+00:00",
+      "fields": {}
+    },
+    {
+      "id": 177,
+      "status": "active",
+      "fullName": "Ana Ferreira",
+      "nickname": "ana",
+      "email": "hw.ana@example.com",
+      "referralCode": "ZVP",
+      "programs": [
+        {
+          "id": 11,
+          "name": "Standard Affiliate"
+        }
+      ],
+      "distributors": [],
+      "createdDate": "2026-02-02T13:30:00+00:00",
+      "modifiedDate": "2026-02-02T13:30:00+00:00",
+      "fields": {}
+    },
+    {
+      "id": 195,
+      "status": "active",
+      "fullName": "Lena Vogel",
+      "nickname": "lena",
+      "email": "hw.lena@example.com",
+      "referralCode": "RRH",
+      "programs": [
+        {
+          "id": 16,
+          "name": "EU Partner Program"
+        }
+      ],
+      "distributors": [],
+      "createdDate": "2026-03-02T13:30:00+00:00",
+      "modifiedDate": "2026-03-02T13:30:00+00:00",
+      "fields": {}
+    }
+  ],
+  "enrollers": [
+    {
+      "id": 1,
+      "name": "Example: big following",
+      "status": "active",
+      "enabled": true,
+      "triggerId": "approved",
+      "triggerArgs": {
+        "programs": null,
+        "form": [
+          4
+        ],
+        "answer_tests": [
+          {
+            "question": "followers",
+            "comparison": "more_than",
+            "value": 10000
+          }
+        ]
+      },
+      "addProgramIds": [
+        2
+      ],
+      "addDistributorIds": [],
+      "addGroupIds": [],
+      "removeProgramIds": [],
+      "removeDistributorIds": [],
+      "removeGroupIds": [],
+      "addForDays": null,
+      "onlyWhileMatching": false,
+      "dateCreated": "2026-11-24 15:51:48",
+      "dateModified": "2026-11-24 15:51:48",
+      "needsFix": null
+    },
+    {
+      "id": 2,
+      "name": "Example: add people who match",
+      "status": "active",
+      "enabled": true,
+      "triggerId": "condition_set_entered",
+      "triggerArgs": {
+        "set": [
+          1
+        ]
+      },
+      "addProgramIds": [
+        2
+      ],
+      "addDistributorIds": [],
+      "addGroupIds": [],
+      "removeProgramIds": [],
+      "removeDistributorIds": [],
+      "removeGroupIds": [],
+      "addForDays": null,
+      "onlyWhileMatching": true,
+      "dateCreated": "2026-11-24 16:07:55",
+      "dateModified": "2026-11-24 16:07:55",
+      "needsFix": null
+    }
+  ],
+  "enrollersTotal": 2,
+  "enroller1": {
+    "id": 1,
+    "name": "Example: big following",
+    "status": "active",
+    "enabled": true,
+    "triggerId": "approved",
+    "triggerArgs": {
+      "programs": null,
+      "form": [
+        4
+      ],
+      "answer_tests": [
+        {
+          "question": "followers",
+          "comparison": "more_than",
+          "value": 10000
+        }
+      ]
+    },
+    "addProgramIds": [
+      2
+    ],
+    "addDistributorIds": [],
+    "addGroupIds": [],
+    "removeProgramIds": [],
+    "removeDistributorIds": [],
+    "removeGroupIds": [],
+    "addForDays": null,
+    "onlyWhileMatching": false,
+    "dateCreated": "2026-11-24 15:51:48",
+    "dateModified": "2026-11-24 15:51:48",
+    "needsFix": null,
+    "applyWaiting": null
+  },
+  "runNow2": {
+    "matching": 3,
+    "willMove": 3,
+    "renews": 0,
+    "alreadyThere": 0,
+    "capped": false,
+    "liveJobId": null,
+    "waitsForCheck": false,
+    "waiting": null,
+    "message": "About 3 of the 3 people who match now would move."
+  },
+  "triggers": [
+    {
+      "id": "applied",
+      "name": "Applied",
+      "description": "Someone applies to join and confirms their email address. It happens once per application, before anyone approves or declines it.",
+      "group": "Applications",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": true,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        }
+      ]
+    },
+    {
+      "id": "approved",
+      "name": "Approved",
+      "description": "An applicant becomes an active collaborator, whether an admin approved them or their application was approved on its own.",
+      "group": "Applications",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        },
+        {
+          "key": "form",
+          "type": "records",
+          "label": "Forms",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "form"
+        },
+        {
+          "key": "answer_tests",
+          "type": "answer_tests",
+          "label": "Answer tests",
+          "min": 0,
+          "max": 10,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "joined",
+      "name": "Joined",
+      "description": "An active collaborator is added to more programs, distributors or collaborator groups, such as when an admin approves their request to join more.",
+      "group": "Membership",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        },
+        {
+          "key": "distributors",
+          "type": "records",
+          "label": "Distributors",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "distributor"
+        }
+      ]
+    },
+    {
+      "id": "reward_earned",
+      "name": "Reward earned",
+      "description": "A sale or a scheduled distribution earns a collaborator rewards. One sale counts once for each collaborator it paid.",
+      "group": "Rewards",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        },
+        {
+          "key": "products",
+          "type": "products",
+          "label": "Products",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "product"
+        },
+        {
+          "key": "minimumAmount",
+          "type": "money",
+          "label": "Minimum amount",
+          "min": 1,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        },
+        {
+          "key": "rewardStatus",
+          "type": "choice",
+          "label": "Reward status",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [
+            {
+              "key": "draft",
+              "label": "Waiting for approval"
+            },
+            {
+              "key": "approved",
+              "label": "Approved"
+            }
+          ],
+          "required": false,
+          "recordType": null
+        },
+        {
+          "key": "afterQuietDays",
+          "type": "int",
+          "label": "Quiet for at least",
+          "min": 1,
+          "max": 3650,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null,
+          "unit": "days"
+        }
+      ]
+    },
+    {
+      "id": "reward_approved",
+      "name": "Reward approved",
+      "description": "A collaborator's rewards are approved. Approving several of their rewards at once counts once.",
+      "group": "Rewards",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        }
+      ]
+    },
+    {
+      "id": "reward_reversed",
+      "name": "Reward reversed",
+      "description": "A reward the collaborator earned is taken back: its sale was refunded, its conversion was rejected, or a merchant rejected it. Each reward counts on its own.",
+      "group": "Rewards",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        }
+      ]
+    },
+    {
+      "id": "payout_sent",
+      "name": "Payout sent",
+      "description": "A payout is sent to a collaborator.",
+      "group": "Payouts",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": []
+    },
+    {
+      "id": "reward_held",
+      "name": "Reward held for review",
+      "description": "A sale earns a collaborator a reward in a currency the program does not pay in, so Siren holds the reward until an admin approves or rejects it.",
+      "group": "Rewards",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": []
+    },
+    {
+      "id": "payout_failed",
+      "name": "Payout failed",
+      "description": "An automatic payout to a collaborator fails and is not sent. It waits until an admin fixes the cause and retries it.",
+      "group": "Payouts",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": []
+    },
+    {
+      "id": "payout_waiting",
+      "name": "Payout waiting on setup",
+      "description": "An automatic payout can't be sent because the collaborator has not set up Stripe or PayPal, so it waits for them. If it still waits a week later, it counts once more.",
+      "group": "Payouts",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": []
+    },
+    {
+      "id": "payout_setup",
+      "name": "Payout setup needed",
+      "description": "A collaborator can earn in a currency you pay out automatically, and has not set up the Stripe or PayPal account it pays to. It happens once per collaborator and payout method.",
+      "group": "Payouts",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": []
+    },
+    {
+      "id": "distributor_metric",
+      "name": "Distributor metric counted",
+      "description": "A metric event you choose counts toward a collaborator in a distributor. It happens each time the metric counts.",
+      "group": "Activity and milestones",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "type",
+          "type": "choice",
+          "label": "Metric type",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "distributors",
+          "type": "records",
+          "label": "Distributors",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "distributor"
+        }
+      ]
+    },
+    {
+      "id": "added_to_group",
+      "name": "Added to a group",
+      "description": "A collaborator is added to a collaborator group.",
+      "group": "Membership",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "groups",
+          "type": "records",
+          "label": "Collaborator groups",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "collaborator_group"
+        }
+      ]
+    },
+    {
+      "id": "left",
+      "name": "Left",
+      "description": "A collaborator is taken out of programs, distributors or collaborator groups. A program or distributor they still have through a collaborator group doesn't count, and deleting a collaborator, a program, a distributor or a group isn't leaving.",
+      "group": "Membership",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        },
+        {
+          "key": "distributors",
+          "type": "records",
+          "label": "Distributors",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "distributor"
+        },
+        {
+          "key": "groups",
+          "type": "records",
+          "label": "Collaborator groups",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "collaborator_group"
+        }
+      ]
+    },
+    {
+      "id": "condition_set_entered",
+      "name": "Starts matching a condition set",
+      "description": "When Siren's daily check finds a collaborator who has started matching a condition set. Once for each time they start matching.",
+      "group": "Condition sets",
+      "canStopMatching": true,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "set",
+          "type": "records",
+          "label": "Condition set",
+          "min": 1,
+          "max": 1,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": "condition_set"
+        }
+      ]
+    },
+    {
+      "id": "condition_set_left",
+      "name": "Stops matching a condition set",
+      "description": "When Siren's daily check finds a collaborator who matched a condition set and no longer does. Once for each time they stop matching.",
+      "group": "Condition sets",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "set",
+          "type": "records",
+          "label": "Condition set",
+          "min": 1,
+          "max": 1,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": "condition_set"
+        }
+      ]
+    },
+    {
+      "id": "enrolled_by_rule",
+      "name": "Enrolled by a rule",
+      "description": "An automatic rule adds a collaborator to programs, distributors or collaborator groups. It happens once each time the rule acts on them, and not when they were already there.",
+      "group": "Membership",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": []
+    },
+    {
+      "id": "removed_by_rule",
+      "name": "Removed by a rule",
+      "description": "An automatic rule takes a collaborator out of programs, distributors or collaborator groups. It happens once each time the rule acts on them, and not when they weren't there.",
+      "group": "Membership",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": []
+    },
+    {
+      "id": "purchase_recorded",
+      "name": "A purchase is recorded",
+      "description": "A store records a purchase by a customer, before its rewards are worked out. On some checkouts that is before the order is paid.",
+      "group": "Sales",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "products",
+          "type": "products",
+          "label": "Products",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "product"
+        },
+        {
+          "key": "minimumAmount",
+          "type": "money",
+          "label": "Minimum amount",
+          "min": 1,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        }
+      ],
+      "buyersHere": false
+    },
+    {
+      "id": "purchase_completed",
+      "name": "A purchase is completed",
+      "description": "A store marks a customer's purchase complete, such as when the order is paid or fulfilled.",
+      "group": "Sales",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "products",
+          "type": "products",
+          "label": "Products",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "product"
+        },
+        {
+          "key": "minimumAmount",
+          "type": "money",
+          "label": "Minimum amount",
+          "min": 1,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        }
+      ],
+      "buyersHere": false
+    },
+    {
+      "id": "first_reward_earned",
+      "name": "First reward earned",
+      "description": "A collaborator earns their first reward ever, from a sale or a scheduled distribution.",
+      "group": "Rewards",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        }
+      ]
+    },
+    {
+      "id": "milestone_reached",
+      "name": "Milestone reached",
+      "description": "A collaborator reaches a number of sales, or an amount of lifetime earnings, that you choose. It happens once, when a reward takes them to it.",
+      "group": "Activity and milestones",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "sales",
+          "type": "int",
+          "label": "Sales reach",
+          "min": 1,
+          "max": 1000000,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        },
+        {
+          "key": "earnings",
+          "type": "money",
+          "label": "Lifetime earnings reach",
+          "min": 1,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        },
+        {
+          "key": "currency",
+          "type": "currency",
+          "label": "Currency",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": null
+        }
+      ]
+    },
+    {
+      "id": "engagement",
+      "name": "Engagement counted",
+      "description": "An engagement event you choose, such as a site visit or a coupon use, counts for a collaborator in a program.",
+      "group": "Activity and milestones",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": null,
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "type",
+          "type": "choice",
+          "label": "Engagement type",
+          "min": null,
+          "max": null,
+          "default": null,
+          "choices": [],
+          "required": true,
+          "recordType": null
+        },
+        {
+          "key": "programs",
+          "type": "records",
+          "label": "Programs",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "program"
+        }
+      ]
+    },
+    {
+      "id": "custom_event",
+      "name": "A custom event",
+      "description": "One of your own events is sent to Siren for a collaborator.",
+      "group": "Activity and milestones",
+      "canStopMatching": false,
+      "entitled": true,
+      "requiredPlan": "pro",
+      "mayAwaitReview": false,
+      "args": [
+        {
+          "key": "events",
+          "type": "records",
+          "label": "Custom events",
+          "min": 1,
+          "max": 50,
+          "default": null,
+          "choices": [],
+          "required": false,
+          "recordType": "custom_event"
+        }
+      ]
+    }
+  ]
+}
