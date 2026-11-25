@@ -607,7 +607,9 @@ export async function appsShow(input: CommandInput): Promise<number> {
     ...(typeof prefix === 'string' && prefix !== '' ? [['Key', `${prefix}…`] as const] : [['Key', out.dim('none')] as const]),
     ...(events.length > 0 ? [['Events', `${clean(events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
   ];
-  run.print(out.report({ headline: `${out.bold(clean(app.key))}  ${clean(app.name)}`, rows, mark: false }).replace(/\n$/, ''));
+  // The demo printed "cli-demo  cli-demo" for an app named after its key, so the name shows only when it differs.
+  const named = clean(app.name) === clean(app.key) || clean(app.name) === '' ? '' : `  ${clean(app.name)}`;
+  run.print(out.report({ headline: `${out.bold(clean(app.key))}${named}`, rows, mark: false }).replace(/\n$/, ''));
   if (app.features.length > 0) {
     run.print('');
     const features = app.features.map((item) => [

@@ -7,7 +7,7 @@ import { appKeyArgument, orgNamed } from './apply';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
-import { REPORT_WIDTH, clean, styleFor, visibleLength } from '../style';
+import { REPORT_WIDTH, clean, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 
@@ -418,11 +418,7 @@ async function showRequest(input: CommandInput, typed: string): Promise<number> 
   if (data.length === 0) run.print('Siren sent no data.');
   else {
     run.print(out.bold('DATA'));
-    const widest = Math.max(...data.map(([key]) => clean(key).length));
-    for (const [key, value] of data) {
-      const shown = clean(typeof value === 'string' ? value : JSON.stringify(value));
-      run.print(`  ${out.dim(clean(key))}${' '.repeat(widest - clean(key).length + 2)}${shown}`);
-    }
+    for (const line of dataLines(out, data, 2)) run.print(line);
   }
 
   const short = shortId(id);
@@ -518,6 +514,51 @@ export async function appsResend(input: CommandInput): Promise<number> {
       .replace(/\n$/, ''),
   );
   return 0;
+}
+
+/**
+ * The data Siren sent as indented key and value lines, the keys dim and
+ * aligned at each level. An object's entries go under its key, two spaces
+ * further in, and so does each object in a list, under its number from 1.
+ * A list of plain values is one line, joined with commas. In a terminal a
+ * long value wraps under itself, so no line passes 80 columns. `--json`
+ * prints the data whole.
+ */
+function dataLines(out: Style, entries: ReadonlyArray<readonly [string, unknown]>, indent: number): string[] {
+  const lines: string[] = [];
+  const pad = ' '.repeat(indent);
+  const widest = Math.max(0, ...entries.map(([key]) => [...clean(key)].length));
+  for (const [key, value] of entries) {
+    const label = clean(key);
+    const nested = nestedEntries(value);
+    if (nested !== undefined) {
+      lines.push(`${pad}${out.dim(label)}`);
+      lines.push(...dataLines(out, nested, indent + 2));
+      continue;
+    }
+    const at = indent + widest + 2;
+    const shown = clean(scalarText(value));
+    const [first = '', ...rest] = out.rich ? wrapWords(shown, Math.max(20, REPORT_WIDTH - at)) : [shown];
+    lines.push(`${pad}${out.dim(label)}${' '.repeat(widest - [...label].length + 2)}${first}`);
+    for (const more of rest) lines.push(`${' '.repeat(at)}${more}`);
+  }
+  return lines;
+}
+
+/** An object's entries, or a list's items under their numbers when one of them is an object or a list. Undefined for a value one line holds. */
+function nestedEntries(value: unknown): Array<readonly [string, unknown]> | undefined {
+  if (Array.isArray(value)) {
+    return value.some((item) => typeof item === 'object' && item !== null) ? value.map((item, at) => [String(at + 1), item] as const) : undefined;
+  }
+  if (typeof value === 'object' && value !== null && Object.keys(value).length > 0) return Object.entries(value);
+  return undefined;
+}
+
+/** A value one line holds: text as it is, a list of plain values joined with commas, and anything else as JSON. */
+function scalarText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.length === 0 ? '[]' : value.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join(', ');
+  return JSON.stringify(value) ?? String(value);
 }
 
 /**
