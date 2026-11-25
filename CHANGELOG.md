@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- The handler's default `onError` writes one string per failure through the new `logger` option,
+  in place of `console.error(prefix, error)`. The line holds the error's class, message and code,
+  with a nested cause folded in as "(cause: ...)". A stack trace follows only when your own
+  function threw, so a single 401 on the answer post prints one line instead of about twenty.
+- A refused signature now reaches `onError` as a `SignatureVerificationError` with a code
+  (`signature_mismatch`, `signature_missing`, `signature_malformed`, `timestamp_mismatch` or
+  `timestamp_out_of_tolerance`). The reply is still the 401 with the same words.
+
 - Each kind's types are named from the kind, the same in the PHP and Python SDKs: `<Kind>Question`
   and `<Kind>Answer` for an ask, `<Kind>Tell` for a tell, with a variant between the kind and the
   suffix. `AppConversionApprovedData` is `PostConversionActionTell`, `AppAllocationCompletedData` is
@@ -109,6 +117,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the SDK resent the request as a lost connection.
 
 ### Added
+
+- A `logger` option on `apps.requestHandler()`, taking anything with `debug`, `info`, `warn` and
+  `error`, such as `console`, pino or winston. The handler writes one `debug` line per request it
+  handled, with its name, status and time. Refused signatures and slow tells go to `warn`, and every
+  other failure to `error`. Left out, warnings and errors go to the console and the debug lines are
+  dropped.
+- The default line for a refused signature says what to check: `SIREN_SIGNING_SECRET` for a wrong
+  signature, a proxy for a missing or unreadable header, the clock for a stale time. After five in
+  one minute the rest are counted into one line, with no timer.
+- `AppSlowTellError` and `TELL_TIME_LIMIT_SECONDS` (8, Siren's delivery timeout). A tell whose
+  function runs longer still replies 200, and `onError` and `simulate()` get the error, since Siren
+  stopped waiting and sends the tell again.
+- `webhookEvent(type, data?)` and `sampleEventData(type)` in `@novatorius/siren/testing` sign a
+  webhook event as Siren sends one to an app's address, for `onEvent()` tests. The samples come from
+  the payload tables in Siren's docs/api/webhooks-events.md (feat/apps at 6d2abd936a), built by
+  scripts/siren-event-samples.mjs, which a test runs against `SIREN_CHECKOUT` to hold them equal.
+- `appRequestFromRecord(record, { key })` in `@novatorius/siren/testing` turns a stored request,
+  as `apps.requests.retrieve(id)` answers it, into a signed test input.
+- After a 422 `app_answer_invalid`, the default line says to reproduce the answer with `simulate()`
+  and resend, in place of when Siren sends it again.
+- The README's "Develop on your machine" teaches `siren listen --forward-to` and
+  `siren trigger ask`, which arrive with the command-line tool's next release.
 
 - A request's empty engagement `args`, which Siren sends as `[]` until it writes `{}`, reads as
   `{}`, so `args.weight` is safe for an engagement type with no settings.

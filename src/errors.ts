@@ -697,6 +697,20 @@ export class AppHandlerError extends SirenError {
 }
 
 /**
+ * A tell whose function took longer than Siren waits for its reply
+ * (`TELL_TIME_LIMIT_SECONDS`, 8). The handler still replied 200, but Siren
+ * had stopped waiting, counted a timeout and sends the tell again, so the
+ * function ran twice. `onError` gets it, and `simulate()` returns it. The
+ * PHP and Python SDKs report the same case.
+ */
+export class AppSlowTellError extends SirenError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'AppSlowTellError';
+  }
+}
+
+/**
  * Extract message/code/data from a Siren error body. The `error` value is
  * polymorphic:
  *   - a plain string  → `{ "error": "something went wrong" }`

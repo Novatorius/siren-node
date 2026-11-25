@@ -164,6 +164,76 @@ A running app posts its answers to the real Siren Cloud, or to the client's `bas
 app's `onError` logs the refusal, which is expected here. `simulate` posts nothing, so use it to
 check answers in a test.
 
+### Test requests
+
+`siren trigger ask <app> <feature>` makes Siren send a feature's sample request now, marked as a test
+with `"test": true`, on a sandbox or a live Siren. Your function reads it as `request.test`, which is
+false on every real request. Siren checks a test ask's answer by the kind's own rules and applies
+nothing. A handler must never move money or write records on a test request. Answer it as usual, so
+Siren checks the answer, and stop there, as the payout method sample does.
+`appRequest(kind, key, { test: true })` builds one for a test of your own.
+
+### Test an onEvent function
+
+`webhookEvent(type, data?)` signs a webhook event the way Siren signs one to an app's address, with
+`X-Siren-Event` naming the type and a new `evt_` delivery id. Left out, `data` is
+`sampleEventData(type)`, the payload Siren's event reference documents for that type, so a test of an
+`onEvent()` function needs no hand signing:
+
+```js
+import assert from 'node:assert/strict'
+import { Siren } from '@novatorius/siren'
+import { sampleEventData, webhookEvent } from '@novatorius/siren/testing'
+
+const answers = new Siren().apps.requestHandler()
+const approved = []
+answers.onEvent('conversion.approved', (event) => {
+  approved.push(event.data.conversionId)
+})
+
+// A signed conversion.approved, with Siren's sample data. Pass your own data as the second argument.
+const { status, error } = await answers.simulate(webhookEvent('conversion.approved'))
+assert.equal(status, 200)
+assert.equal(error, null)
+assert.deepEqual(approved, [sampleEventData('conversion.approved').conversionId])
+```
+
+### Replay a stored request
+
+`appRequestFromRecord(record, { key })` turns a request Siren stored into a test input, signed
+again with the same id, kind, mode, data and `answerBy`. `record` is what
+`siren.apps.requests.retrieve(id)` answers, the row `siren apps requests <id>` shows, as an object or
+its JSON text. That row names its feature as `app:12` without the key, so pass the key
+`siren apps show <app>` lists beside the feature. A raw request body, as your app logged it, names
+its key already.
+
+```js
+import { appRequestFromRecord } from '@novatorius/siren/testing'
+
+const stored = await siren.apps.requests.retrieve('apr_9f2c4e0b7a1d4c3e8b6f5a2d1c0e9b8a')
+const { answer, error } = await answers.simulate(appRequestFromRecord(stored, { key: 'split-by-score' }))
+```
+
+`simulate` then runs your function on the exact question Siren asked, so a refused or failed answer
+can be fixed in a test before you resend the request with `siren apps resend <id>`.
+
+## Develop on your machine
+
+Siren can send a sandbox app's requests to the handler on your laptop with no tunnel and no public
+address. `listen` and `trigger` arrive with the command-line tool's next release.
+
+1. Use a sandbox key, one that starts `sk_test_`. On a sandbox, `siren apps apply` declares the app
+   with no `url` and writes its key and signing secret to `.env.sandbox`, which the handler reads.
+2. Start your app, then run `siren listen --forward-to localhost:3000/siren`. While it runs, Siren
+   sends that app's asks, tells and webhook events to your handler, signed with the app's own
+   secret, and prints each reply. Your handler posts an ask's answer to Siren as it always does.
+   Listening works only on a sandbox Siren.
+3. In another terminal, `siren trigger ask <app> <feature>` sends a real sample request for one
+   feature through it.
+
+Set `logger: console` on the handler while you work, and it writes one line per request with its
+status and time.
+
 ## Mount it on your server
 
 None of these servers is a dependency of this package. Keep the handler in its own module:
@@ -244,7 +314,7 @@ TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 
 
 ### Options and functions
 
-`apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError, extraKinds })` takes:
+`apps.requestHandler({ signingSecret, toleranceSeconds, runLater, onError, logger, extraKinds })` takes:
 
 - `signingSecret`, the app's signing secret, which Siren showed once when it made the app's
   address. Left out, it is `SIREN_SIGNING_SECRET` from the environment. The handler refuses an
@@ -252,13 +322,27 @@ TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 
 - `toleranceSeconds`, how far a request's signed time may be from this machine's clock, either way.
   A whole number from 1 to 3600, 300 by default.
 - `runLater`, a function handed an ask's work after the reply, such as Next.js's `after`.
+  A tell's function can call your `runLater` too, for the slow part of its work: a tell must
+  finish within Siren's 8 seconds (`TELL_TIME_LIMIT_SECONDS`), so save what you need, hand the
+  rest over and return.
 - `onError`, a function of the error and the request that gets every error Siren does not see: a
   function that threw, an answer that broke the rules, Siren's refusal of an answer, an
-  `answerUrl` on another Siren, and a body a parser already read. By default it writes one `console.error` line with the kind, key and request
-  id, or an event's type and delivery id, and the error. For an ask that failed after its 200, the
-  line adds when Siren sends it again, such as "Siren sends it again after 16:58 UTC, when its
-  answer window closes", and how to resend it sooner, ahead of the error and its stack trace. It never writes the request's data or
-  headers.
+  `answerUrl` on another Siren, a body a parser already read, a refused signature
+  (`SignatureVerificationError`, still answered 401) and a tell that took longer than 8 seconds
+  (`AppSlowTellError`). By default it writes one line through `logger` with the kind, key and
+  request id, or an event's type and delivery id, and the error's class, message and code. A stack
+  trace follows only when your own function threw. For an ask that failed after its 200, the line
+  adds when Siren sends it again, such as "Siren sends it again after 16:58 UTC, when its answer
+  window closes", and how to resend it sooner, ahead of the error and its stack trace. After a 422
+  `app_answer_invalid` it says instead to reproduce the answer with `simulate()`, fix it and
+  resend. A refused signature names what to check, such as `SIREN_SIGNING_SECRET` after a rotated
+  secret, and after five in one minute the rest are counted into one line. It never writes the
+  request's data or headers.
+- `logger`, where the default `onError` writes, and where the handler writes one `debug` line per
+  request it handled, with its status and time. Anything with `debug`, `info`, `warn` and `error`
+  fits: `console`, pino or winston. Refused signatures and slow tells go to `warn`, everything else
+  to `error`. Left out, warnings and errors go to the console and the debug lines are dropped, so
+  pass `logger: console` to see each request while you work.
 - `extraKinds`, a list of kinds a newer Siren sends that this SDK does not know yet, which `on()`
   then takes.
 
@@ -301,10 +385,10 @@ Every reply is JSON with `Cache-Control: no-store`.
 | A method other than POST | 405 | Nothing. |
 | A body over 1 MiB | 413 | Nothing. |
 | A body a parser already turned into an object | 500 | `onError` gets a `SirenError` that says to mount the handler before the JSON parser, or to give the route a raw body. |
-| A missing or wrong `X-Siren-Signature-V2`, another `X-Siren-Timestamp`, or a time more than `toleranceSeconds` (default 300) from the clock | 401 | The checks are `verifyRequest`'s own. |
+| A missing or wrong `X-Siren-Signature-V2`, another `X-Siren-Timestamp`, or a time more than `toleranceSeconds` (default 300) from the clock | 401 | The checks are `verifyRequest`'s own. `onError` gets a `SignatureVerificationError` with a code, and the default writes a warning that says what to check. |
 | A signed body that is not JSON, or an app request that is not an envelope of version 1 | 400, naming the first field that breaks its rule, such as "The request's `id` must be `apr_` followed by 32 hex characters." | Nothing. |
 | An ask whose `answerUrl` is on another Siren than the client's `baseUrl` | 500 | `onError` gets a `SirenError` naming both addresses and the `baseUrl` to set. The function does not run, nothing is posted, and Siren sends the ask again. |
-| A tell with a function | 200 once the function returns, 500 when it throws | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. The function has Siren's 8 seconds. |
+| A tell with a function | 200 once the function returns, 500 when it throws | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. A tell must finish within 8 seconds. Past that Siren has stopped waiting, counts a timeout and sends the tell again, so the function runs twice. `onError` gets an `AppSlowTellError`, and `simulate()` returns it. |
 | An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `answers.later()`, answer later with `apps.requests.answer()`. When it returns nothing, `onError` gets an error. |
 | When your function fails | A tell gets 500. An ask already got its 200. | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. Siren sends a failed ask again when its answer window closes, 60 minutes by default, and you can resend it sooner with `siren apps resend <id>`. Siren Cloud offers Send again once the ask needs attention. `onError` gets the error, and for an ask the default line says when Siren sends it again. |
 | An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
@@ -624,7 +708,9 @@ shapes. `{ outcome: 'paid', reference }` has a `reference` of 1 to 191 character
 in the app's own system. `{ outcome: 'failed', reason }` has a `reason` of 1 to 500 characters.
 
 ```js
-answers.on('payoutMethod', 'acme-ledger', async ({ data }) => {
+answers.on('payoutMethod', 'acme-ledger', async ({ data, test }) => {
+  // A test request, such as one siren trigger ask sent: answer, and pay nothing.
+  if (test) return { outcome: 'failed', reason: 'A test request, so nothing was paid.' }
   // Pay each payout once, keyed by its id, and answer with your reference.
   const paid = await payOnce(data.payout.id, data.collaborator, data.amount)
   return paid.ok ? { outcome: 'paid', reference: paid.id } : { outcome: 'failed', reason: paid.error }
@@ -892,7 +978,7 @@ try {
 | `app_request_not_needing_attention` | 409 | A person answered an ask that does not need attention. Wait for the app, or answer once `siren apps requests --attention` lists it. |
 | `app_request_not_found` | 404 | Check the id. Siren tells an admin "This organization has no request with this key." and an app's key "No request with this key was sent to this app.", which also covers a request sent to another app. The resend route and `requests.retrieve()` say "App request not found." |
 | `app_inactive`, `app_answer_forbidden` | 403 | Turn the app on, or answer as an admin. |
-| `app_answer_invalid` | 422 | Fix the answer for the feature's kind. |
+| `app_answer_invalid` | 422 | Fix the answer for the feature's kind. The default log line says to reproduce it with `simulate()` on the request's data, then resend. |
 | `app_answer_unauthorized` | 401 | Answer with the app's own key or an admin's session. Siren sends this 401 with no code when the bearer is missing or unknown, and `requests.answer()` gives it the code and a message that says to run `siren apps rotate-key <app key>` when the app's key is lost, and `siren apps add-key <app key>` when the app holds no key, as after a revoke. |
 
 Every other failure throws a typed subclass of `SirenError`, as [Error handling](#error-handling)

@@ -1308,6 +1308,8 @@ export interface AppRequestRecord {
   feature: string;
   kind: FeatureKind | (string & {});
   mode: AppRequestMode | (string & {});
+  /** True for a test request (`AppRequestSerializer` adds it then). Siren leaves it out otherwise. */
+  test?: boolean;
   subject: { type: string; id: string };
   status: AppRequestStatus | (string & {});
   sendCount: number;
@@ -1377,6 +1379,14 @@ interface AppRequestBase<D = Record<string, unknown>> {
    * names the feature, not the request.
    */
   feature: { kind: FeatureKind | (string & {}); key: string; id: string };
+  /**
+   * True for a test request, such as one `siren trigger ask` sent: Siren
+   * checks a test ask's answer by the kind's rules and applies nothing.
+   * False when Siren left the field out, as it does for every real request.
+   * Never move money or write records for a test request. Answer it as
+   * usual and stop there.
+   */
+  test: boolean;
   createdAt: string;
   /** The kind's payload. Its fields belong to the feature's kind. */
   data: D;

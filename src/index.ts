@@ -51,6 +51,7 @@ export {
   ConnectionError,
   SignatureVerificationError,
   AppHandlerError,
+  AppSlowTellError,
 } from './errors';
 export type { SirenErrorDetails, FailedValidation } from './errors';
 export type {
@@ -155,7 +156,9 @@ export type {
   AppFastifyReply,
   AppFunctionFor,
   AppSimulatedAnswer,
+  AppLogger,
 } from './resources/app-request-handler';
+export { TELL_TIME_LIMIT_SECONDS } from './resources/app-request-handler';
 export {
   AppsResource,
   AppFeaturesResource,

@@ -5,6 +5,7 @@ import { AppHandlerError } from '../errors';
 import type { FeatureKind } from '../feature-kind';
 import { DEFAULT_BASE_URL } from '../http';
 import APP_KINDS from '../app-kinds.json';
+import { EVENT_SAMPLES } from './event-samples';
 import { SAMPLE_DATA } from './sample-data';
 
 /*
@@ -50,6 +51,12 @@ export interface AppTestRequestOptions {
   baseUrl?: string;
   /** The signed time, in Unix seconds. Defaults to now. */
   timestamp?: number;
+  /**
+   * True builds a test request, as `siren trigger ask` makes Siren send:
+   * the body carries `"test": true` after `mode`, and the handler reads
+   * `request.test` as true. Left out, the field is absent, as on a real request.
+   */
+  test?: boolean;
 }
 
 /**
@@ -94,6 +101,7 @@ export function appRequest<K extends FeatureKind | (string & {})>(kind: K, key: 
     id,
     type: 'app.request',
     mode: ask ? 'ask' : 'tell',
+    ...(options.test === true ? { test: true } : {}),
     app: options.app ?? 'my-app',
     feature: { kind, key, id: 'app:1' },
     createdAt: at(t),
@@ -104,21 +112,158 @@ export function appRequest<K extends FeatureKind | (string & {})>(kind: K, key: 
   }
   body.data = options.data ?? sampleData(kind);
 
-  const rawBody = JSON.stringify(body);
+  return signed(kind, JSON.stringify(body), secret, t, 'app.request', `${id}.1`, id);
+}
+
+/** A body with Siren's headers, signed as `WebhookSignature::headers()` signs them. */
+function signed<K extends string>(
+  kind: K,
+  rawBody: string,
+  secret: string,
+  t: number,
+  event: string,
+  delivery: string,
+  idempotencyKey?: string,
+): AppTestRequest<K> {
   const hmac = (text: string): string => createHmac('sha256', secret).update(text).digest('hex');
-  return {
-    kind,
-    method: 'POST',
-    rawBody,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Siren-Signature': `sha256=${hmac(rawBody)}`,
-      'X-Siren-Event': 'app.request',
-      'X-Siren-Delivery': `${id}.1`,
-      'User-Agent': 'Siren-Webhooks/1.0',
-      'X-Siren-Timestamp': String(t),
-      'X-Siren-Signature-V2': `t=${t},v1=${hmac(`${t}.${rawBody}`)}`,
-      'Idempotency-Key': id,
-    },
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Siren-Signature': `sha256=${hmac(rawBody)}`,
+    'X-Siren-Event': event,
+    'X-Siren-Delivery': delivery,
+    'User-Agent': 'Siren-Webhooks/1.0',
+    'X-Siren-Timestamp': String(t),
+    'X-Siren-Signature-V2': `t=${t},v1=${hmac(`${t}.${rawBody}`)}`,
   };
+  if (idempotencyKey !== undefined) headers['Idempotency-Key'] = idempotencyKey;
+  return { kind, method: 'POST', rawBody, headers };
+}
+
+/** The secret from the options or `SIREN_SIGNING_SECRET`, or an `AppHandlerError` naming `method`. */
+function secretFor(method: string, given: string | undefined): string {
+  const secret = given ?? readEnvironment('SIREN_SIGNING_SECRET');
+  if (typeof secret !== 'string' || secret === '') {
+    throw new AppHandlerError(`${method} needs the signing secret. Pass it as secret, or set SIREN_SIGNING_SECRET in the environment.`);
+  }
+  return secret;
+}
+
+/**
+ * Siren's sample `data` for the webhook event `type`, built from the
+ * payload table Siren's event reference gives it (docs/api/webhooks-events.md),
+ * as a fresh copy. Throws `AppHandlerError` for an event Siren documents no
+ * payload for: pass that event's data to `webhookEvent()` yourself.
+ */
+export function sampleEventData(type: string): Record<string, unknown> {
+  const data = Object.prototype.hasOwnProperty.call(EVENT_SAMPLES, type) ? EVENT_SAMPLES[type] : undefined;
+  if (data === undefined) {
+    throw new AppHandlerError(
+      `sampleEventData() has no sample of ${String(type)}. Pass the data to webhookEvent(type, data). It has samples of ${Object.keys(EVENT_SAMPLES).join(', ')}.`,
+    );
+  }
+  return structuredClone(data) as Record<string, unknown>;
+}
+
+/** Options for {@link webhookEvent}. */
+export interface WebhookTestEventOptions {
+  /** The signing secret. Defaults to `SIREN_SIGNING_SECRET` from the environment. */
+  secret?: string;
+  /** The delivery id. Defaults to a new `evt_` and 32 hex characters. */
+  deliveryId?: string;
+  /** The signed time, in Unix seconds. Defaults to now. */
+  timestamp?: number;
+}
+
+/**
+ * A signed webhook event of `type`, as Siren sends one to an app's
+ * address: the body is the event's data, and `X-Siren-Event` names the
+ * type. `data` defaults to {@link sampleEventData}. Hand it to
+ * `answers.simulate()` to test an `onEvent()` function.
+ *
+ * ```js
+ * const { status } = await answers.simulate(webhookEvent('conversion.approved'))
+ * ```
+ */
+export function webhookEvent(type: string, data?: Record<string, unknown>, options: WebhookTestEventOptions = {}): AppTestRequest<string> {
+  if (typeof type !== 'string' || !/^[a-z_]+\.[a-z_]+$/.test(type)) {
+    throw new AppHandlerError(`webhookEvent() takes an event type such as conversion.approved, and ${JSON.stringify(type)} is not one.`);
+  }
+  const secret = secretFor('webhookEvent()', options.secret);
+  const body = data ?? sampleEventData(type);
+  const t = options.timestamp ?? Math.floor(Date.now() / 1000);
+  return signed(type, JSON.stringify(body), secret, t, type, options.deliveryId ?? `evt_${randomBytes(16).toString('hex')}`);
+}
+
+/** Options for {@link appRequestFromRecord}. */
+export interface AppRecordRequestOptions {
+  /**
+   * The feature's key. A stored request names its feature as `app:{id}`
+   * only, so give the key `siren apps show <app>` lists beside it. A raw
+   * request body names it already.
+   */
+  key?: string;
+  /** The signing secret. Defaults to `SIREN_SIGNING_SECRET` from the environment. */
+  secret?: string;
+  /** The app's key. Defaults to the record's `app`, then `my-app`. */
+  app?: string;
+  /** The Siren the request comes from, as for {@link appRequest}. */
+  baseUrl?: string;
+  /** The signed time, in Unix seconds. Defaults to now. */
+  timestamp?: number;
+}
+
+/**
+ * A stored request as a test input: the same id, kind, mode, data and
+ * `answerBy` Siren sent, signed again so `answers.simulate()` takes it.
+ * `record` is what `apps.requests.retrieve(id)` answers (Siren's
+ * `GET /apps/requests/{requestKey}`, AppRequestSerializer::toDetail()),
+ * the same row the command-line tool reads for `siren apps requests <id>`,
+ * or a raw request body as Siren sent it. Either one parsed, or its JSON text.
+ */
+export function appRequestFromRecord(record: unknown, options: AppRecordRequestOptions = {}): AppTestRequest<string> {
+  const method = 'appRequestFromRecord()';
+  let row: unknown = record;
+  if (typeof record === 'string') {
+    try {
+      row = JSON.parse(record) as unknown;
+    } catch {
+      throw new AppHandlerError(`${method} takes a stored request as an object or its JSON text, and this text is not JSON.`);
+    }
+  }
+  if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+    throw new AppHandlerError(`${method} takes a stored request as an object, such as what apps.requests.retrieve(id) answers.`);
+  }
+  const given = row as Record<string, unknown>;
+  const feature = given.feature;
+  const envelope = typeof feature === 'object' && feature !== null ? (feature as Record<string, unknown>) : undefined;
+  const kind = envelope?.kind ?? given.kind;
+  const featureId = envelope?.id ?? feature;
+  if (typeof given.id !== 'string' || typeof kind !== 'string' || (given.mode !== 'ask' && given.mode !== 'tell')) {
+    throw new AppHandlerError(`${method} needs the record's id, kind and mode, as apps.requests.retrieve(id) answers them.`);
+  }
+  const key = options.key ?? (typeof envelope?.key === 'string' ? envelope.key : undefined);
+  if (key === undefined || key === '') {
+    throw new AppHandlerError(
+      `${method} needs the feature's key: the record names its feature as ${String(featureId)}, without the key. Pass { key }, which \`siren apps show <app>\` lists beside each feature.`,
+    );
+  }
+  const secret = secretFor(method, options.secret);
+  const t = options.timestamp ?? Math.floor(Date.now() / 1000);
+  const base = (options.baseUrl ?? baseUrlForKey(readEnvironment('SIREN_API_KEY'), DEFAULT_BASE_URL, true)).replace(/\/+$/, '');
+  const body: Record<string, unknown> = {
+    version: 1,
+    id: given.id,
+    type: 'app.request',
+    mode: given.mode,
+    ...(given.test === true ? { test: true } : {}),
+    app: options.app ?? (typeof given.app === 'string' ? given.app : 'my-app'),
+    feature: { kind, key, id: typeof featureId === 'string' ? featureId : 'app:1' },
+    createdAt: typeof given.createdAt === 'string' ? given.createdAt : new Date(t * 1000).toISOString().replace(/\.\d{3}Z$/, '+00:00'),
+  };
+  if (given.mode === 'ask') {
+    body.answerBy = typeof given.answerBy === 'string' ? given.answerBy : new Date((t + 3600) * 1000).toISOString().replace(/\.\d{3}Z$/, '+00:00');
+    body.answerUrl = `${base}/apps/requests/${given.id}/answer`;
+  }
+  body.data = typeof given.data === 'object' && given.data !== null && !Array.isArray(given.data) ? given.data : {};
+  return signed(kind, JSON.stringify(body), secret, t, 'app.request', `${given.id}.1`, given.id);
 }
