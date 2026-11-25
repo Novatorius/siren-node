@@ -10,6 +10,7 @@ GETTING STARTED
   apps apply          Declare the app on Siren and save its key
 
 APPS
+  apps diff           Show what apply would change
   apps list           List the apps
   apps show           Show one app and its features
   apps rotate-key     Replace the app's key and revoke the old one

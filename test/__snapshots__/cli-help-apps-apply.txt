@@ -6,6 +6,7 @@ USAGE
 
 FLAGS
   --yes               Skip the question. Needed with no terminal
+  --json              Print the plan and the app as JSON
 
 GLOBAL FLAGS
   --sandbox           Use Siren's sandbox, whatever you logged in to last

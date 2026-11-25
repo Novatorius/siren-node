@@ -13,6 +13,7 @@ import { askOrg, findOrg, membershipsOf, orgList } from '../org';
 import { REPORT_WIDTH, clean, styleFor, unbroken, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
+import type { StoredSession } from '../credentials';
 import { CliRefusal, CliUsageError, commandLine } from '../targets';
 
 /*
@@ -199,6 +200,113 @@ function onThisMachine(url: string): boolean {
 export async function appsApply(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io } = input;
+  const json = input.values.json === true;
+  const plan = await readPlan(input, run, 'apply');
+  const { shown, path, parsed, shell, session, key, params, changes, lines, envPath } = plan;
+  const out = styleFor(io, 'stdout', input.values);
+  const err = styleFor(io, 'stderr', input.values);
+  if (lines.length === 0) {
+    if (json) run.print(JSON.stringify({ plan: planData(plan), applied: false }, null, 2));
+    else run.print(out.success(`${out.bold(key)} already matches ${shown}. Nothing to send.`));
+    return 0;
+  }
+  const org = orgNamed(session);
+  if (json && input.values.yes !== true) {
+    // A script gets the plan, and nothing is sent without --yes, as with no terminal.
+    run.print(JSON.stringify({ plan: planData(plan), applied: false }, null, 2));
+    return 1;
+  }
+  if (!json) printPlan(run, out, plan);
+  if (input.values.yes !== true) {
+    const question = changes.isNew ? `Make ${key} in ${org}? [y/N] ` : `Apply to ${org}? [y/N] `;
+    if (!io.interactive) {
+      const again = run.command(input.args[0] === undefined ? 'apps apply --yes' : `apps apply ${shown} --yes`);
+      io.stderr(
+        err.rich
+          ? `${err.warning("Nothing sent: there's no terminal to ask in.")}\n${err.next(`${err.command(again)} applies ${lines.length === 1 ? 'it' : 'them'} without asking`)}\n`
+          : `siren: Nothing was sent. Run ${again} to apply ${lines.length === 1 ? 'it' : 'them'} without asking.\n`,
+      );
+      return 1;
+    }
+    if (!changes.isNew) run.print(out.dim('The last write wins, so this replaces anything changed in the dashboard since.'));
+    const typed = (await io.prompt(question)).trim().toLowerCase();
+    if (typed !== 'yes' && typed !== 'y') {
+      io.stderr(err.rich ? `${err.dim('Nothing sent.')}\n` : 'siren: Nothing was sent.\n');
+      return 1;
+    }
+  }
+  void path;
+
+  const siren = run.siren();
+  const spinner = err.rich ? err.spinner(changes.isNew ? `Making ${key}` : `Applying ${shown}`, (text) => io.stderr(text)) : undefined;
+  let app: Awaited<ReturnType<typeof siren.apps.declare>>;
+  try {
+    app = await siren.apps.declare(key, params);
+  } finally {
+    spinner?.cancel();
+  }
+
+  const envName = shortPath(io.cwd, envPath);
+  const rows: Array<readonly [string, string]> = [];
+  const tips: string[] = [];
+  let saved: string | false = '';
+  if (app.created) saved = await saveSecrets(run, key, envPath, { rawKey: app.rawKey, signingSecret: app.signingSecret }, false);
+  // A later declaration that gave the app its first address answers the address's secret once.
+  else if (app.signingSecret !== undefined) saved = await saveSecrets(run, key, envPath, { signingSecret: app.signingSecret }, false);
+  await run.remember(key, envPath);
+  if (saved === false) return 1;
+  if (json) {
+    // The key and secret went to the env file. They never print, here or anywhere.
+    const { rawKey: _rawKey, signingSecret: _signingSecret, ...shownApp } = app as typeof app & { rawKey?: unknown; signingSecret?: unknown };
+    run.print(JSON.stringify({ plan: planData(plan), applied: true, app: shownApp }, null, 2));
+    return 0;
+  }
+  if (saved !== '') rows.push([app.created ? 'Key' : 'Secret', saved]);
+  for (const item of app.features) rows.push([clean(item.key), featureRow(item)]);
+  if (Array.isArray(app.events) && app.events.length > 0) rows.push(['Events', `${clean(app.events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`]);
+  for (const name of parsed.filled) rows.push(['URL from', `${name}${shell(name) ? '' : ' in .env'}`]);
+  if (app.features.some((item) => item.status === 'archived')) {
+    const again = unbroken(run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`));
+    tips.push(`Siren keeps an archived feature while a record selects it, and never calls it. Name it in ${shown} again and run ${again} to bring it back.`);
+  }
+  if (!app.created && (await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
+    // An app made in the dashboard may hold no key, and Siren refuses to rotate one it lacks (409 `app_key_missing`).
+    if (app.apiKey === null || app.apiKey === undefined) tips.push(`${key} holds no key, so ${envName} has none. ${unbroken(run.command(`apps add-key ${key}`))} makes one and saves it there.`);
+    // CLI pass 2, finding 2: a running service may hold the key, so never advise rotating it.
+    else tips.push(`${envName} holds no key for ${key}, which is fine when your service has one. ${unbroken(run.command(`apps rotate-key ${key}`))} would save a new one here and revoke the one in use.`);
+  }
+  const next = app.created
+    ? [
+        { text: out.command(`node --env-file=${envName} server.js`), aside: 'run your handler with its key' },
+        // A read, which needs no --live.
+        { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
+      ]
+    : [];
+  run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${clean(session.orgName)}`, rows, next, tips }).replace(/\n$/, ''));
+  return 0;
+}
+
+/** What apply would do: the file it read, the app it names, and the changes Siren would take. */
+interface Plan {
+  shown: string;
+  path: string;
+  parsed: ReturnType<typeof parseAppFile> & { file: NonNullable<ReturnType<typeof parseAppFile>['file']> };
+  shell: (name: string) => boolean;
+  session: StoredSession;
+  key: string;
+  params: ReturnType<typeof declarationFor>['params'];
+  changes: ReturnType<typeof appChanges>;
+  lines: string[];
+  envPath: string;
+}
+
+/**
+ * Reads the app file and the app on Siren, and works out what apply would
+ * change. Apply first checks the env file it will write to. Diff writes
+ * nothing, so it skips that check.
+ */
+async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' | 'diff'): Promise<Plan> {
+  const { io } = input;
   const shown = input.args[0] ?? APP_FILE_NAME;
   const path = resolve(io.cwd, shown);
   const text = await readText(path);
@@ -226,20 +334,24 @@ export async function appsApply(input: CommandInput): Promise<number> {
     );
   }
   const envPath = join(dirname(path), run.envFileName());
-  const problem = await envFileProblem(envPath);
-  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent.`);
-  const held = await envValue(envPath, 'SIREN_BASE_URL');
-  if (held !== undefined && held !== run.target.baseUrl) {
-    throw new CliRefusal(
-      `${envPath} holds the key for ${held}, and this apply is for ${run.target.baseUrl}, so nothing was sent. ` +
-        `Move that file aside to keep its key, then run ${run.command('apps apply')} again.`,
-    );
+  if (mode === 'apply') {
+    const problem = await envFileProblem(envPath);
+    if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent.`);
+    const held = await envValue(envPath, 'SIREN_BASE_URL');
+    if (held !== undefined && held !== run.target.baseUrl) {
+      throw new CliRefusal(
+        `${envPath} holds the key for ${held}, and this apply is for ${run.target.baseUrl}, so nothing was sent. ` +
+          `Move that file aside to keep its key, then run ${run.command('apps apply')} again.`,
+      );
+    }
   }
-  const siren = run.siren();
-  const current = await siren.apps.retrieve(key).catch((error: unknown) => {
-    if (error instanceof NotFoundError) return undefined;
-    throw error;
-  });
+  const current = await run
+    .siren()
+    .apps.retrieve(key)
+    .catch((error: unknown) => {
+      if (error instanceof NotFoundError) return undefined;
+      throw error;
+    });
   const changes = appChanges(current, params);
   if (current !== undefined && (current.apiKey === null || current.apiKey === undefined) && (params.scopes ?? []).length > 0) {
     run.warn(
@@ -252,84 +364,61 @@ export async function appsApply(input: CommandInput): Promise<number> {
   const uses = changes.dropped.map(({ item }) => (typeof item.uses === 'number' ? item.uses : undefined));
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
-  const lines = [...changes.lines, ...removals];
-  const out = styleFor(io, 'stdout', {});
-  const err = styleFor(io, 'stderr', {});
-  if (lines.length === 0) {
-    run.print(out.success(`${out.bold(key)} already matches ${shown}. Nothing to send.`));
-    return 0;
-  }
-  const org = orgNamed(session);
-  run.print(`${out.bold('Plan')}  ${out.bold(key)} → ${org}`);
+  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath };
+}
+
+/** The plan as a person reads it: a header with the app and the organization, then one marked line per change. */
+function printPlan(run: CommandContext, out: Style, plan: Plan): void {
+  run.print(`${out.bold('Plan')}  ${out.bold(plan.key)} → ${orgNamed(plan.session)}`);
   run.print('');
-  for (const line of lines) {
+  for (const line of plan.lines) {
     // A terminal gets lines that fit it. A pipe gets each change on one line, for a script to read.
     const [first = '', ...rest] = out.rich ? wrapWords(line, REPORT_WIDTH - 4) : [line];
     run.print(`  ${planMarker(out, line)} ${first}`);
     for (const more of rest) run.print(`    ${more}`);
   }
-  const origin = params.url == null ? undefined : originOf(params.url);
-  if (changes.isNew && origin !== undefined) run.print(`  ${out.dim('→')} sends its requests to ${origin}`);
+  const origin = plan.params.url == null ? undefined : originOf(plan.params.url);
+  if (plan.changes.isNew && origin !== undefined) run.print(`  ${out.dim('→')} sends its requests to ${origin}`);
   run.print('');
-  if (input.values.yes !== true) {
-    const question = changes.isNew ? `Make ${key} in ${org}? [y/N] ` : `Apply to ${org}? [y/N] `;
-    if (!io.interactive) {
-      const again = run.command(input.args[0] === undefined ? 'apps apply --yes' : `apps apply ${shown} --yes`);
-      io.stderr(
-        err.rich
-          ? `${err.warning("Nothing sent: there's no terminal to ask in.")}\n${err.next(`${err.command(again)} applies ${lines.length === 1 ? 'it' : 'them'} without asking`)}\n`
-          : `siren: Nothing was sent. Run ${again} to apply ${lines.length === 1 ? 'it' : 'them'} without asking.\n`,
-      );
-      return 1;
-    }
-    if (!changes.isNew) run.print(out.dim('The last write wins, so this replaces anything changed in the dashboard since.'));
-    const typed = (await io.prompt(question)).trim().toLowerCase();
-    if (typed !== 'yes' && typed !== 'y') {
-      io.stderr(err.rich ? `${err.dim('Nothing sent.')}\n` : 'siren: Nothing was sent.\n');
-      return 1;
-    }
-  }
+}
 
-  const spinner = err.rich ? err.spinner(changes.isNew ? `Making ${key}` : `Applying ${shown}`, (text) => io.stderr(text)) : undefined;
-  let app: Awaited<ReturnType<typeof siren.apps.declare>>;
-  try {
-    app = await siren.apps.declare(key, params);
-  } finally {
-    spinner?.cancel();
-  }
+/** The plan as data, for `--json`: the app, the organization, whether it is new or matches, and each change as add, remove or change. */
+function planData(plan: Plan): Record<string, unknown> {
+  const origin = plan.params.url == null ? null : (originOf(plan.params.url) ?? null);
+  return {
+    app: plan.key,
+    org: { id: plan.session.orgId, name: plan.session.orgName, slug: plan.session.orgSlug ?? null },
+    new: plan.changes.isNew,
+    matches: plan.lines.length === 0,
+    changes: plan.lines.map((text) => ({ op: /^(adds|makes) /.test(text) ? 'add' : /^removes /.test(text) ? 'remove' : 'change', text })),
+    sendsTo: plan.changes.isNew ? origin : null,
+  };
+}
 
-  const envName = shortPath(io.cwd, envPath);
-  const rows: Array<readonly [string, string]> = [];
-  const tips: string[] = [];
-  let saved: string | false = '';
-  if (app.created) saved = await saveSecrets(run, key, envPath, { rawKey: app.rawKey, signingSecret: app.signingSecret }, false);
-  // A later declaration that gave the app its first address answers the address's secret once.
-  else if (app.signingSecret !== undefined) saved = await saveSecrets(run, key, envPath, { signingSecret: app.signingSecret }, false);
-  await run.remember(key, envPath);
-  if (saved === false) return 1;
-  if (saved !== '') rows.push([app.created ? 'Key' : 'Secret', saved]);
-  for (const item of app.features) rows.push([clean(item.key), featureRow(item)]);
-  if (Array.isArray(app.events) && app.events.length > 0) rows.push(['Events', `${clean(app.events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`]);
-  for (const name of parsed.filled) rows.push(['URL from', `${name}${shell(name) ? '' : ' in .env'}`]);
-  if (app.features.some((item) => item.status === 'archived')) {
-    const again = unbroken(run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${shown}`));
-    tips.push(`Siren keeps an archived feature while a record selects it, and never calls it. Name it in ${shown} again and run ${again} to bring it back.`);
+/**
+ * `siren apps diff [file]`: what apply would change, with nothing sent.
+ * It reads the app from Siren, prints the plan or that the file matches,
+ * and exits 0 when the file matches and 3 when apply would change
+ * something, as `terraform plan -detailed-exitcode` and `git diff
+ * --exit-code` do, so a CI check can tell a difference from a failure,
+ * which keeps 1 and 2. It needs no --live, since it only reads.
+ * `--json` prints the plan as data.
+ */
+export async function appsDiff(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  const plan = await readPlan(input, run, 'diff');
+  if (input.values.json === true) {
+    run.print(JSON.stringify(planData(plan), null, 2));
+    return plan.lines.length === 0 ? 0 : 3;
   }
-  if (!app.created && (await envValue(envPath, 'SIREN_API_KEY')) === undefined) {
-    // An app made in the dashboard may hold no key, and Siren refuses to rotate one it lacks (409 `app_key_missing`).
-    if (app.apiKey === null || app.apiKey === undefined) tips.push(`${key} holds no key, so ${envName} has none. ${unbroken(run.command(`apps add-key ${key}`))} makes one and saves it there.`);
-    // CLI pass 2, finding 2: a running service may hold the key, so never advise rotating it.
-    else tips.push(`${envName} holds no key for ${key}, which is fine when your service has one. ${unbroken(run.command(`apps rotate-key ${key}`))} would save a new one here and revoke the one in use.`);
+  const out = styleFor(input.io, 'stdout', input.values);
+  if (plan.lines.length === 0) {
+    run.print(out.success(`${out.bold(plan.key)} already matches ${plan.shown}. Nothing to send.`));
+    return 0;
   }
-  const next = app.created
-    ? [
-        { text: out.command(`node --env-file=${envName} server.js`), aside: 'run your handler with its key' },
-        // A read, which needs no --live.
-        { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
-      ]
-    : [];
-  run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${clean(session.orgName)}`, rows, next, tips }).replace(/\n$/, ''));
-  return 0;
+  printPlan(run, out, plan);
+  run.print(out.next(`${out.command(run.command(input.args[0] === undefined ? 'apps apply' : `apps apply ${plan.shown}`))} makes these changes.`));
+  return 3;
 }
 
 /** `+` for what a plan adds, `-` for what it removes, `~` for what it changes, colored when the terminal takes color. */
