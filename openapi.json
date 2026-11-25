@@ -1768,6 +1768,16 @@
                 "tags": [
                     "apps"
                 ],
+                "parameters": [
+                    {
+                        "name": "feature",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "x-siren-validation": "IsFeatureRef"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Success.",
@@ -1986,6 +1996,14 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "idPrefix",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "x-siren-validation": "IsRequestIdPrefix"
                         }
                     }
                 ],
