@@ -17,6 +17,8 @@ const strip = (text: string) => text.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '');
 const tty = (h: ReturnType<typeof harness>) => ({ ...h.io, stdoutTty: true, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } });
 const FILE = 'launch.recipe.json';
 const previewed = reply(200, { success: true, preview: PREVIEW });
+// The copy check reads the organization's programs, since the recipe makes one. None here have its name.
+const noPrograms = reply(200, { items: [], total: 0, page: 1, perPage: 200, totalPages: 1 });
 const recipeRequests = (h: ReturnType<typeof harness>) => h.http.requests.filter((request) => new URL(request.url).pathname.includes('/recipes'));
 const bodyAt = (h: ReturnType<typeof harness>, at: number) => JSON.parse(recipeRequests(h)[at]!.body!) as Record<string, unknown>;
 const withFile = (replies: Parameters<typeof harness>[0], options: Parameters<typeof harness>[1] = {}) => {
@@ -28,9 +30,9 @@ const withFile = (replies: Parameters<typeof harness>[0], options: Parameters<ty
 
 describe('siren recipes preview', () => {
   it("says what the recipe makes, sends it to POST /recipes/preview without its $schema, and writes nothing", async () => {
-    const h = withFile([previewed]);
+    const h = withFile([previewed, noPrograms]);
     expect(await h.run(['recipes', 'preview', FILE]), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /recipes/preview']);
+    expect(h.paths()).toEqual(['POST /recipes/preview', 'GET /programs']);
     expect(bodyAt(h, 0)).toEqual(RECIPE);
     expect(h.out()).toContain(`${FILE} would make these in Acme (3), sandbox.`);
     expect(h.out()).toContain('Programs');
@@ -39,7 +41,7 @@ describe('siren recipes preview', () => {
   });
 
   it('reads the recipe from standard input with -', async () => {
-    const h = harness([previewed], { stdin: JSON.stringify(RECIPE) });
+    const h = harness([previewed, noPrograms], { stdin: JSON.stringify(RECIPE) });
     h.signedIn();
     expect(await h.run(['recipes', 'preview', '-']), h.err()).toBe(0);
     expect(bodyAt(h, 0)).toEqual(RECIPE);
@@ -82,24 +84,24 @@ describe('siren recipes preview', () => {
 
 describe('siren recipes apply', () => {
   it('previews, then sends nothing with no terminal to ask in, and names --yes', async () => {
-    const h = withFile([previewed]);
+    const h = withFile([previewed, noPrograms]);
     expect(await h.run(['recipes', 'apply', FILE])).toBe(1);
-    expect(h.paths()).toEqual(['POST /recipes/preview']);
+    expect(h.paths()).toEqual(['POST /recipes/preview', 'GET /programs']);
     expect(h.err()).toContain(`Run siren recipes apply ${FILE} --yes to apply it without asking.`);
   });
 
   it('asks in a terminal, naming the organization, and sends nothing on no', async () => {
-    const h = withFile([previewed], { interactive: true, typed: ['n'] });
+    const h = withFile([previewed, noPrograms], { interactive: true, typed: ['n'] });
     expect(await h.run(['recipes', 'apply', FILE])).toBe(1);
     expect(h.prompts).toEqual(['Apply it to Acme (3), sandbox? [y/N] ']);
-    expect(h.paths()).toEqual(['POST /recipes/preview']);
+    expect(h.paths()).toEqual(['POST /recipes/preview', 'GET /programs']);
   });
 
   it('applies with an import key from its content and the file as its source, then follows the job to the end', async () => {
     const pending = importDetail({ status: 'processing', processedItems: 1, perStanzaProcessed: { programs: 1, collaborators: 0 } });
-    const h = withFile([previewed, reply(202, { success: true, ...pending }), reply(200, { success: true, ...importDetail() })]);
+    const h = withFile([previewed, noPrograms, reply(202, { success: true, ...pending }), reply(200, { success: true, ...importDetail() })]);
     expect(await h.run(['recipes', 'apply', FILE, '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /recipes/preview', 'POST /recipes/apply', 'GET /recipes/imports/job7f3a']);
+    expect(h.paths()).toEqual(['POST /recipes/preview', 'GET /programs', 'POST /recipes/apply', 'GET /recipes/imports/job7f3a']);
     expect(bodyAt(h, 1)).toEqual({ ...RECIPE, importKey: importKeyOf(RECIPE), source: { kind: 'cli', fileName: FILE } });
     expect(h.out()).toContain(`Applied ${FILE}.`);
     expect(h.out()).toMatch(/People +1 added, 0 updated, 0 skipped, 0 failed/);
@@ -115,13 +117,13 @@ describe('siren recipes apply', () => {
   });
 
   it('sends no import key with --again, so Siren applies it again as an update', async () => {
-    const h = withFile([previewed, reply(202, { success: true, ...importDetail() })]);
+    const h = withFile([previewed, noPrograms, reply(202, { success: true, ...importDetail() })]);
     expect(await h.run(['recipes', 'apply', FILE, '--yes', '--again']), h.err()).toBe(0);
     expect(bodyAt(h, 1)).not.toHaveProperty('importKey');
   });
 
   it('names the earlier import and --again when Siren applied this recipe already', async () => {
-    const h = withFile([previewed, reply(409, { error: { message: 'This recipe has already been applied here.', context: { type: 'RECIPE_ALREADY_APPLIED', jobId: 'job11', status: 'complete' } } })]);
+    const h = withFile([previewed, noPrograms, reply(409, { error: { message: 'This recipe has already been applied here.', context: { type: 'RECIPE_ALREADY_APPLIED', jobId: 'job11', status: 'complete' } } })]);
     expect(await h.run(['recipes', 'apply', FILE, '--yes'])).toBe(1);
     expect(h.err()).toContain(`${FILE} is applied in Acme (3), sandbox already.`);
     expect(h.err()).toContain('Run siren recipes status job11 to see it, or add --again to apply it again as an update.');
@@ -129,25 +131,25 @@ describe('siren recipes apply', () => {
 
   it('refuses with no terminal when a variable has no --var, and sends each answer it is given', async () => {
     const needs = reply(200, { success: true, preview: { ...PREVIEW, variables: [{ key: 'partnerProgram', type: 'program', name: 'Partner program', help: null }] } });
-    const missing = withFile([needs]);
+    const missing = withFile([needs, noPrograms]);
     expect(await missing.run(['recipes', 'apply', FILE, '--yes'])).toBe(1);
     expect(missing.err()).toContain(`Run siren recipes apply ${FILE} --var partnerProgram=<id>.`);
 
-    const given = withFile([needs, reply(202, { success: true, ...importDetail() })]);
+    const given = withFile([needs, noPrograms, reply(202, { success: true, ...importDetail() })]);
     expect(await given.run(['recipes', 'apply', FILE, '--yes', '--var', 'partnerProgram=4']), given.err()).toBe(0);
     expect(bodyAt(given, 1).variableAnswers).toEqual({ partnerProgram: 4 });
   });
 
   it('prints the import id and stops with --no-wait', async () => {
-    const h = withFile([previewed, reply(202, { success: true, ...importDetail({ status: 'pending' }) })]);
+    const h = withFile([previewed, noPrograms, reply(202, { success: true, ...importDetail({ status: 'pending' }) })]);
     expect(await h.run(['recipes', 'apply', FILE, '--yes', '--no-wait']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /recipes/preview', 'POST /recipes/apply']);
+    expect(h.paths()).toEqual(['POST /recipes/preview', 'GET /programs', 'POST /recipes/apply']);
     expect(h.out()).toContain('Started importing launch.recipe.json as job7f3a.');
     expect(h.out()).toContain('siren recipes status job7f3a');
   });
 
   it('stops watching on Ctrl-C with 130, and says the import goes on', async () => {
-    const h = withFile([previewed, reply(202, { success: true, ...importDetail({ status: 'processing' }) })], { onSleep: (_count, abort) => abort() });
+    const h = withFile([previewed, noPrograms, reply(202, { success: true, ...importDetail({ status: 'processing' }) })], { onSleep: (_count, abort) => abort() });
     expect(await h.run(['recipes', 'apply', FILE, '--yes'])).toBe(130);
     expect(h.err()).toContain('The import goes on.');
     expect(h.err()).toContain('siren recipes status job7f3a');
@@ -155,7 +157,7 @@ describe('siren recipes apply', () => {
 
   it('lists each person who failed, and exits 1', async () => {
     const failed = importDetail({ failedItems: 1, collaboratorResults: [{ key: 'ana', email: 'ana@example.com', outcome: 'failed', reason: 'The email address is not valid.' }], collaboratorSummary: { added: 0, updated: 0, skipped: 0, failed: 1, emailed: 0 } });
-    const h = withFile([previewed, reply(202, { success: true, ...failed })]);
+    const h = withFile([previewed, noPrograms, reply(202, { success: true, ...failed })]);
     expect(await h.run(['recipes', 'apply', FILE, '--yes'])).toBe(1);
     expect(h.out()).toContain(`Applied ${FILE}, with 1 failed.`);
     expect(h.out()).toContain('ana@example.com: The email address is not valid.');
@@ -223,7 +225,7 @@ describe('siren recipes: export, then preview of the same file', () => {
   const recorded = JSON.parse(readFileSync(new URL('./fixtures/recipes/programs-round-trip.json', import.meta.url), 'utf8')) as { exported: Record<string, unknown>; preview: RecipePreview };
 
   it("previews what export wrote, with Siren's samples as objects, and names a few by name", async () => {
-    const h = harness([reply(200, { success: true, recipe: recorded.exported, skipped: {} }), reply(200, { success: true, preview: recorded.preview })]);
+    const h = harness([reply(200, { success: true, recipe: recorded.exported, skipped: {} }), reply(200, { success: true, preview: recorded.preview }), noPrograms]);
     h.signedIn();
     expect(await h.run(['recipes', 'export', '--include', 'programs']), h.err()).toBe(0);
     h.write('export.json', h.out());
@@ -239,7 +241,7 @@ describe('siren recipes: export, then preview of the same file', () => {
 describe('an error inside the tool', () => {
   it('prints its stack with --verbose, and keeps it out without', async () => {
     // A preview whose sections are no list fails inside the tool, which is the case --verbose is for.
-    const broken = () => harness([reply(200, { success: true, preview: { ...PREVIEW, sections: 7 } })]);
+    const broken = () => harness([reply(200, { success: true, preview: { ...PREVIEW, sections: 7 } }), noPrograms]);
     const quiet = broken();
     quiet.signedIn();
     quiet.write(FILE, JSON.stringify(RECIPE));
@@ -264,5 +266,41 @@ describe('siren recipes catalog when Siren cannot reach Beacon', () => {
       expect(h.err()).toContain("Siren couldn't reach Beacon, which serves the ready-made recipes.");
       expect(h.err()).toContain('Only the catalog needs Beacon.');
     }
+  });
+});
+
+describe('siren recipes preview of a recipe whose records this organization already has', () => {
+  const recorded = JSON.parse(readFileSync(new URL('./fixtures/recipes/programs-round-trip.json', import.meta.url), 'utf8')) as { exported: { programs: Record<string, { name: string }> }; preview: RecipePreview };
+  const names = Object.values(recorded.exported.programs).map((program) => program.name);
+  const listed = (items: Array<{ id: number; name: string }>) => reply(200, { items, total: items.length, page: 1, perPage: 200, totalPages: 1 });
+
+  it('warns that applying makes copies, and offers the list before apply', async () => {
+    const h = harness([reply(200, { success: true, preview: recorded.preview }), listed(names.map((name, at) => ({ id: at + 1, name })))]);
+    h.signedIn();
+    h.write('setup.json', JSON.stringify(recorded.exported));
+    expect(await h.run(['recipes', 'preview', 'setup.json']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /recipes/preview', 'GET /programs']);
+    expect(new URL(h.http.requests.at(-1)!.url).searchParams.get('number')).toBe('200');
+    expect(h.out()).toContain('19 programs here already have these names. Applying makes copies.');
+    const next = h.out().slice(h.out().indexOf('Next'));
+    expect(next.indexOf('siren programs list')).toBeGreaterThan(-1);
+    expect(next.indexOf('siren programs list')).toBeLessThan(next.indexOf('siren recipes apply setup.json'));
+  });
+
+  it('says nothing of copies when no name matches, and offers apply first', async () => {
+    const h = harness([reply(200, { success: true, preview: recorded.preview }), listed([{ id: 1, name: 'Something else' }])]);
+    h.signedIn();
+    h.write('setup.json', JSON.stringify(recorded.exported));
+    expect(await h.run(['recipes', 'preview', 'setup.json']), h.err()).toBe(0);
+    expect(h.out()).not.toContain('copies');
+    expect(h.out()).toMatch(/Next\n {2}1 {2}siren recipes apply setup\.json/);
+  });
+
+  it('warns on apply too, before it asks', async () => {
+    const h = harness([reply(200, { success: true, preview: recorded.preview }), listed([{ id: 1, name: names[0]! }])], { interactive: true, typed: ['n'] });
+    h.signedIn();
+    h.write('setup.json', JSON.stringify(recorded.exported));
+    expect(await h.run(['recipes', 'apply', 'setup.json'])).toBe(1);
+    expect(h.out()).toContain('1 program here already has this name. Applying makes a copy.');
   });
 });

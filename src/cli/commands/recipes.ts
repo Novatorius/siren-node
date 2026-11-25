@@ -134,6 +134,60 @@ function sectionRows(preview: RecipePreview): Array<[string, string]> {
     });
 }
 
+/**
+ * The sections Siren creates again on every apply, with the list command
+ * for each and its words. People upsert by email, so they are not here.
+ */
+const COPIED_SECTIONS = [
+  { section: 'programs', list: 'programs', one: 'program', many: 'programs', read: (run: CommandContext, page: number) => run.siren().programs.list({ number: 200, page }) },
+  { section: 'programGroups', list: 'program-groups', one: 'program group', many: 'program groups', read: (run: CommandContext, page: number) => run.siren().programGroups.list({ number: 200, page }) },
+  { section: 'collaboratorGroups', list: 'collaborator-groups', one: 'group', many: 'groups', read: (run: CommandContext, page: number) => run.siren().collaboratorGroups.list({ number: 200, page }) },
+  { section: 'distributors', list: 'distributors', one: 'distributor', many: 'distributors', read: (run: CommandContext, page: number) => run.siren().distributors.list({ number: 200, page }) },
+] as const;
+
+/** The most pages of 200 the copy check reads in one section, so a huge organization costs at most this many requests. */
+const COPY_CHECK_PAGES = 5;
+
+/** One section whose records the organization already has by name, such as 19 programs. */
+interface Copies {
+  count: number;
+  line: string;
+  list: string;
+}
+
+/**
+ * The records the recipe would make again, by name, in each section Siren
+ * creates on every apply. Applying an export to the organization it came
+ * from copies every program in it, so preview and apply warn first. Names
+ * match without regard to case or space at the ends.
+ */
+async function copiesOf(run: CommandContext, recipe: Recipe): Promise<Copies[]> {
+  const found: Copies[] = [];
+  for (const kind of COPIED_SECTIONS) {
+    const entries = recipe[kind.section];
+    if (typeof entries !== 'object' || entries === null) continue;
+    const wanted = (Array.isArray(entries) ? entries : Object.values(entries))
+      .map((entry: unknown) => (typeof entry === 'object' && entry !== null ? (entry as { name?: unknown }).name : undefined))
+      .filter((name): name is string => typeof name === 'string' && name.trim() !== '')
+      .map((name) => name.trim().toLowerCase());
+    if (wanted.length === 0) continue;
+    const here = new Set<string>();
+    for (let page = 1; page <= COPY_CHECK_PAGES; page++) {
+      const rows = (await kind.read(run, page)) as unknown as Array<{ name?: unknown }>;
+      for (const row of rows) if (typeof row.name === 'string') here.add(row.name.trim().toLowerCase());
+      if (rows.length < 200) break;
+    }
+    const count = wanted.filter((name) => here.has(name)).length;
+    if (count === 0) continue;
+    found.push({
+      count,
+      list: kind.list,
+      line: count === 1 ? `1 ${kind.one} here already has this name. Applying makes a copy.` : `${count} ${kind.many} here already have these names. Applying makes copies.`,
+    });
+  }
+  return found;
+}
+
 /** `siren recipes preview <file|->`: what applying it would make. Writes nothing. */
 export async function recipesPreview(input: CommandInput): Promise<number> {
   const run = contextOf(input);
@@ -152,13 +206,18 @@ export async function recipesPreview(input: CommandInput): Promise<number> {
   }
   if (input.values.quiet === true) return 0;
   const out = styleFor(input.io, 'stdout', input.values);
+  const copies = await copiesOf(run, read.recipe);
+  const apply = { text: out.command(run.command(`recipes apply ${given}`)), aside: copies.length > 0 ? 'apply it anyway, making the copies' : 'apply it, after asking' };
+  // The warning comes first, where it can't be missed under the sections and Next.
+  for (const copy of copies) run.print(out.warning(copy.line));
   run.print(
     out
       .report({
         headline: `${out.bold(read.shown)} would make ${preview.sections.some((section) => section.count > 0) ? 'these' : 'nothing'} in ${orgNamed(run.current())}.`,
         mark: false,
         rows: [...sectionRows(preview), ...preview.variables.map((variable) => [`Needs`, `${say(variable.name)} (a ${say(variable.type)}, --var ${say(variable.key)}=<id>)`] as [string, string])],
-        next: [{ text: out.command(run.command(`recipes apply ${given}`)), aside: 'apply it, after asking' }],
+        // A recipe that copies records leads with the list of them, not with apply.
+        next: copies.length > 0 ? [...copies.map((copy) => ({ text: out.command(run.command(`${copy.list} list`)), aside: 'see the ones here' })), apply] : [apply],
       })
       .replace(/\n$/, ''),
   );
@@ -225,6 +284,7 @@ export async function recipesApply(input: CommandInput): Promise<number> {
     return 1;
   }
   if (!json) {
+    for (const copy of await copiesOf(run, read.recipe)) run.print(out.warning(copy.line));
     run.print(out.report({ headline: `${out.bold(read.shown)} would make ${preview.sections.some((section) => section.count > 0) ? 'these' : 'nothing'}.`, mark: false, rows: sectionRows(preview) }).replace(/\n$/, ''));
   }
   if (values.yes !== true) {
