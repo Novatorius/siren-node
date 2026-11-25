@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { AppErrorCode, BadRequestError, ConflictError, ErrorCode, NotFoundError, SirenError, ValidationError, appErrorCode } from '../../errors';
 import type { App, AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
-import { appKeyArgument, orgNamed } from './apply';
+import { appKeyArgument, isAppKey, orgNamed } from './apply';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
@@ -28,6 +28,24 @@ const REQUEST_PREFIX = /^(?:apr_)?[0-9a-f]{4,32}$/;
 
 /** How many characters of a request id the tool shows, and every command takes. */
 const SHORT_ID = 8;
+
+/** The most rows a terminal list shows, the newest. Piped and --json, the list is whole. */
+const TERMINAL_ROWS = 20;
+
+/**
+ * The app key in the app file at `path` when it holds one app, or
+ * undefined: no file, one the tool can't read, or several apps. The file
+ * is checked properly by apply, so this only reads the key.
+ */
+async function appKeyInFolder(path: string): Promise<string | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as { apps?: unknown };
+    const keys = typeof parsed.apps === 'object' && parsed.apps !== null && !Array.isArray(parsed.apps) ? Object.keys(parsed.apps) : [];
+    return keys.length === 1 && isAppKey(keys[0]!) ? keys[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** A whole request id's length: `apr_` and 32 hex characters. */
 const APP_REQUEST_ID_LENGTH = 36;
@@ -148,8 +166,8 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   const id = input.args[0];
   const { values } = input;
   if (id !== undefined) {
-    if (values.app !== undefined || values.attention === true || values.follow === true) {
-      const flag = values.app !== undefined ? '--app' : values.attention === true ? '--attention' : '--follow';
+    if (values.app !== undefined || values.all === true || values.attention === true || values.follow === true) {
+      const flag = values.app !== undefined ? '--app' : values.all === true ? '--all' : values.attention === true ? '--attention' : '--follow';
       throw new CliUsageError(`${flag} doesn't go with a request id, which shows that one request.`);
     }
     return showRequest(input, id);
@@ -159,7 +177,10 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   const { io } = input;
   const json = values.json === true;
   const attention = values.attention === true;
-  const appKey = typeof values.app === 'string' ? appKeyArgument(values.app) : undefined;
+  if (values.all === true && values.app !== undefined) throw new CliUsageError('--all lists every app, so it doesn\'t go with --app.');
+  // CLI pass 3, should-fix 7: in an app's folder the list is that app's, unless --all asks for every app.
+  const fromFile = values.app === undefined && values.all !== true ? await appKeyInFolder(run.appFilePath) : undefined;
+  const appKey = typeof values.app === 'string' ? appKeyArgument(values.app) : fromFile;
   const session = await run.signedIn();
   const org = orgNamed(session);
   const siren = run.siren();
@@ -184,6 +205,13 @@ export async function appsRequests(input: CommandInput): Promise<number> {
     rows.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
     if (appKey === undefined) return rows;
     const app = [...appsById.values()].find((candidate) => candidate.key === appKey);
+    if (app === undefined && fromFile !== undefined) {
+      throw new CliRefusal(`${clean(session.orgName)} has no app ${appKey}.`, {
+        why: `${basename(run.appFilePath)} names it, and it isn't made yet.`,
+        fix: run.command('apps apply'),
+        fixWords: 'to make it',
+      });
+    }
     if (app === undefined) throw new CliRefusal(`${clean(session.orgName)} has no app ${appKey}.`, { why: '--app names it.', fix: run.command('apps list'), fixWords: 'to list the apps' });
     return rows.filter((row) => row.appId === app.id);
   };
@@ -194,7 +222,8 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   const columns: Column[] = [
     { header: 'ID', cap: SHORT_ID, cell: (row) => out.dim(label(row.id)) },
     { header: 'WHEN', cap: 12, cell: (row) => when(row.createdAt, zone) },
-    { header: 'APP', cap: 18, cell: (row) => clean(appsById.get(row.appId)?.key ?? `app ${row.appId}`) },
+    // One app's list leaves out APP, since every row is that app's.
+    ...(appKey === undefined ? [{ header: 'APP', cap: 18, cell: (row: AppRequestRecord) => clean(appsById.get(row.appId)?.key ?? `app ${row.appId}`) }] : []),
     { header: 'FEATURE', cap: 18, cell: (row) => clean(kindName(row.kind).replace(/ action$/, '')) },
     { header: 'ABOUT', cap: 16, cell: (row) => (row.subject ? clean(`${row.subject.type} ${row.subject.id}`) : '') },
     { header: 'SENDS', cap: 5, cell: (row) => String(row.sendCount) },
@@ -219,15 +248,20 @@ export async function appsRequests(input: CommandInput): Promise<number> {
     }
     label = await idLabelFor(run, rows.at(-1)!.id);
     if (label === whole) columns[0]!.cap = APP_REQUEST_ID_LENGTH;
-    const count = `${rows.length} ${rows.length === 1 ? 'request' : 'requests'}`;
+    const count = `${rows.length} ${rows.length === 1 ? 'request' : 'requests'}${appKey === undefined ? '' : ` for ${appKey}`}`;
     run.print(attention ? `${out.bold(count)} ${out.amber(rows.length === 1 ? 'needs you' : 'need you')} in ${org}` : `${out.bold(count)} in ${org}`);
     run.print('');
-    const shown = fitting(columns, rows, width, false);
-    for (const line of out.table(shown.map((column) => column.header), rows.map((row) => shown.map((column) => cut(column.cell(row), column.cap))), width)) run.print(line);
+    // A terminal shows the newest TERMINAL_ROWS. Piped and --json, the list is whole.
+    const listed = out.rich ? rows.slice(-TERMINAL_ROWS) : rows;
+    const shown = fitting(columns, listed, width, false);
+    for (const line of out.table(shown.map((column) => column.header), listed.map((row) => shown.map((column) => cut(column.cell(row), column.cap))), width)) run.print(line);
     const newest = label(rows.at(-1)!.id);
     run.print('');
+    const hidden = rows.length - listed.length;
+    if (hidden > 0) run.print(out.dim(`${hidden} older ${hidden === 1 ? 'request is' : 'requests are'} not shown. --json prints them all.`));
     const one = out.command(run.command(`apps requests ${newest}`));
     run.print(out.next(attention ? `${one} shows it, and ${out.command(run.command(`apps resend ${newest}`))} sends it again.` : `${one} shows one.`));
+    if (fromFile !== undefined) run.print(out.next(`${out.command(run.command('apps requests --all'))} lists every app's.`));
     return 0;
   }
 
@@ -236,7 +270,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   // While following, Ctrl-C aborts the signal and the loop ends with 130.
   const following = () => undefined;
   io.signal?.addEventListener('abort', following);
-  if (!json) io.stderr(`${styleFor(io, 'stderr', values).dim(`Watching ${org} for requests. Ctrl-C stops.`)}\n`);
+  if (!json) io.stderr(`${styleFor(io, 'stderr', values).dim(`Watching ${appKey === undefined ? '' : `${appKey} in `}${org} for requests. Ctrl-C stops.`)}\n`);
   let shown: Column[] = [];
   try {
     for (let poll = 1; ; poll += 1) {
@@ -283,7 +317,8 @@ function fitting(columns: readonly Column[], rows: readonly AppRequestRecord[], 
     return Math.max(column.header.length, ...rows.map((row) => Math.min(visibleLength(column.cell(row)), column.cap)));
   };
   const total = () => shown.reduce((sum, column) => sum + measure(column), 0) + 2 * (shown.length - 1);
-  for (const header of ['SENDS', 'APP', 'ABOUT']) {
+  // ABOUT goes before APP, which says whose each request is (CLI pass 3, should-fix 7).
+  for (const header of ['SENDS', 'ABOUT', 'APP']) {
     if (total() <= width) break;
     shown = shown.filter((column) => column.header !== header);
   }
@@ -453,7 +488,8 @@ async function showRequest(input: CommandInput, typed: string): Promise<number> 
   if (request.status === 'answered' || request.status === 'applied') return 0;
   const short = (await idLabelFor(run, id, start))(id);
   const resend = `${out.command(run.command(`apps resend ${short}`))} sends it again.`;
-  if (request.status === 'needs_attention') {
+  // A tell takes no answer, and Siren answers 422 to one (CLI pass 3, should-fix 8), so only an ask offers answer.
+  if (request.status === 'needs_attention' && request.mode === 'ask') {
     run.print('');
     run.print(out.next(`${out.command(run.command(`apps answer ${short} --body '{"outcome":"…"}'`))} answers it.`));
     run.print(out.next(resend));

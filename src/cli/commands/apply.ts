@@ -52,7 +52,7 @@ export function appKeyArgument(key: string): string {
 }
 
 /** True for a key Siren can hold: the pattern, at most 64 characters, and none of the words Siren keeps for its own routes. */
-function isAppKey(key: string): boolean {
+export function isAppKey(key: string): boolean {
   return key.length <= 64 && APP_KEY.test(key) && !(RESERVED_APP_KEYS as readonly string[]).includes(key);
 }
 

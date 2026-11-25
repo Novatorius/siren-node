@@ -68,7 +68,7 @@ describe('siren apps requests: the list', () => {
     const h = harness([apps(), list(waiting), list(), found(waiting), apps(), list(), list()], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain('1 request in Acme (3), sandbox');
+    expect(h.out()).toContain(`1 request for ${APP_KEY} in Acme (3), sandbox`);
     const before = h.out().length;
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
     expect(h.out().slice(before)).toBe(['No requests for acme-payouts yet.', 'siren apps requests --app acme-payouts --follow watches for them.', ''].join('\n'));
@@ -317,5 +317,84 @@ describe('siren apps answer and resend: the success output', () => {
     h.signedIn();
     expect(await h.run(['apps', 'resend', APP_REQUEST_ID]), h.err()).toBe(0);
     expect(h.out()).toBe(['Sent b79943ff again', '', '  State   waiting', '  Sends   2', '', 'siren apps requests b79943ff shows each send.', ''].join('\n'));
+  });
+});
+
+describe('CLI pass 3, should-fix 8: a tell takes no answer', () => {
+  it('offers only resend for a tell that needs attention, since Siren answers 422 to an answer', async () => {
+    const tell = { ...requestRow({ mode: 'tell', kind: 'postConversionAction', status: 'needs_attention', lastError: 'Host not found' }), data: {}, answer: null, answeredByUser: null };
+    const h = harness([reply(200, tell), apps(), reply(200, []), found(waiting)], { env: UTC });
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', APP_REQUEST_ID]), h.err()).toBe(0);
+    expect(h.out()).not.toContain('apps answer');
+    expect(h.out()).toContain('siren apps resend b79943ff sends it again.');
+  });
+});
+
+describe("CLI pass 3, should-fix 7: in an app's folder, the list is that app's", () => {
+  const theirs = requestRow({ id: 'apr_aaaa0000000000000000000000000000', appId: 99, createdAt: '2026-11-17T10:00:00+00:00' });
+  const appFile = JSON.stringify({ version: 1, apps: { [APP_KEY]: { name: 'Acme', url: 'https://acme.example/siren' } } });
+  const otherApp = () => reply(200, [appRecord(), appRecord({ id: 99, key: 'other-app' })]);
+
+  it('lists only the app siren.app.json names, says so, and names the flag that lists them all', async () => {
+    const h = harness([otherApp(), list(waiting, theirs), list(), found(waiting)], { env: UTC });
+    h.signedIn();
+    h.write('siren.app.json', appFile);
+    expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
+    expect(h.out()).toContain(`1 request for ${APP_KEY} in Acme (3), sandbox`);
+    expect(h.out()).not.toContain('aaaa0000');
+    expect(h.out()).toContain("siren apps requests --all lists every app's.");
+    // One app's list has no APP column, since every row is that app's.
+    expect(h.out()).not.toMatch(/^ID .* APP /m);
+  });
+
+  it('lists every app with --all, and refuses --all beside --app', async () => {
+    const h = harness([otherApp(), list(waiting, theirs), list(), found(theirs)], { env: UTC });
+    h.signedIn();
+    h.write('siren.app.json', appFile);
+    expect(await h.run(['apps', 'requests', '--all']), h.err()).toBe(0);
+    expect(h.out()).toContain('2 requests in Acme (3), sandbox');
+    expect(h.out()).toContain('aaaa0000');
+    expect(await h.run(['apps', 'requests', '--all', '--app', APP_KEY])).toBe(2);
+  });
+
+  it('says when the app in siren.app.json is not in the organization yet, and how to make it', async () => {
+    const h = harness([reply(200, [appRecord({ id: 99, key: 'other-app' })]), list(theirs), list()], { env: UTC });
+    h.signedIn();
+    h.write('siren.app.json', appFile);
+    expect(await h.run(['apps', 'requests'])).toBe(1);
+    expect(h.err()).toContain(`siren: Acme has no app ${APP_KEY}. siren.app.json names it, and it isn't made yet. Run siren apps apply to make it.`);
+  });
+
+  it('names the app while following', async () => {
+    const h = harness([otherApp(), list(), list()], { env: UTC, onSleep: (count, abort) => (count === 1 ? abort() : undefined) });
+    h.signedIn();
+    h.write('siren.app.json', appFile);
+    expect(await h.run(['apps', 'requests', '--follow'])).toBe(130);
+    expect(h.err()).toContain(`Watching ${APP_KEY} in Acme (3), sandbox for requests. Ctrl-C stops.`);
+  });
+
+  it('in a terminal: drops ABOUT before APP, and shows the newest 20 with a count of the rest', async () => {
+    const many = Array.from({ length: 25 }, (_, at) =>
+      requestRow({
+        id: `apr_${String(at).padStart(2, '0')}${'0'.repeat(30)}`,
+        status: 'needs_attention',
+        subject: { type: 'distributorLines', id: '5:t6884' },
+        createdAt: `2026-11-17T09:${String(at).padStart(2, '0')}:00+00:00`,
+      }),
+    );
+    const h = harness([apps(), list(...many), list(), found(many[24])], { env: UTC });
+    h.signedIn();
+    expect(await runCli(['apps', 'requests'], { ...h.io, stdoutTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } })).toBe(0);
+    const lines = strip(h.out()).split('\n');
+    expect(lines[0]).toBe('25 requests in Acme (3), sandbox');
+    const header = lines.find((line) => line.startsWith('ID '))!;
+    expect(header).toContain('APP');
+    expect(header).not.toContain('ABOUT');
+    const rows = lines.filter((line) => /^\d{8} /.test(line));
+    expect(rows).toHaveLength(20);
+    expect(rows[0]).toMatch(/^05000000 /);
+    expect(h.out()).toContain('5 older requests are not shown. --json prints them all.');
+    for (const line of lines) expect([...line].length, line).toBeLessThanOrEqual(80);
   });
 });

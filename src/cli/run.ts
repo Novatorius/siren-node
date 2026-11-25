@@ -290,9 +290,10 @@ const SPECS: Record<Command, CommandSpec> = {
     summary: 'List what Siren sent the apps, or show one request with each send and answer.',
     group: 'Requests',
     short: 'List what Siren sent, or show one request',
-    options: { app: { type: 'string' }, attention: { type: 'boolean' }, follow: { type: 'boolean' }, json: { type: 'boolean' } },
+    options: { app: { type: 'string' }, all: { type: 'boolean' }, attention: { type: 'boolean' }, follow: { type: 'boolean' }, json: { type: 'boolean' } },
     flags: {
-      app: ['--app <key>', "Only this app's requests"],
+      app: ['--app <key>', "Only this app's requests. In an app's folder, siren.app.json's app is the default"],
+      all: ['--all', "Every app's requests, in an app's folder too"],
       attention: ['--attention', 'Only requests that need a person'],
       follow: ['--follow', 'Keep watching, and print each change. Ctrl-C stops'],
       json: ['--json', 'With a request id: the whole request, its app and feature keys, and its sends, as JSON'],
