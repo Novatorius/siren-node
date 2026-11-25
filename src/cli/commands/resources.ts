@@ -451,7 +451,7 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     input.io.stdout(
       style.report({
         headline: `Would send ${style.bold(`${outgoing.method} ${url}`)}`,
-        ...(outgoing.body !== undefined ? { rows: [['body', clip(JSON.stringify(outgoing.body), WIDTH - 9)]] } : {}),
+        ...(outgoing.body !== undefined ? { rows: [['body', style.fit(JSON.stringify(outgoing.body), WIDTH - 9)]] } : {}),
         tips: ['Nothing was sent.'],
       }),
     );
@@ -573,7 +573,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const paged = isEnvelope(body) && body.totalPages !== undefined && body.totalPages > 1;
     const page = paged ? style.dim(`  page ${(body as Envelope).page ?? 1} of ${(body as Envelope).totalPages}`) : '';
     const lines = [style.success(`${style.bold(`${rows.length} ${rows.length === 1 ? singular(name) : name}`)}${page}`)];
-    const shown = records.length === rows.length ? table(style, records) : rows.map((row) => clip(`  ${cell(row)}`, WIDTH));
+    const shown = records.length === rows.length ? table(style, records) : rows.map((row) => style.fit(`  ${cell(row)}`, WIDTH));
     if (shown.length > 0) lines.push('', ...shown);
     const firstId = records[0]?.id;
     if (firstId !== undefined && firstId !== null) {
@@ -590,7 +590,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const record = body as Record<string, unknown>;
     const id = record.id;
     const what = `${singular(name)}${id !== undefined && id !== null ? ` ${cell(id)}` : ''}`;
-    out(style.report({ headline: `${style.bold(what)}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)} in ${org}`}`, rows: recordRows(record) }));
+    out(style.report({ headline: `${style.bold(what)}${plan.outgoing.method === 'GET' ? '' : ` ${pastTense(plan.outgoing.method)} in ${org}`}`, rows: recordRows(style, record) }));
     return;
   }
 

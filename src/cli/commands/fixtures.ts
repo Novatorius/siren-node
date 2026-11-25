@@ -148,7 +148,7 @@ export async function fixtures(input: CommandInput): Promise<number> {
       result = activity;
       const shown = cleaned(activity);
       next = activityNext(style, input, activity);
-      line = `${step.name}  ${eventName(shown.event).toLowerCase()} · ${activityRows(shown)
+      line = `${step.name}  ${eventName(shown.event).toLowerCase()} · ${activityRows(style, shown)
         .filter(([label]) => label !== '')
         .map(([label, value]) => `${label.toLowerCase()} ${value}`)
         .slice(0, 2)
@@ -156,7 +156,7 @@ export async function fixtures(input: CommandInput): Promise<number> {
     }
     results.set(step.name, result);
     done.push({ name: step.name, trigger: step.trigger, result });
-    if (!json) io.stdout(`${style.success([...line].length > 78 ? `${[...line].slice(0, 77).join('')}…` : line)}\n`);
+    if (!json) io.stdout(`${style.success(style.fit(line, 78))}\n`);
   }
 
   if (json) io.stdout(`${JSON.stringify({ steps: done }, null, 2)}\n`);

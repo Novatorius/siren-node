@@ -175,6 +175,17 @@ export class Style {
     return this.rich ? `${RED}${BOLD}✗ ${line}${RESET}` : line;
   }
 
+  /**
+   * `text` cut to `width` columns with an ellipsis in a terminal, and whole
+   * through a pipe or with --json, where a reader or a script wants every
+   * character. The same test as the rest of the style: `rich`.
+   */
+  fit(text: string, width: number): string {
+    if (!this.rich) return text;
+    const chars = [...text];
+    return chars.length > width ? `${chars.slice(0, Math.max(width - 1, 0)).join('')}…` : text;
+  }
+
   /** "! The key is not saved." */
   warning(line: string): string {
     return this.rich ? `${this.amber('!')} ${line}` : line;

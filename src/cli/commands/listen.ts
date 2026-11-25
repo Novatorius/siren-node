@@ -143,9 +143,9 @@ function shown(text: string): string {
   return clean(text.replace(/[\r\n\t]+/g, ' '));
 }
 
-/** `text` cut to `width` characters. */
-function cut(text: string, width: number): string {
-  return [...text].slice(0, width).join('');
+/** `text` cut to `width` characters in a terminal, and whole through a pipe. */
+function cut(style: Style, text: string, width: number): string {
+  return style.rich ? [...text].slice(0, width).join('') : text;
 }
 
 /** The answer statuses that mean the ask went wrong. */
@@ -155,19 +155,20 @@ const BAD_ANSWERS: ReadonlySet<string> = new Set(['needs_attention', 'dropped'])
  * One delivery's line: time, kind, feature or event type, the handler's
  * status, the time it took and the id cut to 12 characters. In a terminal
  * it starts with a green ✓, or a red ✗ for a failure, and plain it has no
- * symbol. Every value from Siren is cleaned, and no line passes 80 columns.
+ * symbol. Every value from Siren is cleaned. In a terminal no line passes
+ * 80 columns, and through a pipe each value is whole.
  */
 export function deliveryLine(style: Style, at: number, delivery: ListenDelivery, result: Forwarded): string {
   const ok = result.httpStatus !== null && result.httpStatus >= 200 && result.httpStatus < 300;
   const status = result.httpStatus === null ? '---' : String(result.httpStatus);
-  const rest = `${shown(kindOf(delivery)).padEnd(7)} ${cut(shown(labelOf(delivery)), 19).padEnd(19)} ${status.padEnd(4)} ${duration(result.durationMs).padStart(6)}  ${cut(shown(idOf(delivery)), 12)}`;
+  const rest = `${shown(kindOf(delivery)).padEnd(7)} ${cut(style, shown(labelOf(delivery)), 19).padEnd(19)} ${status.padEnd(4)} ${duration(result.durationMs).padStart(6)}  ${cut(style, shown(idOf(delivery)), 12)}`;
   return ok ? style.success(`${style.dim(clock(at))}  ${rest}`) : style.failure(`${clock(at)}  ${rest}`);
 }
 
 /** The line for an ask's answer the handler posted: time, the feature, Siren's status and the request id. */
 export function answerLine(style: Style, at: number, feature: string, answer: Pick<ListenAnswer, 'request' | 'status'>): string {
   const status = shown(answer.status);
-  const rest = `${'answer'.padEnd(7)} ${cut(shown(feature), 19).padEnd(19)} ${cut(status, 11).padEnd(11)}  ${cut(shown(answer.request), 12)}`;
+  const rest = `${'answer'.padEnd(7)} ${cut(style, shown(feature), 19).padEnd(19)} ${cut(style, status, 11).padEnd(11)}  ${cut(style, shown(answer.request), 12)}`;
   return BAD_ANSWERS.has(status) ? style.failure(`${clock(at)}  ${rest}`) : style.success(`${style.dim(clock(at))}  ${rest}`);
 }
 
@@ -480,7 +481,7 @@ function headline(style: Style, appKey: string, orgName: string, target: string,
       ['Forwarding', shown(target)],
       ['Takes', takes],
       ['Signing', `your app's secret, SIREN_SIGNING_SECRET in ${shown(envName)}`],
-      ['Session', `${cut(shown(opened.session.id), 12)}, ends ${opened.session.idleTimeoutSeconds}s after the CLI stops`],
+      ['Session', `${cut(style, shown(opened.session.id), 12)}, ends ${opened.session.idleTimeoutSeconds}s after the CLI stops`],
       ...(opened.replaced ? [['Replaced', 'another siren listen for this app, which stops'] as const] : []),
     ],
     tips: [address === null ? 'Ctrl-C stops. The app has no address, so Siren holds nothing for it then.' : `Ctrl-C stops. Siren then sends to ${shown(address)} again.`],
@@ -498,7 +499,9 @@ function failureLines(style: Style, run: CommandContext, delivery: ListenDeliver
     const line = `${pad}${style.next(text)}`;
     return visibleLength(line) <= REPORT_WIDTH ? line : `  ${style.next(text)}`;
   };
-  const lines = wrapWords(shown(failureReason(result)), REPORT_WIDTH - pad.length).map((line) => `${pad}${line}`);
+  // Wrapped to fit a terminal, and one whole line through a pipe.
+  const reason = shown(failureReason(result));
+  const lines = (style.rich ? wrapWords(reason, REPORT_WIDTH - pad.length) : [reason]).map((line) => `${pad}${line}`);
   if (delivery.request === null) return [...lines, step("The dashboard's webhook deliveries page shows it.")];
   const resend = style.command(run.command(`apps resend ${shown(delivery.request.id)}`));
   if (result.httpStatus === null) {

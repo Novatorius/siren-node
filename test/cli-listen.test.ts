@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { deliveryLine, failureReason, forwardAddress } from '../src/cli/commands/listen';
 import { runCli } from '../src/cli/run';
-import { Style } from '../src/cli/style';
+import { Style, visibleLength } from '../src/cli/style';
 import type { ListenDelivery } from '../src/cli/commands/listen';
 import { LIVE_BASE_URL } from '../src/cli/targets';
 import { verifyAppRequest } from '../src/resources/app-requests';
@@ -123,11 +123,13 @@ describe('siren listen', () => {
     const out = h.out();
     expect(out).toContain(`Listening for ${KEY} in`);
     expect(out).not.toContain('✓');
-    expect(out).toMatch(/\d\d:\d\d:\d\d {2}ask {5}acme-ledger {9}200 +\d+ms {2}apr_b79943ff\n/);
+    // Through a pipe the id is whole, so a script can pass it to siren apps resend.
+    expect(out).toMatch(new RegExp(`\\d\\d:\\d\\d:\\d\\d {2}ask {5}acme-ledger {9}200 +\\d+ms {2}${REQUEST}\\n`));
     expect(out).toContain(`Stopped listening for ${KEY}`);
     expect(out).toContain('Forwarded   1 delivery, 1 answered 2xx');
     expect(out).toMatch(new RegExp(`Next\\n  1  siren apps requests --app ${KEY} +what Siren did next\\n`));
-    for (const line of out.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80);
+    // Only the delivery line carries Siren's whole id, which a pipe never cuts. The rest stays within 80.
+    for (const line of out.split('\n').filter((one) => !one.includes(REQUEST))) expect(line.length, line).toBeLessThanOrEqual(80);
   });
 
   it('prints a ✗ line with the reason and the resend command for a 500, and for a handler that is not running', async () => {
@@ -137,7 +139,8 @@ describe('siren listen', () => {
     expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
     expect(h.out()).toMatch(/ask {5}acme-ledger {9}500 /);
     expect(h.out().replace(/\s+/g, ' ')).toContain('The handler answered 500: The function for payoutMethod acme-ledger failed');
-    for (const line of h.out().split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+    // Through a pipe nothing is cut, so the reason is one whole line.
+    expect(h.out()).toContain('          The handler answered 500: The function for payoutMethod acme-ledger failed');
     expect(h.out()).toContain(`siren apps resend ${REQUEST}`);
     expect(bodyOf(h.http.requests[2])).toMatchObject({ httpStatus: 500 });
 
@@ -159,8 +162,8 @@ describe('siren listen', () => {
     const h = harness([opened(), polled([delivery(), event], [{ request: REQUEST, status: 'answered', answeredBy: 'app:12', answeredAt: '2026-11-24T19:02:12+00:00' }]), reported(), reported(), closed()], stopAtFirstWait);
     h.signedIn();
     expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
-    expect(h.out()).toMatch(/event {3}sale\.created {8}200 .*evt_6a1f9c2e\n/);
-    expect(h.out()).toMatch(/answer {2}acme-ledger {9}answered {5}apr_b79943ff\n/);
+    expect(h.out()).toMatch(/event {3}sale\.created {8}200 .*evt_6a1f9c2e00\n/);
+    expect(h.out()).toMatch(new RegExp(`answer {2}acme-ledger {9}answered {5}${REQUEST}\\n`));
   });
 
   it('opens a new session when Siren ended one for silence, and stops with 1 when another listen took over', async () => {
@@ -314,11 +317,15 @@ describe('siren listen', () => {
     expect(live.paths()).toEqual([]);
   });
 
-  it('reads an address with no scheme as http, cuts a long reason, and keeps lines within 80 columns', () => {
+  it('reads an address with no scheme as http, cuts a long reason, keeps lines within 80 columns in a terminal and whole through a pipe', () => {
     expect(forwardAddress('localhost:8787/siren')).toBe('http://localhost:8787/siren');
     expect(forwardAddress('https://dev.acme.example/hook')).toBe('https://dev.acme.example/hook');
     expect(failureReason({ httpStatus: 502, body: 'x'.repeat(200), error: null, durationMs: 1 })).toHaveLength('The handler answered 502: '.length + 60);
     const long = delivery({ request: { id: REQUEST, mode: 'tell', kind: 'postConversionAction', feature: 'a-very-long-feature-key-indeed-yes' } });
-    expect(deliveryLine(new Style({ tty: false, env: {} }), 0, long, { httpStatus: null, body: '', error: 'x', durationMs: 8000 }).length).toBeLessThanOrEqual(80);
+    const failed = { httpStatus: null, body: '', error: 'x', durationMs: 8000 };
+    expect(visibleLength(deliveryLine(new Style({ tty: true, env: {} }), 0, long, failed))).toBeLessThanOrEqual(80);
+    const piped = deliveryLine(new Style({ tty: false, env: {} }), 0, long, failed);
+    expect(piped).toContain('a-very-long-feature-key-indeed-yes');
+    expect(piped).toContain(REQUEST);
   });
 });

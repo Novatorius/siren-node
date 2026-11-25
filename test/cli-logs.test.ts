@@ -194,8 +194,12 @@ describe('siren logs tail', () => {
 });
 
 describe('a log line', () => {
-  it('is time, type, summary, status and duration, aligned, within 80 columns', () => {
-    const [line] = entryLines(plain, entry({ summary: `POST /apps/${'a'.repeat(80)}` }), command);
+  it('is time, type, summary, status and duration, aligned, within 80 columns in a terminal and whole through a pipe', () => {
+    const long = entry({ summary: `POST /apps/${'a'.repeat(80)}` });
+    const [piped] = entryLines(plain, long, command);
+    expect(piped).toContain(`POST /apps/${'a'.repeat(80)}`);
+    expect(piped).not.toContain('…');
+    const [line] = entryLines(rich, long, command).map((one) => one.replace(/\u001b\[[\d;]*m/g, ''));
     const at = new Date('2026-11-24T19:02:11.000Z');
     const clock = [at.getHours(), at.getMinutes(), at.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':');
 

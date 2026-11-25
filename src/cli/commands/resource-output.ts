@@ -4,8 +4,9 @@ import type { Style } from '../style';
 /*
  * How the record commands lay out Siren's answers, through the style module
  * (src/cli/style.ts): an aligned table for a list, labels and values for one
- * record. Nothing passes 80 columns, and every key and value from Siren is
- * cleaned of escape sequences and control characters first.
+ * record. In a terminal nothing passes 80 columns. Through a pipe a list
+ * shows every scalar column and each value whole. Every key and value from
+ * Siren is cleaned of escape sequences and control characters first.
  */
 
 /** The widest line the tool prints. */
@@ -36,39 +37,40 @@ function scalar(value: unknown): boolean {
 
 /**
  * The columns a list shows: `id` first, then the fields every row holds as a
- * scalar, in the first row's order, as many as fit in {@link WIDTH}.
+ * scalar, in the first row's order, as many as fit in `width`.
  */
-export function columns(rows: readonly Record<string, unknown>[]): string[] {
+export function columns(rows: readonly Record<string, unknown>[], width: number = WIDTH): string[] {
   if (rows.length === 0) return [];
   const keys = Object.keys(rows[0]!).filter((key) => rows.every((row) => scalar(row[key])));
   const ordered = keys.includes('id') ? ['id', ...keys.filter((key) => key !== 'id')] : keys;
   const chosen: string[] = [];
   let used = 2;
   for (const key of ordered) {
-    const width = Math.min(COLUMN, Math.max(key.length, ...rows.map((row) => cell(row[key]).length)));
-    if (chosen.length > 0 && used + width > WIDTH) break;
+    const wide = Math.min(COLUMN, Math.max(key.length, ...rows.map((row) => cell(row[key]).length)));
+    if (chosen.length > 0 && used + wide > width) break;
     chosen.push(key);
-    used += width + 2;
+    used += wide + 2;
   }
   return chosen;
 }
 
 /** A list as an aligned table, the header dim, indented two spaces. */
 export function table(style: Style, rows: readonly Record<string, unknown>[]): string[] {
-  const keys = columns(rows);
+  const width = style.rich ? WIDTH : Number.POSITIVE_INFINITY;
+  const keys = columns(rows, width);
   if (keys.length === 0) return [];
   const lines = style.table(
     keys.map((key) => clean(key)),
-    rows.map((row) => keys.map((key) => clip(cell(row[key]), COLUMN))),
-    WIDTH - 2,
+    rows.map((row) => keys.map((key) => style.fit(cell(row[key]), COLUMN))),
+    width - 2,
   );
   return lines.map((line) => `  ${line}`);
 }
 
-/** One record as labels and values for {@link Style.report}, `id` left out, each line inside {@link WIDTH}. */
-export function recordRows(record: Record<string, unknown>): Array<readonly [string, string]> {
+/** One record as labels and values for {@link Style.report}, `id` left out, each line inside {@link WIDTH} in a terminal and whole through a pipe. */
+export function recordRows(style: Style, record: Record<string, unknown>): Array<readonly [string, string]> {
   const keys = Object.keys(record).filter((key) => key !== 'id');
   if (keys.length === 0) return [];
   const width = Math.min(24, Math.max(...keys.map((key) => key.length)));
-  return keys.map((key) => [clip(clean(key), width), clip(cell(record[key]), WIDTH - width - 5)] as const);
+  return keys.map((key) => [style.fit(clean(key), width), style.fit(cell(record[key]), WIDTH - width - 5)] as const);
 }

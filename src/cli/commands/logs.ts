@@ -326,7 +326,7 @@ function scopeWords(query: LogQuery): string {
 
 /**
  * One entry as lines: time, type, summary, status and duration, aligned
- * and 80 columns at most. A failed or refused entry's status is the style
+ * and 80 columns at most in a terminal, whole through a pipe. A failed or refused entry's status is the style
  * module's failure, a red ✗ in a terminal, with its reason under it in red
  * and a › command to look closer when there is one. `--expand` adds the
  * body as JSON under it. Every value from Siren is cleaned of escape
@@ -335,22 +335,22 @@ function scopeWords(query: LogQuery): string {
 export function entryLines(style: Style, entry: LogEntry, command: (words: string) => string): string[] {
   const bad = entry.status === 'failed' || entry.status === 'refused';
   const time = clock(entry.at);
-  const type = cut(String(entry.type), TYPE_WIDTH).padEnd(TYPE_WIDTH);
-  const summary = cut(summaryOf(entry), SUMMARY_WIDTH).padEnd(SUMMARY_WIDTH);
-  const word = cut(String(entry.status), bad && style.rich ? STATUS_WIDTH - 2 : STATUS_WIDTH);
+  const type = cut(style, String(entry.type), TYPE_WIDTH).padEnd(TYPE_WIDTH);
+  const summary = cut(style, summaryOf(entry), SUMMARY_WIDTH).padEnd(SUMMARY_WIDTH);
+  const word = cut(style, String(entry.status), bad && style.rich ? STATUS_WIDTH - 2 : STATUS_WIDTH);
   const shown = bad ? style.failure(word) : word;
   const status = `${shown}${' '.repeat(Math.max(0, STATUS_WIDTH - visibleLength(shown)))}`;
   const duration = formatDuration(entry.durationMs).padStart(DURATION_WIDTH);
   const lines = [`${style.dim(time)}  ${type}  ${summary}  ${status}${duration}`.trimEnd()];
 
-  if (bad && entry.reason) lines.push(`${INDENT}${style.red(cut(entry.reason, LINE_WIDTH - INDENT.length))}`);
+  if (bad && entry.reason) lines.push(`${INDENT}${style.red(cut(style, entry.reason, LINE_WIDTH - INDENT.length))}`);
   const look = lookCloser(entry);
   if (bad && look !== undefined) {
     // A command is never cut, since a cut one cannot be run. When it would pass 80 columns under the type, it moves left.
     const hint = style.next(style.dim(command(look)));
     lines.push(`${INDENT.length + visibleLength(hint) <= LINE_WIDTH ? INDENT : '  '}${hint}`);
   }
-  if (bad && look === undefined && typeof entry.requestId === 'string') lines.push(`${INDENT}${style.dim(cut(`Request id ${entry.requestId}`, LINE_WIDTH - INDENT.length))}`);
+  if (bad && look === undefined && typeof entry.requestId === 'string') lines.push(`${INDENT}${style.dim(cut(style, `Request id ${entry.requestId}`, LINE_WIDTH - INDENT.length))}`);
   if (entry.body !== undefined) {
     // JSON escapes the C0 controls but not the C1 ones, so each line is cleaned too.
     for (const line of JSON.stringify(entry.body, null, 2).split('\n')) lines.push(`${INDENT}${style.dim(clean(line))}`);
@@ -393,8 +393,7 @@ function formatDuration(ms: number | null): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** `text` from Siren on one line, cleaned, and cut to `width` columns with an ellipsis when cut. */
-function cut(text: string, width: number): string {
-  const chars = [...clean(text.replace(/[\r\n\t]+/g, ' '))];
-  return chars.length > width ? `${chars.slice(0, width - 1).join('')}…` : chars.join('');
+/** `text` from Siren on one line, cleaned, and in a terminal cut to `width` columns with an ellipsis. Through a pipe it stays whole. */
+function cut(style: Style, text: string, width: number): string {
+  return style.fit(clean(text.replace(/[\r\n\t]+/g, ' ')), width);
 }

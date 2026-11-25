@@ -305,16 +305,10 @@ export function openWaits(result: ActivityResult): ActivityWait[] {
   return result.waits.filter((wait) => isOpen(wait.status));
 }
 
-/** `text` cut with an ellipsis to `width` columns. */
-export function fit(text: string, width: number): string {
-  const chars = [...text];
-  return chars.length <= width ? text : `${chars.slice(0, Math.max(width - 1, 0)).join('')}…`;
-}
-
-/** Rows cut so each line fits 80 columns beside the widest label. */
-function fitted(rows: Array<readonly [string, string]>): Array<readonly [string, string]> {
+/** Rows cut so each line fits 80 columns beside the widest label in a terminal. Through a pipe each value stays whole. */
+function fitted(style: Style, rows: Array<readonly [string, string]>): Array<readonly [string, string]> {
   const label = Math.max(0, ...rows.map(([name]) => name.length)) + 3;
-  return rows.map(([name, value]) => [name, fit(value, WIDTH - 2 - label)] as const);
+  return rows.map(([name, value]) => [name, style.fit(value, WIDTH - 2 - label)] as const);
 }
 
 /** The name of each program the conversions name, by id. */
@@ -361,7 +355,7 @@ export function eventName(event: string): string {
 }
 
 /** The rows of a result: the sale, who it went to, its conversions, rewards and waits. */
-export function activityRows(result: ActivityResult): Array<readonly [string, string]> {
+export function activityRows(style: Style, result: ActivityResult): Array<readonly [string, string]> {
   const rows: Array<readonly [string, string]> = [];
   if (result.transactionId !== null) rows.push(['Transaction', `${result.transactionId}${result.total === null ? '' : ` · ${money(result.total)}`}`]);
   else if (result.opportunityId !== null) rows.push(['Opportunity', String(result.opportunityId)]);
@@ -371,7 +365,7 @@ export function activityRows(result: ActivityResult): Array<readonly [string, st
   });
   rows.push(...earnRows(result, 'Earns'), ...waitRows(result));
   if (result.obligations.length === 0 && result.waits.length === 0 && result.event !== 'visit') rows.push(['Earns', 'nothing. No program paid for this.']);
-  return fitted(rows);
+  return fitted(style, rows);
 }
 
 /** "Acme (acme), sandbox": the organization the run acts in, as signedIn() settled it, and its edition. */
@@ -398,9 +392,9 @@ export function activityReport(style: Style, input: CommandInput, run: CommandCo
   const open = openWaits(result);
   const tips = [
     ...(open.length > 0 ? ['A reward that waits is settled once the app answers.'] : []),
-    ...(result.message !== null && result.message !== '' ? [fit(result.message, WIDTH - 2)] : []),
+    ...(result.message !== null && result.message !== '' ? [style.fit(result.message, WIDTH - 2)] : []),
   ];
-  return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: activityRows(result), next, tips });
+  return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: activityRows(style, result), next, tips });
 }
 
 /** The report `siren simulate` prints: who would earn what, and no ids, since none of them exist. Every value from Siren is cleaned first. */
@@ -409,7 +403,7 @@ export function simulationReport(style: Style, run: CommandContext, raw: Activit
   const programs = [...programNames(result).values()];
   const count = result.obligations.length + result.waits.length;
   const total = result.total === null ? 'A' : `A ${money(result.total)}`;
-  const rows = fitted([
+  const rows = fitted(style, [
     ...(programs.length === 0 ? [] : [['Programs', programs.join(', ')] as const]),
     ...earnRows(result, null),
     ...result.waits.map((wait) => ['Waits', `on ${waitName(wait)}`] as const),
@@ -420,7 +414,7 @@ export function simulationReport(style: Style, run: CommandContext, raw: Activit
     tips: [
       'Nothing was written.',
       ...(result.waits.length > 0 ? ["A simulation sends no ask, so an app's answer can't be shown here."] : []),
-      ...(result.message !== null && result.message !== '' && count === 0 ? [fit(result.message, WIDTH - 2)] : []),
+      ...(result.message !== null && result.message !== '' && count === 0 ? [style.fit(result.message, WIDTH - 2)] : []),
     ],
   });
 }
@@ -485,7 +479,7 @@ export function askReport(style: Style, input: CommandInput, run: CommandContext
   if (!tell && request.answer !== null) rows.push(['Siren', 'took the answer as this kind would. Nothing acted on it.']);
   return style.report({
     headline: `Siren ${tell ? 'told' : 'asked'} ${app} › ${feature} in ${orgLabel(run)} (test)`,
-    rows: fitted(rows),
+    rows: fitted(style, rows),
     next: [{ text: style.command(input.command(`apps requests ${request.id}`)), aside: 'each send and answer' }],
     tips: tell || request.answer !== null ? [] : [request.sendCount === 0 ? 'Siren queued it, and sends it on its next run.' : 'Your app answers it at the answerUrl the request carries.'],
   });
