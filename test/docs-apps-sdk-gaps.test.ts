@@ -111,14 +111,16 @@ describe('apps-sdk-gaps docs: CHANGELOG', () => {
 });
 
 describe('apps-sdk-gaps docs: README', () => {
-  it('describes each new subscription call and its scopes', () => {
+  it('describes each new subscription call, and that it takes a session', () => {
     const webhooks = section(read('README.md'), '### Check and change a subscription');
 
     for (const name of ['retrieve(id)', 'deliveries(id)', 'update(id, params)', 'test(id)']) {
       expect(webhooks, name).toContain(`\`${name}\``);
     }
-    expect(webhooks).toContain('webhook-subscriptions:manage');
-    expect(webhooks).toMatch(/sent once/);
+    // Siren retired the webhook scopes: every /webhooks route takes a session (pass 4 follow-ups).
+    expect(webhooks).not.toContain('webhook-subscriptions:');
+    expect(webhooks).toContain('ApiKeyNotAcceptedError');
+    expect(webhooks).toMatch(/sent\s+once/);
   });
 
   it('names every record scope group and the new scopes in the API key section', () => {

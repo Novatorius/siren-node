@@ -697,10 +697,10 @@ export class AppHandlerError extends SirenError {
 }
 
 /**
- * A tell whose function took longer than Siren waits for its reply
- * (`TELL_TIME_LIMIT_SECONDS`, 8). The handler still replied 200, but Siren
- * had stopped waiting, counted a timeout and sends the tell again, so the
- * function ran twice. `onError` gets it, and `simulate()` returns it. The
+ * A tell's or a webhook event's function took longer than Siren waits for
+ * its reply (`TELL_TIME_LIMIT_SECONDS`, 8). The handler still replied 200,
+ * but Siren had stopped waiting, counted a timeout and sends it again, so
+ * the function ran twice. `onError` gets it, and `simulate()` returns it. The
  * PHP and Python SDKs report the same case.
  */
 export class AppSlowTellError extends SirenError {

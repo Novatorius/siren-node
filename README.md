@@ -328,8 +328,8 @@ TypeScript, the Web `Request` signature is the handler's last, so Next.js 13 to 
 - `onError`, a function of the error and the request that gets every error Siren does not see: a
   function that threw, an answer that broke the rules, Siren's refusal of an answer, an
   `answerUrl` on another Siren, a body a parser already read, a refused signature
-  (`SignatureVerificationError`, still answered 401) and a tell that took longer than 8 seconds
-  (`AppSlowTellError`). By default it writes one line through `logger` with the kind, key and
+  (`SignatureVerificationError`, still answered 401) and a tell or event function that took longer
+  than 8 seconds (`AppSlowTellError`). By default it writes one line through `logger` with the kind, key and
   request id, or an event's type and delivery id, and the error's class, message and code. A stack
   trace follows only when your own function threw. For an ask that failed after its 200, the line
   adds when Siren sends it again, such as "Siren sends it again after 16:58 UTC, when its answer
@@ -392,7 +392,7 @@ Every reply is JSON with `Cache-Control: no-store`.
 | An ask with a function | 200 at once | The function runs after the reply, and the handler posts what it returns. When it returns `answers.later()`, answer later with `apps.requests.answer()`. When it returns nothing, `onError` gets an error. |
 | When your function fails | A tell gets 500. An ask already got its 200. | Siren sends a failed tell again about 1, 2, 4 and 8 minutes later. Siren sends a failed ask again when its answer window closes, 60 minutes by default, and you can resend it sooner with `siren apps resend <id>`. Siren Cloud offers Send again once the ask needs attention. `onError` gets the error, and for an ask the default line says when Siren sends it again. |
 | An app request with no function for its kind and key | 404 `No function handles <kind> <key>.` | Siren sends it again, then shows it under Needs attention. |
-| Another event with an `onEvent` function | 200 once it returns, 500 when it throws | Nothing more. |
+| Another event with an `onEvent` function | 200 once it returns, 500 when it throws | An event must finish within 8 seconds, as a tell must. Past that Siren sends it again, so the function runs twice. `onError` gets an `AppSlowTellError` naming the event type, the default writes it as a warning with the delivery id, and `simulate()` returns it. |
 | Another event with no function | 200 | Nothing. |
 
 [Errors and retries](#errors-and-retries) says what happens to the answer the handler posts.
@@ -1164,57 +1164,60 @@ app.post('/webhooks/siren', express.raw({ type: 'application/json' }), (req, res
 });
 ```
 
-Create the subscription (the `signingSecret` is returned **once** — store it). The API key needs
-the `webhook-subscriptions:manage` scope. Siren lists the event types it sends at
-`GET /webhooks/events`, and `WebhookEventType` holds the same names:
+A webhook address belongs to an app. Give an app one with `siren apps apply` and a `url` in its
+app file, or from code with `apps.create({ name, url, events })` for a new app or
+`apps.update(key, { url, events })` for one you have. Both take a signed-in session, never an API
+key, and answer the `signingSecret` **once**, so store it. `WebhookEventType` holds the event names:
 
 ```ts
 import { WebhookEventType } from '@novatorius/siren';
 
-const sub = await siren.webhooks.subscriptions.create({
-  targetUrl: 'https://example.com/webhooks/siren',
+const app = await siren.apps.create({
+  name: 'Conversion tracker',
+  url: 'https://example.com/webhooks/siren',
   events: [WebhookEventType.ConversionApproved, WebhookEventType.PayoutPaid],
   // or: events: [WebhookEventType.All]
 });
-await saveSecretSomewhereSafe(sub.signingSecret);
+await saveSecretSomewhereSafe(app.signingSecret);
 ```
 
-`webhooks.subscriptions.events()` reads that live list, each entry an `event`, its `category` and a
-readable `label`. It can hold an event this SDK's `WebhookEventType` lacks yet. The key needs
-`webhook-subscriptions:read` or `webhook-subscriptions:manage`:
+`apps.events()` reads Siren's live list of event types, each entry an `event`, its `category` and a
+readable `label`. It can hold an event this SDK's `WebhookEventType` lacks yet. `apps.test(key)`
+sends the address one signed test delivery, and `apps.deliveries(key)` reads its latest deliveries:
 
 ```ts
-const catalog = await siren.webhooks.subscriptions.events();
+const catalog = await siren.apps.events();
 // [{ event: 'sale.created', category: 'Sales', label: 'A sale was recorded' }, ...]
 ```
 
 ### Check and change a subscription
 
 These calls are deprecated for a Siren app, which holds its address now. Siren refuses them for an
-address an app owns. See [The old key and webhook calls](#the-old-key-and-webhook-calls).
+address an app owns. See [The old key and webhook calls](#the-old-key-and-webhook-calls). Every one
+of them takes a signed-in session. Siren refuses an API key on any `/webhooks` route with an
+`ApiKeyNotAcceptedError`.
 
 `retrieve(id)` reads one subscription, and `deliveries(id)` reads its latest 50 deliveries, newest
 first, each with the payload Siren sent, its status (`pending`, `delivered` or `failed`), the tries
-it took and the first 200 bytes of your endpoint's answer. Both take `webhook-subscriptions:read`
-or `webhook-subscriptions:manage`.
+it took and the first 200 bytes of your endpoint's answer.
 
 `update(id, params)` changes the target URL, the events, the status or the description, and sends
 only the fields you give. It throws `SirenError` before sending for any other key, and for an update
 with no field that is not `null` or `undefined`, because Siren skips a `null` field and cannot apply
 an update with nothing to change. `test(id)` makes Siren send one signed `webhook.test` delivery now and
-answers what your endpoint did. Siren answers 200 either way, so read `delivered`. Both take
-`webhook-subscriptions:manage`, and each is sent once.
+answers what your endpoint did. Siren answers 200 either way, so read `delivered`. Each is sent
+once.
 
 ```ts
-const result = await siren.webhooks.subscriptions.test(sub.id);
+const result = await siren.webhooks.subscriptions.test(subscriptionId);
 if (!result.delivered) {
-  const [latest] = await siren.webhooks.subscriptions.deliveries(sub.id);
+  const [latest] = await siren.webhooks.subscriptions.deliveries(subscriptionId);
   console.log(latest?.httpStatusCode, latest?.errorMessage, latest?.responseBody);
 }
 
 // Stop deliveries while you fix the endpoint, then start them again.
-await siren.webhooks.subscriptions.update(sub.id, { status: 'paused' });
-await siren.webhooks.subscriptions.update(sub.id, { status: 'active' });
+await siren.webhooks.subscriptions.update(subscriptionId, { status: 'paused' });
+await siren.webhooks.subscriptions.update(subscriptionId, { status: 'active' });
 ```
 
 Siren refuses a test for a paused subscription with a 409, raised as `ConflictError`. From one
@@ -1227,13 +1230,12 @@ raised as `RateLimitError`.
   (`events.sale`, `events.refund`, `events.siteVisited`, `events.ingest`). Sales and refunds
   are auto-retried on network errors and 429/5xx. A visit, a custom event sent through
   `events.ingest` and a sale with no `externalId` are sent once.
-- **Signed-webhook verification and subscriptions** — constant-time signature checks
-  (`webhooks.constructEvent`, `webhooks.verifySignature`) plus subscription management
-  (`webhooks.subscriptions.create` / `list` / `retrieve` / `update` / `delete` / `test` /
-  `deliveries`) with an API key that holds a webhook scope.
-- **API keys** — mint, list, and revoke keys (`apiKeys.create` / `list` / `revoke`), and list the
-  scopes a new key may hold (`apiKeys.scopes()`), with a dashboard session's token. The raw key is
-  returned once and cannot be retrieved later.
+- **Signed-webhook verification** — constant-time signature checks (`webhooks.constructEvent`,
+  `webhooks.verifySignature`). An app holds its webhook address: give it one with `apps.create` or
+  `apps.update`, and read its deliveries with `apps.deliveries`, with a signed-in session.
+- **An app's key** — make, rotate and revoke the key an app holds (`apps.createKey` /
+  `apps.rotateKey` / `apps.revokeKey`), and list the scopes a key may hold (`apps.scopes()`), with
+  a signed-in session. The raw key is returned once and cannot be retrieved later.
 - **Reconciliation reads** — thin paginated readers over Siren's ledger for `conversions`,
   `transactions`, `obligations`, `payouts` and `fulfillments`, with an API key that holds the
   ledger scopes. `payouts.retrieve` and `fulfillments.retrieve` read one record.
@@ -1478,7 +1480,7 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->webhooks->constructEvent()` | `siren.webhooks.constructEvent()` |  |
 | `$siren->webhooks->constructEventFromHeaders()` | none | Node leaves it out. `constructEvent` takes the request headers, a Fetch `Headers` or Node's `req.headers`, as its fourth argument and reads the event and delivery from them, which is what this PHP method adds. |
 | `$siren->webhooks->verifySignature()` | `siren.webhooks.verifySignature()` |  |
-| `$siren->webhooks->subscriptions->create()` | `siren.webhooks.subscriptions.create()` |  |
+| `$siren->webhooks->subscriptions->create()` | `siren.webhooks.subscriptions.create()` | Both send `POST /webhooks`, which Siren answers with 405. Use `apps.create()` or `apps.update()`. |
 | `$siren->webhooks->subscriptions->events()` | `siren.webhooks.subscriptions.events()` |  |
 | `$siren->webhooks->subscriptions->list()` | `siren.webhooks.subscriptions.list()` |  |
 | `$siren->webhooks->subscriptions->delete()` | `siren.webhooks.subscriptions.delete()` |  |
@@ -1486,10 +1488,10 @@ public static helpers (`listQuery`, `query` and `toListResult`), which Node keep
 | `$siren->webhooks->subscriptions->update()` | `siren.webhooks.subscriptions.update()` |  |
 | `$siren->webhooks->subscriptions->test()` | `siren.webhooks.subscriptions.test()` |  |
 | `$siren->webhooks->subscriptions->deliveries()` | `siren.webhooks.subscriptions.deliveries()` | Throws `UnexpectedResponseError` for a body that is not a list or a row that is not an object. PHP keeps each member of what it decoded that is an array, as its `events()` does, so it drops a row that is not an array, reads each array member of a JSON object as a row, and answers `[]` for a body that is not JSON. |
-| `$siren->apiKeys->create()` | `siren.apiKeys.create()` |  |
-| `$siren->apiKeys->list()` | `siren.apiKeys.list()` |  |
-| `$siren->apiKeys->scopes()` | `siren.apiKeys.scopes()` |  |
-| `$siren->apiKeys->revoke()` | `siren.apiKeys.revoke()` |  |
+| `$siren->apiKeys->create()` | `siren.apiKeys.create()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.create()` or `apps.createKey()`. |
+| `$siren->apiKeys->list()` | `siren.apiKeys.list()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.list()`. |
+| `$siren->apiKeys->scopes()` | `siren.apiKeys.scopes()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.scopes()`. |
+| `$siren->apiKeys->revoke()` | `siren.apiKeys.revoke()` | Both call `/api-keys`, which Siren answers with 404. Use `apps.revokeKey()`. |
 | `$siren->conversions->list()` | `siren.conversions.list()` |  |
 | `$siren->conversions->retrieve()` | `siren.conversions.retrieve()` |  |
 | `$siren->conversions->create()` | `siren.conversions.create()` | Sends only the five fields Siren reads and refuses any other key, and refuses an `engagementId`, `transactionId` or `obligationId` that is not a positive whole number, where PHP sends the array as given. After a lost answer, `recoverCreate` sends it again only when Siren holds no such conversion. |
@@ -1728,18 +1730,22 @@ An API key does what its scopes allow. `ApiKeyScope` names each one:
 | `ApiKeyScope.LedgerTransactionsRead` (`ledger:transactions:read`) | `transactions.list()` |
 | `ApiKeyScope.LedgerObligationsRead` (`ledger:obligations:read`) | `obligations.list()` |
 | `ApiKeyScope.LedgerPayoutsRead` (`ledger:payouts:read`) | `payouts.list()`, `payouts.retrieve()` |
-| `ApiKeyScope.WebhookSubscriptionsRead` (`webhook-subscriptions:read`) | `webhooks.subscriptions.list()`, `events()`, `retrieve()`, `deliveries()` |
-| `ApiKeyScope.WebhookSubscriptionsManage` (`webhook-subscriptions:manage`) | Every `webhooks.subscriptions` call, `update()` and `test()` included |
+
+The two webhook scopes are retired: `ApiKeyScope.WebhookSubscriptionsRead`
+(`webhook-subscriptions:read`) and `WebhookSubscriptionsManage` (`webhook-subscriptions:manage`),
+and their `ApiKeyRecordScope` names `WebhooksRead` and `WebhooksManage`. Siren refuses them on a new
+key with a 422, and a key that still holds one opens nothing, because no API key may use a
+`/webhooks` route.
 
 `ApiKeyRecordScope` names all thirty record scopes Siren issues, in the order the dashboard offers
 them, and `API_KEY_RECORD_SCOPES` lists them. Each name is the constant's name in Siren's
 `ApiKeyRecordScopes` in Pascal case, so `FULFILLMENTS_READ` is `ApiKeyRecordScope.FulfillmentsRead`.
-The six above carry the same strings under both names.
+The ledger scopes above carry the same strings under both names, and the list still holds the two
+retired webhook scopes, `WebhooksRead` and `WebhooksManage`.
 
 | Group | `ApiKeyRecordScope` names |
 |---|---|
 | The ledger, read only | `EngagementsRead`, `OpportunitiesRead`, `ConversionsRead`, `TransactionsRead`, `ObligationsRead`, `FulfillmentsRead`, `PayoutsRead` |
-| Webhook subscriptions | `WebhooksRead`, `WebhooksManage` |
 | Records a merchant sets up | `ProductsRead`, `ProductsManage`, `CouponsRead`, `CouponsManage`, `CollaboratorsRead`, `CollaboratorsManage`, `CollaboratorGroupsRead`, `CollaboratorGroupsManage`, `ProgramsRead`, `ProgramsManage`, `ProgramGroupsRead`, `ProgramGroupsManage`, `DistributorsRead`, `DistributorsManage`, `ApplicationFormsRead`, `ApplicationFormsManage`, `ApplicationsRead`, `ApplicationsManage`, `NotificationRulesRead`, `NotificationRulesManage`, `PropertiesRead` |
 
 `ApiKeyRecordScope.FulfillmentsRead` (`ledger:fulfillments:read`) opens `fulfillments.list()` and
@@ -1748,27 +1754,28 @@ The six above carry the same strings under both names.
 ```ts
 import { ApiKeyRecordScope } from '@novatorius/siren';
 
-const key = await siren.apiKeys.create({
-  label: 'Payout app',
-  scopes: [ApiKeyRecordScope.PayoutsRead, ApiKeyRecordScope.FulfillmentsRead, ApiKeyRecordScope.WebhooksManage],
+const app = await siren.apps.createKey('payout-app', {
+  scopes: [ApiKeyRecordScope.PayoutsRead, ApiKeyRecordScope.FulfillmentsRead],
 });
 ```
 
-Siren grants the ledger, webhook and record scopes only by their exact names. `*`, `event:*`,
+Siren grants the ledger and record scopes only by their exact names. `*`, `event:*`,
 wildcards such as `ledger:*`, and older names such as `conversions:read` grant none of them, so a
 key made before these scopes existed reads nothing until you replace it with one that holds them.
 A key's requests count against the organization's API rate limit.
 
-`apiKeys.create`, `list`, `revoke` and `scopes` take a signed-in dashboard session's token. No API
-key scope reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`.
+An API key belongs to an app. `apps.createKey`, `apps.rotateKey`, `apps.revokeKey` and
+`apps.scopes` take a signed-in dashboard session's token, as every `/apps` call does. No API key
+reaches them, and Siren answers a key there with an `ApiKeyNotAcceptedError`. From the command line,
+`siren apps apply` makes the key and `siren apps rotate-key` replaces it.
 
-`apiKeys.scopes()` lists every scope a new key may hold, grouped by resource: the event scopes under
+`apps.scopes()` lists every scope a key may hold, grouped by resource: the event scopes under
 `events`, with any custom event types your organization added, the ledger scopes under `ledger`,
-the webhook scopes under `webhook-subscriptions`, and the record scopes under one `records:*` group
-each. Each entry carries the `scope` string to pass to `apiKeys.create` and a readable `label`:
+and the record scopes under one `records:*` group each. Each entry carries the `scope` string to
+pass to `apps.createKey` and a readable `label`:
 
 ```ts
-const groups = await siren.apiKeys.scopes();
+const groups = await siren.apps.scopes();
 for (const entry of groups.ledger ?? []) console.log(entry.scope, entry.label);
 // ledger:conversions:read Read conversions
 ```
@@ -1776,16 +1783,15 @@ for (const entry of groups.ledger ?? []) console.log(entry.scope, entry.label);
 ```ts
 import { ApiKeyScope } from '@novatorius/siren';
 
-const key = await siren.apiKeys.create({
-  label: 'Accounting export',
+const app = await siren.apps.createKey('accounting-export', {
   scopes: [ApiKeyScope.LedgerConversionsRead, ApiKeyScope.LedgerPayoutsRead],
 });
-// key.rawKey (sk_live_...) is returned ONCE and cannot be retrieved later.
+// app.rawKey (sk_live_...) is returned ONCE and cannot be retrieved later.
 ```
 
 A key created with a `propertyId` is bound to that store. It reads only its own store's
-conversions, transactions and obligations, and Siren refuses it on payouts, fulfillments and
-webhook subscriptions with a `StoreKeyNotAllowedError`. An organization-wide key reads the whole
+conversions, transactions and obligations, and Siren refuses it on payouts and fulfillments with
+a `StoreKeyNotAllowedError`. An organization-wide key reads the whole
 organization, and narrows a ledger read to one store with `propertyId`:
 
 ```ts
@@ -1849,9 +1855,9 @@ own lock.
 ### Retries
 
 Idempotent reads, sales and refunds automatically retry network errors and 429/5xx responses with
-exponential backoff (honoring `Retry-After`). The management writes `apiKeys.create` and
-`webhooks.subscriptions.create` are **never** auto-retried, so a flaky connection can't mint
-duplicate credentials. `events.siteVisited` is never retried either, because Siren records every
+exponential backoff (honoring `Retry-After`). The writes that answer a secret once, such as
+`apps.create`, `apps.createKey`, `apps.rotateKey` and `apps.rotateSecret`, are **never**
+auto-retried, so a flaky connection can't mint duplicate credentials. `events.siteVisited` is never retried either, because Siren records every
 visit it receives. `events.ingest` is sent once for every slug, and a sale with no `externalId` is
 sent once, because Siren has no key to match a resent copy of either. A 403 or 409 is sent once.
 A 401 is resent once after a refresh when the credential is an `AccessTokenSource` that can
@@ -2129,12 +2135,16 @@ that goes out of Siren needs Pro, so on Plus an outward feature and the events r
 
 ### The old key and webhook calls
 
-`siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, because an app holds its key and
-its address now. Each call's doc comment names the app call that replaces it: `apps.createKey()`
-for a key, `apps.update()` for an address's url and events, `apps.deliveries()` for its deliveries,
-and `apps.test()` for a test. Siren already refuses the webhook routes for an address an app owns.
-These calls go when Siren removes their routes. `siren.webhooks.constructEvent()` and
-`verifySignature()` stay, since an app's address receives events signed the same way.
+`siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated. An app holds its key and its
+address now, and Siren has removed the old routes for making them. Every `siren.apiKeys` call
+reaches `/api-keys`, which Siren answers with 404, and `siren.webhooks.subscriptions.create()`
+sends `POST /webhooks`, which Siren answers with 405. Use `apps.create()` or `apps.update()` for an
+address and its events, `apps.createKey()`, `apps.rotateKey()` and `apps.revokeKey()` for a key,
+`apps.scopes()` for the scopes a key may hold, `apps.deliveries()` for deliveries and `apps.test()`
+for a test. The other `siren.webhooks.subscriptions` calls still reach Siren with a signed-in
+session, and Siren refuses them for an address an app owns. These calls go in a later release.
+`siren.webhooks.constructEvent()` and `verifySignature()` stay, since an app's address receives
+events signed the same way.
 
 ### The sandbox
 

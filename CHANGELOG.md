@@ -126,9 +126,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The default line for a refused signature says what to check: `SIREN_SIGNING_SECRET` for a wrong
   signature, a proxy for a missing or unreadable header, the clock for a stale time. After five in
   one minute the rest are counted into one line, with no timer.
-- `AppSlowTellError` and `TELL_TIME_LIMIT_SECONDS` (8, Siren's delivery timeout). A tell whose
-  function runs longer still replies 200, and `onError` and `simulate()` get the error, since Siren
-  stopped waiting and sends the tell again.
+- `AppSlowTellError` and `TELL_TIME_LIMIT_SECONDS` (8, Siren's delivery timeout). A tell or
+  `onEvent` function that runs longer still replies 200, and `onError` and `simulate()` get the
+  error, since Siren stopped waiting and sends the tell or event again. The default writes it as a
+  warning naming the kind and key, or the event type and delivery id.
 - `webhookEvent(type, data?)` and `sampleEventData(type)` in `@novatorius/siren/testing` sign a
   webhook event as Siren sends one to an app's address, for `onEvent()` tests. The samples come from
   the payload tables in Siren's docs/api/webhooks-events.md (feat/apps at 6d2abd936a), built by
@@ -563,6 +564,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rawKey` and `signingSecret`, so a caller that logs the error never logs a secret.
 - `App.webhookSubscriptionId` and `App.apiKeyId` are optional and deprecated, since Siren no longer
   sends them. Read `address.id` and `apiKey.id`.
+- The README no longer teaches `siren.apiKeys` or `webhooks.subscriptions.create()`. Siren answers
+  every `/api-keys` route with 404 and `POST /webhooks` with 405, so the README gives a key and an
+  address through `apps.create()`, `apps.update()`, `apps.createKey()`, `apps.rotateKey()` and
+  `apps.revokeKey()`, with a signed-in session, and says the other `/webhooks` calls take a session
+  too. It calls the `webhook-subscriptions:read` and `webhook-subscriptions:manage` scopes retired,
+  since no API key may use a `/webhooks` route. The methods stay for now.
 - `siren.apiKeys` and `siren.webhooks.subscriptions` are deprecated, each method naming the app
   call that replaces it, since an app holds its key and its address now. They stay until Siren
   removes their routes. openapi.yaml marks each old `/webhooks` and `/api-keys` operation

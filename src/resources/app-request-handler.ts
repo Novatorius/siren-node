@@ -29,8 +29,9 @@ export const APP_REQUEST_BODY_LIMIT = 1024 * 1024;
  * How long Siren waits for a reply before it counts a timeout: the
  * 8-second limit its delivery client puts on every post to an app's address
  * (WebhookDeliveryService::deliver(), through GuardedCurlHttpClient). A
- * tell's reply waits for its function, so a function slower than this runs,
- * replies to no one, and runs again when Siren sends the tell again.
+ * tell's or a webhook event's reply waits for its function, so a function
+ * slower than this runs, replies to no one, and runs again when Siren sends
+ * the tell or event again.
  */
 export const TELL_TIME_LIMIT_SECONDS = 8;
 
@@ -45,7 +46,7 @@ export interface AppLogger {
   /** One line per request handled: its name, the reply's status and the time it took. */
   debug(message: string): void;
   info(message: string): void;
-  /** A refused signature, and a tell that ran past Siren's 8 seconds. */
+  /** A refused signature, and a tell or event that ran past Siren's 8 seconds. */
   warn(message: string): void;
   /** Every other failure `onError` gets. */
   error(message: string): void;
@@ -100,7 +101,7 @@ export interface AppRequestHandlerOptions<X extends string = never> {
    * Gets every error the handler does not show Siren: a function that threw,
    * an answer that broke the rules, Siren's refusal of an answer, a body a
    * parser already read, a refused signature (`SignatureVerificationError`,
-   * still answered 401) and a tell slower than Siren's 8 seconds
+   * still answered 401) and a tell or event slower than Siren's 8 seconds
    * (`AppSlowTellError`). `request` is the checked request or event, when
    * there is one. The default writes one line through `logger` with the
    * kind, key and request id (or the event's type and delivery id) and the
@@ -574,16 +575,7 @@ export function createAppRequestHandler<X extends string = never>(
         note(error, request);
         return reply(500, { error: `The function for ${kind} ${key} failed, so Siren will send this request again.` });
       }
-      const took = Date.now() - started;
-      if (took > TELL_TIME_LIMIT_SECONDS * 1000) {
-        note(
-          new AppSlowTellError(
-            `${kind} ${key} took ${(took / 1000).toFixed(1)} s. Siren stops waiting at ${TELL_TIME_LIMIT_SECONDS} s and sends the tell again, so it ran twice. ` +
-              'Save what you need, hand the slow part to runLater or your own queue, and return.',
-          ),
-          request,
-        );
-      }
+      checkTime(started, `${kind} ${key}`, 'tell', request, note);
       return reply(200, {});
     }
 
@@ -662,13 +654,38 @@ export function createAppRequestHandler<X extends string = never>(
     seen.request = event;
     const fn = events.get(event.type);
     if (fn === undefined) return reply(200, {});
+    const started = Date.now();
     try {
       await run(() => fn(event));
     } catch (error) {
       note(error, event);
       return reply(500, { error: `The function for ${event.type} failed, so Siren will send this event again.` });
     }
+    checkTime(started, event.type, 'event', event, note);
     return reply(200, {});
+  };
+
+  /**
+   * Reports a tell or an event whose function ran past
+   * {@link TELL_TIME_LIMIT_SECONDS}: its reply came after Siren stopped
+   * waiting, so Siren sends it again and the function runs twice.
+   */
+  const checkTime = (
+    started: number,
+    name: string,
+    what: 'tell' | 'event',
+    about: AppRequest | WebhookEvent,
+    note: (error: unknown, request?: AppRequest | WebhookEvent) => void,
+  ): void => {
+    const took = Date.now() - started;
+    if (took <= TELL_TIME_LIMIT_SECONDS * 1000) return;
+    note(
+      new AppSlowTellError(
+        `${name} took ${(took / 1000).toFixed(1)} s. Siren stops waiting at ${TELL_TIME_LIMIT_SECONDS} s and sends the ${what} again, so it ran twice. ` +
+          'Save what you need, hand the slow part to runLater or your own queue, and return.',
+      ),
+      about,
+    );
   };
 
   /** Hands an ask's work to `runLater`, `waitUntil` or the event loop, in that order. */

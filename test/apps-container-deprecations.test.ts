@@ -71,13 +71,16 @@ describe('apps-sdk-container: the old key and webhook calls', () => {
     }
   });
 
-  it('the README says the old calls go when Siren removes their routes, and names the app calls', () => {
+  it('the README says which old calls Siren already refuses, and names the app calls', () => {
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8').replace(/\s+/g, ' ');
     const note = readme.slice(readme.indexOf('### The old key and webhook calls'));
     expect(note.length).toBeGreaterThan(40);
     const text = note.slice(0, note.indexOf(' #', 4) > 0 ? note.indexOf(' #', 4) : undefined);
     expect(text).toMatch(/deprecated/);
-    expect(text).toMatch(/when Siren removes/);
+    // Siren removed /api-keys (404) and POST /webhooks (405) on feat/apps (pass 4 follow-ups).
+    expect(text).toMatch(/Siren has removed/);
+    expect(text).toMatch(/404/);
+    expect(text).toMatch(/405/);
     for (const call of ['siren.apiKeys', 'siren.webhooks.subscriptions', 'apps.createKey()', 'apps.update()', 'apps.deliveries()']) {
       expect(text, call).toContain(call);
     }
