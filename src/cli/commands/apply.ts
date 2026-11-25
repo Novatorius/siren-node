@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, lstat, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ConflictError, NotFoundError, appErrorCode } from '../../errors';
 import { RESERVED_APP_KEYS } from '../../resources/apps';
 import type { App, AppFeature, AppFeatureDeclaration } from '../../record-types';
-import { APP_FILE_NAME, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
+import { FeatureKind } from '../../taxonomy';
+import { APP_FILE_NAME, APP_FILE_SCHEMA_PATH, appFileTemplate, declarationFor, parseAppFile } from '../app-file';
 import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
@@ -84,13 +85,7 @@ export async function appsInit(input: CommandInput): Promise<number> {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CliRefusal(`${path} is already there, so nothing was written.`);
     throw error;
   }
-  const ignorePath = join(io.cwd, '.gitignore');
-  const ignored = await readText(ignorePath);
-  const have = (ignored ?? '').split(/\r?\n/);
-  const missing = IGNORED.filter((line) => !have.includes(line));
-  if (missing.length > 0) {
-    await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
-  }
+  const missing = await keepEnvFilesOutOfGit(io.cwd);
   const style = styleFor(io, 'stdout', {});
   io.stdout(
     style.report({
@@ -109,6 +104,140 @@ export async function appsInit(input: CommandInput): Promise<number> {
     }),
   );
   return 0;
+}
+
+/** Adds to `.gitignore` in `folder` each env file line apply writes and it lacks, and answers the lines added. */
+async function keepEnvFilesOutOfGit(folder: string): Promise<string[]> {
+  const ignorePath = join(folder, '.gitignore');
+  const ignored = await readText(ignorePath);
+  const have = (ignored ?? '').split(/\r?\n/);
+  const missing = IGNORED.filter((line) => !have.includes(line));
+  if (missing.length > 0) {
+    await writeFile(ignorePath, `${ignored ?? ''}${ignored && !ignored.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`);
+  }
+  return missing;
+}
+
+/**
+ * `siren apps pull <key> [file] [--url-env] [--yes] [--json]`: writes
+ * siren.app.json, or the file named, from the app on Siren, so `siren apps
+ * diff` finds nothing to change straight after (CLI pass 2, finding 6).
+ * It reads `GET /apps/{key}` once. The file holds the name, the
+ * description, the url, the key's scopes as Siren stores them, the
+ * events, the problem contacts and each active feature with the settings
+ * its kind takes. An archived feature is left out, since naming it brings
+ * it back. `--url-env` writes `${SIREN_APP_URL}` in place of the url. The
+ * file names the organization for a person in several, so later commands
+ * act in the same one. It asks before replacing a file, `--yes` skips the
+ * question, and with no terminal and no `--yes` it writes nothing. Like
+ * init, it keeps the env files apply writes out of git. It prints the
+ * url's host, never the url.
+ */
+export async function appsPull(input: CommandInput): Promise<number> {
+  const run = contextOf(input);
+  const { io, values } = input;
+  const key = appKeyArgument(input.args[0] ?? '');
+  const shown = input.args[1] ?? APP_FILE_NAME;
+  const path = resolve(io.cwd, shown);
+  const session = await run.signedIn();
+  const app = await run.siren().apps.retrieve(key);
+  const urlEnv = values['url-env'] === true;
+  const org = membershipsOf(session).length > 1 ? (run.orgChoice?.org.orgSlug || String(run.orgChoice?.org.orgId ?? session.orgId)) : undefined;
+  const file = pulledFile(app, org, urlEnv);
+  const json = values.json === true;
+
+  if ((await readText(path)) !== undefined && values.yes !== true) {
+    const again = run.command(`apps pull ${key}${input.args[1] === undefined ? '' : ` ${shown}`} --yes`);
+    if (!io.interactive || json) {
+      throw new CliRefusal(`Nothing written: ${shortPath(io.cwd, path)} is already there.`, { why: 'Pulling replaces it with the app on Siren.', fix: again });
+    }
+    const typed = (await io.prompt(`Replace ${shortPath(io.cwd, path)}? [y/N] `)).trim().toLowerCase();
+    if (typed !== 'y' && typed !== 'yes') {
+      const err = styleFor(io, 'stderr', values);
+      io.stderr(err.rich ? `${err.dim('Nothing written.')}\n` : 'siren: Nothing was written.\n');
+      return 1;
+    }
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(file, null, 2)}\n`);
+  const ignored = await keepEnvFilesOutOfGit(io.cwd);
+
+  if (json) {
+    run.print(JSON.stringify({ path: shortPath(io.cwd, path), file }, null, 2));
+    return 0;
+  }
+  const out = styleFor(io, 'stdout', values);
+  const active = app.features.filter((item) => item.status !== 'archived');
+  const archived = app.features.filter((item) => item.status === 'archived');
+  const host = typeof app.url === 'string' && app.url !== '' ? hostOf(app.url) : undefined;
+  const rows: Array<readonly [string, string]> = [
+    ...(org === undefined ? [] : [['Org', clean(org)] as const]),
+    ['Features', active.length === 0 ? out.dim('none') : clean(active.map((item) => item.key).join(', '))],
+    ...(host === undefined ? [] : [['URL', urlEnv ? 'from SIREN_APP_URL' : `${clean(host)}, written in the file`] as const]),
+    ...(archived.length > 0 ? [['Left out', `${clean(archived.map((item) => item.key).join(', '))}, archived`] as const] : []),
+    ...(ignored.length > 0 ? [['Ignored', `${ignored.join(', ')} (added to .gitignore)`] as const] : []),
+  ];
+  const tips = [
+    ...(host !== undefined && urlEnv ? ["Set SIREN_APP_URL to the app's url in .env or your shell before you run apply."] : []),
+    ...(host !== undefined && !urlEnv ? [`${unbroken('--url-env')} writes \${SIREN_APP_URL} in place of the url, for a url that differs per machine.`] : []),
+  ];
+  run.print(
+    out
+      .report({
+        headline: `Wrote ${out.bold(shortPath(io.cwd, path))} from ${out.bold(clean(key))}`,
+        rows,
+        next: [{ text: out.command(run.command(input.args[1] === undefined ? 'apps diff' : `apps diff ${shown}`)), aside: 'check the file matches Siren' }],
+        tips,
+      })
+      .replace(/\n$/, ''),
+  );
+  return 0;
+}
+
+/** The app file for `app` as Siren holds it, in the shape `parseAppFile` reads. */
+function pulledFile(app: App, org: string | undefined, urlEnv: boolean): Record<string, unknown> {
+  const hasAddress = typeof app.url === 'string' && app.url !== '';
+  const scopes = app.apiKey === null || app.apiKey === undefined ? [] : storedScopes(app.apiKey.scopes ?? app.scopes ?? []);
+  const features: Record<string, Record<string, unknown>> = {};
+  for (const item of app.features) {
+    if (item.status === 'archived') continue;
+    features[item.key] = pulledFeature(item);
+  }
+  const body: Record<string, unknown> = {
+    name: app.name,
+    ...(app.description ? { description: app.description } : {}),
+    ...(hasAddress ? { url: urlEnv ? '${SIREN_APP_URL}' : app.url } : {}),
+    ...(scopes.length > 0 ? { scopes } : {}),
+    ...(hasAddress && Array.isArray(app.events) && app.events.length > 0 ? { events: [...app.events] } : {}),
+    ...(Array.isArray(app.contacts) && app.contacts.length > 0 ? { contacts: [...app.contacts] } : {}),
+    ...(Object.keys(features).length > 0 ? { features } : {}),
+  };
+  return { $schema: APP_FILE_SCHEMA_PATH, version: 1, ...(org === undefined ? {} : { org }), apps: { [app.key]: body } };
+}
+
+/** One feature for the file: its kind and name, its description when it has one, and the settings its kind takes. */
+function pulledFeature(item: AppFeature): Record<string, unknown> {
+  const settings = item.settings ?? {};
+  const feature: Record<string, unknown> = { kind: item.kind, name: item.name };
+  if (item.description) feature.description = item.description;
+  if (item.kind === FeatureKind.PayoutMethod && settings.currencies !== undefined) feature.currencies = [...settings.currencies];
+  if (settings.answerWindowMinutes !== undefined) feature.answerWindowMinutes = settings.answerWindowMinutes;
+  if (item.kind === FeatureKind.MetricCalculation && settings.scoresMoney === true) feature.scoresMoney = true;
+  if (item.kind === FeatureKind.IncentiveType && settings.conversionTypes !== undefined) feature.conversionTypes = [...settings.conversionTypes];
+  if (item.kind === FeatureKind.CustomEvent) {
+    if (settings.fields !== undefined && Object.keys(settings.fields).length > 0) feature.fields = structuredClone(settings.fields);
+    if (settings.domains !== undefined && settings.domains.length > 0) feature.domains = [...settings.domains];
+  }
+  return feature;
+}
+
+/** The host of `url`, or the url's text when it is no url. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 /** "Acme (acme), live": the organization a write acts in, and whether it is live, for the question before the write. */
