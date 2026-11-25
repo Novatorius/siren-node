@@ -81,6 +81,19 @@ export function currencyDecimalPlaces(definition: CurrencyDefinition | undefined
   return Math.min(scale, digits(definition?.decimalPlaces, scale));
 }
 
+/**
+ * An amount a person typed (10.5) as the integer Siren stores (1050 for
+ * USD, 11 for points), shifted on decimal text so 19.99 is 1999 and never
+ * 1998, and rounded half away from zero, as Siren rounds.
+ */
+export function toStoredAmount(shown: number | string, definition: CurrencyDefinition | undefined): number {
+  const value = Number(shown);
+  if (!Number.isFinite(value)) return 0;
+  const shifted = Number(`${value}e${currencyScale(definition)}`);
+  if (!Number.isFinite(shifted)) return Math.round(value * 10 ** currencyScale(definition));
+  return shifted < 0 ? -Math.round(-shifted) : Math.round(shifted);
+}
+
 /** A stored amount (1050) as the number a person reads (10.5 for USD), shifted on decimal text so 1999 is 19.99. */
 export function toShownAmount(stored: number | string, definition: CurrencyDefinition | undefined): number {
   const value = Number(stored);

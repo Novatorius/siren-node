@@ -33,7 +33,7 @@ DEVELOPER TOOLS
   trigger             Make test activity in a sandbox
   trigger ask         Send a feature a test ask
   logs tail           Watch requests, deliveries and API calls live
-  simulate            Show who a sale would pay, writing nothing
+  simulate            Show what a scenario would make, writing nothing
   fixtures            Run a file of trigger steps
   apps test           Send the app's address a test delivery
 

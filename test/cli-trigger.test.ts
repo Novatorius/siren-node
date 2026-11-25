@@ -7,7 +7,8 @@ import { requestRow } from './apps-siren-answers';
 import { resolveReferences } from '../src/cli/commands/fixtures';
 
 /*
- * `siren trigger`, `trigger ask`, `apps test`, `fixtures` and `simulate`.
+ * `siren trigger`, `trigger ask`, `apps test` and `fixtures`. `simulate` is in
+ * cli-simulate.test.ts.
  * Contract: contract/devtools-trigger.md in the run folder, section 4. The
  * Siren routes they call are POST /test-activity, GET
  * /test-activity/sales/{id}, POST /simulations/sale and POST
@@ -405,28 +406,6 @@ describe('siren fixtures <file>', () => {
   });
 });
 
-describe('siren simulate', () => {
-  it('runs a sale on a live organization without --live, and says it wrote nothing', async () => {
-    const h = harness([reply(200, sale({ simulated: true, status: 'created' }))], { edition: 'production' });
-    h.signedIn(live());
-    expect(await h.run(['simulate', '--amount', '49.99', '--program', '3', '--base-url', BASE]), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /simulations/sale']);
-    expect(bodyOf(h.http.requests[0])).toEqual({ amount: '49.99', programId: 3 });
-    expect(h.out()).toContain('A $49.99 USD sale would earn 1 reward in Acme (3), live');
-    expect(h.out()).toContain('Nothing was written.');
-    expect(h.out()).toMatch(/Programs\s+Partner program/);
-    expect(h.out()).toMatch(/Sam Lee\s+\$7\.50 USD\s+pending/);
-    expect(h.out()).not.toContain('3307');
-  });
-
-  it('prints the body with --json', async () => {
-    const h = harness([reply(200, sale({ simulated: true }))]);
-    h.signedIn();
-    expect(await h.run(['simulate', '--json'])).toBe(0);
-    expect(JSON.parse(h.out())).toEqual(sale({ simulated: true }));
-  });
-});
-
 describe('what Siren sends, printed', () => {
   /** Siren's text with an escape sequence, a link and a bell in it, which must never reach the screen. */
   const sly = (text: string) => `${text}\u001b[2J\u001b]8;;https://evil.example\u0007\u009b1A`;
@@ -457,11 +436,23 @@ describe('what Siren sends, printed', () => {
     expect(h.out()).toContain('Sale recorded in Acme (3), sandbox');
     expect(h.out()).toMatch(/Collaborator\s+Sam Lee \(42\)/);
 
-    const sim = harness([reply(200, slySale({ simulated: true }))]);
+    const scenario = {
+      actions: [{ type: 'site_visited', label: sly('visit'), event: null, created: {}, error: sly('No such key.') }],
+      ledgers: {
+        transactions: [{ id: 1, lineItems: [{ name: sly('Tee'), quantity: 1, value: 500, units: 'USD' }], programs: [{ programName: sly('Partner program'), baseAmount: 500, percent: 10, lines: [] }] }],
+        conversions: [{ collaboratorName: sly('Sam Lee'), programName: sly('Partner program'), status: sly('pending') }],
+        obligations: [{ value: 50, awardType: 'USD', collaboratorName: sly('Sam Lee'), status: 'draft', holdReason: sly('fraud check') }],
+      },
+      why: [{ message: sly('Sam earned.') }],
+      skipped: [{ message: sly('Kim was skipped.') }],
+      distributions: [],
+    };
+    const sim = harness([reply(200, scenario), reply(200, [{ code: 'USD', symbol: '$', scale: 2, decimalPlaces: 2, type: 'monetary', isDefault: true }])]);
     sim.signedIn(slySession());
-    expect(await sim.run(['simulate']), sim.err()).toBe(0);
+    sim.write('flow.json', '{"actions":[]}');
+    expect(await sim.run(['simulate', 'flow.json']), sim.err()).toBe(1);
     clear(sim.out());
-    expect(sim.out()).toMatch(/Programs\s+Partner program/);
+    expect(sim.out()).toContain('Partner program counted $5.00 USD of it');
 
     const steps = harness([reply(201, slySale()), reply(202, { test: true, request: { ...requestRow({ id: REQUEST, status: sly('applied') }), data: {}, answer: { note: sly('ok') }, answeredByUser: null } })]);
     steps.signedIn(slySession());

@@ -1,0 +1,61 @@
+{
+  "_source": "Built from the result shape and the assertions in Siren PR 1253 (pkt/simulate-scenario, bd87cdadc4): ScenarioResult::toArray, ScenarioLedgerReader, ScenarioCompiledLines, ScenarioExplainer and tests/Integration/Tests/Scenarios/ScenarioOrgRunTest.php. No preview runs that branch, so this is not a recorded answer.",
+  "validation": { "valid": true, "errors": [] },
+  "applied": {},
+  "appliedKeys": {},
+  "actions": [
+    { "type": "site_visited", "label": "visit", "event": "site_visited", "created": { "opportunity": 912 }, "error": null },
+    { "type": "sale_triggered", "label": "sale", "event": "sale_triggered", "created": { "transaction": 7610 }, "error": null }
+  ],
+  "ledgers": {
+    "opportunities": [{ "id": 912, "status": "converted", "producedBy": { "index": 0, "type": "site_visited", "label": "visit" } }],
+    "engagements": [
+      { "id": 41300, "opportunityId": 912, "programId": 1, "programName": "Affiliate", "collaboratorId": 39, "collaboratorName": "Sam Referrer", "status": "converted", "score": null, "producedBy": { "index": 0, "type": "site_visited", "label": "visit" } }
+    ],
+    "conversions": [
+      { "id": 5701, "opportunityId": 912, "engagementId": 41300, "transactionId": 7610, "obligationId": 6001, "status": "pending", "type": "sale", "programId": 1, "programName": "Affiliate", "collaboratorId": 39, "collaboratorName": "Sam Referrer", "producedBy": { "index": 1, "type": "sale_triggered", "label": "sale" } }
+    ],
+    "obligations": [
+      { "id": 6001, "collaboratorId": 39, "collaboratorName": "Sam Referrer", "programId": 1, "programName": "Affiliate", "units": "USD", "status": "draft", "holdReason": "awaiting_conversion_approval", "awardType": "USD", "value": 2000, "producedBy": { "index": 1, "type": "sale_triggered", "label": "sale" } }
+    ],
+    "transactions": [
+      {
+        "id": 7610,
+        "opportunityId": 912,
+        "status": "complete",
+        "lineItems": [
+          { "id": 1, "name": "Tee shirt", "description": "Tee shirt", "type": "product", "quantity": 2, "value": 5000, "units": "USD" },
+          { "id": 2, "name": "Shipping", "description": "Shipping", "type": "shipping", "quantity": 1, "value": 2500, "units": "USD" },
+          { "id": 3, "name": "Tax", "description": "Tax", "type": "tax", "quantity": 1, "value": 1500, "units": "USD" }
+        ],
+        "programs": [
+          {
+            "conversionId": 5701,
+            "programId": 1,
+            "programName": "Affiliate",
+            "collaboratorId": 39,
+            "compilers": ["includeLineItems"],
+            "percent": 20,
+            "baseAmount": 10000,
+            "lines": [
+              { "lineItemId": 1, "name": "Tee shirt", "type": "product", "quantity": 2, "lineTotal": 10000, "counted": true, "countedBy": "includeLineItems", "reason": null, "message": null },
+              { "lineItemId": 2, "name": "Shipping", "type": "shipping", "quantity": 1, "lineTotal": 2500, "counted": false, "countedBy": null, "reason": "shipping_not_counted", "message": "The program does not count shipping." },
+              { "lineItemId": 3, "name": "Tax", "type": "tax", "quantity": 1, "lineTotal": 1500, "counted": false, "countedBy": null, "reason": "tax_not_counted", "message": "The program does not count tax." }
+            ]
+          }
+        ],
+        "producedBy": { "index": 1, "type": "sale_triggered", "label": "sale" }
+      }
+    ]
+  },
+  "records": { "opportunities": [], "engagements": [], "conversions": [], "obligations": [], "transactions": [], "transactionDetails": [], "distributions": [], "metrics": [], "allocations": [] },
+  "why": [
+    { "transactionId": 7610, "conversionId": 5701, "obligationId": 6001, "collaboratorId": 39, "collaboratorName": "Sam Referrer", "programId": 1, "programName": "Affiliate", "action": { "index": 0, "type": "site_visited", "label": "visit" }, "reason": "site_visited", "message": "Sam Referrer earned in Affiliate on this sale because the scenario credits their referral link (action \"visit\")." }
+  ],
+  "skipped": [
+    { "collaboratorId": 39, "collaboratorName": "Sam Referrer", "programId": 2, "programName": "Influencer", "reason": "no_matching_engagement", "message": "Influencer counts coupon uses only. This sale used none." }
+  ],
+  "distributions": [],
+  "engine": {},
+  "simulated": true
+}

@@ -416,7 +416,7 @@ export function activityReport(style: Style, input: CommandInput, run: CommandCo
   return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: activityRows(style, result), next, tips });
 }
 
-/** The report `siren simulate` prints: who would earn what, and no ids, since none of them exist. Every value from Siren is cleaned first. */
+/** The report `siren simulate` prints on a Siren with only the older sale route: who would earn what, and no ids, since none of them exist. Every value from Siren is cleaned first. */
 export function simulationReport(style: Style, run: CommandContext, raw: ActivityResult): string {
   const result = cleaned(raw);
   const programs = [...programNames(result).values()];
