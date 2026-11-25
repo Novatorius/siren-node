@@ -226,15 +226,20 @@ export class Style {
    */
   table(headers: readonly string[], rows: ReadonlyArray<readonly string[]>, width: number): string[] {
     const all = [headers, ...rows];
-    const widths = headers.map((_, column) => Math.max(...all.map((row) => [...(row[column] ?? '')].length)));
+    const widths = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
     const line = (row: readonly string[]) => {
-      const cells = row.map((cell, column) => (column === row.length - 1 ? cell : cell.padEnd(widths[column]!)));
+      const cells = row.map((cell, column) => (column === row.length - 1 ? cell : `${cell}${' '.repeat(widths[column]! - visibleLength(cell))}`));
       const text = cells.join('  ');
-      const chars = [...text];
-      return chars.length > width ? `${chars.slice(0, Math.max(width - 1, 0)).join('')}…` : text;
+      if (visibleLength(text) <= width) return text;
+      // Only the last column is shortened, and it is cut as plain text.
+      const before = cells.slice(0, -1).join('  ');
+      const room = Math.max(width - visibleLength(before) - 3, 0);
+      const last = [...(row.at(-1) ?? '').replace(/\u001b\[[\d;?]*[A-Za-z]/g, '')];
+      return `${before}  ${last.slice(0, room).join('')}…`;
     };
     return [this.dim(line(headers)), ...rows.map(line)];
   }
+
 
   /**
    * A spinner beside `text`, written with `write`. In a terminal it turns

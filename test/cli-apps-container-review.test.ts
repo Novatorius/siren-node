@@ -180,7 +180,7 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(kindLabel('futureKind')).toBe('futureKind');
   });
 
-  it('show, list and apply print the readable name beside the kind', async () => {
+  it('show and the apply plan print the readable name beside the kind', async () => {
     const h = harness([reply(200, appRecord()), reply(200, [appRecord()]), reply(200, appRecord({ name: 'Old', features: [appRecord().features[0]] })), reply(200, appRecord())], {
       env: URL_ENV,
     });
@@ -190,8 +190,8 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const out = h.out();
-    expect(out).toContain('  app:11  Post-conversion action (postConversionAction)  notify-crm  Tell the CRM\n');
-    expect(out).toContain('  app:12  Payout method (payoutMethod)  acme-ledger  Acme ledger\n');
+    expect(out).toContain('\napp:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM\n');
+    expect(out).toContain('\napp:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger\n');
     expect(out).toContain('  + adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n');
   });
 

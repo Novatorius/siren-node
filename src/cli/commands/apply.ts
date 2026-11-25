@@ -379,47 +379,110 @@ function refuseKindChange(item: AppFeature, uses: number | undefined, wanted: re
 }
 
 
-/** `siren apps list [--json]`: one block per app with its features, or the JSON Siren sent. */
+/** `siren apps list [--json]`: a count line and a table of the apps, or the JSON Siren sent. */
 export async function appsList(input: CommandInput): Promise<number> {
   const run = contextOf(input);
-  await run.signedIn();
+  const session = await run.signedIn();
   const apps = await run.siren().apps.list();
   if (input.values.json === true) {
     run.print(JSON.stringify(apps, null, 2));
     return 0;
   }
-  if (apps.length === 0) run.print(`No apps on ${run.target.baseUrl} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
-  for (const app of apps) {
-    for (const line of appLines(app)) run.print(line);
-    attentionLine(run, app);
+  const out = styleFor(input.io, 'stdout', {});
+  if (apps.length === 0) {
+    run.print(`No apps in ${orgNamed(session)} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
+    return 0;
+  }
+  run.print(out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
+  run.print('');
+  const rows = apps.map((app) => {
+    const count = attentionCount(app);
+    return [
+      app.key,
+      stateCell(out, app),
+      String(app.features.length),
+      count === 0 ? out.dim('–') : out.bold(out.amber(`${count} ${count === 1 ? 'request' : 'requests'}`)),
+      addressCell(out, app),
+    ];
+  });
+  for (const line of out.table(['APP', 'STATE', 'FEATURES', 'ATTENTION', 'ADDRESS'], rows, widthOf(input, out))) run.print(line);
+  const waiting = apps.filter((app) => attentionCount(app) > 0);
+  if (waiting.length === 1) attentionTip(run, out, waiting[0]!);
+  else if (waiting.length > 1) {
+    run.print('');
+    run.print(out.next(`${out.command(run.command('apps requests --attention'))} lists the requests that need you.`));
   }
   return 0;
 }
 
-/** `siren apps show <key> [--json]`: the app and its features. */
+/** `siren apps show <key> [--json]`: the app in an aligned block, then its features as a table. */
 export async function appsShow(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const key = appKeyArgument(input.args[0] ?? '');
   await run.signedIn();
   const app = await run.siren().apps.retrieve(key);
-  if (input.values.json === true) run.print(JSON.stringify(app, null, 2));
-  else {
-    for (const line of appLines(app)) run.print(line);
-    attentionLine(run, app);
+  if (input.values.json === true) {
+    run.print(JSON.stringify(app, null, 2));
+    return 0;
   }
+  const out = styleFor(input.io, 'stdout', {});
+  const prefix = app.apiKey?.prefix ?? app.apiKeyPrefix;
+  const events = Array.isArray(app.events) ? app.events : [];
+  const rows: Array<readonly [string, string]> = [
+    ['State', stateCell(out, app)],
+    ['Address', addressCell(out, app)],
+    ...(typeof prefix === 'string' && prefix !== '' ? [['Key', `${prefix}…`] as const] : [['Key', out.dim('none')] as const]),
+    ...(events.length > 0 ? [['Events', `${events.join(', ')}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
+  ];
+  const report = out.report({ headline: `${out.bold(app.key)}  ${app.name}`, rows });
+  // A report leads with ✓, which says something was done. A view has nothing to mark.
+  run.print(report.replace(/^(\S*✓\S* )?/, '').replace(/\n$/, ''));
+  if (app.features.length > 0) {
+    run.print('');
+    const features = app.features.map((item) => [
+      item.ref,
+      item.key,
+      kindLabel(item.kind),
+      `${item.name}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
+    ]);
+    for (const line of out.table(['ID', 'KEY', 'KIND', 'NAME'], features, widthOf(input, out))) run.print(line);
+  }
+  if (attentionCount(app) > 0) attentionTip(run, out, app);
   return 0;
 }
 
-/**
- * Under an app with requests that need a person, how many, and the command
- * that lists them. Prints nothing for a count of zero, or for a Siren that
- * sends no count.
- */
-function attentionLine(run: CommandContext, app: App): void {
-  const count = app.needsAttention;
-  if (typeof count !== 'number' || count <= 0) return;
-  const command = run.command(`apps requests --app ${app.key} --attention`);
-  run.print(count === 1 ? `  1 request needs attention. See it with ${command}.` : `  ${count} requests need attention. See them with ${command}.`);
+/** How many of the app's requests need a person, or 0 when Siren sends no count. */
+function attentionCount(app: App): number {
+  return typeof app.needsAttention === 'number' && app.needsAttention > 0 ? app.needsAttention : 0;
+}
+
+/** `● on` green or `○ off` dim in a terminal, `on` or `off` elsewhere. */
+function stateCell(style: Style, app: App): string {
+  if (app.status === 'active') return style.rich ? style.green('● on') : 'on';
+  return style.rich ? style.dim('○ off') : 'off';
+}
+
+/** The host Siren sends the app's requests to, or `key only` for an app with no address. Never the whole url. */
+function addressCell(style: Style, app: App): string {
+  if (typeof app.url !== 'string' || app.url === '') return style.dim('key only');
+  try {
+    return new URL(app.url).host;
+  } catch {
+    return style.dim('an address');
+  }
+}
+
+/** The widest a table may be: the terminal's columns, 80 in a terminal of unknown size, and no limit in a pipe. */
+function widthOf(input: CommandInput, style: Style): number {
+  if (!style.rich) return Number.POSITIVE_INFINITY;
+  return input.io.screen?.size?.columns ?? 80;
+}
+
+/** The tip under an app with requests that need a person: how many, and the command that lists them. */
+function attentionTip(run: CommandContext, out: Style, app: App): void {
+  const count = attentionCount(app);
+  run.print('');
+  run.print(out.next(`${out.command(run.command(`apps requests --app ${app.key} --attention`))} lists the ${count} that ${count === 1 ? 'needs' : 'need'} you.`));
 }
 
 /** `siren apps on <key>`: turns the app on. */
@@ -586,26 +649,6 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   }
   run.print(`Deleted ${key} from ${run.target.baseUrl}. Its key no longer works.`);
   return 0;
-}
-
-/**
- * An app's lines: its key, name, state and, when `showUrl`, its url, then
- * one line per feature with its `app:{id}`, then its events when it has
- * any. A feature Siren archived, because a later declaration left it out
- * while a record still selects it, says so beside it, and a feature or the
- * events the plan cannot use say which plan they need. `apply` leaves the url out, since it may have come from the
- * environment.
- */
-export function appLines(app: App, showUrl = true): string[] {
-  const state = app.status === 'active' ? 'on' : 'off';
-  const lines = [`${app.key}  ${app.name}  ${state}${showUrl && app.url ? `  ${app.url}` : ''}`];
-  for (const item of app.features) {
-    const archived = item.status === 'archived' ? '  archived, so Siren no longer calls it' : '';
-    lines.push(`  ${item.ref}  ${kindLabel(item.kind)}  ${item.key}  ${item.name}${archived}${planMark(item)}`);
-  }
-  const events = Array.isArray(app.events) ? app.events : [];
-  if (events.length > 0) lines.push(`  events  ${events.join(', ')}${planMark(app.eventsAccess, ', so Siren does not send them')}`);
-  return lines;
 }
 
 /**

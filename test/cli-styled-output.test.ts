@@ -179,3 +179,62 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
     expect(h.paths()).toEqual([`GET /apps/${APP_KEY}`]);
   });
 });
+
+describe('siren apps list and show: tables (catalog mockup 2)', () => {
+  const second = appRecord({ key: 'ledger-sync', name: 'Ledger sync', status: 'inactive', url: null, address: null, features: [], needsAttention: 0 });
+
+  it('list: a count line, a table of apps with the host only, and one tip with the command for what needs you', async () => {
+    const h = harness([reply(200, [appRecord({ needsAttention: 2 }), second])]);
+    h.signedIn();
+    expect(await h.run(['apps', 'list']), h.err()).toBe(0);
+    expect(h.out()).toBe(
+      [
+        '2 apps in Acme (3), sandbox',
+        '',
+        'APP           STATE  FEATURES  ATTENTION   ADDRESS',
+        'acme-payouts  on     2         2 requests  acme.example',
+        'ledger-sync   off    0         –           key only',
+        '',
+        'siren apps requests --app acme-payouts --attention lists the 2 that need you.',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('show: the app in a block, then its features as a table, marks in the name column', async () => {
+    const app = appRecord({ needsAttention: 1, features: appRecord().features.map((item, at) => (at === 0 ? { ...item, status: 'archived' } : item)) });
+    const h = harness([reply(200, app)]);
+    h.signedIn();
+    expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
+    expect(h.out()).toBe(
+      [
+        'acme-payouts  Acme',
+        '',
+        '  State     on',
+        '  Address   acme.example',
+        '  Key       sk_test_0a0a0a0a…',
+        '',
+        'ID      KEY          KIND                                           NAME',
+        'app:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM · archived',
+        'app:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger',
+        '',
+        'siren apps requests --app acme-payouts --attention lists the 1 that needs you.',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('is styled in a terminal and fits 80 columns', async () => {
+    const h = harness([reply(200, [appRecord({ needsAttention: 2 }), second]), reply(200, appRecord())]);
+    h.signedIn();
+    const { runCli } = await import('../src/cli/run');
+    const io = { ...h.io, stdoutTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } };
+    expect(await runCli(['apps', 'list', '--quiet'], io), h.err()).toBe(0);
+    expect(await runCli(['apps', 'show', APP_KEY, '--quiet'], io), h.err()).toBe(0);
+    const text = h.out();
+    expect(text).toMatch(/\u001b\[[\d;]+m● on\u001b\[0m/);
+    expect(text).toContain(`${ESC}2m○ off${ESC}0m`);
+    for (const line of strip(text).split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
+    await expect(text).toMatchFileSnapshot('./__snapshots__/cli-styled-list-show.txt');
+  });
+});
