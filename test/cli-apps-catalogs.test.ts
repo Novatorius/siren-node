@@ -83,7 +83,10 @@ describe('siren apps scopes and siren apps events', () => {
     expect(await h.run(['apps', 'scopes']), h.err()).toBe(0);
     const lines = h.out().trimEnd().split('\n');
     expect(lines[0]).toMatch(/^SCOPE\s+ALLOWS$/);
-    expect(lines.some((line) => /^event:sale\s+Sale$/.test(line))).toBe(true);
+    // CLI pass 3: an event scope's label is the event's name, so ALLOWS says what the key may do with it.
+    expect(lines.some((line) => /^event:sale\s+Send sale events$/.test(line))).toBe(true);
+    expect(lines.some((line) => /^event:site-visited\s+Send site visited events$/.test(line))).toBe(true);
+    expect(lines.some((line) => /^records:programs:read\s+Read programs$/.test(line))).toBe(true);
     expect(lines.some((line) => /^records:programs:read\s+\S/.test(line))).toBe(true);
     expect(h.paths()).toEqual(['GET /apps/scopes']);
 

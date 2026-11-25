@@ -85,3 +85,15 @@ describe('should-fix 14: login ends with what to do next', () => {
     expect(h.out().slice(before)).toMatch(/\nNext\n {2}1 {2}siren apps apply +declare the app on Siren and save its key\n/);
   });
 });
+
+describe("one-liner: a command's help names the global flags in one line", () => {
+  it('lists their names and points at siren --help, which explains them', async () => {
+    const h = harness([]);
+    expect(await h.run(['apps', 'list', '--help'])).toBe(0);
+    expect(h.out()).toContain('GLOBAL FLAGS\n  --sandbox, --live, --base-url, --org, --quiet, --verbose and --help work with\n  every command. siren --help explains them.\n');
+    expect(h.out()).not.toContain('Skip the logo animation');
+    const top = harness([]);
+    expect(await top.run(['--help'])).toBe(0);
+    expect(top.out()).toContain('Skip the logo animation');
+  });
+});

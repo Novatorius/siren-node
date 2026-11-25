@@ -710,7 +710,9 @@ export async function appsScopes(input: CommandInput): Promise<number> {
     return 0;
   }
   const out = styleFor(input.io, 'stdout', {});
-  const rows = Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => [clean(entry.scope), clean(entry.label)]));
+  // An event scope's label is the event's name, such as Sale, so ALLOWS says what the key may do with it (CLI pass 3).
+  const allows = (entry: { resource: string; label: string }) => (entry.resource === 'events' ? `Send ${clean(entry.label).toLowerCase()} events` : clean(entry.label));
+  const rows = Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => [clean(entry.scope), allows(entry)]));
   for (const line of out.table(['SCOPE', 'ALLOWS'], rows, widthOf(input, out))) run.print(line);
   return 0;
 }

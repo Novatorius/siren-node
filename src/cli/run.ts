@@ -107,6 +107,12 @@ const GLOBAL_FLAGS: ReadonlyArray<readonly [string, string]> = [
   ['-h, --help', 'Show help for a command'],
 ];
 
+/** "--sandbox, --live, … and --help": each global flag's long name. */
+function globalFlagNames(): string {
+  const names = GLOBAL_FLAGS.map(([flag]) => /--[a-z-]+/.exec(flag)?.[0] ?? flag);
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 /** Where `siren --help` sends a person for more. */
 const GUIDE_URL = 'https://github.com/Novatorius/siren-node#command-line-tool';
 
@@ -494,7 +500,8 @@ function commandHelp(style: Style, spec: CommandSpec): string {
     '',
     ...section(style, 'Usage', [`  siren ${spec.usage}`]),
     ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text)) : []),
-    ...section(style, 'Global flags', columns(GLOBAL_FLAGS, 22, (text) => text)),
+    // CLI pass 3: the global flags once by name, since siren --help explains each.
+    ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, HELP_WIDTH - 2).map((line) => `  ${line}`)),
     ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
     ...section(style, 'Learn more', learnMore(style, false)),
   ].join('\n');
