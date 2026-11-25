@@ -94,13 +94,18 @@ export function orgFrom(memberships: readonly StoredMembership[], wanted: OrgWan
 export async function settleOrg(io: CliIo, memberships: readonly StoredMembership[], wanted: OrgWanted | undefined, list: string): Promise<OrgChoice> {
   const settled = orgFrom(memberships, wanted);
   if (settled === 'missing') {
-    throw new CliRefusal(`You are not in an organization named ${wanted!.name}. Yours are ${orgList(memberships)}.`, { fix: list, fixWords: 'to list them' });
+    throw new CliRefusal(`You're not in an organization named ${wanted!.name}.`, {
+      why: `${wanted!.source === 'file' ? `"org" in ${wanted!.from}` : wanted!.from} names it. Yours: ${orgList(memberships)}.`,
+      fix: list,
+      fixWords: 'to list them',
+    });
   }
   if (settled !== 'several') return settled;
   if (!io.interactive) {
-    throw new CliRefusal(
-      `You belong to ${memberships.length} organizations: ${orgList(memberships)}. Pick one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.`,
-    );
+    throw new CliRefusal(`You belong to ${memberships.length} organizations, and nothing names one.`, {
+      why: `With no terminal to ask in, the tool needs a name. Yours: ${orgList(memberships)}.`,
+      fixText: 'Pick one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.',
+    });
   }
   return { org: await askOrg(io, memberships), source: 'asked' };
 }
@@ -211,6 +216,8 @@ export async function askOrg(io: CliIo, memberships: readonly StoredMembership[]
   for (const membership of memberships) io.stderr(`  ${clean(membership.orgSlug)}  ${clean(membership.orgName)}\n`);
   const typed = (await io.prompt('Organization (slug): ')).trim();
   const chosen = findOrg(memberships, typed);
-  if (chosen === undefined) throw new CliRefusal(`You are not in an organization named ${clean(typed)}. Yours are ${orgList(memberships)}.`);
+  if (chosen === undefined) {
+    throw new CliRefusal(`You're not in an organization named ${clean(typed)}.`, { why: `Yours: ${orgList(memberships)}.`, fixText: 'Run the command again and type one of those.' });
+  }
   return chosen;
 }

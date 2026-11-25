@@ -53,7 +53,7 @@ describe('finding 8: --live only on a command that changes a live organization',
     const h = harness([AuthAnswers.oneOrg()], { edition: 'production', stdin: PASSWORD });
     expect(await h.run(['login', '--base-url', UAT, '--live', '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
     expect(await h.run(['apps', 'apply', '--live'])).toBe(1);
-    expect(h.err()).toContain('Write one with siren apps init.');
+    expect(h.err()).toContain('Run siren apps init to write siren.app.json.');
   });
 
   it('keeps --live on a hint to a write, and leaves it off a hint to a read', async () => {

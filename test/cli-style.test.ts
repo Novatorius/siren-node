@@ -61,12 +61,12 @@ describe('style: lines', () => {
   });
 });
 
-describe('style: errors are three parts at most', () => {
-  const refusal = new CliRefusal('Not logged in.', { fix: 'siren login', fixWords: 'to log in', detail: ['Siren: uat.example'] });
+describe('style: errors are three parts', () => {
+  const refusal = new CliRefusal('Not logged in.', { why: 'No session.', fix: 'siren login', fixWords: 'to log in', detail: ['Siren: uat.example'] });
 
   it('gives the plain message on one line, as every error was before', () => {
-    expect(refusal.message).toBe('Not logged in. Run siren login to log in.');
-    expect(plain.error(refusal, false)).toBe('siren: Not logged in. Run siren login to log in.\n');
+    expect(refusal.message).toBe('Not logged in. No session. Run siren login to log in.');
+    expect(plain.error(refusal, false)).toBe('siren: Not logged in. No session. Run siren login to log in.\n');
   });
 
   it('in a terminal: a red ✗ headline, the why, and the fix as a command to run', () => {
@@ -83,12 +83,12 @@ describe('style: errors are three parts at most', () => {
   it('adds the detail, dim, only with --verbose or SIREN_DEBUG', () => {
     expect(rich.error(refusal, false)).not.toContain('uat.example');
     expect(rich.error(refusal, true)).toContain(`${ESC}2mSiren: uat.example`);
-    expect(plain.error(refusal, true)).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
+    expect(plain.error(refusal, true)).toBe('siren: Not logged in. No session. Run siren login to log in.\nSiren: uat.example\n');
   });
 
   it('always shows a dim line that is marked to show, such as a Siren that is not the default', () => {
-    const elsewhere = new CliRefusal('Not logged in.', { fix: 'siren login', fixWords: 'to log in', note: 'Siren: uat.example' });
-    expect(plain.error(elsewhere, false)).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
+    const elsewhere = new CliRefusal('Not logged in.', { why: 'No session.', fix: 'siren login', fixWords: 'to log in', note: 'Siren: uat.example' });
+    expect(plain.error(elsewhere, false)).toBe('siren: Not logged in. No session. Run siren login to log in.\nSiren: uat.example\n');
     expect(rich.error(elsewhere, false)).toContain(`${ESC}2mSiren: uat.example`);
   });
 });
@@ -184,7 +184,7 @@ describe('style: what runCli prints', () => {
     const h = harness([]);
     const { runCli } = await import('../src/cli/run');
     expect(await runCli(['whoami'], { ...h.io, stderrTty: true, env: { NO_COLOR: '1' } })).toBe(1);
-    expect(h.err()).toBe('siren: Not logged in. Run siren login to log in.\n');
+    expect(h.err()).toBe('siren: Not logged in. The tool keeps no session for sandbox.sirenaffiliates.com. Run siren login to log in.\n');
     const json = harness([]);
     json.signedIn();
     expect(await runCli(['whoami', '--json'], { ...json.io, stdoutTty: true, stderrTty: true, env: { TERM: 'xterm-256color' } })).toBe(0);
@@ -195,7 +195,7 @@ describe('style: what runCli prints', () => {
   it('adds the detail with --verbose or SIREN_DEBUG=1, and the Siren beside a not-logged-in line when it is not the default', async () => {
     const h = harness([], { env: { SIREN_BASE_URL: 'https://uat.example/siren/v1' } });
     expect(await h.run(['whoami'])).toBe(1);
-    expect(h.err()).toBe('siren: Not logged in. Run siren login to log in.\nSiren: uat.example\n');
+    expect(h.err()).toBe('siren: Not logged in. The tool keeps no session for uat.example. Run siren login to log in.\n');
     const verbose = harness([]);
     expect(await verbose.run(['whoami', '--verbose'])).toBe(1);
     expect(verbose.err()).toContain('Siren: sandbox.sirenaffiliates.com');
@@ -206,16 +206,16 @@ describe('style: what runCli prints', () => {
 });
 
 describe('style: a command line the tool cannot read', () => {
-  it('in a terminal: the ✗ headline, the guess as a command to run, and where help is, dim', async () => {
+  it('in a terminal: the ✗ headline, where help is, and the guess as a command to run', async () => {
     const h = harness([]);
     const { runCli } = await import('../src/cli/run');
     expect(await runCli(['apps', 'aply'], { ...h.io, stderrTty: true, env: { TERM: 'xterm-256color' } })).toBe(2);
     const lines = h.err().split('\n');
     expect(lines[0]).toContain('✗');
     expect(lines[0]).toContain(`siren apps has no command ${ESC}1m"aply"${ESC}0m.`);
-    expect(lines[1]).toContain(`Did you mean ${ESC}1msiren apps apply${ESC}0m?`);
-    expect(lines[1]).toContain('›');
-    expect(lines[2]).toBe(`${ESC}2m  siren apps --help lists the app commands.${ESC}0m`);
+    expect(lines[1]).toBe('  siren apps --help lists the app commands.');
+    expect(lines[2]).toContain(`Did you mean ${ESC}1msiren apps apply${ESC}0m?`);
+    expect(lines[2]).toContain('›');
   });
 
   it('keeps the one-line form when plain', async () => {

@@ -86,15 +86,19 @@ async function requestIdFor(run: CommandContext, typed: string, org: string): Pr
   }
   const ids = [...new Set(rows.map((row) => row.id).filter((id) => id.startsWith(`apr_${start}`)))];
   if (ids.length > 1) {
-    throw new CliRefusal(`${ids.length} requests start with ${start}: ${ids.map((id) => shortIdOf(id, start)).join(', ')}.`, { why: 'Give more of the id.' });
+    throw new CliRefusal(`${ids.length} requests start with ${start}.`, {
+      why: `They are ${ids.map((id) => shortIdOf(id, start)).join(', ')}, so nothing was sent.`,
+      fixText: 'Give more of the id.',
+    });
   }
   if (!whole) {
-    throw new CliRefusal(`${org} has more than 1000 requests, more than a short id searches, so the tool can't be sure ${start} names one request.`, {
-      why: 'Give the whole id, apr_ and 32 characters, which the request view and --json show.',
+    throw new CliRefusal(`The tool can't be sure ${start} names one request.`, {
+      why: `${org} has more than 1000 requests, more than a short id searches.`,
+      fixText: 'Give the whole id, apr_ and 32 characters, which the list prints.',
     });
   }
   if (ids.length === 0) {
-    throw new CliRefusal(`${org} has no request that starts with ${start}.`, { fix: run.command('apps requests'), fixWords: 'to list the latest' });
+    throw new CliRefusal(`${org} has no request that starts with ${start}.`, { why: 'Siren found none, so nothing was sent.', fix: run.command('apps requests'), fixWords: 'to list the latest' });
   }
   return ids[0]!;
 }
@@ -163,7 +167,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
     rows.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
     if (appKey === undefined) return rows;
     const app = [...appsById.values()].find((candidate) => candidate.key === appKey);
-    if (app === undefined) throw new CliRefusal(`${clean(session.orgName)} has no app ${appKey}.`, { fix: run.command('apps list'), fixWords: 'to see its apps' });
+    if (app === undefined) throw new CliRefusal(`${clean(session.orgName)} has no app ${appKey}.`, { why: '--app names it.', fix: run.command('apps list'), fixWords: 'to list the apps' });
     return rows.filter((row) => row.appId === app.id);
   };
 
@@ -355,7 +359,7 @@ async function showRequest(input: CommandInput, typed: string): Promise<number> 
     request = await siren.apps.requests.retrieve(id);
   } catch (error) {
     if (error instanceof NotFoundError && appErrorCode(error) === AppErrorCode.RequestNotFound) {
-      throw new CliRefusal(`This organization has no request ${id}. See the latest with ${run.command('apps requests')}.`);
+      throw new CliRefusal(`This organization has no request ${id}.`, { why: 'Siren found none with that id.', fix: run.command('apps requests'), fixWords: 'to list the latest' });
     }
     throw error;
   }
@@ -450,8 +454,9 @@ export async function appsAnswer(input: CommandInput): Promise<number> {
   let answer: unknown;
   try {
     answer = JSON.parse(text);
-  } catch (error) {
-    throw new CliUsageError(`The answer is not JSON: ${(error as Error).message}`);
+  } catch {
+    // CLI pass 3, should-fix 13: never Node's parser text, which names a character position no one counts.
+    throw new CliUsageError('The answer isn\'t JSON. Keys and text need double quotes, as in {"outcome":"paid"}.');
   }
   if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) {
     throw new CliUsageError('The answer must be a JSON object, such as {"outcome":"paid","reference":"acme-88"}.');
@@ -496,7 +501,7 @@ export async function appsResend(input: CommandInput): Promise<number> {
   try {
     row = await siren.apps.requests.resend(id);
   } catch (error) {
-    if (error instanceof ConflictError && appErrorCode(error) === AppErrorCode.NotResendable) throw new CliRefusal(await notResendableLine(run, id, error));
+    if (error instanceof ConflictError && appErrorCode(error) === AppErrorCode.NotResendable) throw await notResendableRefusal(run, id, error);
     throw error;
   }
   const out = styleFor(input.io, 'stdout', input.values);
@@ -567,19 +572,26 @@ function scalarText(value: unknown): string {
  * its app is off, so it reads the request and the apps to name the app and
  * the `siren apps on` that turns it on.
  */
-async function notResendableLine(run: ReturnType<typeof contextOf>, id: string, error: ConflictError): Promise<string> {
+async function notResendableRefusal(run: ReturnType<typeof contextOf>, id: string, error: ConflictError): Promise<CliRefusal> {
   const data = (typeof error.data === 'object' && error.data !== null ? error.data : {}) as { status?: unknown };
-  if (data.status === 'applied') return `Siren sent nothing: ${id} is applied, so its answer already did its work.`;
+  if (data.status === 'applied') {
+    return new CliRefusal(`${shortId(id)} is applied, so Siren sent nothing.`, {
+      why: 'Its answer already did its work.',
+      fix: run.command(`apps requests ${id}`),
+      fixWords: 'to see what it did',
+    });
+  }
   const siren = run.siren();
   const app = await siren.apps.requests
     .retrieve(id)
     .then(async (request) => (await siren.apps.list()).find((candidate) => candidate.id === request.appId))
     .catch(() => undefined);
   const key = app?.key ?? '<app key>';
-  return (
-    `Siren sent nothing: ${app?.key ?? 'its app'} is off, and Siren sends nothing to an app that is off. ` +
-    `Turn it on with ${run.command(`apps on ${key}`)}, then run ${run.command(`apps resend ${id}`)}.`
-  );
+  return new CliRefusal(`${app?.key ?? 'Its app'} is off, so Siren sent nothing.`, {
+    why: 'Siren sends nothing to an app that is off.',
+    fixLead: `Run ${run.command(`apps on ${key}`)}, then`,
+    fix: run.command(`apps resend ${id}`),
+  });
 }
 
 /** Every code this SDK knows, so a refusal with any other one prints the code beside Siren's message. */
@@ -596,9 +608,11 @@ function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unkno
   if (!(error instanceof SirenError) || error.statusCode === undefined) return error;
   const code = appErrorCode(error);
   if (code === AppErrorCode.NotNeedingAttention) {
-    return new CliRefusal(`${error.message} See the requests that need attention with ${run.command('apps requests --attention')}.`);
+    return new CliRefusal("This request doesn't need an answer.", { why: error.message, fix: run.command('apps requests --attention'), fixWords: 'to list the ones that do' });
   }
-  if (code !== undefined && !KNOWN_CODES.has(code)) return new CliRefusal(`${error.message} Siren's code: ${code}.`);
+  if (code !== undefined && !KNOWN_CODES.has(code)) {
+    return new CliRefusal('Siren refused the answer.', { why: `${error.message} Siren's code: ${code}.`, fixText: 'Fix what it names, then answer again.' });
+  }
   return error;
 }
 
@@ -612,7 +626,11 @@ async function readAnswerFile(path: string): Promise<string> {
   try {
     return await readFile(path, 'utf8');
   } catch (error) {
-    throw new CliRefusal(`${path} could not be read: ${(error as Error).message}`);
+    const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+    throw new CliRefusal(missing ? `There's no ${path} here.` : `The tool can't read ${path}.`, {
+      why: '--file names the answer to send, so nothing was sent.',
+      fixText: 'Give --file the path of a JSON file, or pass the answer with --body.',
+    });
   }
 }
 

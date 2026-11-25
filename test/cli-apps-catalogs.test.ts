@@ -31,7 +31,7 @@ describe('apply and diff check scopes and events against the lists Siren serves'
     h.write('siren.app.json', file({ scopes: ['event:sales', 'records:programs:read'] }));
     expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
     expect(h.err()).toContain('siren.app.json: scopes: "event:sales" is not a scope an app\'s key may hold. Did you mean "event:sale"?');
-    expect(h.err()).toContain('siren.app.json has a problem, so nothing was sent.');
+    expect(h.err()).toContain('siren.app.json has a problem. Siren offers no such scope, so nothing was sent.');
     expect(h.err()).toContain('siren apps scopes');
     expect(h.out()).not.toContain('Plan');
     expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes']);
@@ -55,7 +55,7 @@ describe('apply and diff check scopes and events against the lists Siren serves'
     expect(await h.run(['apps', 'diff'])).toBe(1);
     expect(h.err()).toContain('Did you mean "sale.created"?');
     expect(h.err()).not.toContain('"payout.paid"');
-    expect(h.err()).toContain('siren.app.json has 2 problems, so nothing was sent.');
+    expect(h.err()).toContain('siren.app.json has 2 problems. Siren offers no such scope or event, so nothing was sent.');
   });
 
   it('reads no list when every scope and event is one the app already holds, or is a wildcard', async () => {

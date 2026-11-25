@@ -456,7 +456,7 @@ export function startLoginStage(io: CliIo, flags: HookFlags, card: LoginCard): L
         await screen.wait(HOOK_FRAME_MS);
         if (keys.pressed === CTRL_C) {
           close();
-          throw new CliRefusal('Stopped waiting for approval, so nothing was kept.');
+          throw new CliRefusal('Stopped waiting for approval.', { why: 'You pressed Ctrl-C, so nothing was kept.', fixText: 'Run siren login again when you are ready.' });
         }
         tick += 1;
         if (keys.pressed === null) current = frameAt(APART + APART_DRIFT[tick % APART_DRIFT.length]!);

@@ -1,5 +1,5 @@
 import { SirenError } from '../../errors';
-import { contextOf, jwtClaim, notSignedIn, planLine, tokenFrom, tokenRefusal } from '../context';
+import { contextOf, jwtClaim, notSignedIn, planRefusal, tokenFrom, tokenRefusal } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { findOrg, orgList } from '../org';
@@ -9,7 +9,7 @@ import type { LoginView } from '../login-view';
 import type { Style } from '../style';
 import { DeviceSignIn, PasswordSignIn, askLine, readPassword } from '../session-auth';
 import type { Edition, EmailConfirmationWindow, LoginResult, Membership, PersonalToken, SessionTokens } from '../session-auth';
-import { CliRefusal, CliUsageError, assertEditionAllowed, assertSessionMatches, httpDetail } from '../targets';
+import { CliRefusal, CliUsageError, assertEditionAllowed, assertSessionMatches, hostName, httpDetail } from '../targets';
 
 /*
  * `siren signup`, `login`, `logout`, `orgs` and `use`: signing a person in
@@ -39,7 +39,7 @@ export async function signup(input: CommandInput): Promise<number> {
   await run.store.get(run.target.baseUrl);
 
   const edition = await run.targetEdition();
-  assertEditionAllowed(run.target, edition, 'sign up on a live Siren');
+  assertEditionAllowed(run.target, edition, 'signup', 'Signing up on a live Siren');
 
   const orgName = text(values['org-name']) ?? (await askLine(io, 'Organization name: ', '--org-name'));
   const email = text(values.email) ?? (await askLine(io, 'Email: ', '--email'));
@@ -47,11 +47,18 @@ export async function signup(input: CommandInput): Promise<number> {
     values['accept-terms'] === true ||
     (io.interactive && /^y(es)?$/i.test((await io.prompt("Do you accept Siren's Terms of Service and Privacy Policy? (y/N) ")).trim()));
   if (!accepted) {
-    throw new CliRefusal(
-      `Siren makes an organization only for a person who accepts its Terms of Service and Privacy Policy. Run ${run.command('signup --accept-terms')} to accept them.`,
-    );
+    throw new CliRefusal("You need to accept Siren's terms to make an organization.", {
+      why: 'Siren makes one only for a person who accepts its Terms of Service and Privacy Policy.',
+      fix: run.command('signup --accept-terms'),
+      fixWords: 'to accept them',
+    });
   }
-  if (orgName === '' || email === '') throw new CliRefusal('Siren needs an organization name and an email address to sign up.');
+  if (orgName === '' || email === '') {
+    throw new CliRefusal('Sign-up needs an organization name and an email.', {
+      why: 'One of them was empty, so nothing was sent.',
+      fix: run.command('signup --org-name Acme --email you@acme.com'),
+    });
+  }
   const password = await readPassword(io, passwordFromStdin);
 
   let registered;
@@ -59,7 +66,11 @@ export async function signup(input: CommandInput): Promise<number> {
     registered = await run.auth.registerOrg({ orgName, email, password, acceptTerms: true });
   } catch (error) {
     if ((error as SirenError).statusCode === 404) {
-      throw new CliRefusal(`Sign-up is turned off on ${run.target.baseUrl}. Ask its owner, or use ${run.command('login')}.`);
+      throw new CliRefusal(`${hostName(run.target.baseUrl)} doesn't take sign-ups.`, {
+        why: 'Its owner turned sign-up off.',
+        fixLead: 'Ask its owner for an invite, then run',
+        fix: run.command('login'),
+      });
     }
     throw error;
   }
@@ -128,7 +139,7 @@ export async function login(input: CommandInput): Promise<number> {
   await run.store.get(run.target.baseUrl);
 
   const edition = await run.targetEdition();
-  assertEditionAllowed(run.target, edition, 'log in to a live organization');
+  assertEditionAllowed(run.target, edition, 'login', 'Logging in to a live organization');
 
   const style = styleFor(io, 'stdout', {});
   const view = browser ? loginView(io, values) : undefined;
@@ -138,7 +149,7 @@ export async function login(input: CommandInput): Promise<number> {
       ? await new DeviceSignIn(run.command('login'), view).signIn(run.auth, io)
       : await new PasswordSignIn().signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
   } catch (error) {
-    throw signInRefusal(error, run.command('login'), run.target.baseUrl);
+    throw signInRefusal(error, run.command('login'), run.target.baseUrl, view !== undefined);
   }
   try {
     return await keepLogin(input, result, edition, style, view);
@@ -159,7 +170,7 @@ async function keepLogin(input: CommandInput, result: LoginResult, edition: Edit
   let org: Membership | undefined;
   const wanted = typeof input.values.org === 'string' ? input.values.org : undefined;
   if (wanted !== undefined && findOrg(memberships, wanted) === undefined) {
-    throw new CliRefusal(`You are not in an organization named ${wanted}. Yours are ${orgList(memberships)}.`, { fix: run.command('login'), fixWords: 'without --org' });
+    throw new CliRefusal(`You're not in an organization named ${wanted}.`, { why: `--org names it. Yours: ${orgList(memberships)}.`, fix: run.command('login'), fixWords: 'without --org' });
   }
   if (result.kind === 'session') {
     tokens = result.tokens;
@@ -176,7 +187,13 @@ async function keepLogin(input: CommandInput, result: LoginResult, edition: Edit
       }
     }
   }
-  if (org === undefined) throw new CliRefusal('Siren logged you in but named no organization.', { why: 'Log in to the Siren dashboard to check your membership.' });
+  if (org === undefined) {
+    throw new CliRefusal("Your account isn't in an organization.", {
+      why: 'Siren logged you in but named none.',
+      fixLead: 'Ask an admin to invite you, or run',
+      fix: run.command('signup'),
+    });
+  }
 
   const session = await run.keep(tokens!, org, edition, tokens!.user.email, memberships);
   const count = `${memberships.length} ${memberships.length === 1 ? 'organization' : 'organizations'}`;
@@ -203,7 +220,11 @@ export async function logout(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const session = await run.store.get(run.target.baseUrl);
   const host = new URL(run.target.baseUrl).host;
-  if (session === null) throw new CliRefusal(`You weren't logged in to ${host}, so there was nothing to log out of.`);
+  if (session === null) {
+    // CLI pass 3: being logged out already is the state the person wanted, so an amber ! in place of a red ✗. The exit stays 1, as gh's does.
+    input.io.stderr(`${styleFor(input.io, 'stderr', input.values).warning(`You weren't logged in to ${host}, so there was nothing to log out of.`)}\n`);
+    return 1;
+  }
   const out = styleFor(input.io, 'stdout', input.values);
   const done = () => run.print(out.success(`Logged out of ${out.bold(host)}.`));
   run.adopt(session);
@@ -365,13 +386,26 @@ export function confirmationLine(window: EmailConfirmationWindow | undefined, no
  * Siren. Any other error is answered as it is, so a wrong password shows
  * Siren's own message.
  */
-function signInRefusal(error: unknown, login: string, baseUrl: string): unknown {
+function signInRefusal(error: unknown, login: string, baseUrl: string, browser = false): unknown {
   const code = error instanceof SirenError ? error.code : undefined;
   if (code === 'email_unconfirmed') {
-    return new CliRefusal(`Confirm your email address first. Open the email Siren sent from your inbox, confirm the address, then run ${login} again.`);
+    return new CliRefusal("Your email address isn't confirmed yet.", {
+      why: 'Siren logs you in once you confirm it.',
+      fixLead: 'Open the email Siren sent to your inbox, confirm the address, then run',
+      fix: login,
+      fixWords: 'again',
+    });
   }
-  const plan = planLine(code, login);
-  if (plan !== undefined) return new CliRefusal(plan);
+  // CLI pass 3, must-fix 4: a Siren without browser sign-in answers POST /auth/cli/code with 404.
+  if (browser && error instanceof SirenError && error.statusCode === 404) {
+    return new CliRefusal(`${hostName(baseUrl)} doesn't offer browser login yet.`, {
+      why: 'It has no browser sign-in, so the tool asks for your email and password instead.',
+      fix: login.replace(/^siren login/, 'siren login --password'),
+      detail: httpDetail(error, baseUrl),
+    });
+  }
+  const plan = planRefusal(code, login);
+  if (plan !== undefined) return plan;
   if (error instanceof SirenError && error.statusCode === 401) {
     // Siren's own words say two things in one line (catalog mockup 4), so the tool splits them.
     return new CliRefusal("Siren didn't accept that email and password.", {

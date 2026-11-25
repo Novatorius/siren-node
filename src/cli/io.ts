@@ -219,7 +219,7 @@ function nodeScreen(): CliScreen {
 
 /** The error a prompt answers when the person presses Ctrl-C at it. */
 function stopped(): CliRefusal {
-  return new CliRefusal('Stopped.');
+  return new CliRefusal('Stopped.', { why: 'You pressed Ctrl-C, so nothing was sent.', fixText: 'Run the command again when you are ready.' });
 }
 
 /** Asks on standard error and answers the line typed, through `node:readline`. */

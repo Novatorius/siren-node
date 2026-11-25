@@ -114,7 +114,8 @@ describe('orgs: each command picks its organization', () => {
     h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
     expect(await h.run(['apps', 'list'])).toBe(1);
     expect(h.err()).toBe(
-      'siren: You belong to 2 organizations: acme (Acme) and acme-two (Acme Two). Pick one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.\n',
+      'siren: You belong to 2 organizations, and nothing names one. With no terminal to ask in, the tool needs a name. Yours: acme (Acme) and acme-two (Acme Two). ' +
+        'Pick one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.\n',
     );
     expect(h.sent()).toEqual([]);
   });
@@ -123,7 +124,7 @@ describe('orgs: each command picks its organization', () => {
     const h = harness([AuthAnswers.memberships()]);
     h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
     expect(await h.run(['apps', 'list', '--org', 'other'])).toBe(1);
-    expect(h.err()).toContain('You are not in an organization named other. Yours are acme (Acme) and acme-two (Acme Two).');
+    expect(h.err()).toContain("You're not in an organization named other. --org names it. Yours: acme (Acme) and acme-two (Acme Two).");
     expect(h.paths()).toEqual(['GET /auth/memberships']);
   });
 });
@@ -172,13 +173,13 @@ describe('orgs: a personal access token carries its own organization', () => {
   it('refuses --org or an app file that names another organization', async () => {
     const h = harness([about], { env: { SIREN_TOKEN: token } });
     expect(await h.run(['apps', 'list', '--org', 'acme-two'])).toBe(1);
-    expect(h.err()).toContain('SIREN_TOKEN acts in Acme (acme), and --org names acme-two.');
+    expect(h.err()).toContain('SIREN_TOKEN acts in acme, and --org names acme-two.');
     expect(h.paths()).toEqual(['GET /personal-tokens/current']);
 
     const file = harness([about], { env: { SIREN_TOKEN: token } });
     file.write('siren.app.json', appFile('acme-two'));
     expect(await file.run(['apps', 'list'])).toBe(1);
-    expect(file.err()).toContain('SIREN_TOKEN acts in Acme (acme), and siren.app.json names acme-two.');
+    expect(file.err()).toContain('SIREN_TOKEN acts in acme, and siren.app.json names acme-two.');
   });
 
   it('acts when they agree', async () => {

@@ -179,7 +179,7 @@ describe('short request ids', () => {
     const both = harness([list(waiting, twin), reply(200, { status: 'accepted' })]);
     both.signedIn();
     expect(await both.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}'])).toBe(1);
-    expect(both.err()).toContain('2 requests start with b79943ff: b79943ff8ca3, b79943ff0000.');
+    expect(both.err()).toContain('2 requests start with b79943ff. They are b79943ff8ca3, b79943ff0000, so nothing was sent.');
     expect(both.paths()).toEqual(['GET /apps/requests']);
   });
 

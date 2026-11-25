@@ -356,14 +356,25 @@ command writes its own escape codes.
 - A command's success output has one shape, which `siren apps init` set: a ✓ headline with the
   thing in bold, a short block of dim labels and their values, a numbered Next with the commands
   in bold, and one or two dim tips. A file in the working folder is named, not given as a path.
-- An error is three parts at most: a red bold ✗ headline, the why under it indented two spaces,
-  and the fix led by a green ›, with the command in bold (catalog mockup 4). `--verbose` or
-  `SIREN_DEBUG=1` adds one dim line under it with the HTTP status, Siren's error code and the host,
-  such as `HTTP 401 · sandbox.sirenaffiliates.com`. A wrong email or password reads "Siren didn't
-  accept that email and password." with the why and the fix on their own lines, not Siren's
-  sentence. An unknown command names the group and the word, the nearest command, and the help
-  that lists the group, with no usage block (catalog mockup 5). With no session, every command says "Not logged in. Run siren login to log in.", and
-  names the Siren on a dim line only when it is not the default sandbox or live one.
+- An error has three parts: a red bold ✗ headline, the why under it indented two spaces, and the
+  fix led by a green ›, with the command in bold (catalog mockup 4). `RefusalParts` in
+  src/cli/targets.ts requires the why and the fix, a command or a sentence, so tsc holds every
+  refusal to the shape (CLI pass 3, must-fix 2). In a terminal, the style module wraps every ✗, ✓,
+  ! and › line at a word boundary within 80 columns with a two-space hanging indent, and keeps a
+  command that fits a line on one line. Piped, an error stays one `siren:` line. An error names a
+  Siren by its host, never its whole address, and a file in the working folder by its name.
+  `--verbose` or `SIREN_DEBUG=1` adds one dim line under it with the HTTP status, Siren's error
+  code and the host, such as `HTTP 401 · sandbox.sirenaffiliates.com`. A wrong email or password
+  reads "Siren didn't accept that email and password." with the why and the fix on their own
+  lines, not Siren's sentence. Siren's own 404 for an app or a request names the key or id the
+  person typed, and Node's JSON parser text never prints. Problems in siren.app.json print under
+  the ✗ headline, each place dim with its message under it, and piped, each is one
+  `file:line:col: message` line (must-fix 3). A browser login against a Siren that answers
+  `POST /auth/cli/code` with 404 says it offers no browser login yet and names `siren login
+  --password` (must-fix 4). A command typo and a flag typo share the shape: the headline, the
+  help or usage line, and `› Did you mean …?` (should-fix 15). `siren app list` offers `siren apps
+  list` (should-fix 6). With no session, every command says "Not logged in.", that the tool keeps
+  no session for that host, and "Run siren login to log in."
 - Long work shows a spinner that turns into one ✓ or ✗ line.
 - Help follows gh's: a one-line description, USAGE, the commands under Getting started, Apps,
   Requests and Account with one aligned line each, FLAGS, ENVIRONMENT, EXAMPLES and LEARN MORE.

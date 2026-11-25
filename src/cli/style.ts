@@ -90,6 +90,30 @@ export function wrapWords(text: string, width: number): string[] {
   return [...lines, line];
 }
 
+/**
+ * `text` wrapped at word boundaries to fit `width` columns, the first line
+ * after `lead` and the rest after `indent`. A line break in `text` starts a
+ * new line. A no-break space keeps two words together, and prints as a
+ * space. Used for every line the tool prints in a terminal, so nothing
+ * wraps mid-word at 80 columns (CLI pass 3, must-fix 2).
+ */
+export function hanging(lead: string, text: string, indent = '  ', width = REPORT_WIDTH): string {
+  const first = width - visibleLength(lead);
+  const rest = width - visibleLength(indent);
+  const lines: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    const room = lines.length === 0 ? first : rest;
+    const [head = '', ...tail] = wrapWords(paragraph, room);
+    lines.push(head, ...(tail.length === 0 ? [] : wrapWords(tail.join(' '), rest)));
+  }
+  return lines.map((line, at) => `${at === 0 ? lead : indent}${line}`.replace(/\u00a0/g, ' ')).join('\n');
+}
+
+/** A command kept on one line when it fits one, its spaces made no-break. */
+function keptWhole(command: string): string {
+  return visibleLength(command) <= REPORT_WIDTH - 10 ? command.replace(/ /g, '\u00a0') : command;
+}
+
 /** How many columns `text` takes, without its escape codes. */
 export function visibleLength(text: string): number {
   return [...text.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '')].length;
@@ -165,24 +189,24 @@ export class Style {
     return this.bold(text);
   }
 
-  /** "✓ Applied acme-payouts." */
+  /** "✓ Applied acme-payouts.", wrapped within 80 columns in a terminal. */
   success(line: string): string {
-    return this.rich ? `${this.green('✓')} ${line}` : line;
+    return this.rich ? hanging(`${this.green('✓')} `, line) : line;
   }
 
-  /** "✗ Not logged in.", the words in bold. */
+  /** "✗ Not logged in.", the words in bold, wrapped within 80 columns in a terminal. */
   failure(line: string): string {
-    return this.rich ? `${RED}${BOLD}✗ ${line}${RESET}` : line;
+    return this.rich ? `${RED}${BOLD}${hanging('✗ ', line)}${RESET}` : line;
   }
 
-  /** "! The key is not saved." */
+  /** "! The key is not saved.", wrapped within 80 columns in a terminal. */
   warning(line: string): string {
-    return this.rich ? `${this.amber('!')} ${line}` : line;
+    return this.rich ? hanging(`${this.amber('!')} `, line) : line;
   }
 
-  /** "› siren apps apply" */
+  /** "› siren apps apply", wrapped within 80 columns in a terminal. */
   next(line: string): string {
-    return this.rich ? `${this.dim('›')} ${line}` : line;
+    return this.rich ? hanging(`${this.dim('›')} `, line) : line;
   }
 
   /**
@@ -193,13 +217,20 @@ export class Style {
    * `verbose` adds the detail, dim, in both.
    */
   error(refusal: Pick<CliRefusal, 'message' | 'headline' | 'parts'>, verbose: boolean): string {
-    const { why, fix, fixLead, fixWords, note, detail } = refusal.parts;
-    const extra = [...(note === undefined ? [] : [note]), ...(verbose ? (detail ?? []) : [])];
-    if (!this.rich) return `siren: ${refusal.message}\n${extra.map((line) => `${line}\n`).join('')}`;
-    const lines = [this.failure(refusal.headline)];
-    if (why !== undefined) lines.push(`  ${why}`);
-    if (fix !== undefined) lines.push(`${this.green('›')} ${fixLead ?? 'Run'} ${this.command(fix)}${fixWords === undefined ? '' : ` ${fixWords}`}.`);
-    for (const line of extra) lines.push(this.dim(line));
+    const parts = refusal.parts;
+    const extra = [...(parts.note === undefined ? [] : [parts.note]), ...(verbose ? (parts.detail ?? []) : [])];
+    const problems = parts.problems ?? [];
+    if (!this.rich) {
+      return `siren: ${refusal.message}\n${[...problems.map((problem) => `${problem.at}: ${problem.message}`), ...extra].map((line) => `${line}\n`).join('')}`;
+    }
+    const lines = [this.failure(refusal.headline), hanging('  ', parts.why)];
+    for (const problem of problems) lines.push(`  ${this.dim(problem.at)}`, hanging('    ', problem.message, '    '));
+    const fix =
+      parts.fix === undefined
+        ? parts.fixText
+        : `${parts.fixLead ?? 'Run'} ${this.command(keptWhole(parts.fix))}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`;
+    lines.push(hanging(`${this.green('›')} `, fix));
+    for (const line of extra) lines.push(this.dim(hanging('', line)));
     return `${lines.join('\n')}\n`;
   }
 

@@ -127,7 +127,7 @@ describe('apps-cli: siren signup, login and the session', () => {
 
     const closed = harness([ConfirmationAnswers.signupOff()], { stdin: PASSWORD });
     expect(await closed.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'])).toBe(1);
-    expect(closed.err()).toContain(`Sign-up is turned off on ${SANDBOX_BASE_URL}. Ask its owner, or use siren login.`);
+    expect(closed.err()).toContain("sandbox.sirenaffiliates.com doesn't take sign-ups. Its owner turned sign-up off. Ask its owner for an invite, then run siren login.");
     expect(closed.err()).not.toMatch(/not found/i);
 
     const unconfirmed = harness(
@@ -462,7 +462,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(await other.run(['apps', 'rotate-key', KEY, '--yes', '--app-file', 'siren.app.json'])).toBe(1);
     expect(other.http.requests).toHaveLength(0);
     expect(other.file('.env.sandbox')).toBe(held);
-    expect(other.err()).toContain('http://localhost:33918/siren/v1');
+    expect(other.err()).toContain('holds a key for another Siren, localhost:33918.');
 
     const named = harness([reply(200, { ...app, rawKey: RAW_KEY_2, signingSecret: SIGNING_SECRET_2 })]);
     named.signedIn();
@@ -642,8 +642,8 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     expect(await early.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
     expect(early.paths()).toEqual([`POST /apps/requests/${REQUEST}/answer`]);
     expect(early.err()).toBe(
-      'siren: A person may answer only a request that needs attention. The app may still answer this one. ' +
-        'See the requests that need attention with siren apps requests --attention.\n',
+      "siren: This request doesn't need an answer. A person may answer only a request that needs attention. The app may still answer this one. " +
+        'Run siren apps requests --attention to list the ones that do.\n',
     );
   });
 
@@ -651,7 +651,9 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     const h = harness([AppAnswers.unknownRefusal()]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', REQUEST, '--body', '{"outcome":"paid"}'])).toBe(1);
-    expect(h.err()).toBe("siren: Siren refused this answer for a reason this SDK does not know. Siren's code: made_up_refusal_code.\n");
+    expect(h.err()).toBe(
+      "siren: Siren refused the answer. Siren refused this answer for a reason this SDK does not know. Siren's code: made_up_refusal_code. Fix what it names, then answer again.\n",
+    );
   });
 
   it('sends a request again', async () => {

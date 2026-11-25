@@ -9,10 +9,10 @@ import { CredentialStore } from './credentials';
 import { firstRun, welcome } from './hook';
 import type { HookCard } from './hook';
 import type { CliIo } from './io';
-import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, httpDetail, resolveTarget } from './targets';
+import { CliRefusal, CliUsageError, LIVE_BASE_URL, commandLine, hostName, httpDetail, resolveTarget } from './targets';
 import { nearest } from './suggest';
-import { Style, styleFor, wrapWords } from './style';
-import { SirenError } from '../errors';
+import { Style, hanging, styleFor, wrapWords } from './style';
+import { ConnectionError, NotFoundError, SirenError } from '../errors';
 import { SANDBOX_BASE_URL } from '../http';
 import type { Target } from './targets';
 
@@ -531,8 +531,14 @@ function commandNamed(words: readonly string[]): Command {
   const name = words[0] === 'apps' ? `apps ${words[1] ?? ''}`.trim() : (words[0] ?? '');
   if ((COMMANDS as readonly string[]).includes(name)) return name as Command;
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
+  // CLI pass 3, should-fix 6: "app list" means apps list, so a group word near apps is read as apps with the rest of the line.
+  if (words[0] !== 'apps' && words.length > 1 && nearest(words[0] ?? '', ['apps']) === 'apps') {
+    const asApps = `apps ${words[1]}`;
+    const guess = (COMMANDS as readonly string[]).includes(asApps) ? asApps : nearest(asApps, COMMANDS);
+    throw new CommandUnknown('siren', words[0] ?? '', guess === undefined ? [] : [guess]);
+  }
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
-  const guesses = started.length > 0 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
+  const guesses = started.length > 0 && started.length <= 4 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
   const group = words[0] === 'apps' && words.length > 1 ? 'siren apps' : 'siren';
   const word = group === 'siren apps' ? (words[1] ?? '') : name;
   throw new CommandUnknown(group, word, guesses);
@@ -562,6 +568,9 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   let spec: CommandSpec | undefined;
   let name: Command | undefined;
   let login = 'siren login';
+  // What a refusal names: the arguments typed after the command, and its hint command lines.
+  let typedArgs: readonly string[] = [];
+  let hintCommand = (words: string) => `siren ${words}`;
   // The Siren a failed command was talking to, for the line --verbose adds.
   let targetUrl: string | undefined;
   try {
@@ -601,6 +610,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
 
     const { values, positionals } = read(argv, { ...GLOBAL, ...spec.options }, `siren ${name}`, spec);
     const args = positionals.slice(name.split(' ').length);
+    typedArgs = args;
     if (args.length < spec.positionals[0] || args.length > spec.positionals[1]) {
       throw new CliUsageError(`siren ${name} takes ${spec.positionals[0] === spec.positionals[1] ? spec.positionals[0] : `${spec.positionals[0]} to ${spec.positionals[1]}`} arguments, and got ${args.length}.`);
     }
@@ -608,7 +618,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const flags = targetFlags(values);
     const context = spec.offline
       ? null
-      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined);
+      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     targetUrl = context?.target.baseUrl;
     // A command that sends nothing checks no address, so its hints repeat the flags as typed.
@@ -617,6 +627,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       addressFlag: flags.baseUrl !== undefined ? ` --base-url ${flags.baseUrl}` : flags.sandbox ? ' --sandbox' : '',
     };
     const command = (words: string) => commandLine(hintTarget, words);
+    hintCommand = context === null ? command : (words: string) => context.command(words);
     login = command('login');
     // A browser sign-in plays the logo animation when the approval lands, so the first run waits for that moment.
     const playsAtApproval = name === 'login' && session.usesBrowserSignIn(values);
@@ -639,23 +650,31 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
         io.stderr(`siren: ${error.message}\n${help}\n`);
         return 2;
       }
+      // CLI pass 3, should-fix 15: a command typo and a flag typo share one shape, the three parts of every error.
       const lines = [style.failure(`${error.group} has no command ${style.bold(`"${error.word}"`)}.`)];
-      if (error.guesses.length > 0) lines.push(`${style.green('›')} Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`);
-      lines.push(style.dim(`  ${help}`));
+      if (error.guesses.length > 0) {
+        lines.push(hanging('  ', help), hanging(`${style.green('›')} `, `Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`));
+      } else {
+        lines.push(hanging('  ', 'The tool knows no command by that name.'), hanging(`${style.green('›')} `, `Run ${style.command(help.split(' lists')[0]!)} to list them.`));
+      }
       io.stderr(`${lines.join('\n')}\n`);
       return 2;
     }
     if (error instanceof CliUsageError) {
       const usage = spec === undefined ? 'Run siren --help to see the commands.' : `Usage: siren ${spec.usage}`;
-      const guess =
-        error.guesses.length === 0
-          ? []
-          : [`  ${style.next(`Did you mean ${error.guesses.map((one) => style.command(one.startsWith('-') ? one : `siren ${one}`)).join(' or ')}?`)}`];
-      io.stderr(style.rich ? `${[style.failure(error.headline), ...guess, `  ${style.dim(usage)}`].join('\n')}\n` : `siren: ${error.message}\n${usage}\n`);
+      const fix =
+        error.guesses.length > 0
+          ? `Did you mean ${error.guesses.map((one) => style.command(one.startsWith('-') ? one : `siren ${one}`)).join(' or ')}?`
+          : `Run ${style.command(spec === undefined || name === undefined ? 'siren --help' : `siren ${name} --help`)} to see ${spec === undefined ? 'the commands' : 'its options'}.`;
+      io.stderr(
+        style.rich
+          ? `${[style.failure(error.headline), hanging('  ', usage), hanging(`${style.green('›')} `, fix)].join('\n')}\n`
+          : `siren: ${error.message}\n${usage}\n`,
+      );
       return 2;
     }
     const verbose = argv.includes('--verbose') || io.env.SIREN_DEBUG === '1';
-    io.stderr(style.error(tokenRefusal(error, login) ?? asRefusal(error, targetUrl), verbose));
+    io.stderr(style.error(tokenRefusal(error, login) ?? asRefusal(error, targetUrl, { name, args: typedArgs, command: hintCommand }), verbose));
     return 1;
   }
 }
@@ -665,11 +684,29 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
  * an error from Siren with its message as the headline and its status and
  * code as detail, and anything else by its message.
  */
-function asRefusal(error: unknown, baseUrl: string | undefined): CliRefusal {
+function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: Command | undefined; args: readonly string[]; command: (words: string) => string }): CliRefusal {
   if (error instanceof CliRefusal) return error;
   const message = (error instanceof Error ? error.message : String(error)).replace(/^Siren: /, '');
-  if (!(error instanceof SirenError)) return new CliRefusal(message);
-  return new CliRefusal(message, { detail: httpDetail(error, baseUrl) });
+  const host = baseUrl === undefined ? 'Siren' : hostName(baseUrl);
+  if (error instanceof ConnectionError) {
+    return new CliRefusal(`Lost the connection to ${host}.`, { why: message, fixText: 'Try again. --verbose shows the request.', detail: httpDetail(error, baseUrl) });
+  }
+  if (!(error instanceof SirenError)) {
+    return new CliRefusal('Something went wrong inside the tool.', { why: message, fixText: 'Run it again with --verbose, and send the output to Siren support.' });
+  }
+  const detail = httpDetail(error, baseUrl);
+  // Siren's 404s name no key or id, so the tool names the one typed (CLI pass 3, should-fix 10).
+  const [first] = typed.args;
+  if (error instanceof NotFoundError && first !== undefined && typed.name?.startsWith('apps ') === true) {
+    if (/^apr_/.test(first) || error.code === 'app_request_not_found') {
+      return new CliRefusal(`This organization has no request ${first}.`, { why: 'Siren found none with that id.', fix: typed.command('apps requests'), fixWords: 'to list the latest', detail });
+    }
+    return new CliRefusal(`This organization has no app ${first}.`, { why: 'Siren found none with that key.', fix: typed.command('apps list'), fixWords: 'to list the apps', detail });
+  }
+  if (error.statusCode !== undefined && error.statusCode >= 500) {
+    return new CliRefusal(`${host} had a problem answering.`, { why: message, fixText: 'Try again in a minute. --verbose shows what Siren answered.', detail });
+  }
+  return new CliRefusal(message, { why: `${host} refused it, so nothing more was sent.`, fixText: 'Fix what it names, then run the command again. --verbose shows the code.', detail });
 }
 
 /** A command name the tool does not know, with the group it was typed in and the nearest real commands. */

@@ -47,8 +47,8 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
       expect(h.paths()).toEqual([]);
       expect(h.editionReads).toHaveLength(1);
       expect(h.err()).toBe(
-        `siren: ${BASE} is now a live Siren, and your session was made when it was a sandbox one, so nothing was sent with it. ` +
-          `Run siren login --base-url ${BASE} --live to sign in again.\n`,
+        'siren: example.invalid became a live Siren since you logged in. Your session was made when it was a sandbox one, so nothing was sent with it. ' +
+          `Run siren login --base-url ${BASE} --live.\n`,
       );
     }
   });
@@ -61,8 +61,8 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
       expect(await h.run(argv), argv.join(' ')).toBe(1);
       expect(h.paths()).toEqual([]);
       expect(h.err()).toBe(
-        `siren: ${BASE} is now a sandbox Siren, and your session was made when it was a live one, so nothing was sent with it. ` +
-          `Run siren login --base-url ${BASE} to sign in again.\n`,
+        'siren: example.invalid became a sandbox Siren since you logged in. Your session was made when it was a live one, so nothing was sent with it. ' +
+          `Run siren login --base-url ${BASE}.\n`,
       );
       expect(h.err()).not.toContain('is a live Siren');
     }
@@ -73,7 +73,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     h.signedIn({ [BASE]: session() });
     expect(await h.run(['apps', 'list', '--base-url', BASE, '--live'])).toBe(1);
     expect(h.paths()).toEqual([]);
-    expect(h.err()).toContain('is now a live Siren');
+    expect(h.err()).toContain('became a live Siren');
   });
 
   it('checks every command that sends anything with a session, and none of them sends anything else on a mismatch', async () => {
@@ -82,7 +82,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
       h.signedIn({ [SANDBOX_BASE_URL]: session({ envFiles: { [APP_KEY]: '/nowhere/.env.sandbox' } }) });
       expect(await h.run(command), command.join(' ')).toBe(1);
       expect(h.paths(), command.join(' ')).toEqual([]);
-      expect(h.err(), command.join(' ')).toContain('your session was made when it was a sandbox one');
+      expect(h.err(), command.join(' ')).toContain('Your session was made when it was a sandbox one');
     }
   });
 
@@ -91,8 +91,8 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     h.signedIn({ [SANDBOX_BASE_URL]: session({ baseUrl: BASE }) });
     expect(await h.run(['apps', 'list'])).toBe(1);
     expect(h.paths()).toEqual([]);
-    expect(h.err()).toContain(`The session stored for ${SANDBOX_BASE_URL} was made for ${BASE}`);
-    expect(h.err()).toContain('Run siren login to sign in again.');
+    expect(h.err()).toContain('Your session belongs to another Siren. It was made for example.invalid, and this command is for sandbox.sirenaffiliates.com');
+    expect(h.err()).toContain('Run siren login.');
   });
 
   // The follow runs here pass --attention, which reads one list a poll. The plain list also reads the attention list (demo fix 2).
@@ -136,8 +136,8 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(await other.run(['apps', 'list'])).toBe(1);
     expect(followed).toBe(other.err());
     expect(followed).toBe(
-      `siren: ${SANDBOX_BASE_URL} is now a live Siren, and your session was made when it was a sandbox one, so nothing was sent with it. ` +
-        'Run siren login --live to sign in again.\n',
+      'siren: sandbox.sirenaffiliates.com became a live Siren since you logged in. Your session was made when it was a sandbox one, so nothing was sent with it. ' +
+        'Run siren login --live.\n',
     );
   });
 
@@ -149,7 +149,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE }) });
     expect(await h.run(['apps', 'requests', '--attention', '--follow', '--live', '--base-url', BASE])).toBe(1);
     expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests']);
-    expect(h.err()).toContain('is now a sandbox Siren, and your session was made when it was a live one');
+    expect(h.err()).toContain('became a sandbox Siren since you logged in. Your session was made when it was a live one');
   });
 
   it('gives the edition read a short timeout of its own, so a target that hangs is given up well under ten seconds', async () => {
@@ -164,8 +164,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     const pauses = [500, 1000].slice(0, timeouts.length - 1).reduce((sum, pause) => sum + pause, 0);
     expect(timeouts.reduce((sum, timeout) => sum + timeout, 0) + pauses).toBeLessThan(7000);
     expect(h.err()).toBe(
-      `siren: ${SANDBOX_BASE_URL} did not answer when the tool asked which edition it is, so nothing was sent. ` +
-        'Check the address, or try again in a minute.\n',
+      "siren: Can't reach sandbox.sirenaffiliates.com. Nothing answered there, so nothing was sent. Check the address, or try again in a minute.\n",
     );
   });
 
@@ -210,7 +209,7 @@ describe('apps-cli: the edition check against a Cloud whose edition changes betw
     for (const live of [[], ['--live']]) {
       const refused = await runBuilt(cli, ['apps', 'list', ...base, ...live], config);
       expect(refused.status).toBe(1);
-      expect(refused.stderr).toContain('is now a live Siren, and your session was made when it was a sandbox one');
+      expect(refused.stderr).toContain('became a live Siren since you logged in. Your session was made when it was a sandbox one');
     }
     expect(cloud.seen.slice(before).map((request) => `${request.method} ${request.path}`)).toEqual([
       'GET /auth/signup-options',
@@ -239,7 +238,7 @@ describe('apps-cli: the edition check against a Cloud whose edition changes betw
     const ended = await following;
 
     expect(ended.status, ended.stderr).toBe(1);
-    expect(ended.stderr).toContain('is now a live Siren, and your session was made when it was a sandbox one');
+    expect(ended.stderr).toContain('became a live Siren since you logged in. Your session was made when it was a sandbox one');
     const after = cloud.seen.slice(flippedAt).map((request) => `${request.method} ${request.path}`);
     expect(after).toEqual(['GET /auth/signup-options']);
     cloud.edition = 'sandbox';
@@ -257,7 +256,7 @@ describe('apps-cli: the edition check against a Cloud whose edition changes betw
     expect(ended.status, ended.stderr).toBe(1);
     expect(took).toBeLessThan(9000);
     expect(ended.stderr).toBe(
-      `siren: ${cloud.baseUrl} did not answer when the tool asked which edition it is, so nothing was sent. Check the address, or try again in a minute.\n`,
+      `siren: Can't reach ${new URL(cloud.baseUrl).host}. Nothing answered there, so nothing was sent. Check the address, or try again in a minute.\n`,
     );
   }, 60_000);
 });
