@@ -129,12 +129,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `apps.requests.list()` takes `limit` (1 to 100) and `before` (a request id) to page through every
-  request, as `GET /apps/requests` now reads them. It refuses either one beside `needs_attention`,
-  whose list Siren answers whole.
+  request, as `GET /apps/requests` now reads them.
 - `apps.requests.list({ idPrefix })` finds requests by the start of their id, `apr_` and 4 to 32
   hex characters in either case, as Siren reads it from feat/apps 76d5bbdf83. It answers the
   matching requests, at most two, newest first, so two mean the start fits more than one. It
   refuses status, limit or before beside it, since Siren ignores them.
+- `apps.requests.list({ appId })` keeps the list to one app, by its numeric id, as Siren reads it
+  on the plain list and `needs_attention` from feat/apps 76d5bbdf83.
+- `apps.requests.list({ status: 'needs_attention' })` takes `limit` and `before` too, since Siren
+  pages the attention list from pkt/apps-attention-paging. An older Siren ignores them and answers
+  at most 50.
 
 - `new Siren()` reads `SIREN_BASE_URL` as its default base URL, the way it reads `SIREN_API_KEY`,
   and a `baseUrl` passed in code wins. `siren apps apply` writes the variable beside the key, so a

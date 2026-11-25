@@ -58,7 +58,7 @@ export const DEFAULT_APP_REQUEST_TOLERANCE_SECONDS = 300;
  */
 export class AppRequestsResource {
   /** The filters `list()` sends, the ones `GET /apps/requests` reads (ListAppRequests.php at feat/apps 76d5bbdf83). */
-  static readonly LIST_FILTERS = ['status', 'limit', 'before', 'idPrefix'] as const;
+  static readonly LIST_FILTERS = ['status', 'limit', 'before', 'idPrefix', 'appId'] as const;
 
   constructor(private readonly http: HttpTransport) {}
 
@@ -71,9 +71,11 @@ export class AppRequestsResource {
    * as the next page's `before` until a page holds fewer than `limit`.
    *
    * Refuses with `SirenError` before sending: a key of `params` other than
-   * these three, a status outside `AppRequestStatus`, a limit outside 1 to
-   * 100, a `before` that is not a request id, and `limit` or `before` with
-   * `needs_attention`, whose list Siren does not page. Retries on a network
+   * the filters it lists, a status outside `AppRequestStatus`, a limit
+   * outside 1 to 100, a `before` that is not a request id, and a bad
+   * `idPrefix` or `appId`. `needs_attention` pages the same way on a Siren
+   * from pkt/apps-attention-paging, and an older one answers at most 50
+   * and ignores `limit` and `before`. Retries on a network
    * error, 429 or 5xx, as a read. Throws `UnexpectedResponseError` when the
    * 2xx body is not an object holding a `requests` array of objects.
    */

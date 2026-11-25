@@ -3193,12 +3193,16 @@ paths:
           schema: { type: string, enum: [pending, sent, delivered, answered, applying, applied, needs_attention, dropped] }
         - name: limit
           in: query
-          description: How many requests to answer. Not with needs_attention.
+          description: How many requests to answer.
           schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
         - name: before
           in: query
-          description: Only the requests older than this one, to read the next page. Not with needs_attention.
+          description: Only the requests older than this one, to read the next page.
           schema: { type: string, pattern: '^apr_[0-9a-f]{32}$' }
+        - name: appId
+          in: query
+          description: Only this app's requests, by its numeric id. Not with idPrefix.
+          schema: { type: integer, minimum: 1 }
         - name: idPrefix
           in: query
           description: |

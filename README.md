@@ -928,7 +928,8 @@ nothing more was applied. A different answer after an accepted one gets 409
 
 `apps.requests.list({ status, limit, before })` reads the latest requests, newest first: 50, or `limit` from 1 to 100,
 older than the request `before` names when it is given. Pass each page's last id as the next page's `before` to read them
-all. `needs_attention` comes whole and takes neither. `apps.requests.list({ idPrefix: 'apr_9f2c' })`
+all. `needs_attention` pages the same way on a Siren that reads it there, and an older Siren answers
+at most 50 of those and ignores both. `appId` keeps any of these lists to one app, by `App.id`. `apps.requests.list({ idPrefix: 'apr_9f2c' })`
 finds requests by the start of their id, 4 to 32 hex characters in either case after `apr_`, as
 the command-line tool prints one short. It answers the matching requests, at most two, newest
 first: one is the request, and two mean the start fits more than one. It takes no other filter. An
