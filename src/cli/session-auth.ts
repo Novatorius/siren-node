@@ -573,7 +573,7 @@ export class DeviceSignIn implements SignInMethod {
   ) {}
 
   async signIn(auth: SessionAuthClient, io: CliIo): Promise<LoginResult> {
-    const code = await auth.cliCode(io.machine ?? 'this machine');
+    const code = await auth.cliCode(machineName(io.machine));
     const opened = io.openUrl === undefined ? false : await io.openUrl(code.page).catch(() => false);
     const view = this.view ?? plainView(io);
     view.show(code, opened);
@@ -631,4 +631,17 @@ export class DeviceSignIn implements SignInMethod {
 /** An interval Siren named, held between 1 second and {@link MAX_POLL_SECONDS}. */
 function seconds(value: number): number {
   return Number.isFinite(value) ? Math.min(Math.max(Math.ceil(value), 1), MAX_POLL_SECONDS) : 5;
+}
+
+/**
+ * The host name as Siren takes it for `machine`: 1 to 63 letters, digits,
+ * dots, hyphens or underscores, or `POST /auth/cli/code` answers 422
+ * `invalid_machine_name` (contract/cli-signin.md, 2026-11-24). Any other
+ * character becomes a hyphen, the name is cut to 63 characters, and an
+ * empty one becomes `siren-cli`. The approval page shows it, so the person
+ * can tell their own terminal's request from another.
+ */
+export function machineName(host: string | undefined): string {
+  const name = Array.from(host ?? '', (character) => (/^[A-Za-z0-9._-]$/.test(character) ? character : '-')).join('').slice(0, 63);
+  return name === '' ? 'siren-cli' : name;
 }

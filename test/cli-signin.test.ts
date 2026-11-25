@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { CliIo } from '../src/cli/io';
 import { runCli } from '../src/cli/run';
+import { machineName } from '../src/cli/session-auth';
 import { HOOK_FRAMES } from '../src/cli/hook-frames';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { appRecord } from './apps-siren-answers';
@@ -62,6 +63,20 @@ describe('cli sign-in: login approves a code in the browser', () => {
     expect(h.out()).toContain(`Logged in as ${EMAIL} · 1 organization\n`);
     expect(h.credentials().sessions[SANDBOX_BASE_URL]?.accessToken).toBe(ACCESS_1);
     expect(h.secretPrompts).toEqual([]);
+  });
+
+  it('sends the host name in the characters Siren takes: letters, digits, dots, hyphens and underscores, up to 63', async () => {
+    expect(machineName('test-laptop')).toBe('test-laptop');
+    expect(machineName('Alex\u2019s MacBook Pro (2).local')).toBe('Alex-s-MacBook-Pro--2-.local');
+    expect(machineName('build_01.ci.example')).toBe('build_01.ci.example');
+    expect(machineName('a'.repeat(80))).toBe('a'.repeat(63));
+    expect(machineName('')).toBe('siren-cli');
+    expect(machineName(undefined)).toBe('siren-cli');
+    expect(machineName('\u00e9\u00e9')).toBe('--');
+
+    const h = harness([Device.code(), Device.approved()], { interactive: true });
+    expect(await runCli(['login'], { ...h.io, machine: 'Alex\u2019s MacBook Pro' }), h.err()).toBe(0);
+    expect(bodyOf(h, 0)).toEqual({ machine: 'Alex-s-MacBook-Pro' });
   });
 
   it('prints the page with no character that could move the cursor or recolor the terminal', async () => {
