@@ -104,7 +104,7 @@ describe('orgs: each command picks its organization', () => {
     const h = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, [appRecord()])], { interactive: true, typed: ['acme-two'] });
     h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
-    expect(h.prompts.join('')).toContain('Organization');
+    expect(h.prompts.join('')).toContain('Number or slug');
     expect(h.err()).toContain('acme-two');
     expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /apps']);
   });
@@ -266,5 +266,85 @@ describe('orgs: SIREN_ORG and the app file disagree', () => {
       expect(await h.run(['apps', 'off', APP_KEY]), h.err()).toBe(0);
       expect(h.err()).toBe('');
     }
+  });
+});
+
+/*
+ * Pass 3 re-check, must-fix 3: the organization question in gh's shape. An
+ * arrow-key list in a terminal that sends keys, name and slug, with the
+ * session's organization picked to start and typing to filter. A numbered
+ * list with a line answer elsewhere in a terminal. A miss asks again, and a
+ * blank answer never prints an empty name.
+ */
+describe('orgs: the organization question', () => {
+  const strip = (text: string) => text.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '');
+  // Acme is the session's own organization, so picking it sends no switch.
+  const repliesFor = (slug: string) => (slug === 'acme' ? [reply(200, [appRecord()])] : [AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, [appRecord()])]);
+  const ttyRun = async (keys: readonly string[], slug = 'acme-two') => {
+    const { runCli } = await import('../src/cli/run');
+    const { fakeScreen } = await import('./cli-screen-fake');
+    const h = harness(repliesFor(slug), { interactive: true });
+    h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    const screen = fakeScreen({ type: keys });
+    const code = await runCli(['apps', 'list', '-q'], { ...h.io, screen: screen.screen, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } });
+    return { h, code };
+  };
+
+  it('in a terminal that sends keys: lists name and slug, starts on the session organization, and moves with the arrows', async () => {
+    const { h, code } = await ttyRun(['\u001b[B', '\r']);
+    expect(code, h.err()).toBe(0);
+    const text = strip(h.err());
+    expect(text).toContain('? Which organization? Arrows move, typing filters, Enter picks.');
+    expect(text).toMatch(/❯ Acme {6}acme\n/);
+    expect(text).toMatch(/ {2}Acme Two {2}acme-two\n/);
+    expect(text).toContain('? Which organization? Acme Two (acme-two)');
+    expect(text).toContain('› Skip this next time with --org acme-two or SIREN_ORG=acme-two.');
+    expect(h.paths()).toEqual(['POST /auth/switch-org', 'GET /apps']);
+  });
+
+  it('takes the start of a slug typed into the list', async () => {
+    const { h, code } = await ttyRun(['acme-t', '\r']);
+    expect(code, h.err()).toBe(0);
+    expect(strip(h.err())).toContain('? Which organization? Acme Two (acme-two)');
+  });
+
+  it('takes the session organization on Enter alone, and sends no switch', async () => {
+    const { h, code } = await ttyRun(['\r'], 'acme');
+    expect(code, h.err()).toBe(0);
+    expect(strip(h.err())).toContain('? Which organization? Acme (acme)');
+    expect(h.paths()).toEqual(['GET /apps']);
+  });
+
+  it('stops with three parts on Ctrl-C, and sends nothing', async () => {
+    const { h, code } = await ttyRun(['\u0003']);
+    expect(code).toBe(1);
+    expect(strip(h.err())).toMatch(/✗ No organization picked\.\n {2}Ctrl-C stopped the question, so nothing was sent\.\n› Run it again, or pass --org <slug>\./);
+    expect(h.paths()).toEqual([]);
+  });
+
+  it('asks by line where keys do not come: takes a number, a slug or its start, and the session organization when blank', async () => {
+    for (const [typed, slug] of [['2', 'acme-two'], ['acme-two', 'acme-two'], ['Acme T', 'acme-two'], ['', 'acme']] as const) {
+      const h = harness(repliesFor(slug), { interactive: true, typed: [typed] });
+      h.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+      expect(await h.run(['apps', 'list']), `${typed}: ${h.err()}`).toBe(0);
+      expect(h.err()).toContain('Which organization?\n  1  Acme      acme\n  2  Acme Two  acme-two\n');
+      expect(h.prompts).toEqual(['Number or slug [acme]: ']);
+      expect(h.err(), typed).toContain(`Skip this next time with --org ${slug} or SIREN_ORG=${slug}.`);
+    }
+  });
+
+  it('asks again on a miss, three times at most, and never names an empty organization', async () => {
+    const again = harness([AuthAnswers.tokens(ACCESS_2, REFRESH_2), reply(200, [appRecord()])], { interactive: true, typed: ['nope', '2'] });
+    again.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    expect(await again.run(['apps', 'list']), again.err()).toBe(0);
+    expect(again.err()).toContain('nope is none of them. Type a number or a slug.');
+    expect(again.prompts).toHaveLength(2);
+
+    const misses = harness([], { interactive: true, typed: ['x', 'y', 'z'] });
+    misses.signedIn({ [SANDBOX_BASE_URL]: twoOrgs() });
+    expect(await misses.run(['apps', 'list'])).toBe(1);
+    expect(misses.err()).toContain('siren: No organization picked. z named none of them, so nothing was sent. Run it again, or pass --org <slug>.');
+    expect(misses.err()).not.toMatch(/named \./);
+    expect(misses.http.requests).toHaveLength(0);
   });
 });

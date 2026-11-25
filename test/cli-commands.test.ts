@@ -537,7 +537,8 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
       none(),
       found(),
       reply(200, [app]),
-      reply(200, { requests: [row, other] }),
+      // Siren keeps the list to the app with appId.
+      reply(200, { requests: [row] }),
       none(),
       found(),
       reply(200, [app]),

@@ -280,14 +280,14 @@ const SPECS: Record<Command, CommandSpec> = {
     run: apply.appsList,
   },
   'apps show': {
-    usage: 'apps show <key> [flags]',
+    usage: 'apps show [key] [flags]',
     summary: 'Show one app and its features.',
     group: 'Apps',
     short: 'Show one app and its features',
     options: { json: { type: 'boolean' } },
     flags: { json: JSON_FLAG },
     examples: ['siren apps show acme-payouts'],
-    positionals: [1, 1],
+    positionals: [0, 1],
     readsOnly: true,
     run: apply.appsShow,
   },
@@ -622,7 +622,9 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const args = positionals.slice(name.split(' ').length);
     typedArgs = args;
     if (args.length < spec.positionals[0] || args.length > spec.positionals[1]) {
-      throw new CliUsageError(`siren ${name} takes ${spec.positionals[0] === spec.positionals[1] ? spec.positionals[0] : `${spec.positionals[0]} to ${spec.positionals[1]}`} arguments, and got ${args.length}.`);
+      const most = spec.positionals[1];
+      const range = spec.positionals[0] === most ? String(most) : `${spec.positionals[0]} to ${most}`;
+      throw new CliUsageError(`siren ${name} takes ${range} ${most === 1 ? 'argument' : 'arguments'}, and got ${args.length}.`);
     }
 
     const flags = targetFlags(values);

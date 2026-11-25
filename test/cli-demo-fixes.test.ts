@@ -58,7 +58,8 @@ describe('demo fix 2: apps requests shows a request that needs attention, howeve
   });
 
   it('says in one short line when an app has none there, and names the command that watches for them', async () => {
-    const h = harness([reply(200, [appRecord()]), reply(200, { requests: recent }), reply(200, { requests: [] })]);
+    // Siren keeps both lists to the app with appId, so another app's 50 never reach it (pass 3 re-check, must-fix 1).
+    const h = harness([reply(200, [appRecord()]), reply(200, { requests: [] }), reply(200, { requests: [] })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
     expect(h.out()).toBe(`No requests for ${APP_KEY} yet.\nsiren apps requests --app ${APP_KEY} --follow watches for them.\n`);

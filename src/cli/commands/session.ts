@@ -79,16 +79,33 @@ export async function signup(input: CommandInput): Promise<number> {
   }
 
   const org = registered.org;
+  // Pass 3 re-check, must-fix 2: the first success a newcomer sees, in the shape every success has.
+  const out = styleFor(io, 'stdout', values);
+  const made = `Made ${out.bold(clean(org.orgName))} (${clean(org.orgSlug)})`;
+  const siren = `${hostName(run.target.baseUrl)}, ${edition === 'production' ? out.amber('live') : 'sandbox'}`;
   if (registered.tokens === null) {
     run.print(
-      `Made ${org.orgName} (${org.orgSlug}) on ${run.target.baseUrl}. Siren sent a confirmation email to ${email}. ` +
-        `Open it from your inbox, confirm the address, then run ${run.command('login')}.`,
+      out
+        .report({
+          headline: made,
+          rows: [['Siren', siren], ['Email', clean(email)]],
+          next: [{ text: `Open the email Siren sent to your inbox, and confirm the address` }, { text: out.command(run.command('login')) }],
+        })
+        .replace(/\n$/, ''),
     );
     return 0;
   }
 
   const session = await run.keep(registered.tokens, org, edition, email);
-  run.print(`Made ${org.orgName} (${org.orgSlug}) on ${run.target.baseUrl}, and signed in as ${session.email}.`);
+  run.print(
+    out
+      .report({
+        headline: made,
+        rows: [['Signed in as', clean(session.email)], ['Siren', siren]],
+        next: [{ text: out.command(run.command('apps init')), aside: 'write siren.app.json in this folder' }],
+      })
+      .replace(/\n$/, ''),
+  );
   const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());
   if (pending !== null) run.print(pending);
   return 0;
@@ -408,7 +425,7 @@ function signInRefusal(error: unknown, login: string, baseUrl: string, browser =
   // CLI pass 3, must-fix 4: a Siren without browser sign-in answers POST /auth/cli/code with 404.
   if (browser && error instanceof SirenError && error.statusCode === 404) {
     return new CliRefusal(`${hostName(baseUrl)} doesn't offer browser login yet.`, {
-      why: 'It has no browser sign-in, so the tool asks for your email and password instead.',
+      why: 'It has no browser sign-in yet. Log in with your email and password.',
       fix: login.replace(/^siren login/, 'siren login --password'),
       detail: httpDetail(error, baseUrl),
     });

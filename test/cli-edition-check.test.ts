@@ -132,7 +132,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     // The first poll, the idPrefix lookup its first row brings, and the second poll. The third poll never goes.
     expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps/requests']);
     expect(h.editionReads).toHaveLength(3);
-    expect(h.err()).toMatch(/^Watching Acme \(3\), sandbox for requests\. Ctrl-C stops\.\n/);
+    expect(h.err()).toMatch(/^Watching Acme \(3\), sandbox\. Ctrl-C stops\.\n/);
     const followed = h.err().replace(/^Watching .*\n/, '');
 
     const other = harness([reply(200, [app])], { edition: 'production' });

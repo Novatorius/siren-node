@@ -235,7 +235,7 @@ export class CommandContext {
     const wanted = pick ? await this.wanted() : undefined;
     // A session from before login kept memberships knows only its own organization.
     const kept = orgFrom(membershipsOf(session), wanted);
-    if (pick && kept === 'several') this.orgChoice = await settleOrg(this.io, membershipsOf(session), undefined, this.command('orgs'));
+    if (pick && kept === 'several') this.orgChoice = await settleOrg(this.io, membershipsOf(session), undefined, this.command('orgs'), session.orgId);
     else if (pick && typeof kept === 'object') this.orgChoice = kept;
     if (this.orgChoice !== undefined) this.checkOrgSources(wanted, this.orgChoice.org);
     const edition = await this.targetEdition();
@@ -244,7 +244,7 @@ export class CommandContext {
     this.adopt(session);
     // A name the kept list lacks, which the person may have joined since login: ask Siren.
     if (pick && this.orgChoice === undefined) {
-      this.orgChoice = await settleOrg(this.io, await this.memberships(), wanted, this.command('orgs'));
+      this.orgChoice = await settleOrg(this.io, await this.memberships(), wanted, this.command('orgs'), session.orgId);
       this.checkOrgSources(wanted, this.orgChoice.org);
     }
     if (this.orgChoice !== undefined && this.orgChoice.org.orgId !== session.orgId) await this.borrow(this.orgChoice.org);
@@ -292,7 +292,7 @@ export class CommandContext {
     const session = this.current();
     const wanted = await this.wanted();
     const kept = orgFrom(membershipsOf(session), wanted);
-    this.orgChoice = typeof kept === 'object' ? kept : await settleOrg(this.io, kept === 'several' ? membershipsOf(session) : await this.memberships(), wanted, list);
+    this.orgChoice = typeof kept === 'object' ? kept : await settleOrg(this.io, kept === 'several' ? membershipsOf(session) : await this.memberships(), wanted, list, session.orgId);
     this.checkOrgSources(wanted, this.orgChoice.org);
     return this.orgChoice;
   }

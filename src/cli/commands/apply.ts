@@ -11,7 +11,7 @@ import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
-import { REPORT_WIDTH, clean, styleFor, unbroken, visibleLength, wrapWords } from '../style';
+import { REPORT_WIDTH, clean, hanging, styleFor, unbroken, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import type { StoredSession } from '../credentials';
@@ -270,7 +270,7 @@ async function orgForInit(input: CommandInput): Promise<string | undefined> {
     return found.orgSlug || String(found.orgId);
   }
   if (memberships.length < 2 || !input.io.interactive) return undefined;
-  const chosen = await askOrg(input.io, memberships);
+  const chosen = await askOrg(input.io, memberships, session.orgId);
   return chosen.orgSlug || String(chosen.orgId);
 }
 
@@ -476,7 +476,8 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
     throw new CliRefusal(`${shown} has ${problems.length === 1 ? 'a problem' : `${problems.length} problems`}.`, {
       why: 'The tool checks the file before it sends anything, so nothing was sent.',
       problems,
-      fixLead: `Fix ${problems.length === 1 ? 'it' : 'them'} in ${shown}, then run`,
+      // Pass 3 re-check, should-fix 9: a variable that isn't set is fixed in .env, and the file is fine.
+      fixLead: unsetVariables(problems) ?? `Fix ${problems.length === 1 ? 'it' : 'them'} in ${shown}, then run`,
       fix: run.command(mode === 'apply' ? 'apps apply' : 'apps diff'),
       fixWords: 'again',
     });
@@ -747,7 +748,19 @@ export async function appsList(input: CommandInput): Promise<number> {
   }
   const out = styleFor(input.io, 'stdout', {});
   if (apps.length === 0) {
-    run.print(`No apps in ${orgNamed(session)} yet. Write one with ${run.command('apps init')}, then run ${run.command('apps apply')}.`);
+    // Pass 3 re-check, must-fix 2: a sentence that wrapped mid-word becomes a headline and a Next.
+    run.print(
+      out
+        .report({
+          headline: `No apps in ${orgNamed(session)} yet.`,
+          mark: false,
+          next: [
+            { text: out.command(run.command('apps init')), aside: 'write siren.app.json in this folder' },
+            { text: out.command(run.command('apps apply')), aside: 'declare the app on Siren and save its key' },
+          ],
+        })
+        .replace(/\n$/, ''),
+    );
     return 0;
   }
   run.print(out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
@@ -773,9 +786,35 @@ export async function appsList(input: CommandInput): Promise<number> {
 }
 
 /** `siren apps show <key> [--json]`: the app in an aligned block, then its features as a table. */
+/**
+ * The app key in the app file at `path` when it holds one app, or
+ * undefined: no file, one the tool can't read, or several apps. The file
+ * is checked properly by apply, so this only reads the key.
+ */
+/** "Set NAME in .env, then run" when every problem is a variable that isn't set, else undefined. */
+function unsetVariables(problems: ReadonlyArray<{ message: string }>): string | undefined {
+  const names = problems.map((problem) => /needs the environment variable (SIREN_APP_[A-Z0-9_]+), which is not set/.exec(problem.message)?.[1]);
+  if (names.some((name) => name === undefined)) return undefined;
+  const unique = [...new Set(names as string[])];
+  return `Set ${unique.length === 1 ? unique[0] : `${unique.slice(0, -1).join(', ')} and ${unique.at(-1)}`} in .env, then run`;
+}
+
+export async function appKeyInFolder(path: string): Promise<string | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as { apps?: unknown };
+    const keys = typeof parsed.apps === 'object' && parsed.apps !== null && !Array.isArray(parsed.apps) ? Object.keys(parsed.apps) : [];
+    return keys.length === 1 && isAppKey(keys[0]!) ? keys[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function appsShow(input: CommandInput): Promise<number> {
   const run = contextOf(input);
-  const key = appKeyArgument(input.args[0] ?? '');
+  // Pass 3 re-check, should-fix 8: in an app's folder, the app is siren.app.json's, as apps requests reads it.
+  const given = input.args[0] ?? (await appKeyInFolder(run.appFilePath));
+  if (given === undefined) throw new CliUsageError(`siren apps show takes 1 argument, and got 0. With no key, it shows the app ${APP_FILE_NAME} names.`);
+  const key = appKeyArgument(given);
   await run.signedIn();
   const app = await run.siren().apps.retrieve(key);
   if (input.values.json === true) {
@@ -1047,13 +1086,18 @@ export async function appsDelete(input: CommandInput): Promise<number> {
   if (values.yes !== true) {
     let typed: string | undefined;
     if (session !== undefined) {
-      run.print(styleFor(io, 'stdout', values).warning(`Deleting ${key} revokes its key and can't be undone.`));
-      typed = (await io.prompt(`Type ${key} to delete it from ${orgNamed(session)}: `)).trim();
+      // Pass 3 re-check, must-fix 2: the question is its own wrapped lines, and the answer goes on a short prompt,
+      // so a long key and organization never push the typed answer past 80 columns.
+      const out = styleFor(io, 'stdout', values);
+      run.print(out.warning(`Deleting ${out.bold(key)} from ${orgNamed(session)} can't be undone.`));
+      run.print(out.rich ? hanging('  ', `It revokes the key. Type ${out.bold(key)} to delete it.`) : `It revokes the key. Type ${key} to delete it.`);
+      typed = (await io.prompt('Key: ')).trim();
     }
     if (typed !== key) {
       throw new CliRefusal(io.interactive ? `Nothing deleted: you typed something other than ${key}.` : 'Nothing deleted: deleting needs a yes.', {
         why: 'It revokes the key and cannot be undone.',
-        fix: run.command(`apps delete ${key} --yes`),
+        // Pass 3 re-check, should-fix 13: after a wrong answer, ask again, and never skip the check that failed.
+        ...(io.interactive ? { fix: run.command(`apps delete ${key}`), fixWords: 'to be asked again' } : { fix: run.command(`apps delete ${key} --yes`) }),
       });
     }
   }
@@ -1096,9 +1140,11 @@ async function setStatus(input: CommandInput, status: 'active' | 'inactive'): Pr
     out.success(
       app.status === 'active'
         ? `${shown} is on. Siren sends it requests again.`
-        : `${shown} is off. Siren sends it nothing until ${out.command(run.command(`apps on ${clean(app.key)}`))}.`,
+        : `${shown} is off. Siren sends it nothing.`,
     ),
   );
+  // Pass 3 re-check, should-fix 12: the command that undoes it goes on a tip, as other commands' do.
+  if (app.status !== 'active') run.print(out.next(`${out.command(run.command(`apps on ${clean(app.key)}`))} turns it back on.`));
   return 0;
 }
 

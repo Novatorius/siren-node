@@ -103,7 +103,7 @@ describe('siren apps requests: the list', () => {
     });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--follow'])).toBe(130);
-    expect(h.err()).toContain('Watching Acme (3), sandbox for requests. Ctrl-C stops.');
+    expect(h.err()).toContain('Watching Acme (3), sandbox. Ctrl-C stops.');
     const rows = h.out().split('\n').filter((line) => line.startsWith('b79943ff'));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toContain('waiting');
@@ -337,10 +337,12 @@ describe("CLI pass 3, should-fix 7: in an app's folder, the list is that app's",
   const otherApp = () => reply(200, [appRecord(), appRecord({ id: 99, key: 'other-app' })]);
 
   it('lists only the app siren.app.json names, says so, and names the flag that lists them all', async () => {
-    const h = harness([otherApp(), list(waiting, theirs), list(), found(waiting)], { env: UTC });
+    // Siren keeps the lists to the app with appId (pass 3 re-check, must-fix 1).
+    const h = harness([otherApp(), list(waiting), list(), found(waiting)], { env: UTC });
     h.signedIn();
     h.write('siren.app.json', appFile);
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
+    expect(new URL(h.http.requests[1]!.url).searchParams.get('appId')).toBe('4');
     expect(h.out()).toContain(`1 request for ${APP_KEY} in Acme (3), sandbox`);
     expect(h.out()).not.toContain('aaaa0000');
     expect(h.out()).toContain("siren apps requests --all lists every app's.");
@@ -371,7 +373,7 @@ describe("CLI pass 3, should-fix 7: in an app's folder, the list is that app's",
     h.signedIn();
     h.write('siren.app.json', appFile);
     expect(await h.run(['apps', 'requests', '--follow'])).toBe(130);
-    expect(h.err()).toContain(`Watching ${APP_KEY} in Acme (3), sandbox for requests. Ctrl-C stops.`);
+    expect(h.err()).toContain(`Watching ${APP_KEY} in Acme (3), sandbox. Ctrl-C stops.`);
   });
 
   it('in a terminal: drops ABOUT before APP, and shows the newest 20 with a count of the rest', async () => {
@@ -396,5 +398,59 @@ describe("CLI pass 3, should-fix 7: in an app's folder, the list is that app's",
     expect(rows[0]).toMatch(/^05000000 /);
     expect(h.out()).toContain('5 older requests are not shown. --json prints them all.');
     for (const line of lines) expect([...line].length, line).toBeLessThanOrEqual(80);
+  });
+});
+
+describe('pass 3 re-check, must-fix 1: an app list never misses what apps list counts', () => {
+  /*
+   * On the preview the organization held 53 requests that needed attention,
+   * 52 for one app and 1 for acme-crm, and Siren's attention list answered
+   * the newest 50, all for the first app. The tool filtered by app on its
+   * side, so acme-crm's list said it had none. Siren filters by appId at
+   * feat/apps 76d5bbdf83, and pages the attention list with limit and
+   * before from pkt/apps-attention-paging.
+   */
+  const busy = appRecord({ id: 4, key: 'packet-tour', needsAttention: 52 });
+  const crm = appRecord({ id: 9, key: 'acme-crm', needsAttention: 1 });
+  const stuckOf = (appId: number, at: number) =>
+    requestRow({ id: `apr_${String(appId).padStart(2, '0')}${String(at).padStart(30, '0')}`, appId, status: 'needs_attention', lastError: 'Host not found', createdAt: `2026-11-17T${String(10 + Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}:00+00:00` });
+  const busyRows = Array.from({ length: 52 }, (_, at) => stuckOf(4, at));
+  const crmRow = stuckOf(9, 0);
+  const queries = (h: ReturnType<typeof harness>) => h.http.requests.filter((request) => new URL(request.url).pathname.endsWith('/apps/requests')).map((request) => Object.fromEntries(new URL(request.url).searchParams));
+
+  it("asks Siren for one app's requests by appId, so an older one shows however busy the organization", async () => {
+    const h = harness([reply(200, [busy, crm]), list(), list(crmRow), found(crmRow)], { env: UTC });
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', '--app', 'acme-crm']), h.err()).toBe(0);
+    expect(h.out()).toContain('1 request for acme-crm in Acme (3), sandbox');
+    expect(h.out()).toContain('09000000');
+    expect(queries(h).slice(0, 2)).toEqual([{ appId: '9' }, { status: 'needs_attention', limit: '100', appId: '9' }]);
+  });
+
+  it('pages the attention list while Siren answers full pages, each before the last id of the one before', async () => {
+    const many = Array.from({ length: 103 }, (_, at) => stuckOf(4, at));
+    const h = harness([reply(200, [appRecord({ id: 4, key: 'packet-tour', needsAttention: 103 })]), list(...many.slice(0, 100)), list(...many.slice(100)), found(many[0])], { env: UTC });
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
+    expect(h.out()).toContain('103 requests need you in Acme (3), sandbox');
+    expect(queries(h).slice(0, 2)).toEqual([{ status: 'needs_attention', limit: '100' }, { status: 'needs_attention', limit: '100', before: many[99]!.id }]);
+    expect(h.err()).toBe('');
+  });
+
+  it('says how many Siren counts and did not list, when an older Siren answers the newest 50 alone', async () => {
+    const h = harness([reply(200, [busy, crm]), list(...busyRows.slice(0, 50)), found(busyRows[0])], { env: UTC });
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
+    expect(h.out()).toContain('50 requests need you in Acme (3), sandbox');
+    expect(h.out()).toContain('\nSiren counts 53 that need you, and this list holds 50.\n');
+    expect(h.out()).toContain('siren apps requests --app acme-crm --attention lists one app');
+  });
+
+  it('never says an app has none while apps list counts one', async () => {
+    const h = harness([reply(200, [appRecord({ id: 9, key: 'acme-crm', needsAttention: 1 })]), list(), list()], { env: UTC });
+    h.signedIn();
+    expect(await h.run(['apps', 'requests', '--app', 'acme-crm']), h.err()).toBe(0);
+    expect(h.out()).not.toContain('No requests for acme-crm yet.');
+    expect(h.out()).toContain('Siren counts 1 that needs you, and this list holds none.');
   });
 });

@@ -67,8 +67,8 @@ describe('should-fix 12: the delete question names the organization and fits 80 
     const h = harness([reply(200, { success: true })], { interactive: true, typed: [APP_KEY] });
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await h.run(['apps', 'delete', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(`Deleting ${APP_KEY} revokes its key and can't be undone.`);
-    expect(h.prompts).toEqual([`Type ${APP_KEY} to delete it from Acme (acme), sandbox: `]);
+    expect(h.out()).toContain(`Deleting ${APP_KEY} from Acme (acme), sandbox can't be undone.\nIt revokes the key. Type ${APP_KEY} to delete it.`);
+    expect(h.prompts).toEqual(['Key: ']);
     for (const line of [...h.out().split('\n'), ...h.prompts]) expect([...line].length, line).toBeLessThanOrEqual(80);
   });
 });

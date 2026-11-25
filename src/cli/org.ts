@@ -1,3 +1,4 @@
+import { askOrg } from './org-picker';
 import { readFile } from 'node:fs/promises';
 import { CallbackAccessTokenSource } from '../auth/callback-access-token-source';
 import { Siren, createHttpTransport } from '../client';
@@ -106,7 +107,7 @@ export function orgFrom(memberships: readonly StoredMembership[], wanted: OrgWan
  * asked in a terminal. Refuses a name they are not in, and several with no
  * terminal, naming each. `list` is the command a refusal names to list them.
  */
-export async function settleOrg(io: CliIo, memberships: readonly StoredMembership[], wanted: OrgWanted | undefined, list: string): Promise<OrgChoice> {
+export async function settleOrg(io: CliIo, memberships: readonly StoredMembership[], wanted: OrgWanted | undefined, list: string, current?: number): Promise<OrgChoice> {
   const settled = orgFrom(memberships, wanted);
   if (settled === 'missing') {
     throw new CliRefusal(`You're not in an organization named ${wanted!.name}.`, {
@@ -122,7 +123,7 @@ export async function settleOrg(io: CliIo, memberships: readonly StoredMembershi
       fixText: 'Pick one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.',
     });
   }
-  return { org: await askOrg(io, memberships), source: 'asked' };
+  return { org: await askOrg(io, memberships, current), source: 'asked' };
 }
 
 /**
@@ -225,14 +226,4 @@ export async function orgInFile(path: string): Promise<string | undefined> {
   }
 }
 
-/** Lists the person's organizations on standard error, asks which one, and answers it, or refuses one they are not in. */
-export async function askOrg(io: CliIo, memberships: readonly StoredMembership[]): Promise<StoredMembership> {
-  io.stderr(`You belong to ${memberships.length} organizations:\n`);
-  for (const membership of memberships) io.stderr(`  ${clean(membership.orgSlug)}  ${clean(membership.orgName)}\n`);
-  const typed = (await io.prompt('Organization (slug): ')).trim();
-  const chosen = findOrg(memberships, typed);
-  if (chosen === undefined) {
-    throw new CliRefusal(`You're not in an organization named ${clean(typed)}.`, { why: `Yours: ${orgList(memberships)}.`, fixText: 'Run the command again and type one of those.' });
-  }
-  return chosen;
-}
+export { askOrg };

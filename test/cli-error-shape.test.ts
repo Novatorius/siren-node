@@ -7,6 +7,7 @@ import { runCli } from '../src/cli/run';
 import { AuthAnswers, EMAIL, PASSWORD, harness, session } from './cli-fakes';
 import { APP_KEY, AppAnswers, PartAnswers, appMissing, appRecord } from './apps-siren-answers';
 import { reply } from './http-fakes';
+import { SANDBOX_BASE_URL } from '../src/http';
 /*
  * CLI pass 3, must-fix 2 (review/cli-dx/pass-3-review.md): most errors were
  * one long red sentence, and 28 of 81 terminal screens wrapped mid-word.
@@ -172,7 +173,8 @@ describe('cli pass 3, must-fix 3: problems in siren.app.json print under the ✗
     expect(lines[1]).toBe('  The tool checks the file before it sends anything, so nothing was sent.');
     expect(lines[2]).toMatch(/^ {2}siren\.app\.json:\d+:\d+$/);
     expect(lines[3]).toMatch(/^ {4}apps\.acme-payouts\.url needs the environment variable SIREN_APP_URL/);
-    expect(lines.at(-1)).toBe('› Fix it in siren.app.json, then run siren apps apply again.');
+    // Pass 3 re-check, should-fix 9: the one problem is a variable that isn't set, so the fix names .env.
+    expect(lines.at(-1)).toBe('› Set SIREN_APP_URL in .env, then run siren apps apply again.');
     expect(h.err()).toMatch(/\u001b\[2msiren\.app\.json:\d+:\d+\u001b\[0m/);
     expect(h.out()).toBe('');
   });
@@ -210,4 +212,50 @@ describe('cli pass 3, should-fix 6: siren app list', () => {
     expect(h.err()).toContain('Did you mean "apps list"?');
     expect(h.err()).not.toContain('apps apply');
   });
+});
+
+/* ---- Pass 3 re-check, must-fix 2: the plain screens that wrapped mid-word ---- */
+
+describe('pass 3 re-check, must-fix 2: signup, the empty list, the follow header and the delete question fit 80 columns', () => {
+  const LONG_KEY = 'cli-dx-recheck-3c-with-a-much-longer-app-key';
+  const longOrg = () => session({ orgName: 'UAT Organization for the Recheck', orgSlug: 'uat-org-recheck' });
+  const screens: Array<{ name: string; argv: string[]; replies: Parameters<typeof harness>[0]; options?: Parameters<typeof harness>[1]; signed?: boolean; first: RegExp; stream: 'out' | 'err' }> = [
+    {
+      name: 'signup success',
+      argv: ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'],
+      replies: [AuthAnswers.registered()],
+      options: { stdin: `${PASSWORD}\n` },
+      signed: false,
+      first: /^✓ Made Acme \(acme\)$/,
+      stream: 'out',
+    },
+    { name: 'the empty apps list', argv: ['apps', 'list'], replies: [reply(200, [])], first: /^No apps in UAT Organization for the Recheck \(uat-org-recheck\), sandbox yet\.$/, stream: 'out' },
+    {
+      name: 'the --follow header',
+      argv: ['apps', 'requests', '--app', LONG_KEY, '--follow'],
+      replies: [reply(200, [appRecord({ key: LONG_KEY })]), reply(200, { requests: [] })],
+      options: { onSleep: (_count, abort) => abort() },
+      first: /^Watching cli-dx-recheck-3c-with-a-much-longer-app-key in UAT Organization for$/,
+      stream: 'err',
+    },
+    {
+      name: 'the delete question',
+      argv: ['apps', 'delete', LONG_KEY],
+      replies: [reply(200, { success: true })],
+      options: { interactive: true, typed: [LONG_KEY] },
+      first: /^! Deleting cli-dx-recheck-3c-with-a-much-longer-app-key from UAT Organization$/,
+      stream: 'out',
+    },
+  ];
+  for (const screen of screens) {
+    it(screen.name, async () => {
+      const h = harness(screen.replies, screen.options);
+      if (screen.signed !== false) h.signedIn({ [SANDBOX_BASE_URL]: longOrg() });
+      const code = await runCli(screen.argv, tty(h));
+      expect([0, 130], h.err()).toContain(code);
+      const text = strip(screen.stream === 'out' ? h.out() : h.err()).trimEnd();
+      expect(text.split('\n')[0], text).toMatch(screen.first);
+      for (const line of [...text.split('\n'), ...h.prompts.map((prompt) => `${prompt}${LONG_KEY}`)]) expect([...line].length, line).toBeLessThanOrEqual(80);
+    });
+  }
 });

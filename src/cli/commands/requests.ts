@@ -3,11 +3,11 @@ import { basename, resolve } from 'node:path';
 import { AppErrorCode, BadRequestError, ConflictError, ErrorCode, NotFoundError, SirenError, ValidationError, appErrorCode } from '../../errors';
 import type { App, AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
-import { appKeyArgument, isAppKey, orgNamed } from './apply';
+import { appKeyArgument, appKeyInFolder, orgNamed } from './apply';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
-import { REPORT_WIDTH, clean, styleFor, visibleLength, wrapWords } from '../style';
+import { REPORT_WIDTH, clean, hanging, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError, hostName } from '../targets';
 
@@ -29,23 +29,33 @@ const REQUEST_PREFIX = /^(?:apr_)?[0-9a-f]{4,32}$/;
 /** How many characters of a request id the tool shows, and every command takes. */
 const SHORT_ID = 8;
 
+/** The most pages of 100 the attention list reads, so a broken cursor can't loop. */
+const ATTENTION_PAGES = 10;
+
+/**
+ * Every request that needs attention, in `scope`, newest first. Siren pages
+ * this list with limit and before from pkt/apps-attention-paging, so it reads
+ * pages of 100 until one holds fewer. An older Siren ignores both and
+ * answers its newest 50, which ends the loop after one call.
+ */
+async function attentionRows(siren: ReturnType<CommandContext['siren']>, scope: AppRequestListParams): Promise<AppRequestRecord[]> {
+  const rows: AppRequestRecord[] = [];
+  let before: string | undefined;
+  for (let page = 0; page < ATTENTION_PAGES; page++) {
+    const some = await siren.apps.requests.list({ ...scope, status: 'needs_attention', limit: PAGE_SIZE, ...(before === undefined ? {} : { before }) });
+    rows.push(...some);
+    if (some.length < PAGE_SIZE) break;
+    before = some.at(-1)!.id;
+  }
+  return rows;
+}
+
+/** A page of the request lists, the most Siren answers (ListAppRequests::MAX_LIMIT). */
+const PAGE_SIZE = 100;
+
 /** The most rows a terminal list shows, the newest. Piped and --json, the list is whole. */
 const TERMINAL_ROWS = 20;
 
-/**
- * The app key in the app file at `path` when it holds one app, or
- * undefined: no file, one the tool can't read, or several apps. The file
- * is checked properly by apply, so this only reads the key.
- */
-async function appKeyInFolder(path: string): Promise<string | undefined> {
-  try {
-    const parsed = JSON.parse(await readFile(path, 'utf8')) as { apps?: unknown };
-    const keys = typeof parsed.apps === 'object' && parsed.apps !== null && !Array.isArray(parsed.apps) ? Object.keys(parsed.apps) : [];
-    return keys.length === 1 && isAppKey(keys[0]!) ? keys[0] : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /** A whole request id's length: `apr_` and 32 hex characters. */
 const APP_REQUEST_ID_LENGTH = 36;
@@ -58,7 +68,7 @@ const APP_REQUEST_ID_LENGTH = 36;
 export function requestIdArgument(id: string): string {
   const lower = id.toLowerCase();
   if (!REQUEST_PREFIX.test(lower)) {
-    throw new CliUsageError(`${JSON.stringify(id)} isn't a request id. Request ids look like apr_ec16a240198d5bc956c9a55c01103dd4, and the first ${SHORT_ID} characters after apr_ will do.`);
+    throw new CliUsageError(`${JSON.stringify(id)} isn't a request id. Request ids look like apr_ec16a240198d5bc956c9a55c01103dd4. Its first 4 or more characters after apr_ will do.`);
   }
   return lower;
 }
@@ -185,26 +195,34 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   const org = orgNamed(session);
   const siren = run.siren();
   const out = styleFor(io, 'stdout', values);
-  const filters: AppRequestListParams = attention ? { status: 'needs_attention' } : {};
   const appsById = new Map<number, App>();
   const appOf = async (row: AppRequestRecord): Promise<App | undefined> => {
     if (!appsById.has(row.appId)) for (const app of await siren.apps.list()) appsById.set(app.id, app);
     return appsById.get(row.appId);
   };
 
+  /** What `apps list` counts as needing attention, and how many of those the last read found, for {@link unlisted}. */
+  let attentionFound = 0;
+  let listedApp: App | undefined;
   const read = async (): Promise<AppRequestRecord[]> => {
-    // The apps come first, once, for the APP column and --app.
+    // The apps come first, once, for the APP column, --app and the counts.
     if (appsById.size === 0) for (const app of await siren.apps.list()) appsById.set(app.id, app);
-    const rows = [...(await siren.apps.requests.list(filters))];
-    // The plain list is the organization's latest 50. Every request that needs attention joins it, however old,
+    listedApp = appKey === undefined ? undefined : appNamed(appKey);
+    // Siren keeps the list to one app with appId (pass 3 re-check, must-fix 1). Filtering here missed an app's
+    // requests whenever the organization's newest 50 were another app's.
+    const scope: AppRequestListParams = listedApp === undefined ? {} : { appId: listedApp.id };
+    const rows = attention ? [] : [...(await siren.apps.requests.list(scope))];
+    // The plain list is the latest 50. Every request that needs attention joins it, however old,
     // so an app's list never says it has none while `apps list` counts one.
-    if (!attention) {
-      const held = new Set(rows.map((row) => row.id));
-      rows.push(...(await siren.apps.requests.list({ status: 'needs_attention' })).filter((row) => !held.has(row.id)));
-    }
+    const needing = await attentionRows(siren, scope);
+    attentionFound = needing.length;
+    const held = new Set(rows.map((row) => row.id));
+    rows.push(...needing.filter((row) => !held.has(row.id)));
     rows.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
-    if (appKey === undefined) return rows;
-    const app = [...appsById.values()].find((candidate) => candidate.key === appKey);
+    return rows;
+  };
+  const appNamed = (key: string): App => {
+    const app = [...appsById.values()].find((candidate) => candidate.key === key);
     if (app === undefined && fromFile !== undefined) {
       throw new CliRefusal(`${clean(session.orgName)} has no app ${appKey}.`, {
         why: `${basename(run.appFilePath)} names it, and it isn't made yet.`,
@@ -213,7 +231,23 @@ export async function appsRequests(input: CommandInput): Promise<number> {
       });
     }
     if (app === undefined) throw new CliRefusal(`${clean(session.orgName)} has no app ${appKey}.`, { why: '--app names it.', fix: run.command('apps list'), fixWords: 'to list the apps' });
-    return rows.filter((row) => row.appId === app.id);
+    return app;
+  };
+  /**
+   * The warning when Siren counts more requests that need attention than
+   * the list found, as an older Siren's attention list stops at its newest
+   * 50, with the app list that shows the rest. Undefined when none is missing.
+   */
+  const unlisted = (): string[] => {
+    const counted = listedApp?.needsAttention ?? [...appsById.values()].reduce((sum, app) => sum + (app.needsAttention ?? 0), 0);
+    if (counted <= attentionFound) return [];
+    const lines = [out.warning(`Siren counts ${counted} that ${counted === 1 ? 'needs' : 'need'} you, and this list holds ${attentionFound === 0 ? 'none' : attentionFound}.`)];
+    if (listedApp === undefined) {
+      // The app with the fewest, which a busier app's requests most likely crowded out.
+      const quiet = [...appsById.values()].filter((app) => (app.needsAttention ?? 0) > 0).sort((a, b) => a.needsAttention - b.needsAttention)[0];
+      if (quiet !== undefined) lines.push(out.next(`${out.command(run.command(`apps requests --app ${quiet.key} --attention`))} lists one app's.`));
+    }
+    return lines;
   };
 
   const zone = io.env.TZ;
@@ -239,6 +273,11 @@ export async function appsRequests(input: CommandInput): Promise<number> {
       run.print(JSON.stringify(rows, null, 2));
       return 0;
     }
+    const missing = unlisted();
+    if (rows.length === 0 && missing.length > 0) {
+      for (const line of missing) run.print(line);
+      return 0;
+    }
     if (rows.length === 0) {
       if (appKey !== undefined) {
         run.print(attention ? `No request of ${appKey} needs you.` : `No requests for ${appKey} yet.`);
@@ -262,6 +301,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
     const one = out.command(run.command(`apps requests ${newest}`));
     run.print(out.next(attention ? `${one} shows it, and ${out.command(run.command(`apps resend ${newest}`))} sends it again.` : `${one} shows one.`));
     if (fromFile !== undefined) run.print(out.next(`${out.command(run.command('apps requests --all'))} lists every app's.`));
+    if (missing.length > 0) run.print(['', ...missing].join('\n'));
     return 0;
   }
 
@@ -270,7 +310,12 @@ export async function appsRequests(input: CommandInput): Promise<number> {
   // While following, Ctrl-C aborts the signal and the loop ends with 130.
   const following = () => undefined;
   io.signal?.addEventListener('abort', following);
-  if (!json) io.stderr(`${styleFor(io, 'stderr', values).dim(`Watching ${appKey === undefined ? '' : `${appKey} in `}${org} for requests. Ctrl-C stops.`)}\n`);
+  if (!json) {
+    // Pass 3 re-check, must-fix 2: wrapped at a word in a terminal, with Ctrl-C on a line of its own.
+    const err = styleFor(io, 'stderr', values);
+    const watching = `Watching ${appKey === undefined ? '' : `${appKey} in `}${org}.`;
+    io.stderr(err.rich ? `${err.dim(hanging('', watching))}\n${err.dim('› Ctrl-C stops.')}\n` : `${watching} Ctrl-C stops.\n`);
+  }
   let shown: Column[] = [];
   try {
     for (let poll = 1; ; poll += 1) {
