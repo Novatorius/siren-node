@@ -1673,6 +1673,14 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.features.retrieve()` | `GET /apps/{app}/features/{id}` | Reads one feature with how many records select it and which. |
 | `siren.apps.features.update()` | `PATCH /apps/{app}/features/{id}` | Changes a feature's name, description or settings. Its kind and key never change. |
 | `siren.apps.features.delete()` | `DELETE /apps/{app}/features/{id}` | Archives a feature a record selects, and deletes one nothing selects. |
+| `siren.recipes.preview()` | `POST /recipes/preview` | Checks a recipe and says what applying it would make, writing nothing. |
+| `siren.recipes.apply()` | `POST /recipes/apply` | Starts importing a recipe and answers the import, once per `importKey`. |
+| `siren.recipes.import()` | `GET /recipes/imports/{jobId}` | Reads one import: its progress per section and each person's outcome. |
+| `siren.recipes.imports()` | `GET /recipes/imports` | Lists the organization's recent imports, newest first. |
+| `siren.recipes.export()` | `GET /recipes/export` | Answers the organization's setup as a recipe, and what it left out. |
+| `siren.recipes.exportSizes()` | `GET /recipes/export` | Counts the records in each section an export would hold. |
+| `siren.recipes.catalog()` | `GET /recipes/catalog` | Lists Beacon's ready-made recipes, with whether each fits the organization. |
+| `siren.recipes.fetch()` | `POST /recipes/fetch` | Reads the recipe a Beacon handoff token carries. |
 
 ## Storefront module (browser)
 
@@ -2223,6 +2231,20 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps add-key <key>` | Makes a key for an app that holds none and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. The key holds no scopes until the next `siren apps apply`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off, and say what that means: an app that is off gets nothing from Siren until `siren apps on <key>`. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
+| `siren recipes preview <file\|->` | Says what a recipe would make in the organization, and writes nothing. Siren checks it as apply does, so each problem prints at its path, and a plan or store integration the recipe needs is named in plain words. `-` reads the recipe from standard input. |
+| `siren recipes apply <file\|->` | Previews the recipe, asks for the id of each record it uses but doesn't make (`--var key=<id>` names them), asks before applying (`--yes` skips that), then follows the import with a progress line to its end. It sends an import key made from the recipe's content, so Siren applies the same recipe once and a retry never imports it twice. `--again` applies it again as an update. `--no-wait` prints the import id and stops. |
+| `siren recipes status <importId>` | Shows one import: how far each section got, the people added, updated, skipped and failed, and each failure. |
+| `siren recipes imports` | Lists the organization's recent imports, newest first. |
+| `siren recipes export [--include <sections>]` | Prints the organization's setup as a recipe on standard output, and names what it left out, such as drafts, on standard error. |
+| `siren recipes catalog` and `siren recipes show <id>` | List Beacon's ready-made recipes with whether each fits the organization's store and plan, and print one to save, edit and apply. |
+| `siren recipes fetch <token\|link>` | Prints the recipe a Beacon handoff carries. |
+
+
+Recipes need a signed-in session, from `siren login`. An API key can't use them yet. A recipe file
+may name `siren.recipe.schema.json` from this package in `$schema`, so an editor completes it. The
+tool takes `$schema` out before it sends the recipe, since Siren takes no other key at a recipe's
+top. In code, `siren.recipes` makes the same calls: `preview`, `apply`, `import`, `imports`,
+`export`, `exportSizes`, `catalog` and `fetch`.
 
 Each command acts in one of your organizations. It takes `--org <slug>` first, then `SIREN_ORG`,
 then `org` in siren.app.json, then your only organization. With none of those it asks in a

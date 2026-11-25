@@ -101,6 +101,7 @@ export const LIVE_WRITES = [
   'apps on',
   'apps off',
   'apps delete',
+  'recipes apply',
 ] as const;
 
 /** True when `words`, a command and its arguments, start with a command of {@link LIVE_WRITES}. */

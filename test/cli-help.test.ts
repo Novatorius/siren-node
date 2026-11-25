@@ -28,14 +28,14 @@ describe('help: siren --help', () => {
   it('has the shape of gh help: description, usage, grouped commands, flags, examples and learn more', async () => {
     const text = await helpOf(['--help']);
     expect(text.split('\n')[0]).toMatch(/^[A-Z].+\.$/);
-    expect(sections(text)).toEqual(['USAGE', 'GETTING STARTED', 'APPS', 'REQUESTS', 'ACCOUNT', 'FLAGS', 'ENVIRONMENT', 'EXAMPLES', 'LEARN MORE']);
+    expect(sections(text)).toEqual(['USAGE', 'GETTING STARTED', 'APPS', 'REQUESTS', 'RECIPES', 'ACCOUNT', 'FLAGS', 'ENVIRONMENT', 'EXAMPLES', 'LEARN MORE']);
     expect(text).toContain('https://github.com/Novatorius/siren-node#command-line-tool');
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-help-top.txt');
   });
 
   it('lists every command once, on one line, with its name and a short summary aligned', async () => {
     const text = await helpOf(['--help']);
-    const listed = text.split('\n').filter((line) => /^ {2}(apps )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
+    const listed = text.split('\n').filter((line) => /^ {2}(apps |recipes )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
     const names = listed.map((line) => line.trim().split(/ {2,}/)[0]);
     expect([...names].sort()).toEqual([...COMMANDS].sort());
     expect(new Set(listed.map((line) => line.search(/ {2,}\S/) + line.slice(line.search(/ {2,}\S/)).search(/\S/))).size).toBe(1);
@@ -46,6 +46,9 @@ describe('help: siren --help', () => {
     const apps = await helpOf(['apps']);
     expect(sections(apps)).toEqual(['USAGE', 'APPS', 'REQUESTS', 'LEARN MORE']);
     expect(apps).not.toContain('  login');
+    const recipes = await helpOf(['recipes']);
+    expect(sections(recipes)).toEqual(['USAGE', 'RECIPES', 'LEARN MORE']);
+    expect(recipes).toContain("an API key can't use recipes yet");
   });
 });
 

@@ -28,6 +28,16 @@ REQUESTS
   apps answer         Answer an ask by hand
   apps resend         Send a request again
 
+RECIPES
+  recipes preview     Show what a recipe would make
+  recipes apply       Preview, ask, then apply a recipe
+  recipes status      Show one recipe import
+  recipes imports     List recent recipe imports
+  recipes export      Print this organization's setup as a recipe
+  recipes catalog     List ready-made recipes
+  recipes show        Print one ready-made recipe
+  recipes fetch       Print the recipe a Beacon handoff carries
+
 ACCOUNT
   logout              Log out, and forget the session here
   whoami              Show who you are logged in as
