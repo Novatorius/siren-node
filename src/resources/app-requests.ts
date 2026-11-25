@@ -76,7 +76,20 @@ export async function listAppRequests(
   if (status !== undefined && !REQUEST_STATUSES.includes(status as string)) {
     throw new SirenError(`apps.requests.list() takes a status of ${REQUEST_STATUSES.join(', ')}.`);
   }
-  const query: Record<string, string> = status === undefined ? {} : { status: status as string };
+  const { limit, before } = params as { limit?: unknown; before?: unknown };
+  if (limit !== undefined && !(Number.isInteger(limit) && (limit as number) >= 1 && (limit as number) <= 100)) {
+    throw new SirenError(`apps.requests.list() takes a limit of a whole number from 1 to 100, and got ${String(limit)}.`);
+  }
+  if (before !== undefined) appRequestId(before, 'apps.requests.list() before');
+  if (status === 'needs_attention' && (limit !== undefined || before !== undefined)) {
+    // ListAppRequests reads the attention list whole and ignores both.
+    throw new SirenError('apps.requests.list() pages the plain list only. Siren answers needs_attention whole, so leave out limit and before.');
+  }
+  const query: Record<string, string> = {
+    ...(limit === undefined ? {} : { limit: String(limit) }),
+    ...(before === undefined ? {} : { before: before as string }),
+    ...(status === undefined ? {} : { status: status as string }),
+  };
 
   const answer = await readObject<{ requests: AppRequestRecord[] }>(http, '/apps/requests', query, (body) =>
     Array.isArray(body.requests) && body.requests.every(isJsonObject)

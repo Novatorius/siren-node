@@ -214,6 +214,20 @@ describe('apps-cli: apps.requests', () => {
     }
   });
 
+  it('pages with limit and before, which ListAppRequests reads at feat/apps 0383186437', async () => {
+    const { http, apps: resource } = apps([reply(200, { requests: [row] })]);
+    expect(await resource.requests.list({ limit: 100, before: REQUEST, status: 'sent' })).toEqual([row]);
+    expect(queryOf(http.requests[0])).toEqual({ limit: '100', before: REQUEST, status: 'sent' });
+  });
+
+  it('refuses a limit outside 1 to 100, a before that is no request id, and either one beside needs_attention, which Siren would ignore', async () => {
+    for (const params of [{ limit: 0 }, { limit: 101 }, { limit: 2.5 }, { before: 'apr_x' }, { status: 'needs_attention', limit: 10 }, { status: 'needs_attention', before: REQUEST }]) {
+      const { http, apps: resource } = apps([reply(200, { requests: [] })]);
+      expect(await refused(() => resource.requests.list(params as never)), JSON.stringify(params)).toBeInstanceOf(SirenError);
+      expect(http.requests).toHaveLength(0);
+    }
+  });
+
   it('resends once, and refuses a bad id before sending', async () => {
     const { http, apps: resource } = apps([reply(200, { ...row, sendCount: 2 })]);
     expect((await resource.requests.resend(REQUEST)).sendCount).toBe(2);

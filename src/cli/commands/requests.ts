@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { AppErrorCode, ConflictError, ErrorCode, NotFoundError, SirenError, appErrorCode } from '../../errors';
-import { AppRequestStatus } from '../../taxonomy';
 import type { App, AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument, orgNamed } from './apply';
@@ -48,41 +47,44 @@ export function shortId(id: string): string {
   return id.replace(/^apr_/, '').slice(0, SHORT_ID);
 }
 
-/** The most requests `GET /apps/requests` answers in one list. A list this long may leave older requests out. */
-const LIST_LIMIT = 50;
+/** The most requests one page of `GET /apps/requests` holds (ListAppRequests::MAX_LIMIT). */
+const PAGE_LIMIT = 100;
+
+/** The most pages a short id's search reads, 5000 requests, before it asks for the whole id. */
+const SEARCH_PAGES = 50;
 
 /**
  * The whole id for `typed`, a whole id or its start, after a search that
- * covers the whole organization. Siren lists the latest 50 requests, with
- * no paging. When that list holds fewer than 50, it holds every request.
- * When it is full, the tool reads the latest 50 in each state, and the
- * search covers the organization when every state holds fewer than 50.
- * A start that matches several requests is refused with the list of them,
- * never settled by picking one. A search that could not cover the
- * organization is refused too, since an older request could start the
- * same way, and the command must not act on the wrong one.
+ * covers the whole organization. It pages through `GET /apps/requests`
+ * 100 at a time, newest first, each page before the last id of the one
+ * before, until a page holds fewer than 100. A start that matches several
+ * requests is refused with the list of them, never settled by picking
+ * one. An organization with more than {@link SEARCH_PAGES} pages is
+ * refused too, since an older request could start the same way, and the
+ * command must not act on the wrong one.
  */
 async function requestIdFor(run: CommandContext, typed: string, org: string): Promise<string> {
   if (REQUEST_ID.test(typed)) return typed;
   const start = typed.replace(/^apr_/, '');
   const siren = run.siren();
-  const latest = await siren.apps.requests.list({});
-  const rows = [...latest];
-  let whole = latest.length < LIST_LIMIT;
-  if (!whole) {
-    whole = true;
-    for (const status of Object.values(AppRequestStatus)) {
-      const some = await siren.apps.requests.list({ status });
-      rows.push(...some);
-      if (some.length >= LIST_LIMIT) whole = false;
+  const rows: AppRequestRecord[] = [];
+  let whole = false;
+  let before: string | undefined;
+  for (let page = 0; page < SEARCH_PAGES; page++) {
+    const some = await siren.apps.requests.list({ limit: PAGE_LIMIT, ...(before === undefined ? {} : { before }) });
+    rows.push(...some);
+    if (some.length < PAGE_LIMIT) {
+      whole = true;
+      break;
     }
+    before = some.at(-1)!.id;
   }
   const ids = [...new Set(rows.map((row) => row.id).filter((id) => id.startsWith(`apr_${start}`)))];
   if (ids.length > 1) {
     throw new CliRefusal(`${ids.length} requests start with ${start}: ${ids.map((id) => shortIdOf(id, start)).join(', ')}.`, { why: 'Give more of the id.' });
   }
   if (!whole) {
-    throw new CliRefusal(`${org} has more requests than Siren lists at once, so the tool can't be sure ${start} names one request.`, {
+    throw new CliRefusal(`${org} has more than 5000 requests, more than a short id searches, so the tool can't be sure ${start} names one request.`, {
       why: 'Give the whole id, apr_ and 32 characters, which the request view and --json show.',
     });
   }

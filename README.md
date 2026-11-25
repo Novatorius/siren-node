@@ -926,7 +926,9 @@ nothing more was applied. A different answer after an accepted one gets 409
 
 ### See what Siren sent
 
-`apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
+`apps.requests.list({ status, limit, before })` reads the latest requests, newest first: 50, or `limit` from 1 to 100,
+older than the request `before` names when it is given. Pass each page's last id as the next page's `before` to read them
+all. `needs_attention` comes whole and takes neither. Each request has its status:
 `pending`, `sent`, `delivered` (a tell the app received), `answered`, `applying` (an ask whose
 answer Siren is applying now), `applied` (an ask whose answer did its work), `needs_attention` or
 `dropped`. `apps.requests.retrieve(id)` reads one request, however old,

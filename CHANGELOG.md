@@ -128,6 +128,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `apps.requests.list()` takes `limit` (1 to 100) and `before` (a request id) to page through every
+  request, as `GET /apps/requests` now reads them. It refuses either one beside `needs_attention`,
+  whose list Siren answers whole.
+
 - `new Siren()` reads `SIREN_BASE_URL` as its default base URL, the way it reads `SIREN_API_KEY`,
   and a `baseUrl` passed in code wins. `siren apps apply` writes the variable beside the key, so a
   sandbox ask's `answerUrl` and the client agree. `appRequest()` signs for that host too.

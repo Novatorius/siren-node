@@ -1336,9 +1336,13 @@ export interface AppRequestDetail extends AppRequestRecord {
   answeredByUser: { id: number; email: string } | null;
 }
 
-/** Filters for `apps.requests.list()`. */
+/** Filters and paging for `apps.requests.list()`. */
 export interface AppRequestListParams {
   status?: AppRequestStatus;
+  /** How many requests to answer, 1 to 100. Siren answers 50 without it. Not with `needs_attention`. */
+  limit?: number;
+  /** Keeps the requests older than this one, a request id, to read the next page. Not with `needs_attention`. */
+  before?: string;
 }
 
 /**

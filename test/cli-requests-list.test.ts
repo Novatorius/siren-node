@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli/run';
-import { AppRequestStatus } from '../src/taxonomy';
 import { harness } from './cli-fakes';
 import { APP_KEY, APP_REQUEST_ID, appRecord, requestRow } from './apps-siren-answers';
 import { reply } from './http-fakes';
@@ -117,17 +116,15 @@ describe('siren apps requests: the list', () => {
 });
 
 describe('short request ids', () => {
-  // The fake answers every status the SDK lists, so a status the SDK gains is read here too.
-  const STATUSES: string[] = Object.values(AppRequestStatus);
-  const filler = (n: number, status = 'delivered') =>
-    Array.from({ length: n }, (_, at) => requestRow({ id: `apr_ff${String(at).padStart(30, '0')}`, status }));
-  const statusOf = (h: ReturnType<typeof harness>, at: number) => new URL(h.http.requests[at]!.url).searchParams.get('status');
+  const filler = (n: number, status = 'delivered', from = 0) =>
+    Array.from({ length: n }, (_, at) => requestRow({ id: `apr_ff${String(from + at).padStart(30, '0')}`, status }));
+  const queryOf = (h: ReturnType<typeof harness>, at: number) => Object.fromEntries(new URL(h.http.requests[at]!.url).searchParams);
 
   it('reads a request by its first eight characters when the whole organization holds one id that starts with them', async () => {
     const h = harness([list(waiting, older), reply(200, { ...waiting, data: {}, answer: null, answeredByUser: null }), apps(), reply(200, [])], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', 'b79943ff']), h.err()).toBe(0);
-    // Fewer than 50 requests in all, so one read covers the whole organization.
+    // Fewer than 100 requests in all, so one page covers the whole organization.
     expect(h.paths()).toEqual(['GET /apps/requests', `GET /apps/requests/${APP_REQUEST_ID}`, 'GET /apps', `GET /apps/${APP_KEY}/deliveries`]);
   });
 
@@ -148,26 +145,25 @@ describe('short request ids', () => {
     }
   });
 
-  it('reads only statuses Siren accepts: the list ListAppRequests validates at feat/apps 0383186437', () => {
-    expect(STATUSES).toEqual(['pending', 'sent', 'delivered', 'answered', 'applying', 'applied', 'needs_attention', 'dropped']);
-  });
-
-  it('reads every state when the latest 50 are full, and finds an older request that matches', async () => {
-    const reads = [list(...filler(50)), ...STATUSES.map((status) => (status === 'needs_attention' ? list(requestRow({ status })) : list(...filler(3, status))))];
-    const h = harness([...reads, reply(200, { status: 'accepted' })]);
+  it('pages through every request, 100 at a time, each page before the last id of the one before, and finds an older one that matches', async () => {
+    const first = filler(100);
+    const second = [...filler(40, 'delivered', 100), requestRow({ status: 'needs_attention' })];
+    const h = harness([list(...first), list(...second), reply(200, { status: 'accepted' })]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([...Array.from({ length: STATUSES.length + 1 }, () => 'GET /apps/requests'), `POST /apps/requests/${APP_REQUEST_ID}/answer`]);
-    expect(Array.from({ length: STATUSES.length + 1 }, (_, at) => statusOf(h, at))).toEqual([null, ...STATUSES]);
+    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', `POST /apps/requests/${APP_REQUEST_ID}/answer`]);
+    expect(queryOf(h, 0)).toEqual({ limit: '100' });
+    expect(queryOf(h, 1)).toEqual({ limit: '100', before: first.at(-1)!.id });
   });
 
-  it('refuses, and answers nothing, when a state holds 50 or more, so an older request could start the same way', async () => {
-    const reads = [list(waiting, ...filler(49)), ...STATUSES.map((status) => (status === 'delivered' ? list(...filler(50)) : list()))];
-    const h = harness([...reads, reply(200, { status: 'accepted' })]);
+  it('refuses, and answers nothing, when the organization holds more requests than the search reads', async () => {
+    const full = Array.from({ length: 50 }, (_, page) => list(...filler(100, 'delivered', page * 100)));
+    const h = harness([...full, reply(200, { status: 'accepted' })]);
     h.signedIn();
     expect(await h.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}'])).toBe(1);
     expect(h.err()).toContain("can't be sure b79943ff names one request");
     expect(h.err()).toContain('whole id');
+    expect(h.paths()).toHaveLength(50);
     expect(h.paths()).not.toContain(`POST /apps/requests/${APP_REQUEST_ID}/answer`);
   });
 
