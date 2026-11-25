@@ -50,6 +50,8 @@ export {
   UnexpectedResponseError,
   ConnectionError,
   SignatureVerificationError,
+  AppHandlerError,
+  AppSlowTellError,
 } from './errors';
 export type { SirenErrorDetails, FailedValidation } from './errors';
 export type {
@@ -73,17 +75,12 @@ export type {
   WebhookEvent,
   WebhookHeaders,
   WebhookSubscription,
-  CreatedWebhookSubscription,
-  CreateWebhookSubscriptionParams,
   WebhookCatalogEntry,
   UpdateWebhookSubscriptionParams,
   WebhookTestResult,
   WebhookDelivery,
-  ApiKey,
   ApiKeyScopeEntry,
   ApiKeyScopeGroups,
-  CreatedApiKey,
-  CreateApiKeyParams,
   ListParams,
   SirenList,
 } from './types';
@@ -92,7 +89,6 @@ export type * from './connect/forwarded-events';
 export { EventsResource } from './resources/events';
 export type { BrowserTokenHandler, NodeRequestLike, NodeResponseLike } from './resources/events';
 export { WebhooksResource, WebhookSubscriptionsResource } from './resources/webhooks';
-export { ApiKeysResource } from './resources/api-keys';
 export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';
 export type { RetrieveParams } from './resources/records';
 
@@ -136,10 +132,12 @@ export { SettingsResource } from './resources/settings';
 export { PayoutsResource } from './resources/payouts';
 export { FulfillmentsResource } from './resources/fulfillments';
 export { FeatureKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
+export type { FeatureQuestions, FeatureAnswers, FeatureTells, FeatureQuestion, FeatureAnswer, FeatureTell } from './feature-kind';
 export { AppSource } from './taxonomy';
 export { AppErrorCode, appErrorCode } from './errors';
 export type {
   AppRequestHandler,
+  AppRequestHandlerWith,
   AppRequestHandlerOptions,
   AppRequestInput,
   AppRequestReply,
@@ -151,8 +149,10 @@ export type {
   AppFastifyRequest,
   AppFastifyReply,
   AppFunctionFor,
-  AppHandledKind,
+  AppSimulatedAnswer,
+  AppLogger,
 } from './resources/app-request-handler';
+export { TELL_TIME_LIMIT_SECONDS } from './resources/app-request-handler';
 export {
   AppsResource,
   AppFeaturesResource,

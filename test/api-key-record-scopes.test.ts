@@ -25,7 +25,7 @@ function sdkName(phpName: string): string {
     .join('');
 }
 
-/** The record scopes in the fixture, in the order GET /api-keys/scopes lists them. */
+/** The record scopes in the fixture, in the order GET /apps/scopes lists them. */
 function fixtureScopes(): string[] {
   const fixture = JSON.parse(
     readFileSync(new URL('./fixtures/api-key-scopes.json', import.meta.url), 'utf8'),
@@ -73,7 +73,7 @@ describe('apps-sdk-gaps: API key record scopes', () => {
     expect(Object.values(ApiKeyRecordScope)).toEqual([...API_KEY_RECORD_SCOPES]);
   });
 
-  it('pins the thirty scope strings', () => {
+  it('pins the twenty-eight scope strings', () => {
     expect(ApiKeyRecordScope).toEqual({
       EngagementsRead: 'ledger:engagements:read',
       OpportunitiesRead: 'ledger:opportunities:read',
@@ -82,8 +82,6 @@ describe('apps-sdk-gaps: API key record scopes', () => {
       ObligationsRead: 'ledger:obligations:read',
       FulfillmentsRead: 'ledger:fulfillments:read',
       PayoutsRead: 'ledger:payouts:read',
-      WebhooksRead: 'webhook-subscriptions:read',
-      WebhooksManage: 'webhook-subscriptions:manage',
       ProductsRead: 'records:products:read',
       ProductsManage: 'records:products:manage',
       CouponsRead: 'records:coupons:read',
@@ -108,13 +106,12 @@ describe('apps-sdk-gaps: API key record scopes', () => {
     });
   });
 
-  it('agrees with the ledger and webhook names ApiKeyScope already carries', () => {
+  it('agrees with the ledger names ApiKeyScope already carries, and holds no retired webhook scope', () => {
     expect(ApiKeyScope.LedgerConversionsRead).toBe(ApiKeyRecordScope.ConversionsRead);
     expect(ApiKeyScope.LedgerTransactionsRead).toBe(ApiKeyRecordScope.TransactionsRead);
     expect(ApiKeyScope.LedgerObligationsRead).toBe(ApiKeyRecordScope.ObligationsRead);
     expect(ApiKeyScope.LedgerPayoutsRead).toBe(ApiKeyRecordScope.PayoutsRead);
-    expect(ApiKeyScope.WebhookSubscriptionsRead).toBe(ApiKeyRecordScope.WebhooksRead);
-    expect(ApiKeyScope.WebhookSubscriptionsManage).toBe(ApiKeyRecordScope.WebhooksManage);
+    expect(Object.values(ApiKeyRecordScope).filter((scope) => scope.startsWith('webhook-subscriptions:'))).toEqual([]);
   });
 
   it('is frozen, so a caller cannot change a scope the SDK sends', () => {

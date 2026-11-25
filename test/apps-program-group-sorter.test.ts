@@ -4,7 +4,7 @@ import { declarationFor, parseAppFile } from '../src/cli/app-file';
 import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
 import type { AppFunctionFor } from '../src/resources/app-request-handler';
-import type { AppGroupOrderAnswer, AppGroupOrderQuestion } from '../src/record-types';
+import type { ProgramGroupSorterAnswer, ProgramGroupSorterQuestion } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
 import { bodyOf, transportOver } from './record-fakes';
@@ -29,11 +29,11 @@ interface FeatureFixture {
 const fixture = JSON.parse(
   readFileSync(new URL('./fixtures/apps-feature-contracts/requests.json', import.meta.url), 'utf8'),
 ) as FeatureFixture;
-const QUESTION = fixture.kinds.programGroupSorter!.request.data as AppGroupOrderQuestion;
+const QUESTION = fixture.kinds.programGroupSorter!.request.data as ProgramGroupSorterQuestion;
 const URL_ = 'https://acme.example/siren';
 
 /** Siren's AppGroupOrderQuestion::validate(): why it refuses the answer with 422, or null. */
-function refusalOf(question: AppGroupOrderQuestion, answer: Record<string, unknown>): string | null {
+function refusalOf(question: ProgramGroupSorterQuestion, answer: Record<string, unknown>): string | null {
   if (answer.outcome !== 'sorted') return 'outcome';
   const order = answer.programIds;
   if (!Array.isArray(order)) return 'programIds';
@@ -57,12 +57,12 @@ function file(declared: Record<string, unknown>, url: string | null = URL_): str
 
 /** The sample's function, as README and test/answer-samples/program-group-sorter.js write it, typed as on('programGroupSorter', ...) takes it. */
 const sample: AppFunctionFor<'programGroupSorter'> = ({ data }) => {
-  const best = (program: AppGroupOrderQuestion['programs'][number]) => Math.max(0, ...program.engagements.map((engagement) => engagement.score));
+  const best = (program: ProgramGroupSorterQuestion['programs'][number]) => Math.max(0, ...program.engagements.map((engagement) => engagement.score));
   const programs = [...data.programs].sort((a, b) => best(b) - best(a));
   return { outcome: 'sorted', programIds: programs.map((program) => program.id) };
 };
 
-function ask(data: AppGroupOrderQuestion): Parameters<typeof sample>[0] {
+function ask(data: ProgramGroupSorterQuestion): Parameters<typeof sample>[0] {
   return { id: APP_REQUEST_ID, mode: 'ask', data } as unknown as Parameters<typeof sample>[0];
 }
 
@@ -84,13 +84,13 @@ describe('apps-c16-5: the program group structure kind', () => {
   });
 
   it("gives Siren's fixture answer for Siren's fixture question, one Siren takes", async () => {
-    const answer = (await sample(ask(QUESTION))) as AppGroupOrderAnswer;
+    const answer = (await sample(ask(QUESTION))) as ProgramGroupSorterAnswer;
     expect(answer).toEqual(fixture.kinds.programGroupSorter!.answer);
     expect(refusalOf(QUESTION, answer as unknown as Record<string, unknown>)).toBeNull();
   });
 
   it('keeps the group order for a tie and lists a program with no engagement', async () => {
-    const tied: AppGroupOrderQuestion = {
+    const tied: ProgramGroupSorterQuestion = {
       ...QUESTION,
       programs: [
         { id: 4, name: 'Quiet', engagements: [] },
@@ -98,7 +98,7 @@ describe('apps-c16-5: the program group structure kind', () => {
         { id: 9, name: 'Affiliates', engagements: [{ engagementId: 881, collaboratorId: 57, score: 40, createdDate: '2026-11-09T16:40:00+00:00' }] },
       ],
     };
-    const answer = (await sample(ask(tied))) as AppGroupOrderAnswer;
+    const answer = (await sample(ask(tied))) as ProgramGroupSorterAnswer;
     expect(answer.programIds).toEqual([12, 9, 4]);
     expect(refusalOf(tied, answer as unknown as Record<string, unknown>)).toBeNull();
   });
@@ -113,7 +113,7 @@ describe('apps-c16-5: the program group structure kind', () => {
   it('answers through the one answer route, sent once', async () => {
     const accepted = { status: 'accepted', duplicate: false };
     const over = transportOver([reply(200, accepted)]);
-    const answer: AppGroupOrderAnswer = { outcome: 'sorted', programIds: [9, 12] };
+    const answer: ProgramGroupSorterAnswer = { outcome: 'sorted', programIds: [9, 12] };
     expect(await new AppsResource(over.transport).requests.answer(APP_REQUEST_ID, answer)).toEqual(accepted);
     expect(over.http.requests.map((request) => bodyOf(request))).toEqual([answer]);
   });

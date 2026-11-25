@@ -137,7 +137,7 @@ export function describeTell(siren, request) {
     }
   };
   if (request.feature.kind === 'postConversionAction' && data.conversion && data.program) {
-    /** @type {import('@novatorius/siren').AppConversionApprovedData} */
+    /** @type {import('@novatorius/siren').PostConversionActionTell} */
     const told = /** @type {any} */ (data);
     const about = `conversion ${told.conversion.id} approved for collaborator ${told.conversion.collaboratorId} in program ${told.program.name}`;
     if (told.reward === null) return `${about}, with no reward.`;
@@ -145,7 +145,7 @@ export function describeTell(siren, request) {
     return shown === undefined ? asCame : `${about}, reward ${shown}.`;
   }
   if (request.feature.kind === 'postAllocationAction' && data.allocation && data.distributor) {
-    /** @type {import('@novatorius/siren').AppAllocationCompletedData} */
+    /** @type {import('@novatorius/siren').PostAllocationActionTell} */
     const told = /** @type {any} */ (data);
     const { allocation } = told;
     const shown = read(allocation.value, allocation.currency);

@@ -190,7 +190,7 @@ export const FulfillmentStatus = {
 /** Union of the {@link FulfillmentStatus} strings. */
 export type FulfillmentStatus = (typeof FulfillmentStatus)[keyof typeof FulfillmentStatus];
 
-/** Statuses an API key can hold (`siren.apiKeys`). */
+/** Statuses an API key can hold, as Siren stores them. */
 export const ApiKeyStatus = {
   Active: 'active',
   Revoked: 'revoked',
@@ -364,7 +364,7 @@ export type AppStatus = (typeof AppStatus)[keyof typeof AppStatus];
 /**
  * The statuses of a request Siren sent an app (lib/Apps/Core/Models/AppRequest.php).
  * A tell ends at `delivered`. An ask ends at `applied`, once its answer has
- * done its work. `needs_attention` waits for a person or a late answer. An
+ * done its work, and is `applying` while one run of Siren's job applies it. `needs_attention` waits for a person or a late answer. An
  * ask that holds a reward ends at `dropped` when the app didn't answer within
  * 24 hours, and Siren went on without it.
  */
@@ -373,6 +373,7 @@ export const AppRequestStatus = {
   Sent: 'sent',
   Delivered: 'delivered',
   Answered: 'answered',
+  Applying: 'applying',
   Applied: 'applied',
   NeedsAttention: 'needs_attention',
   Dropped: 'dropped',

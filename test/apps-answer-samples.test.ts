@@ -44,8 +44,9 @@ vi.mock('express', async (importOriginal) => {
 });
 
 // Each sample loads the SDK from source on its first import, which can pass
-// Vitest's 5 seconds on a busy machine.
-vi.setConfig({ testTimeout: 30_000 });
+// Vitest's 5 seconds on a busy machine, and took 50 seconds under a load
+// average of 40.
+vi.setConfig({ testTimeout: 120_000 });
 
 interface FeatureFixture {
   kinds: Record<string, { request: Record<string, unknown>; answer: Record<string, unknown> | null }>;
@@ -99,9 +100,9 @@ async function load(sample: string): Promise<string> {
  * testing entry with the fixture's id, app and feature key, posted to the
  * sample.
  */
-async function sirenSends(url: string, kind: string): Promise<{ status: number; body: unknown }> {
+async function sirenSends(url: string, kind: string, test = false): Promise<{ status: number; body: unknown }> {
   const request = features.kinds[kind]!.request as { app: string; feature: { key: string } };
-  const { method, headers, rawBody } = appRequest(kind, request.feature.key, { id: ID, app: request.app });
+  const { method, headers, rawBody } = appRequest(kind, request.feature.key, { id: ID, app: request.app, ...(test ? { test } : {}) });
   const response = await fetch(url, { method, headers, body: rawBody });
   return { status: response.status, body: (await response.json()) as unknown };
 }
@@ -136,6 +137,18 @@ describe('apps-answer-handler: the section 5 samples, run as written', () => {
     expect(await sirenSends(url, 'postAllocationAction')).toEqual({ status: 200, body: {} });
     const data = features.kinds.postAllocationAction!.request.data as Record<string, unknown>;
     expect(noteShare).toHaveBeenCalledWith(ID, data.allocation);
+    expect(posted).toEqual([]);
+  });
+
+  it('5.1 and 5.2 write nothing on a test request, and still reply 200', async () => {
+    const addToCrm = vi.fn(async () => undefined);
+    const noteShare = vi.fn(async () => undefined);
+    vi.stubGlobal('addToCrm', addToCrm);
+    vi.stubGlobal('noteShare', noteShare);
+    expect(await sirenSends(await load('post-conversion-action'), 'postConversionAction', true)).toEqual({ status: 200, body: {} });
+    expect(await sirenSends(await load('post-allocation-action'), 'postAllocationAction', true)).toEqual({ status: 200, body: {} });
+    expect(addToCrm).not.toHaveBeenCalled();
+    expect(noteShare).not.toHaveBeenCalled();
     expect(posted).toEqual([]);
   });
 
@@ -210,6 +223,16 @@ describe("apps-docs: every other kind's sample, run as written", () => {
     expect(await asked('payout-method', 'payoutMethod')).toEqual(features.kinds.payoutMethod!.answer);
     const data = features.kinds.payoutMethod!.request.data as Record<string, { id?: number }>;
     expect(payOnce).toHaveBeenCalledWith(88, data.collaborator, data.amount);
+  });
+
+  it('payoutMethod: answers a test request at once, paying nothing and calling no provider', async () => {
+    const payOnce = vi.fn(async () => ({ ok: true, id: 'acme-ledger-5521' }));
+    vi.stubGlobal('payOnce', payOnce);
+    const url = await load('payout-method');
+    expect(await sirenSends(url, 'payoutMethod', true)).toEqual({ status: 200, body: {} });
+    await eventually(() => expect(posted).toHaveLength(1));
+    expect(posted[0]!.body).toEqual({ outcome: 'failed', reason: 'A test request, so nothing was paid.' });
+    expect(payOnce).not.toHaveBeenCalled();
   });
 
   it('metricCalculation: scores the triggering collaborator 1 for a visit', async () => {

@@ -7,7 +7,7 @@ import { appKeyArgument, orgNamed } from './apply';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
-import { REPORT_WIDTH, clean, styleFor, visibleLength } from '../style';
+import { REPORT_WIDTH, clean, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 
@@ -23,7 +23,7 @@ const FOLLOW_EVERY_MS = 2000;
 /** A request id: `apr_` and 32 lowercase hex characters. */
 const REQUEST_ID = /^apr_[0-9a-f]{32}$/;
 
-/** A request id or its start, as git takes a commit's: at least 4 hex characters, with or without `apr_`. */
+/** A request id or its start, as git takes a commit's: at least 4 hex characters after any `apr_`, which every id shares. */
 const REQUEST_PREFIX = /^(?:apr_)?[0-9a-f]{4,32}$/;
 
 /** How many characters of a request id the tool shows, and every command takes. */
@@ -47,22 +47,56 @@ export function shortId(id: string): string {
   return id.replace(/^apr_/, '').slice(0, SHORT_ID);
 }
 
+/** The most requests one page of `GET /apps/requests` holds (ListAppRequests::MAX_LIMIT). */
+const PAGE_LIMIT = 100;
+
 /**
- * The whole id for `typed`, a whole id or its start. A start is looked up
- * among the organization's latest requests and every one that needs
- * attention. Refuses one that matches none or several.
+ * The most pages a short id's search reads, 1000 requests, before it asks
+ * for the whole id. Each page is a call one of Siren Cloud's workers
+ * serves in turn, so the search stays short. A prefix lookup on Siren's
+ * side would lift this.
+ */
+const SEARCH_PAGES = 10;
+
+/**
+ * The whole id for `typed`, a whole id or its start, after a search that
+ * covers the whole organization. It pages through `GET /apps/requests`
+ * 100 at a time, newest first, each page before the last id of the one
+ * before, until a page holds fewer than 100. A start that matches several
+ * requests is refused with the list of them, never settled by picking
+ * one. An organization with more than {@link SEARCH_PAGES} pages is
+ * refused too, since an older request could start the same way, and the
+ * command must not act on the wrong one.
  */
 async function requestIdFor(run: CommandContext, typed: string, org: string): Promise<string> {
   if (REQUEST_ID.test(typed)) return typed;
   const start = typed.replace(/^apr_/, '');
   const siren = run.siren();
-  const rows = [...(await siren.apps.requests.list({})), ...(await siren.apps.requests.list({ status: 'needs_attention' }))];
-  const ids = [...new Set(rows.map((row) => row.id).filter((id) => id.startsWith(`apr_${start}`)))];
-  if (ids.length === 1) return ids[0]!;
-  if (ids.length === 0) {
-    throw new CliRefusal(`${org} has no recent request that starts with ${start}.`, { fix: run.command('apps requests'), fixWords: 'to list the latest, or give the whole id' });
+  const rows: AppRequestRecord[] = [];
+  let whole = false;
+  let before: string | undefined;
+  for (let page = 0; page < SEARCH_PAGES; page++) {
+    const some = await siren.apps.requests.list({ limit: PAGE_LIMIT, ...(before === undefined ? {} : { before }) });
+    rows.push(...some);
+    if (some.length < PAGE_LIMIT) {
+      whole = true;
+      break;
+    }
+    before = some.at(-1)!.id;
   }
-  throw new CliRefusal(`${ids.length} requests start with ${start}: ${ids.map((id) => shortIdOf(id, start)).join(', ')}.`, { why: 'Give more of the id.' });
+  const ids = [...new Set(rows.map((row) => row.id).filter((id) => id.startsWith(`apr_${start}`)))];
+  if (ids.length > 1) {
+    throw new CliRefusal(`${ids.length} requests start with ${start}: ${ids.map((id) => shortIdOf(id, start)).join(', ')}.`, { why: 'Give more of the id.' });
+  }
+  if (!whole) {
+    throw new CliRefusal(`${org} has more than 1000 requests, more than a short id searches, so the tool can't be sure ${start} names one request.`, {
+      why: 'Give the whole id, apr_ and 32 characters, which the request view and --json show.',
+    });
+  }
+  if (ids.length === 0) {
+    throw new CliRefusal(`${org} has no request that starts with ${start}.`, { fix: run.command('apps requests'), fixWords: 'to list the latest' });
+  }
+  return ids[0]!;
 }
 
 /** Enough of `id` to tell it from the others that start with `start`. */
@@ -384,11 +418,7 @@ async function showRequest(input: CommandInput, typed: string): Promise<number> 
   if (data.length === 0) run.print('Siren sent no data.');
   else {
     run.print(out.bold('DATA'));
-    const widest = Math.max(...data.map(([key]) => clean(key).length));
-    for (const [key, value] of data) {
-      const shown = clean(typeof value === 'string' ? value : JSON.stringify(value));
-      run.print(`  ${out.dim(clean(key))}${' '.repeat(widest - clean(key).length + 2)}${shown}`);
-    }
+    for (const line of dataLines(out, data, 2)) run.print(line);
   }
 
   const short = shortId(id);
@@ -484,6 +514,51 @@ export async function appsResend(input: CommandInput): Promise<number> {
       .replace(/\n$/, ''),
   );
   return 0;
+}
+
+/**
+ * The data Siren sent as indented key and value lines, the keys dim and
+ * aligned at each level. An object's entries go under its key, two spaces
+ * further in, and so does each object in a list, under its number from 1.
+ * A list of plain values is one line, joined with commas. In a terminal a
+ * long value wraps under itself, so no line passes 80 columns. `--json`
+ * prints the data whole.
+ */
+function dataLines(out: Style, entries: ReadonlyArray<readonly [string, unknown]>, indent: number): string[] {
+  const lines: string[] = [];
+  const pad = ' '.repeat(indent);
+  const widest = Math.max(0, ...entries.map(([key]) => [...clean(key)].length));
+  for (const [key, value] of entries) {
+    const label = clean(key);
+    const nested = nestedEntries(value);
+    if (nested !== undefined) {
+      lines.push(`${pad}${out.dim(label)}`);
+      lines.push(...dataLines(out, nested, indent + 2));
+      continue;
+    }
+    const at = indent + widest + 2;
+    const shown = clean(scalarText(value));
+    const [first = '', ...rest] = out.rich ? wrapWords(shown, Math.max(20, REPORT_WIDTH - at)) : [shown];
+    lines.push(`${pad}${out.dim(label)}${' '.repeat(widest - [...label].length + 2)}${first}`);
+    for (const more of rest) lines.push(`${' '.repeat(at)}${more}`);
+  }
+  return lines;
+}
+
+/** An object's entries, or a list's items under their numbers when one of them is an object or a list. Undefined for a value one line holds. */
+function nestedEntries(value: unknown): Array<readonly [string, unknown]> | undefined {
+  if (Array.isArray(value)) {
+    return value.some((item) => typeof item === 'object' && item !== null) ? value.map((item, at) => [String(at + 1), item] as const) : undefined;
+  }
+  if (typeof value === 'object' && value !== null && Object.keys(value).length > 0) return Object.entries(value);
+  return undefined;
+}
+
+/** A value one line holds: text as it is, a list of plain values joined with commas, and anything else as JSON. */
+function scalarText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.length === 0 ? '[]' : value.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join(', ');
+  return JSON.stringify(value) ?? String(value);
 }
 
 /**

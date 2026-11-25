@@ -31,11 +31,6 @@ function served(method: string, path: string): boolean {
  * `{id}` for any one segment. Each stays for the reason beside it.
  */
 const KNOWN_UNSERVED: Record<string, string> = {
-  'POST /webhooks': 'webhooks.subscriptions.create() is deprecated since an app holds its address, and Siren answers 405. Removing it is a breaking change.',
-  'GET /api-keys': 'apiKeys.list() is deprecated since an app holds its key, and Siren answers 404. Removing it is a breaking change.',
-  'POST /api-keys': 'apiKeys.create() is deprecated, as above.',
-  'GET /api-keys/scopes': 'apiKeys.scopes() is deprecated since an app holds its key, and Siren answers 404. Removing it is a breaking change.',
-  'DELETE /api-keys/{id}': 'apiKeys.revoke() is deprecated, as above.',
 };
 
 /** The known entry a sent line falls under, if any. */

@@ -1,0 +1,89 @@
+{
+  "id": "apr_9f2c4e0b7a1d4c3e8b6f5a2d1c0e9b8a",
+  "appId": 7,
+  "feature": "app:12",
+  "kind": "distributionResolver",
+  "mode": "ask",
+  "test": false,
+  "subject": {
+    "type": "distribution",
+    "id": "88"
+  },
+  "status": "answered",
+  "sendCount": 1,
+  "answerBy": "2026-11-20T15:00:00+00:00",
+  "answeredBy": "app:7",
+  "answeredAt": "2026-11-20T14:02:11+00:00",
+  "lastError": null,
+  "createdAt": "2026-11-20T14:00:00+00:00",
+  "data": {
+    "distribution": {
+      "id": 21,
+      "distributorId": 2,
+      "periodStart": "2026-10-01T00:00:00+00:00",
+      "periodEnd": "2026-11-01T00:00:00+00:00"
+    },
+    "distributor": {
+      "id": 2,
+      "name": "Partner pool"
+    },
+    "pool": {
+      "value": 10000,
+      "total": 10000,
+      "paid": 0,
+      "units": "USD",
+      "currency": {
+        "id": "USD",
+        "symbol": "$",
+        "position": "before",
+        "name": "US Dollar",
+        "scale": 2,
+        "decimalPlaces": 2,
+        "type": "monetary"
+      }
+    },
+    "metrics": [
+      {
+        "metricId": 41,
+        "collaboratorId": 42,
+        "score": 30,
+        "triggerCount": 3
+      },
+      {
+        "metricId": 43,
+        "collaboratorId": 57,
+        "score": 20,
+        "triggerCount": 2
+      }
+    ]
+  },
+  "answer": {
+    "outcome": "allocated",
+    "units": "USD",
+    "shares": {
+      "41": 6000,
+      "43": 4000
+    }
+  },
+  "answeredByUser": null,
+  "appKey": "acme-split",
+  "featureKey": "split-by-score",
+  "sends": [
+    {
+      "id": 501,
+      "webhookSubscriptionId": 19,
+      "eventType": "app.request",
+      "eventId": "apr_9f2c4e0b7a1d4c3e8b6f5a2d1c0e9b8a.1",
+      "payload": {},
+      "status": "delivered",
+      "attemptCount": 1,
+      "httpStatusCode": 200,
+      "responseBody": "",
+      "errorMessage": null,
+      "nextRetryAt": null,
+      "deliveredAt": "2026-11-20T14:00:01+00:00",
+      "dateCreated": "2026-11-20T14:00:00+00:00",
+      "dateModified": "2026-11-20T14:00:01+00:00"
+    }
+  ]
+}

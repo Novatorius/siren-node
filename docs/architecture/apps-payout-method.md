@@ -8,9 +8,9 @@ the app to pay one payout, and the app answers. The SDK already knew the kind
 
 | Part | File | Change |
 |---|---|---|
-| `AppPayoutQuestion` | src/record-types.ts | The ask's `data`: `payout`, `amount` and `collaborator`. |
-| `AppPayoutAnswer` | src/record-types.ts | `AppPayoutPaid` (`reference`, 1 to 191 characters) or `AppPayoutFailed` (`reason`, 1 to 500 characters). |
-| `AppFeatureFunctions.payoutMethod` | src/record-types.ts | Takes `AppAsk<AppPayoutQuestion>` and returns an `AppPayoutAnswer`, as `incentiveResolver` does. |
+| `PayoutMethodQuestion` | src/record-types.ts | The ask's `data`: `payout`, `amount` and `collaborator`. |
+| `PayoutMethodAnswer` | src/record-types.ts | `PayoutMethodPaidAnswer` (`reference`, 1 to 191 characters) or `PayoutMethodFailedAnswer` (`reason`, 1 to 500 characters). |
+| `AppFeatureFunctions.payoutMethod` | src/record-types.ts | Takes `AppAsk<PayoutMethodQuestion>` and returns an `PayoutMethodAnswer`, as `incentiveResolver` does. |
 
 ## Rules
 

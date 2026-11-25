@@ -17,6 +17,9 @@ import { BASE } from './record-fakes';
  * siren-php's feat/apps. `null` marks a method the Node SDK leaves out on
  * purpose, and its row must say why.
  *
+ * `apiKeys` and `webhooks->subscriptions->create()` are gone from both SDKs
+ * (pass 4 fold): Siren removed their routes, so neither table side has them.
+ *
  * Every Node name in the table must exist: a `siren.` name is read from a
  * real `Siren` client built over a FakeHttpClient and the reserved base URL,
  * with the global fetch stubbed to fail, and any other name is read from the
@@ -37,7 +40,6 @@ const PHP_SURFACE: Array<[string, string | null]> = [
   ['$siren->webhooks->constructEvent()', 'siren.webhooks.constructEvent()'],
   ['$siren->webhooks->constructEventFromHeaders()', null],
   ['$siren->webhooks->verifySignature()', 'siren.webhooks.verifySignature()'],
-  ['$siren->webhooks->subscriptions->create()', 'siren.webhooks.subscriptions.create()'],
   ['$siren->webhooks->subscriptions->events()', 'siren.webhooks.subscriptions.events()'],
   ['$siren->webhooks->subscriptions->list()', 'siren.webhooks.subscriptions.list()'],
   ['$siren->webhooks->subscriptions->delete()', 'siren.webhooks.subscriptions.delete()'],
@@ -45,10 +47,6 @@ const PHP_SURFACE: Array<[string, string | null]> = [
   ['$siren->webhooks->subscriptions->update()', 'siren.webhooks.subscriptions.update()'],
   ['$siren->webhooks->subscriptions->test()', 'siren.webhooks.subscriptions.test()'],
   ['$siren->webhooks->subscriptions->deliveries()', 'siren.webhooks.subscriptions.deliveries()'],
-  ['$siren->apiKeys->create()', 'siren.apiKeys.create()'],
-  ['$siren->apiKeys->list()', 'siren.apiKeys.list()'],
-  ['$siren->apiKeys->scopes()', 'siren.apiKeys.scopes()'],
-  ['$siren->apiKeys->revoke()', 'siren.apiKeys.revoke()'],
   ['$siren->conversions->list()', 'siren.conversions.list()'],
   ['$siren->conversions->retrieve()', 'siren.conversions.retrieve()'],
   ['$siren->conversions->create()', 'siren.conversions.create()'],
@@ -280,8 +278,8 @@ describe('P11: README parity table', () => {
     for (const name of ['`ApiKeyRecordScope::ALL`', '`API_KEY_RECORD_SCOPES`', '`ApiKeyRecordScope::FULFILLMENTS_READ`', '`ApiKeyRecordScope.FulfillmentsRead`']) {
       expect(underTable, name).toContain(name);
     }
-    expect(underTable).toContain('the same thirty strings in the same order');
-    expect(sdk.API_KEY_RECORD_SCOPES).toHaveLength(30);
+    expect(underTable).toContain('the same twenty-eight strings in the same order');
+    expect(sdk.API_KEY_RECORD_SCOPES).toHaveLength(28);
   });
 
   it('compares against the PHP SDK by release, never by branch or commit', () => {

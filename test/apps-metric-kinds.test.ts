@@ -5,10 +5,10 @@ import { kindLabel } from '../src/cli/app-kinds';
 import { AppsResource } from '../src/resources/apps';
 import type {
   App,
-  AppMetricCalculationAnswer,
-  AppMetricCalculationQuestion,
-  AppMetricFilterAnswer,
-  AppMetricFilterQuestion,
+  MetricCalculationAnswer,
+  MetricCalculationQuestion,
+  MetricFilterAnswer,
+  MetricFilterQuestion,
 } from '../src/record-types';
 import { FeatureKind } from '../src/taxonomy';
 import { reply } from './http-fakes';
@@ -87,7 +87,7 @@ describe('apps-c16-1: the metric kinds', () => {
   });
 
   it('answers both asks with the typed answers, through the one answer route', async () => {
-    const question: AppMetricCalculationQuestion = {
+    const question: MetricCalculationQuestion = {
       distributor: { id: 12, name: 'Partner leaderboard' },
       distribution: { id: 340, periodEnd: '2026-11-30T23:59:59+00:00' },
       metricType: 'referredSiteVisit',
@@ -98,7 +98,7 @@ describe('apps-c16-1: the metric kinds', () => {
       cause: { id: '9f2c4e1a7b3d5c60', type: 'transaction', causeId: '4512' },
       sale: { transactionId: 4512, conversionId: null, excludedLineIds: [5503] },
     };
-    const filter: AppMetricFilterQuestion = {
+    const filter: MetricFilterQuestion = {
       distributor: question.distributor,
       distribution: { id: 340 },
       collaborator: { id: 7, name: 'Riley Rep' },
@@ -108,9 +108,9 @@ describe('apps-c16-1: the metric kinds', () => {
       cause: { id: '9f2c4e1a7b3d5c60', type: null, causeId: null },
       sale: null,
     };
-    const scores: AppMetricCalculationAnswer = { outcome: 'scores', results: [{ collaboratorId: question.triggeringCollaborator.id, score: 10 }] };
-    const suppress: AppMetricFilterAnswer = { outcome: 'suppress', reason: 'Customer already owned by a partner' };
-    const allow: AppMetricFilterAnswer = { outcome: 'allow' };
+    const scores: MetricCalculationAnswer = { outcome: 'scores', results: [{ collaboratorId: question.triggeringCollaborator.id, score: 10 }] };
+    const suppress: MetricFilterAnswer = { outcome: 'suppress', reason: 'Customer already owned by a partner' };
+    const allow: MetricFilterAnswer = { outcome: 'allow' };
     expect(filter.collaborator.id).toBe(7);
 
     const accepted = { status: 'accepted', duplicate: false };

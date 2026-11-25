@@ -21,7 +21,7 @@ since it gains the handler on its own branch.
 |---|---|---|
 | `siren.apps.requestHandler(options)` | Serves `POST /` at the app's address, then sends `POST /apps/requests/{id}/answer` with the app's key, scope: the app's own key | src/resources/app-request-handler.ts, src/resources/apps.ts |
 | `siren.apps.splitPool(pool, weights)` | None | src/resources/app-amounts.ts, src/resources/apps.ts |
-| `AppDistributionQuestion`, `AppDistributionMetric`, `AppDistributionAnswer`, `AppFeatureFunctions`, `AppRequestFunction`, `AppEventFunction`, `AppSplitPool`, `AppSplitWeights` | None | src/record-types.ts |
+| `DistributionResolverQuestion`, `AppDistributionMetric`, `DistributionResolverAnswer`, `AppFeatureFunctions`, `AppRequestFunction`, `AppEventFunction`, `AppSplitPool`, `AppSplitWeights` | None | src/record-types.ts |
 | `AppRequestHandler`, `AppRequestHandlerOptions`, `AppRequestInput`, `AppRequestReply` and the mount types | None | src/resources/app-request-handler.ts, exported from src/index.ts |
 | `AppTell<D>` and `AppAsk<D>` | None | src/record-types.ts. `D` defaults to `Record<string, unknown>`, so existing code compiles. |
 
@@ -64,11 +64,13 @@ secret or the request body.
 `on()` takes only the 13 kinds Siren sends, `FEATURE_KIND_NAMES` in
 app-feature-kinds.ts, and any the `extraKinds` option names. It refuses
 another kind when the function is registered, and `featureKindProblem()`
-words what to write instead. The types take the same kinds, through
-`AppHandledKind<X>`, where `X` is the extra kinds.
+words what to write instead, as `AppHandlerError`. The types take
+`FeatureKind` and the extra kinds, so a typo's compile error names
+`FeatureKind`. `customEvent` passes the types, since it is a `FeatureKind`,
+and the runtime check refuses it, pointing at `events.ingest()`.
 
 `on(kind, key, fn)` wins over `on(kind, fn)` for its own key. Naming the same
-feature, kind or event twice throws `SirenError`, so a copy and paste slip
+feature, kind or event twice throws `AppHandlerError`, a `SirenError`, so a copy and paste slip
 does not silently drop a function. The handler routes by the envelope's
 `mode`, so a payout method's ask works with no change.
 
@@ -93,12 +95,60 @@ does not silently drop a function. The handler routes by the envelope's
 The work after the reply never rejects, and an `onError` that throws is
 caught.
 
-The default `onError` writes one `console.error` line, `Siren request handler
-(<kind> <key> <id>):` or `(<type> <delivery id>):`, and the error, as the
-PHP SDK's default does. For an ask's work after its 200 it adds when Siren
-sends the ask again, from `answerBy` in UTC, and how to resend it sooner
-(`nextSend()`), before the error so a stack trace can't hide it, unless Siren refused with 403, 404 or 409, after which it
-sends the ask no more. It never writes the request's data or headers.
+The default `onError` writes one string through `logger`, `Siren request
+handler (<kind> <key> <id>):` or `(<type> <delivery id>):`, then the error's
+class, message and code, with a nested cause folded in as "(cause: ...)". A
+stack trace follows only when the app's own function threw, which the handler
+tracks with a `WeakSet` of the errors its `run()` wrapper caught. For an ask's
+work after its 200 it adds when Siren sends the ask again, from `answerBy` in
+UTC, and how to resend it sooner (`nextSend()`), before the error, unless Siren
+refused with 403, 404 or 409, after which it sends the ask no more. After a 422
+`app_answer_invalid` it says instead to reproduce the answer with `simulate()`
+and resend, since a resend alone repeats the refused answer. It never writes the
+request's data or headers.
+
+## Logging and the two warnings
+
+`logger` takes `debug`, `info`, `warn` and `error`. `respond()` times each
+request and writes one `debug` line with its name, status and milliseconds.
+`simulate()` writes nothing. Left out, the logger drops `debug` and `info` and
+sends `warn` and `error` to the console, so a production log stays quiet. A
+custom `onError` replaces the default line, and the debug lines still go to the
+logger.
+
+A refused signature goes to `onError` as the `SignatureVerificationError`
+that `checkSignedDelivery()` threw, with a code per check, and the reply stays
+the 401. The default writes it at `warn` with a hint by code: the signing
+secret for `signature_mismatch`, a proxy for a missing, unreadable or mismatched
+header. Flood control keeps no timer: the first refusal opens a one-minute
+window, five lines are written in it, and the rest are counted. The next
+refusal after the window first writes the count. Tests drive it with Vitest's
+fake `Date`.
+
+A tell's function is timed. Past `TELL_TIME_LIMIT_SECONDS` (8, the timeout
+Siren's delivery client puts on each post to an app's address), `onError` gets
+an `AppSlowTellError` at `warn`, and `simulate()` returns it. The reply is still
+200, because Siren has already stopped waiting and will send the tell again.
+An ask needs no timer: its reply comes before its function runs.
+
+## Testing helpers
+
+`@novatorius/siren/testing` signs requests as `WebhookSignature::headers()`
+signs them. `appRequest(kind, key)` builds one from Siren's sample question.
+`appRequestFromRecord(record)` signs a stored request again with its id,
+kind, mode, data and `answerBy`, from the file `siren apps requests <id> --json`
+saves: Siren's request detail with `appKey` and `featureKey` beside it. Siren's
+detail names its feature as `app:{id}` only, so the helper takes the key from
+`featureKey`, and `{ key }` covers a request whose app is gone, where both
+keys are null. A missing key throws `AppHandlerError`. `webhookEvent(type, data?)` signs an event with `X-Siren-Event`
+set to the type and an `evt_` delivery id, and no `Idempotency-Key`, which
+Siren sends only for keyed deliveries. Its default data is
+`sampleEventData(type)`, from src/testing/event-samples.ts, which
+scripts/siren-event-samples.mjs builds from the payload tables in Siren's
+docs/api/webhooks-events.md. An event whose payload is "the same fields as"
+another copies that one. Siren documents 60 of its 64 event types, and the
+other four (`credit.issued`, `credit.redeemed`, `currency.created`,
+`currency.deleted`) need their data passed.
 
 ## Mounting it
 
@@ -203,6 +253,35 @@ and pass-1-builder-spec.md in the apps run folder) changed these:
 - `prepare` runs scripts/prepare.mjs, which builds with tsup when it is
   installed, keeps a built `dist` when it is not, and otherwise says to run
   `npm ci` first, so an install from a local folder works.
+
+## Types and one surface, DX pass 3
+
+review/sdk-dx/pass-3-review.md and pass-3-builder-spec.md in the apps run
+folder changed these, the same in the PHP and Python SDKs:
+
+- Each kind's types are named from the kind: `<Kind>Question`, `<Kind>Answer`
+  and `<Kind>Tell`. scripts/feature-kind.mjs writes `FeatureQuestions`,
+  `FeatureAnswers` and `FeatureTells` into src/feature-kind.ts from the kinds
+  snapshot, and `AppFeatureFunctions` in record-types.ts is mapped from them,
+  so no list of kinds is written by hand.
+- `appRequest()` returns `AppTestRequest<K>`, which carries `kind`, and
+  `simulate()` has an overload that types `answer` as `FeatureAnswer<K>`.
+  `simulate()` answers `status`, `body`, `answer` and `error` every time,
+  with null for no answer and no error. The answer is the one the handler
+  would post, so it is null after `later()` and beside any error.
+- `apps.requestHandler()` answers `AppRequestHandler`, an interface with no
+  type argument over `AppRequestHandlerWith<never>`, and `on()` returns
+  `this`, so an editor prints `AppRequestHandler` and a typo's error names
+  `FeatureKind`. `AppFunctionFor<'customEvent'>` is `never`, so
+  `customEvent` still fails to type-check.
+- `AppHandlerError`, a `SirenError`, is what the handler and the testing
+  helpers throw for a mistake in the code that uses them.
+- `appRequestFrom()` sets `isAsk` and reads an empty `args` list as `{}`
+  (`readData()`), since Siren encodes an engagement type's empty settings as
+  `[]` until it writes an object.
+- test/apps-dx-pass-3.test.ts runs the TypeScript compiler, strict, on the
+  README's samples and on Siren's request fixture with `satisfies`, so a
+  sample that stops compiling or a field Siren adds fails a test.
 
 ## Left open
 

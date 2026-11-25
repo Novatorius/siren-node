@@ -196,23 +196,23 @@ describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
   it('rotate-key asks first, then writes only the new key, mode 0600', async () => {
     const h = rotating([reply(200, { ...appRecord(), rawKey: NEW_KEY })], { interactive: true, typed: ['yes'] });
     expect(await h.run(['apps', 'rotate-key', KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(`Rotating ${KEY}'s key revokes the old key at once, so anything still using it stops working.\n`);
+    expect(h.out()).toContain('Rotating the key revokes the old one at once, so anything still using it stops working.\n');
     expect(h.prompts).toEqual(['Rotate it in Acme (3), sandbox? [y/N] ']);
     expect(h.paths()).toEqual([`POST /apps/${KEY}/key/rotate`]);
     expect(h.file('.env.sandbox')).toBe(OLD.replace(RAW_KEY, NEW_KEY));
     if (process.platform !== 'win32') expect(h.modeOf(join(h.cwd, '.env.sandbox'))).toBe(0o600);
-    expect(h.out()).toContain('Siren revoked the old key. Restart your app so it reads the new key.');
+    expect(h.out()).toContain('Siren revoked the old key. Restart your app so it reads the new one.');
     expect(h.printed()).not.toContain(NEW_KEY);
   });
 
   it('rotate-secret asks first, then writes only the new signing secret', async () => {
     const h = rotating([reply(200, { ...appRecord(), signingSecret: NEW_SECRET })], { interactive: true, typed: ['y'] });
     expect(await h.run(['apps', 'rotate-secret', KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(`Rotating ${KEY}'s signing secret makes Siren sign with the new one at once, so the app refuses requests until it reads the new one.\n`);
+    expect(h.out()).toContain('Rotating the signing secret makes Siren sign with the new one at once.\n');
     expect(h.prompts[0]).toBe('Rotate it in Acme (3), sandbox? [y/N] ');
     expect(h.paths()).toEqual([`POST /apps/${KEY}/secret/rotate`]);
     expect(h.file('.env.sandbox')).toBe(OLD.replace(SIGNING_SECRET, NEW_SECRET));
-    expect(h.out()).toContain('Saved the new signing secret in .env.sandbox.');
+    expect(h.out()).toContain('  Secret   in .env.sandbox\n');
     expect(h.printed()).not.toContain(NEW_SECRET);
   });
 
@@ -226,7 +226,7 @@ describe('apps-sdk-container item 5: siren apps rotate splits in two', () => {
       const script = rotating([reply(200, appRecord())]);
       expect(await script.run(['apps', command, KEY]), command).toBe(1);
       expect(script.http.requests).toHaveLength(0);
-      expect(script.err()).toContain(`Run siren apps ${command} ${KEY} --yes to rotate it.`);
+      expect(script.err()).toContain(`Run siren apps ${command} ${KEY} --yes.`);
     }
   });
 
@@ -308,7 +308,7 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     expect(await h.run(['apps', 'add-key', KEY]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`POST /apps/${KEY}/key`]);
     expect(h.file('.env.sandbox')).toBe(`SIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET}\nSIREN_API_KEY=${RAW_KEY}\n`);
-    expect(h.out()).toContain('The key holds no scopes yet. Run siren apps apply to give it the scopes your app file names.');
+    expect(h.out()).toContain('siren apps apply   give the key the scopes your app file names');
     expect(h.printed()).not.toContain(RAW_KEY);
 
     expect(await h.run(['apps', 'add-key', KEY])).toBe(1);

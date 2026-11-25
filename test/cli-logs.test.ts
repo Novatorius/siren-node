@@ -219,7 +219,8 @@ describe('a log line', () => {
 
     const lines = entryLines(rich, failed, command);
 
-    expect(lines[0]).toContain('\u001b[31m✗\u001b[0m \u001b[1mfailed');
+    // The style module's failure: one red bold run, ✗ and the word together.
+    expect(lines[0]).toContain('\u001b[31m\u001b[1m✗ failed\u001b[0m');
     expect(lines[1]).toContain('The address answered 500.');
     expect(lines[2]!.replace(/\u001b\[[\d;]*m/g, '')).toContain(`› siren apps requests ${APP_REQUEST_ID}`);
     const flat = entryLines(plain, failed, command);

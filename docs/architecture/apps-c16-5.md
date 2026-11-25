@@ -18,7 +18,7 @@ the same kind on their own pkt/apps-c16-5 branches.
 |---|---|---|
 | `FeatureKind.ProgramGroupSorter` | src/taxonomy.ts | The value `programGroupSorter`. |
 | Readable name | src/cli/app-kinds.ts | Program group structure. |
-| Question and answer types | src/record-types.ts | `AppGroupOrderQuestion`, `AppGroupOrderProgram`, `AppGroupOrderEngagement`, `AppGroupOrderAnswer`. |
+| Question and answer types | src/record-types.ts | `ProgramGroupSorterQuestion`, `ProgramGroupSorterProgram`, `ProgramGroupSorterEngagement`, `ProgramGroupSorterAnswer`. |
 | Typed handler | src/record-types.ts | `AppFeatureFunctions.programGroupSorter`, so `on('programGroupSorter', ...)` types the request and the answer. |
 | `AppFeatureDeclaration` | openapi.yaml | The kind `programGroupSorter`. |
 

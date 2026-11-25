@@ -19,9 +19,9 @@ their own pkt/apps-c16-7 branches.
 |---|---|---|
 | `FeatureKind.CollaboratorGroupStructure` | src/taxonomy.ts | The value `collaboratorGroupStructure`. |
 | Readable name | src/cli/app-kinds.ts | Collaborator group structure. |
-| Question types | src/record-types.ts | `AppCollaboratorGroupStructureQuestion`, `AppCollaboratorGroupStructureDistributorQuestion`, `AppCollaboratorGroupStructureProgramQuestion`, `AppCollaboratorGroupMember`. |
-| Answer types | src/record-types.ts | `AppCollaboratorGroupChain`, `AppCollaboratorGroupTree` and their union `AppCollaboratorGroupStructureAnswer`. |
-| `AppFeatureFunctions` | src/record-types.ts | `on('collaboratorGroupStructure', ...)` gets `AppAsk<AppCollaboratorGroupStructureQuestion>` and returns the answer. |
+| Question types | src/record-types.ts | `CollaboratorGroupStructureQuestion`, `CollaboratorGroupStructureDistributorQuestion`, `CollaboratorGroupStructureProgramQuestion`, `AppCollaboratorGroupMember`. |
+| Answer types | src/record-types.ts | `CollaboratorGroupStructureChainAnswer`, `CollaboratorGroupStructureTreeAnswer` and their union `CollaboratorGroupStructureAnswer`. |
+| `AppFeatureFunctions` | src/record-types.ts | `on('collaboratorGroupStructure', ...)` gets `AppAsk<CollaboratorGroupStructureQuestion>` and returns the answer. |
 | `AppFeatureDeclaration` | openapi.yaml | The kind `collaboratorGroupStructure`. |
 
 ## The question
@@ -34,10 +34,10 @@ interrupts, which differ by side, so the question type keeps an open index
 signature. A distributor's ask carries a metric calculation's fields
 (`distributor`, `distribution`, `metricType`, `distributorMetricTypeId`,
 `opportunityId`, `points`, `sale`) and a metric's `cause`, which
-`AppCollaboratorGroupStructureDistributorQuestion` types. A program's ask
+`CollaboratorGroupStructureDistributorQuestion` types. A program's ask
 carries an engagement calculation's fields (`program`, `engagementType`,
 `programEngagementTypeId`, `args`, `opportunity`) and an engagement's `cause`,
-which `AppCollaboratorGroupStructureProgramQuestion` types.
+which `CollaboratorGroupStructureProgramQuestion` types.
 
 ## Rules
 

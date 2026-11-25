@@ -244,6 +244,12 @@ export class CommandContext {
     return orgWanted(this.orgFlag, this.io.env, { path: this.appFilePath, shown: basename(this.appFilePath) });
   }
 
+  /** The organization of `memberships` that --org, SIREN_ORG, the app file or a single membership picks, or undefined when none does. */
+  async orgInUse(memberships: readonly StoredMembership[]): Promise<StoredMembership | undefined> {
+    const chosen = orgFrom(memberships, await this.wanted());
+    return typeof chosen === 'object' ? chosen.org : undefined;
+  }
+
   /** Settles the organization for a session already in use, as {@link signedIn} does. `list` is the command a refusal names. */
   async chooseOrg(list: string): Promise<OrgChoice> {
     const session = this.current();

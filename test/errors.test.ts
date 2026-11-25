@@ -160,11 +160,11 @@ describe('error mapping by status', () => {
 
   it('leaves code and data unset for an empty context, and fieldErrors empty', async () => {
     const ctx = makeClient(
-      [jsonResponse(400, { error: { message: 'Missing API key ID.', context: [] } })],
+      [jsonResponse(400, { error: { message: 'Missing a filter.', context: [] } })],
       { maxRetries: 0 },
     );
 
-    const err = await ctx.client.apiKeys.revoke(0).catch((e: unknown) => e);
+    const err = await ctx.client.conversions.list().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestError);
     expect((err as BadRequestError).code).toBeUndefined();
     expect((err as BadRequestError).data).toBeUndefined();
@@ -264,12 +264,10 @@ describe('retry behavior', () => {
     expect(ctx.fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('never auto-retries API key creation', async () => {
+  it("never auto-retries making an app's key", async () => {
     const ctx = makeClient([jsonResponse(500, structuredErr('boom'))], { maxRetries: 3 });
 
-    await expect(
-      ctx.client.apiKeys.create({ label: 'Production server', scopes: ['event:*'] }),
-    ).rejects.toBeInstanceOf(ApiError);
+    await expect(ctx.client.apps.createKey('acme', { scopes: ['event:*'] })).rejects.toBeInstanceOf(ApiError);
     expect(ctx.fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -281,53 +279,3 @@ describe('retry behavior', () => {
   });
 });
 
-describe('apiKeys resource', () => {
-  it('creates a key and surfaces the one-time rawKey', async () => {
-    const ctx = makeClient([
-      jsonResponse(201, {
-        id: 9,
-        keyPrefix: 'sk_live_a1b2c3d4',
-        label: 'Production server',
-        status: 'active',
-        rawKey: `sk_live_${'b'.repeat(64)}`,
-      }),
-    ]);
-
-    // Siren refuses a key with no scopes (400) and any scope that is not an
-    // event scope, so the SDK sends the scopes it is given.
-    const key = await ctx.client.apiKeys.create({
-      label: 'Production server',
-      scopes: ['event:sale', 'event:refund'],
-    });
-    expect(ctx.lastCall().url).toBe('https://api.sirenaffiliates.com/siren/v1/api-keys');
-    expect(ctx.lastCall().body).toEqual({
-      label: 'Production server',
-      scopes: ['event:sale', 'event:refund'],
-    });
-    expect(key.rawKey).toBe(`sk_live_${'b'.repeat(64)}`);
-  });
-
-  it('creates a key without a label and leaves label out of the request', async () => {
-    const ctx = makeClient([
-      jsonResponse(201, { id: 10, keyPrefix: 'sk_live_c', label: '', rawKey: `sk_live_${'c'.repeat(64)}` }),
-    ]);
-
-    await ctx.client.apiKeys.create({ scopes: ['event:sale'] });
-    expect(ctx.lastCall().body).toEqual({ scopes: ['event:sale'] });
-  });
-
-  it('lists keys and revokes by id', async () => {
-    const ctx = makeClient([
-      jsonResponse(200, [{ id: 9, label: 'Production server' }]),
-      emptyResponse(200),
-    ]);
-
-    const keys = await ctx.client.apiKeys.list();
-    expect(keys).toEqual([{ id: 9, label: 'Production server' }]);
-
-    await ctx.client.apiKeys.revoke(9);
-    const call = ctx.lastCall();
-    expect(call.method).toBe('DELETE');
-    expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/api-keys/9');
-  });
-});

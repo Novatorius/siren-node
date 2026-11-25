@@ -86,7 +86,8 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     expect(out).toContain('  Kind      tell · Post-conversion action (postConversionAction)\n');
     expect(out).toContain('  Answer    a tell takes none\n');
     expect(out).toContain('\nDATA\n');
-    for (const key of Object.keys(renamedBody<{ data: Record<string, unknown> }>(ONE).data)) expect(out).toContain(`\n  ${key}  `);
+    // An object's key heads its own entries, which sit two spaces further in.
+    for (const key of Object.keys(renamedBody<{ data: Record<string, unknown> }>(ONE).data)) expect(out).toMatch(new RegExp(`\\n  ${key}( {2}|\\n {4}\\S)`));
     expect(out).not.toContain('not among the latest 50');
   });
 

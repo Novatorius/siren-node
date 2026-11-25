@@ -1,7 +1,7 @@
 import type { HttpTransport } from '../http';
 import { shownAmount, splitPool } from './app-amounts';
 import { createAppRequestHandler } from './app-request-handler';
-import type { AppRequestHandler, AppRequestHandlerOptions } from './app-request-handler';
+import type { AppRequestHandler, AppRequestHandlerOptions, AppRequestHandlerWith } from './app-request-handler';
 import { answerAppRequest, listAppRequests, resendAppRequest, retrieveAppRequest, verifyAppRequest } from './app-requests';
 import type {
   App,
@@ -56,18 +56,23 @@ export const DEFAULT_APP_REQUEST_TOLERANCE_SECONDS = 300;
  * takes the app's own API key, or an admin's session to answer by hand.
  */
 export class AppRequestsResource {
-  /** The filters `list()` sends, the one `GET /apps/requests` reads (ListAppRequests.php). */
-  static readonly LIST_FILTERS = ['status'] as const;
+  /** The filters `list()` sends, the ones `GET /apps/requests` reads (ListAppRequests.php at feat/apps 0383186437). */
+  static readonly LIST_FILTERS = ['status', 'limit', 'before'] as const;
 
   constructor(private readonly http: HttpTransport) {}
 
   /**
-   * The org's latest requests, newest first, at most 50, from
-   * `GET /apps/requests`, with `?status=` when `params.status` is given.
-   * Siren answers `{ requests: [...] }` and this answers the list.
+   * The org's latest requests, newest first, from `GET /apps/requests`:
+   * `params.limit` of them, 1 to 100, or 50 without it, older than the
+   * request `params.before` names when it is given, and of `params.status`
+   * when that is given. Siren answers `{ requests: [...] }` and this
+   * answers the list. To read every request, pass the last id of each page
+   * as the next page's `before` until a page holds fewer than `limit`.
    *
    * Refuses with `SirenError` before sending: a key of `params` other than
-   * `status`, or a status outside `AppRequestStatus`. Retries on a network
+   * these three, a status outside `AppRequestStatus`, a limit outside 1 to
+   * 100, a `before` that is not a request id, and `limit` or `before` with
+   * `needs_attention`, whose list Siren does not page. Retries on a network
    * error, 429 or 5xx, as a read. Throws `UnexpectedResponseError` when the
    * 2xx body is not an object holding a `requests` array of objects.
    */
@@ -820,7 +825,12 @@ export class AppsResource {
    * a list of kind names. `on()` refuses a kind Siren never sends unless
    * `extraKinds` names it. It keeps no state.
    */
-  requestHandler<X extends string = never>(options?: AppRequestHandlerOptions<X>): AppRequestHandler<X> {
+  requestHandler(options?: AppRequestHandlerOptions): AppRequestHandler;
+  /** The handler with the kinds `extraKinds` names, which `on()` then takes too. */
+  requestHandler<X extends string>(options: AppRequestHandlerOptions<X> & { extraKinds: readonly X[] }): AppRequestHandlerWith<X>;
+  /** The handler when the options may or may not name `extraKinds`. */
+  requestHandler<X extends string = never>(options?: AppRequestHandlerOptions<X>): AppRequestHandlerWith<X>;
+  requestHandler<X extends string = never>(options?: AppRequestHandlerOptions<X>): AppRequestHandlerWith<X> {
     return createAppRequestHandler<X>(this.http, options, {
       toleranceSeconds: DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,
       maxAnswerBytes: MAX_APP_ANSWER_BYTES,

@@ -181,7 +181,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(await h.run(['logout']), h.err()).toBe(0);
     expect(h.paths()).toEqual([]);
     expect(Object.keys(h.credentials().sessions)).toEqual([BASE]);
-    expect(h.out()).toContain(`Forgot the session for ${SANDBOX_BASE_URL} on this machine.`);
+    expect(h.out()).toContain(`Forgot the session for ${new URL(SANDBOX_BASE_URL).host} on this machine.`);
   });
 });
 

@@ -239,7 +239,7 @@ describe('siren get, post, put, patch and delete', () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await runCli(['programs', 'get', '99'], { ...h.io, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } })).toBe(1);
     const plain = h.err().replace(/\u001b\[[\d;]*m/g, '');
-    expect(plain).toBe('✗ Siren refused GET /programs/99.\n  Siren answered 404 not_found: Program not found.\n  › Run siren programs list to see what is there.\n');
+    expect(plain).toBe('✗ Siren refused GET /programs/99.\n  Siren answered 404 not_found: Program not found.\n› Run siren programs list to see what is there.\n');
   });
 
   it('styles a list in a terminal: a green ✓ headline and a dim header', async () => {

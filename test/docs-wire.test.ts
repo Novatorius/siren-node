@@ -34,7 +34,7 @@ describe('P8: CHANGELOG and README', () => {
     const section = unreleased();
     for (const name of [
       'subscriptions.events()',
-      'apiKeys.scopes()',
+      'apps.scopes()',
       'SiteDisconnectedError',
       'PolicyError',
       'CodeConflictError',
@@ -56,7 +56,7 @@ describe('P8: CHANGELOG and README', () => {
     expect(readme).toMatch(/test:\s*true/);
     expect(readme).toMatch(/lines:\s*\[/);
     expect(readme).toContain('subscriptions.events()');
-    expect(readme).toContain('apiKeys.scopes()');
+    expect(readme).toContain('apps.scopes()');
   });
 });
 

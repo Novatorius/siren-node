@@ -172,10 +172,10 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(bodyOf(unchosen.http.requests[1])).toEqual({ verificationToken: 'verification-token', orgId: 3 });
   });
 
-  it("answers a wrong password with Siren's message and keeps nothing", async () => {
+  it('answers a wrong password in its own words, which split what Siren said, and keeps nothing', async () => {
     const h = harness([AuthAnswers.wrongPassword()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain("Invalid email or password. If you haven't set up your login yet, check your email for a link to set it up.");
+    expect(h.err()).toContain("Siren didn't accept that email and password. Either is wrong, or this account has no password yet.");
     expect(h.printed()).not.toContain(PASSWORD);
     expect(() => h.credentialsText()).toThrow();
   });
@@ -336,14 +336,15 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('declares the app on the first apply, writes its key and secret to .env.sandbox, and prints neither', async () => {
-    const h = harness([appMissing(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
+    const h = harness([appMissing(), AppAnswers.scopes(), reply(201, { ...app, rawKey: RAW_KEY, signingSecret: SIGNING_SECRET })], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
 
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
-    expect(bearer(h, 1)).toBe(`Bearer ${ACCESS_1}`);
-    expect(bodyOf(h.http.requests[1])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
+    // The file names event scopes the new app does not hold yet, so apply checks them against Siren's list (CLI pass 2, finding 5).
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
+    expect(bearer(h, 2)).toBe(`Bearer ${ACCESS_1}`);
+    expect(bodyOf(h.http.requests[2])).toMatchObject({ name: 'Acme', url: 'https://acme.example/siren' });
     expect(h.file('.env.sandbox').split('\n')).toEqual(
       expect.arrayContaining([`SIREN_BASE_URL=${SANDBOX_BASE_URL}`, `SIREN_API_KEY=${RAW_KEY}`, `SIREN_SIGNING_SECRET=${SIGNING_SECRET}`]),
     );
@@ -381,18 +382,18 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
   });
 
   it('leaves the env file as it is when a later apply answers no secret, and says when this machine holds no key', async () => {
-    const h = harness([appBefore(), reply(200, app), appBefore(), reply(200, app)], { env: appEnv });
+    const h = harness([appBefore(), AppAnswers.scopes(), reply(200, app), appBefore(), AppAnswers.scopes(), reply(200, app)], { env: appEnv });
     h.signedIn();
     h.write('siren.app.json', exampleFile);
     h.write('.env.sandbox', `PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(await h.run(['apps', 'apply', 'siren.app.json', '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe(`PORT=8787\nSIREN_API_KEY=${RAW_KEY}\n`);
     expect(h.printed()).not.toContain('siren apps rotate-key');
 
     h.write('.env.sandbox', 'PORT=8787\n');
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
-    expect(h.paths()).toEqual([`GET /apps/${KEY}`, `PUT /apps/${KEY}`, `GET /apps/${KEY}`, `PUT /apps/${KEY}`]);
+    expect(h.paths()).toEqual([`GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`, `GET /apps/${KEY}`, 'GET /apps/scopes', `PUT /apps/${KEY}`]);
     expect(h.file('.env.sandbox')).toBe('PORT=8787\n');
     expect(h.printed().replace(/\n  /g, " ")).toContain(`siren apps rotate-key ${KEY}`);
   });
@@ -440,7 +441,7 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
       `PORT=8787\nSIREN_BASE_URL=${SANDBOX_BASE_URL}\nSIREN_API_KEY=${RAW_KEY_2}\nSIREN_SIGNING_SECRET=${SIGNING_SECRET_2}\n`,
     );
     expect(() => h.file('.env.sandbox')).toThrow();
-    expect(h.out()).toContain(`Saved key ${RAW_KEY_2.slice(0, 16)}… in acme/.env.sandbox.`);
+    expect(h.out()).toContain(`  Key   ${RAW_KEY_2.slice(0, 16)}… in acme/.env.sandbox\n`);
     expect(h.printed()).not.toContain(RAW_KEY_2);
     expect(h.printed()).not.toContain(SIGNING_SECRET_2);
   });

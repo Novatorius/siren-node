@@ -65,7 +65,7 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     const h = harness([AuthAnswers.oneOrg(), AuthAnswers.loggedOut()], { edition: 'production', stdin: PASSWORD });
     await signInLive(h);
     expect(await h.run(['logout']), h.err()).toBe(0);
-    expect(h.out()).toContain(`Signed out of ${UAT}.`);
+    expect(h.out()).toContain(`Logged out of ${new URL(UAT).host}.`);
     expect(h.credentials().current).toBeUndefined();
   });
 
@@ -73,9 +73,10 @@ describe('cli pass 1, finding 2: the tool remembers the Siren you signed in to',
     const h = harness([]);
     h.signedIn({ [SANDBOX_BASE_URL]: session({ baseUrl: SANDBOX_BASE_URL, orgSlug: 'acme' }) });
     expect(await h.run(['whoami']), h.err()).toBe(0);
-    expect(h.out()).toContain(`Logged in as ${EMAIL} to Acme (acme), as admin.`);
-    expect(h.out()).toContain(`Siren: ${SANDBOX_BASE_URL}, a sandbox.`);
-    expect(h.out()).toContain(`Session file: ${h.credentialsPath}`);
+    expect(h.out()).toContain(`Logged in as ${EMAIL}\n`);
+    expect(h.out()).toContain('  Org       Acme (acme) · admin\n');
+    expect(h.out()).toContain('  Siren     sandbox.sirenaffiliates.com · sandbox\n');
+    expect(h.out()).toContain(`  Session   ${h.credentialsPath}\n`);
     expect(h.sent()).toEqual([]);
 
     expect(await h.run(['whoami', '--json']), h.err()).toBe(0);
@@ -140,7 +141,7 @@ describe('cli pass 1, finding 3: bare siren, the apps group, help and typos', ()
   it('suggests the nearest command for a typo', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'aply'])).toBe(2);
-    expect(h.err()).toContain('There is no command "apps aply". Did you mean "apps apply"?');
+    expect(h.err()).toContain('siren apps has no command "aply". Did you mean "apps apply"?');
     const two = harness([]);
     expect(await two.run(['lgin'])).toBe(2);
     expect(two.err()).toContain('Did you mean "login"?');
@@ -179,7 +180,7 @@ describe('cli pass 1, finding 8: apps rotate is gone', () => {
     expect(COMMANDS).not.toContain('apps rotate');
     const h = harness([]);
     expect(await h.run(['apps', 'rotate', APP_KEY])).toBe(2);
-    expect(h.err()).toContain('There is no command "apps rotate".');
+    expect(h.err()).toContain('siren apps has no command "rotate".');
     const help = harness([]);
     await help.run(['--help']);
     expect(help.out()).not.toMatch(/apps rotate[ \n]/);
@@ -274,7 +275,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
   it('suggests each command a cut-off name starts, as for apps rotate', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'rotate', APP_KEY])).toBe(2);
-    expect(h.err()).toContain('There is no command "apps rotate". Did you mean "apps rotate-key" or "apps rotate-secret"?');
+    expect(h.err()).toContain('siren apps has no command "rotate". Did you mean "apps rotate-key" or "apps rotate-secret"?');
   });
 
   it('prints the follow hint after a live first apply with no --live, since reads need none', async () => {

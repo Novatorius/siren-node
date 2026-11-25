@@ -82,6 +82,9 @@ describe('apps-cli: apps.verifyRequest', () => {
         id: 'apr_b79943ff8ca353ce5cf5312bb3fa66c7',
         type: 'app.request',
         mode: 'ask',
+        isAsk: true,
+        // Siren leaves test out of a real request, and the SDK reads it as false.
+        test: false,
         app: 'acme-payouts',
         feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' },
         createdAt: '2026-11-17T09:14:03+00:00',

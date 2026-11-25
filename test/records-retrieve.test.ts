@@ -23,7 +23,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The body as the SDK parses it: JSON when it parses, else undefined, as apiKeys.scopes() reports it. */
+/** The body as the SDK parses it: JSON when it parses, else undefined, as apps.scopes() reports it. */
 function parsed(text: string): unknown {
   try {
     return text === '' ? undefined : (JSON.parse(text) as unknown);

@@ -5,7 +5,9 @@ import { Siren } from '@novatorius/siren'
 const siren = new Siren()
 const answers = siren.apps.requestHandler()
 
-answers.on('postConversionAction', 'tell-the-crm', async ({ id, data }) => {
+answers.on('postConversionAction', 'tell-the-crm', async ({ id, data, test }) => {
+  // A test request, such as one siren trigger ask sent: write nothing.
+  if (test) return
   // Siren may send it twice, so add it once, keyed by id.
   await addToCrm(id, data.conversion, data.reward)
 })

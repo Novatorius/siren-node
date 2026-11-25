@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Siren, SirenError } from '../src/index';
-import type { AppAllocationCompletedData, AppConversionApprovedData, AppCurrency } from '../src/index';
+import type { PostAllocationActionTell, PostConversionActionTell, AppCurrency } from '../src/index';
 import { FakeHttpClient } from './http-fakes';
 import { TEST_API_KEY } from './helpers';
 import { AppCurrencies, AppTells } from './apps-siren-answers';
@@ -50,12 +50,12 @@ describe('apps-sdk-followups-1: the amount a person reads from a tell', () => {
   });
 
   it('reads the amount of both tells as Siren builds them', () => {
-    const approved: AppConversionApprovedData = AppTells.conversionApproved(10000, AppCurrencies.jpy());
-    const completed: AppAllocationCompletedData = AppTells.allocationCompleted(2500);
+    const approved: PostConversionActionTell = AppTells.conversionApproved(10000, AppCurrencies.jpy());
+    const completed: PostAllocationActionTell = AppTells.allocationCompleted(2500);
     expect(approved.reward).not.toBeNull();
     expect(siren.apps.shownAmount(approved.reward!.value, approved.reward!.currency).text).toBe('¥100');
     expect(siren.apps.shownAmount(completed.allocation.value, completed.allocation.currency).text).toBe('$25.00');
-    const none: AppConversionApprovedData = AppTells.conversionWithoutReward();
+    const none: PostConversionActionTell = AppTells.conversionWithoutReward();
     expect(none.reward).toBeNull();
   });
 

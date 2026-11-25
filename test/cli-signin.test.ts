@@ -278,8 +278,11 @@ describe('cli sign-in: whoami says which credential is in use', () => {
     h.signedIn();
     expect(await h.run(['whoami']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['GET /personal-tokens/current']);
-    expect(h.out()).toContain(`Using SIREN_TOKEN "GitHub Actions deploy", ending 9f3c, as ${EMAIL} in Acme (acme), as admin.`);
-    expect(h.out()).toContain('It expires 2027-02-22.');
+    expect(h.out()).toContain('Using SIREN_TOKEN "GitHub Actions deploy"');
+    expect(h.out()).toContain('  Token   ending 9f3c');
+    expect(h.out()).toContain(`  User    ${EMAIL} · admin\n`);
+    expect(h.out()).toContain('  Org     Acme (acme)\n');
+    expect(h.out()).toContain('expires 2027-02-22');
     expect(h.printed()).not.toContain(TOKEN);
   });
 
