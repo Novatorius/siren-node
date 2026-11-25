@@ -128,6 +128,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `new Siren()` reads `SIREN_BASE_URL` as its default base URL, the way it reads `SIREN_API_KEY`,
+  and a `baseUrl` passed in code wins. `siren apps apply` writes the variable beside the key, so a
+  sandbox ask's `answerUrl` and the client agree. `appRequest()` signs for that host too.
+- `AppRequestStatus.Applying` (`applying`), the status of an ask whose answer Siren is applying now.
+  `apps.requests.list({ status: 'applying' })` reads those. The SDK now holds all eight statuses
+  Siren's `AppRequest` model names.
 - `appRequestFromRecord()` reads a request saved with `siren apps requests <id> --json` and takes
   the feature's key from its `featureKey`, so `{ key }` is needed only when the app is gone.
 - A `logger` option on `apps.requestHandler()`, taking anything with `debug`, `info`, `warn` and

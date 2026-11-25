@@ -217,14 +217,18 @@ export function createHttpTransport(options: SirenOptions): HttpTransport {
   const apiKey = ownOption(given, 'apiKey');
   const accessToken = ownOption(given, 'accessToken');
   const httpClient = ownOption(given, 'httpClient');
-  const baseUrl = ownOption(given, 'baseUrl');
+  // A baseUrl passed in code wins. Without one, SIREN_BASE_URL is the default, as `siren apps apply` writes it.
+  const passedBase = ownOption(given, 'baseUrl');
+  const environmentBase = passedBase === undefined ? readEnvironment('SIREN_BASE_URL') : undefined;
+  const baseUrl = passedBase !== undefined ? passedBase : environmentBase;
+  const baseName = environmentBase === undefined ? 'baseUrl' : 'SIREN_BASE_URL';
   const timeout = ownOption(given, 'timeout');
   const maxRetries = ownOption(given, 'maxRetries');
 
   return new HttpTransport({
     tokens: resolveTokens(apiKey, accessToken),
     client: resolveHttpClient(httpClient),
-    baseUrl: baseUrlForKey(apiKey, resolveBaseUrl(baseUrl), baseUrl === undefined),
+    baseUrl: baseUrlForKey(apiKey, resolveBaseUrl(baseUrl, baseName), baseUrl === undefined, baseName),
     timeout: resolveTimeout(timeout),
     maxRetries: resolveMaxRetries(maxRetries),
     ...(typeof apiKey === 'string' ? { appKey: apiKey } : {}),
@@ -244,24 +248,26 @@ export function createHttpTransport(options: SirenOptions): HttpTransport {
  *
  * Any other key or base passes as it is, so a local or UAT Cloud takes
  * either kind. Origins are compared after `new URL`, so case and a trailing
- * slash do not matter. No message quotes the key.
+ * slash do not matter. No message quotes the key. `name` is where the base
+ * came from, `baseUrl` or `SIREN_BASE_URL`, and a refusal names it.
  *
  * @internal
  */
-export function baseUrlForKey(apiKey: unknown, resolved: string, defaulted: boolean): string {
+export function baseUrlForKey(apiKey: unknown, resolved: string, defaulted: boolean, name = 'baseUrl'): string {
+  const leaveOut = name === 'baseUrl' ? 'leave baseUrl out' : `unset ${name}`;
   if (typeof apiKey !== 'string') return resolved;
   const origin = new URL(resolved).origin;
   if (apiKey.startsWith('sk_test_')) {
     if (defaulted) return SANDBOX_BASE_URL;
     if (origin === new URL(DEFAULT_BASE_URL).origin) {
       throw new SirenError(
-        `Siren: a sandbox key (sk_test_) cannot reach the live API. Leave baseUrl out to reach the sandbox at ${SANDBOX_BASE_URL}, or use a live key (sk_live_) there.`,
+        `Siren: a sandbox key (sk_test_) cannot reach the live API${name === 'baseUrl' ? '' : ` that ${name} names`}. ${leaveOut.charAt(0).toUpperCase()}${leaveOut.slice(1)} to reach the sandbox at ${SANDBOX_BASE_URL}, or use a live key (sk_live_) there.`,
       );
     }
   }
   if (apiKey.startsWith('sk_live_') && origin === new URL(SANDBOX_BASE_URL).origin) {
     throw new SirenError(
-      `Siren: a live key (sk_live_) cannot reach the sandbox. Use a sandbox key (sk_test_) there, or leave baseUrl out to reach the live API at ${DEFAULT_BASE_URL}.`,
+      `Siren: a live key (sk_live_) cannot reach the sandbox${name === 'baseUrl' ? '' : ` that ${name} names`}. Use a sandbox key (sk_test_) there, or ${leaveOut} to reach the live API at ${DEFAULT_BASE_URL}.`,
     );
   }
   return resolved;

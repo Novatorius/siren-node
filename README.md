@@ -112,7 +112,9 @@ With neither the option nor the variable set, each refuses when it is made and n
 must be the app's own, since the handler posts answers with it.
 
 The client sends to Siren Cloud, `https://api.sirenaffiliates.com/siren/v1`, by default, and an
-`sk_test_` key sends to the sandbox. Set `baseUrl` only for a local or sandbox Siren. Before an ask's
+`sk_test_` key sends to the sandbox. Set `baseUrl` only for a local or sandbox Siren. When
+`SIREN_BASE_URL` is set, as `siren apps apply` writes it beside the key, the client sends there
+instead, and a `baseUrl` passed in code wins over it. Before an ask's
 reply the handler checks that the request's `answerUrl` is on the same Siren as the client. When it
 is not, the handler replies 500 and `onError` gets both addresses and the `baseUrl` to set, so the
 fault shows on the first request. The answer only ever goes to the client's own address.
@@ -233,8 +235,9 @@ address. `listen` and `trigger` arrive with the command-line tool's next release
 `siren apps apply` on a sandbox declaring an app with no `url`.
 
 1. With a sandbox key, one that starts `sk_test_`, run `siren apps apply`. On a sandbox it declares
-   the app with no `url` and writes its key to `.env.sandbox` as `SIREN_API_KEY`. An app with no
-   address gets no signing secret yet.
+   the app with no `url` and writes its key to `.env.sandbox` as `SIREN_API_KEY`, beside
+   `SIREN_BASE_URL`, the Siren the key belongs to, which the client reads as its default address.
+   An app with no address gets no signing secret yet.
 2. In its own terminal, run `siren listen --forward-to localhost:3000/siren` and leave it open. When
    it first opens a session it writes the signing secret to `.env.sandbox` as
    `SIREN_SIGNING_SECRET`. While it runs, Siren sends that app's asks, tells and webhook events to
@@ -924,8 +927,9 @@ nothing more was applied. A different answer after an accepted one gets 409
 ### See what Siren sent
 
 `apps.requests.list({ status })` reads the latest 50 requests, newest first, and their status:
-`pending`, `sent`, `delivered` (a tell the app received), `answered`, `applied` (an ask whose answer
-did its work), `needs_attention` or `dropped`. `apps.requests.retrieve(id)` reads one request, however old,
+`pending`, `sent`, `delivered` (a tell the app received), `answered`, `applying` (an ask whose
+answer Siren is applying now), `applied` (an ask whose answer did its work), `needs_attention` or
+`dropped`. `apps.requests.retrieve(id)` reads one request, however old,
 with `GET /apps/requests/{requestKey}`: the list's fields, the `data` Siren sent the app, the
 `answer` Siren took or `null`, and `answeredByUser`, `{ id, email }` of the person who answered by
 hand or `null`. It is a read, retried like one, and an admin's session only. Siren answers 404

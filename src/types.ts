@@ -7,8 +7,11 @@ import type { HttpClient } from './http';
 /** Options every `Siren` client takes, whichever credential it uses. */
 export interface SirenBaseOptions {
   /**
-   * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
-   * Point this at staging or a local dev server as needed. It must be an
+   * API base URL. Defaults to `SIREN_BASE_URL` from the environment, which
+   * `siren apps apply` writes beside the key, then to
+   * `https://api.sirenaffiliates.com/siren/v1`, or the sandbox for an
+   * `sk_test_` key. A value given here wins over the variable. Point this at
+   * staging or a local dev server as needed. It must be an
    * http or https URL with no user name or password in it, made only of
    * visible ASCII, U+0021 to U+007E, with no `?`, `#`, backslash or `@`. It
    * starts with `http://` or `https://` and a host that holds no `%`. Give

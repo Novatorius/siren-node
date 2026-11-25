@@ -44,8 +44,9 @@ export interface AppTestRequestOptions {
   app?: string;
   /**
    * The Siren the request comes from, which an ask's `answerUrl` names.
-   * Defaults to where `new Siren()` sends with `SIREN_API_KEY`: Siren Cloud,
-   * or its sandbox for an `sk_test_` key. Set it to your client's
+   * Defaults to where `new Siren()` sends with no `baseUrl`:
+   * `SIREN_BASE_URL`, then Siren Cloud, or its sandbox for an `sk_test_` key
+   * in `SIREN_API_KEY`. Set it to your client's
    * `baseUrl` when you set one.
    */
   baseUrl?: string;
@@ -92,7 +93,7 @@ export function appRequest<K extends FeatureKind | (string & {})>(kind: K, key: 
   }
   const t = options.timestamp ?? Math.floor(Date.now() / 1000);
   const id = options.id ?? `apr_${randomBytes(16).toString('hex')}`;
-  const base = (options.baseUrl ?? baseUrlForKey(readEnvironment('SIREN_API_KEY'), DEFAULT_BASE_URL, true)).replace(/\/+$/, '');
+  const base = (options.baseUrl ?? readEnvironment('SIREN_BASE_URL') ?? baseUrlForKey(readEnvironment('SIREN_API_KEY'), DEFAULT_BASE_URL, true)).replace(/\/+$/, '');
   const ask = !TELL_KINDS.includes(kind);
   const at = (seconds: number): string => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/, '+00:00');
 
@@ -201,7 +202,8 @@ export interface AppRecordRequestOptions {
    * carries it as `featureKey`, and a raw request body names it already, so
    * neither needs this. Give it for a saved request whose `featureKey` is
    * null, because its app is gone, or for a record that names its feature as
-   * `app:{id}` only. `siren apps show <app>` lists each feature's key.
+   * `app:{id}` only. A key given here wins over `featureKey` and the body's
+   * own. `siren apps show <app>` lists each feature's key.
    */
   key?: string;
   /** The signing secret. Defaults to `SIREN_SIGNING_SECRET` from the environment. */
@@ -259,7 +261,7 @@ export function appRequestFromRecord(record: unknown, options: AppRecordRequestO
   }
   const secret = secretFor(method, options.secret);
   const t = options.timestamp ?? Math.floor(Date.now() / 1000);
-  const base = (options.baseUrl ?? baseUrlForKey(readEnvironment('SIREN_API_KEY'), DEFAULT_BASE_URL, true)).replace(/\/+$/, '');
+  const base = (options.baseUrl ?? readEnvironment('SIREN_BASE_URL') ?? baseUrlForKey(readEnvironment('SIREN_API_KEY'), DEFAULT_BASE_URL, true)).replace(/\/+$/, '');
   const body: Record<string, unknown> = {
     version: 1,
     id: given.id,
