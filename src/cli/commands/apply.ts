@@ -10,7 +10,7 @@ import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
-import { REPORT_WIDTH, clean, styleFor, unbroken, wrapWords } from '../style';
+import { REPORT_WIDTH, clean, styleFor, unbroken, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import type { StoredSession } from '../credentials';
@@ -607,18 +607,28 @@ export async function appsShow(input: CommandInput): Promise<number> {
     ...(typeof prefix === 'string' && prefix !== '' ? [['Key', `${prefix}…`] as const] : [['Key', out.dim('none')] as const]),
     ...(events.length > 0 ? [['Events', `${clean(events.join(', '))}${planMark(app.eventsAccess, ', so Siren does not send them')}`] as const] : []),
   ];
+  // Each feature's kind reads "Post-conversion action (postConversionAction)" when the line fits.
+  // When it does not, the code name goes before NAME is cut, and a Kinds row above names the code names.
+  const width = widthOf(input, out);
+  const featureRows = (label: (kind: string) => string) =>
+    app.features.map((item) => [
+      clean(item.ref),
+      clean(item.key),
+      clean(label(item.kind)),
+      `${clean(item.name)}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
+    ]);
+  const HEADERS = ['ID', 'KEY', 'KIND', 'NAME'];
+  const full = featureRows(kindLabel);
+  const fitsFull = out.table(HEADERS, full, Number.POSITIVE_INFINITY).every((line) => visibleLength(line) <= width);
+  const features = fitsFull ? full : featureRows(kindName);
+  if (!fitsFull) rows.push(['Kinds', clean([...new Set(app.features.map((item) => item.kind))].join(', '))]);
+
   // The demo printed "cli-demo  cli-demo" for an app named after its key, so the name shows only when it differs.
   const named = clean(app.name) === clean(app.key) || clean(app.name) === '' ? '' : `  ${clean(app.name)}`;
   run.print(out.report({ headline: `${out.bold(clean(app.key))}${named}`, rows, mark: false }).replace(/\n$/, ''));
   if (app.features.length > 0) {
     run.print('');
-    const features = app.features.map((item) => [
-      clean(item.ref),
-      clean(item.key),
-      clean(kindLabel(item.kind)),
-      `${clean(item.name)}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
-    ]);
-    for (const line of out.table(['ID', 'KEY', 'KIND', 'NAME'], features, widthOf(input, out))) run.print(line);
+    for (const line of out.table(HEADERS, features, width)) run.print(line);
   }
   if (attentionCount(app) > 0) attentionTip(run, out, app);
   return 0;

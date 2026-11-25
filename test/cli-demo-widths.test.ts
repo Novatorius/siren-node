@@ -81,8 +81,21 @@ describe('siren apps show', () => {
     const h = harness([reply(200, { ...app, features })]);
     h.signedIn();
     expect(await runCli(['apps', 'show', APP_KEY], tty(h)), h.err()).toBe(0);
-    // The last column, NAME, is cut with an ellipsis to fit. --json holds it whole.
-    expect(strip(h.out())).toMatch(/app:11 +notify-crm +Post-conversion action \(postConversionAction\) +Tell my ser…\n/);
+    // The kind's code name goes before NAME is cut, and the block above names the code names instead.
+    const text = strip(h.out());
+    expect(text).toMatch(/app:11 +notify-crm +Post-conversion action +Tell my service about each/);
+    expect(text).not.toContain('(postConversionAction)');
+    expect(text).toContain('  Kinds     postConversionAction, payoutMethod\n');
+    fits(h.out());
+  });
+
+  it('keeps the code name beside each kind, and no Kinds row, when the width allows', async () => {
+    const h = harness([reply(200, appRecord())]);
+    h.signedIn();
+    expect(await runCli(['apps', 'show', APP_KEY], tty(h)), h.err()).toBe(0);
+    const text = strip(h.out());
+    expect(text).toMatch(/app:11 +notify-crm +Post-conversion action \(postConversionAction\) +Tell the CRM\n/);
+    expect(text).not.toContain('Kinds');
     fits(h.out());
   });
 });
