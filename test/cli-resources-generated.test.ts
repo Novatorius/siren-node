@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { COMMANDS } from '../src/cli/run';
 import { DELETE_ROUTES, RESOURCE_COMMANDS } from '../src/cli/resources.generated';
 
 /*
@@ -48,5 +49,17 @@ describe('generated resource commands', () => {
     const programs = RESOURCE_COMMANDS.find((command) => command.name === 'programs');
     expect(Object.keys(programs?.ops ?? {}).sort()).toEqual(['create', 'delete', 'get', 'list', 'update']);
     expect(programs?.ops.list?.paginated).toBe(true);
+  });
+
+  it('never shadows or repeats a hand-written command', () => {
+    const words = new Set(COMMANDS.map((command) => command.split(' ')[0]));
+    for (const command of RESOURCE_COMMANDS) expect(words.has(command.name), command.name).toBe(false);
+    // The routes the developer tools send stay theirs alone.
+    const owned = ['/listen-sessions', '/logs', '/test-activity', '/simulations', '/sandbox'];
+    for (const command of RESOURCE_COMMANDS) {
+      for (const route of Object.values(command.ops)) {
+        expect(owned.some((prefix) => route.path === prefix || route.path.startsWith(`${prefix}/`)), `${command.name} ${route.path}`).toBe(false);
+      }
+    }
   });
 });

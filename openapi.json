@@ -145,6 +145,12 @@
             "name": "line-item-filters"
         },
         {
+            "name": "listen-sessions"
+        },
+        {
+            "name": "logs"
+        },
+        {
             "name": "mappings"
         },
         {
@@ -196,6 +202,9 @@
             "name": "paypal"
         },
         {
+            "name": "personal-tokens"
+        },
+        {
             "name": "ping"
         },
         {
@@ -229,10 +238,16 @@
             "name": "settings"
         },
         {
+            "name": "simulations"
+        },
+        {
             "name": "storefront"
         },
         {
             "name": "stripe"
+        },
+        {
+            "name": "test-activity"
         },
         {
             "name": "test-sales"
@@ -1621,6 +1636,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-response": true
             },
             "post": {
@@ -2001,6 +2017,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-response": true
             }
         },
@@ -2046,6 +2063,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-response": true
             }
         },
@@ -2163,6 +2181,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-request": true,
                 "x-siren-open-response": true
             }
@@ -2194,7 +2213,7 @@
                 "x-siren-open-response": true
             }
         },
-        "/apps/{app}/items": {
+        "/apps/{app}/features": {
             "post": {
                 "operationId": "addAppItem",
                 "tags": [
@@ -2262,7 +2281,7 @@
                 "x-siren-open-response": true
             }
         },
-        "/apps/{app}/items/{id}": {
+        "/apps/{app}/features/{id}": {
             "get": {
                 "operationId": "getAppItem",
                 "tags": [
@@ -2546,7 +2565,8 @@
                 ],
                 "x-siren-platforms": [
                     "cloud"
-                ]
+                ],
+                "x-siren-personal-token": true
             },
             "put": {
                 "operationId": "declareApp",
@@ -2593,7 +2613,7 @@
                                         ],
                                         "maxItems": 100
                                     },
-                                    "items": {
+                                    "features": {
                                         "type": [
                                             "array",
                                             "null"
@@ -2687,7 +2707,8 @@
                 ],
                 "x-siren-platforms": [
                     "cloud"
-                ]
+                ],
+                "x-siren-personal-token": true
             },
             "patch": {
                 "operationId": "editApp",
@@ -2880,6 +2901,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-response": true
             }
         },
@@ -2937,6 +2959,85 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/apps/{key}/features/{feature}/test": {
+            "post": {
+                "operationId": "sendFeatureTest",
+                "tags": [
+                    "apps"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "x-siren-open": true
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "feature",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-request": true,
                 "x-siren-open-response": true
             }
         },
@@ -3012,6 +3113,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-response": true
             },
             "delete": {
@@ -3132,6 +3234,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-request": true,
                 "x-siren-open-response": true
             }
@@ -3200,6 +3303,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-request": true,
                 "x-siren-open-response": true
             }
@@ -3278,6 +3382,7 @@
                 "x-siren-platforms": [
                     "cloud"
                 ],
+                "x-siren-personal-token": true,
                 "x-siren-open-response": true
             }
         },
@@ -3526,6 +3631,259 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            }
+        },
+        "/auth/cli/code": {
+            "post": {
+                "operationId": "startCliSignIn",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "machine": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 100
+                                    }
+                                },
+                                "required": [
+                                    "machine"
+                                ],
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            }
+        },
+        "/auth/cli/requests/{userCode}": {
+            "get": {
+                "operationId": "getCliSignIn",
+                "tags": [
+                    "auth"
+                ],
+                "parameters": [
+                    {
+                        "name": "userCode",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            }
+        },
+        "/auth/cli/requests/{userCode}/approve": {
+            "post": {
+                "operationId": "approveCliSignIn",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "x-siren-open": true
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "userCode",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-request": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/auth/cli/requests/{userCode}/deny": {
+            "post": {
+                "operationId": "denyCliSignIn",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "x-siren-open": true
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "userCode",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-request": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/auth/cli/token": {
+            "post": {
+                "operationId": "pollCliSignIn",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "device_code": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128
+                                    }
+                                },
+                                "required": [
+                                    "device_code"
+                                ],
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
                                 }
                             }
                         }
@@ -18538,6 +18896,291 @@
                 "x-siren-open-response": true
             }
         },
+        "/listen-sessions": {
+            "post": {
+                "operationId": "openListenSession",
+                "tags": [
+                    "listen-sessions"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "x-siren-open": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-request": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/listen-sessions/{id}": {
+            "delete": {
+                "operationId": "closeListenSession",
+                "tags": [
+                    "listen-sessions"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            }
+        },
+        "/listen-sessions/{id}/poll": {
+            "post": {
+                "operationId": "pollListenSession",
+                "tags": [
+                    "listen-sessions"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "x-siren-open": true
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-request": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/listen-sessions/{id}/results": {
+            "post": {
+                "operationId": "reportListenResult",
+                "tags": [
+                    "listen-sessions"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "x-siren-open": true
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-request": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/logs": {
+            "get": {
+                "operationId": "listLogs",
+                "tags": [
+                    "logs"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-personal-token": true,
+                "x-siren-open-response": true
+            }
+        },
         "/mappings": {
             "get": {
                 "operationId": "getMappings",
@@ -25172,6 +25815,192 @@
                 "x-siren-open-response": true
             }
         },
+        "/personal-tokens": {
+            "get": {
+                "operationId": "listPersonalTokens",
+                "tags": [
+                    "personal-tokens"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            },
+            "post": {
+                "operationId": "createPersonalToken",
+                "tags": [
+                    "personal-tokens"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 100
+                                    },
+                                    "expiresInDays": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "minimum": 1,
+                                        "maximum": 365
+                                    }
+                                },
+                                "required": [
+                                    "name"
+                                ],
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            }
+        },
+        "/personal-tokens/current": {
+            "get": {
+                "operationId": "getCurrentPersonalToken",
+                "tags": [
+                    "personal-tokens"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-personal-token": true,
+                "x-siren-open-response": true
+            }
+        },
+        "/personal-tokens/{id}": {
+            "delete": {
+                "operationId": "revokePersonalToken",
+                "tags": [
+                    "personal-tokens"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "x-siren-open": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ],
+                "x-siren-open-response": true
+            }
+        },
         "/ping": {
             "get": {
                 "operationId": "ping",
@@ -29927,6 +30756,116 @@
                 "x-siren-open-response": true
             }
         },
+        "/simulations/sale": {
+            "post": {
+                "operationId": "simulateSale",
+                "tags": [
+                    "simulations"
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "collaboratorId": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "programId": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "amount": {
+                                        "type": [
+                                            "number",
+                                            "null"
+                                        ],
+                                        "minimum": 0.01,
+                                        "maximum": 999999999.99
+                                    },
+                                    "currency": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "minLength": 1,
+                                        "maxLength": 32
+                                    },
+                                    "fields": {
+                                        "type": [
+                                            "object",
+                                            "null"
+                                        ],
+                                        "maxProperties": 50
+                                    }
+                                },
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "dateCreated": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "isTest": {},
+                                        "opportunityId": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "additionalProperties": true
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ]
+            }
+        },
         "/storefront/{sourceSlug}/{storefrontKey}/orders": {
             "post": {
                 "operationId": "recordStorefrontOrderClaim",
@@ -30463,6 +31402,218 @@
                 ],
                 "x-siren-open-request": true,
                 "x-siren-open-response": true
+            }
+        },
+        "/test-activity": {
+            "post": {
+                "operationId": "triggerTestActivity",
+                "tags": [
+                    "test-activity"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "event": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 191
+                                    },
+                                    "collaboratorId": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "programId": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "amount": {
+                                        "type": [
+                                            "number",
+                                            "null"
+                                        ],
+                                        "minimum": 0.01,
+                                        "maximum": 999999999.99
+                                    },
+                                    "currency": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "minLength": 1,
+                                        "maxLength": 32
+                                    },
+                                    "fields": {
+                                        "type": [
+                                            "object",
+                                            "null"
+                                        ],
+                                        "maxProperties": 50
+                                    },
+                                    "opportunityId": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "transactionId": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                    }
+                                },
+                                "required": [
+                                    "event"
+                                ],
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "dateCreated": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "isTest": {},
+                                        "opportunityId": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "additionalProperties": true
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ]
+            }
+        },
+        "/test-activity/sales/{transactionId}": {
+            "get": {
+                "operationId": "getTestActivitySale",
+                "tags": [
+                    "test-activity"
+                ],
+                "parameters": [
+                    {
+                        "name": "transactionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "dateCreated": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "isTest": {},
+                                        "opportunityId": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "additionalProperties": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Refused.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                },
+                "x-siren-editions": [
+                    "cloud"
+                ],
+                "x-siren-platforms": [
+                    "cloud"
+                ]
             }
         },
         "/test-sales": {
@@ -32305,7 +33456,7 @@
     },
     "x-siren-open-routes": {
         "request": [
-            "PATCH /apps/{app}/items/{id}",
+            "PATCH /apps/{app}/features/{id}",
             "PATCH /coupons/{id}",
             "PATCH /products/{id}",
             "POST /analytics/reports/batch",
@@ -32315,10 +33466,13 @@
             "POST /applications/verify",
             "POST /apps/requests/{requestKey}/answer",
             "POST /apps/requests/{requestKey}/resend",
-            "POST /apps/{app}/items",
+            "POST /apps/{app}/features",
+            "POST /apps/{key}/features/{feature}/test",
             "POST /apps/{key}/key/rotate",
             "POST /apps/{key}/secret/rotate",
             "POST /apps/{key}/test",
+            "POST /auth/cli/requests/{userCode}/approve",
+            "POST /auth/cli/requests/{userCode}/deny",
             "POST /auth/collaborator-invite",
             "POST /auth/collaborator-invite/claim",
             "POST /auth/collaborator-links/email",
@@ -32362,6 +33516,9 @@
             "POST /event/{eventSlug}",
             "POST /inbound/{sourceSlug}",
             "POST /inbound/{sourceSlug}/{token}",
+            "POST /listen-sessions",
+            "POST /listen-sessions/{id}/poll",
+            "POST /listen-sessions/{id}/results",
             "POST /migration/import",
             "POST /migration/landed",
             "POST /migration/placeholders",
@@ -32434,7 +33591,7 @@
         ],
         "response": [
             "DELETE /application-forms/{id}",
-            "DELETE /apps/{app}/items/{id}",
+            "DELETE /apps/{app}/features/{id}",
             "DELETE /apps/{key}",
             "DELETE /apps/{key}/key",
             "DELETE /auth/collaborator-links/{orgId}",
@@ -32459,11 +33616,13 @@
             "DELETE /fulfillments/{id}",
             "DELETE /inbound/{sourceSlug}",
             "DELETE /inbound/{sourceSlug}/test-deliveries",
+            "DELETE /listen-sessions/{id}",
             "DELETE /mappings",
             "DELETE /notes/{id}",
             "DELETE /notifications/{id}",
             "DELETE /obligations/{id}",
             "DELETE /orgs/{id}/logo",
+            "DELETE /personal-tokens/{id}",
             "DELETE /program-groups/{id}",
             "DELETE /programs/{id}",
             "DELETE /properties/{propertyId}/integrations/{sourceSlug}",
@@ -32487,9 +33646,10 @@
             "GET /apps/requests",
             "GET /apps/requests/{requestKey}",
             "GET /apps/scopes",
-            "GET /apps/{app}/items/{id}",
+            "GET /apps/{app}/features/{id}",
             "GET /apps/{key}/deliveries",
             "GET /auth/activity",
+            "GET /auth/cli/requests/{userCode}",
             "GET /auth/dashboard",
             "GET /auth/dashboard/breakdown",
             "GET /auth/earnings-statement",
@@ -32561,6 +33721,7 @@
             "GET /jobs",
             "GET /jobs/{jobId}",
             "GET /line-item-filters/categories",
+            "GET /logs",
             "GET /migration/currency-conflicts",
             "GET /move-emails",
             "GET /note-sharing/target",
@@ -32588,6 +33749,8 @@
             "GET /payout-destinations/{collaboratorId}",
             "GET /paypal/config",
             "GET /paypal/receivers/{collaboratorId}",
+            "GET /personal-tokens",
+            "GET /personal-tokens/current",
             "GET /ping",
             "GET /portal/codes",
             "GET /portal/how-you-earn",
@@ -32636,7 +33799,7 @@
             "GET /webhooks",
             "GET /webhooks/events",
             "GET /webhooks/{id}/deliveries",
-            "PATCH /apps/{app}/items/{id}",
+            "PATCH /apps/{app}/features/{id}",
             "PATCH /auth/members/{userId}",
             "PATCH /coupons/{id}",
             "PATCH /products/{id}",
@@ -32651,13 +33814,18 @@
             "POST /apps/award-waits/{id}/set-aside",
             "POST /apps/requests/{requestKey}/answer",
             "POST /apps/requests/{requestKey}/resend",
-            "POST /apps/{app}/items",
+            "POST /apps/{app}/features",
+            "POST /apps/{key}/features/{feature}/test",
             "POST /apps/{key}/key",
             "POST /apps/{key}/key/rotate",
             "POST /apps/{key}/secret/rotate",
             "POST /apps/{key}/status",
             "POST /apps/{key}/test",
             "POST /auth/accept-invite",
+            "POST /auth/cli/code",
+            "POST /auth/cli/requests/{userCode}/approve",
+            "POST /auth/cli/requests/{userCode}/deny",
+            "POST /auth/cli/token",
             "POST /auth/collaborator-invite",
             "POST /auth/collaborator-invite/claim",
             "POST /auth/collaborator-links/email",
@@ -32722,6 +33890,9 @@
             "POST /fulfillments/bulk",
             "POST /inbound/{sourceSlug}",
             "POST /inbound/{sourceSlug}/{token}",
+            "POST /listen-sessions",
+            "POST /listen-sessions/{id}/poll",
+            "POST /listen-sessions/{id}/results",
             "POST /migration/import",
             "POST /migration/landed",
             "POST /migration/placeholders",
@@ -32752,6 +33923,7 @@
             "POST /payouts/{id}/retry",
             "POST /paypal/config",
             "POST /paypal/receivers",
+            "POST /personal-tokens",
             "POST /products",
             "POST /products/merge",
             "POST /products/merge/preview",

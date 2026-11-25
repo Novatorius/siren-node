@@ -27,7 +27,7 @@ export interface ResourceCommand {
   readonly ops: Readonly<Partial<Record<ResourceOp, ResourceRoute>>>;
 }
 
-/** Every generated resource, by name, from openapi.json (46 resources). */
+/** Every generated resource, by name, from openapi.json (47 resources). */
 export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
   {
     "name": "application-forms",
@@ -1121,6 +1121,31 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
     }
   },
   {
+    "name": "personal-tokens",
+    "ops": {
+      "list": {
+        "method": "GET",
+        "path": "/personal-tokens"
+      },
+      "create": {
+        "method": "POST",
+        "path": "/personal-tokens",
+        "fields": [
+          "name",
+          "expiresInDays"
+        ],
+        "required": [
+          "name"
+        ]
+      },
+      "delete": {
+        "method": "DELETE",
+        "path": "/personal-tokens/{id}",
+        "param": "id"
+      }
+    }
+  },
+  {
     "name": "ping",
     "ops": {
       "list": {
@@ -1452,14 +1477,14 @@ export interface DeleteRoute {
   readonly param?: string;
 }
 
-/** Every DELETE route in openapi.json (38 routes). */
+/** Every DELETE route in openapi.json (40 routes). */
 export const DELETE_ROUTES: readonly DeleteRoute[] = [
   {
     "path": "/application-forms/{id}",
     "param": "id"
   },
   {
-    "path": "/apps/{app}/items/{id}",
+    "path": "/apps/{app}/features/{id}",
     "param": "id"
   },
   {
@@ -1555,6 +1580,10 @@ export const DELETE_ROUTES: readonly DeleteRoute[] = [
     "param": "sourceSlug"
   },
   {
+    "path": "/listen-sessions/{id}",
+    "param": "id"
+  },
+  {
     "path": "/mappings"
   },
   {
@@ -1571,6 +1600,10 @@ export const DELETE_ROUTES: readonly DeleteRoute[] = [
   },
   {
     "path": "/orgs/{id}/logo",
+    "param": "id"
+  },
+  {
+    "path": "/personal-tokens/{id}",
     "param": "id"
   },
   {

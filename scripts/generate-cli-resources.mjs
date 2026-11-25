@@ -13,8 +13,8 @@
  *
  * Only routes the spec marks as running on Siren Cloud (`x-siren-platforms`)
  * become commands, so WordPress-only routes such as /settings do not. Tags
- * that hand-written commands own (apps, auth) are left out, as are tags whose
- * name is already a command. Siren keeps operator and sandbox routes out of
+ * that hand-written commands own (apps, auth and the developer tools) are left
+ * out, as are tags whose name is already a command. Siren keeps operator and sandbox routes out of
  * the public spec, and the operator mark is still checked here.
  *
  * DELETE_ROUTES lists every DELETE route with the parameter that names its
@@ -29,8 +29,18 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Tags whose commands are written by hand, or that name a command already. */
-export const SKIPPED_TAGS = ['apps', 'auth', 'get', 'post', 'put', 'patch', 'delete', 'help', 'version', 'login', 'logout', 'signup', 'whoami', 'orgs', 'use'];
+/**
+ * Tags whose commands are written by hand, or that name a command already.
+ * The developer tools own their routes: `siren listen` the listen sessions,
+ * `siren logs tail` the log feed, `siren trigger` and `siren simulate` the
+ * test activity and simulation routes, and `siren sandbox` and `siren seed`
+ * the sandbox routes. A generated command beside them would shadow the word
+ * or send the same route a second way.
+ */
+export const SKIPPED_TAGS = [
+  'apps', 'auth', 'get', 'post', 'put', 'patch', 'delete', 'help', 'version', 'login', 'logout', 'signup', 'whoami', 'orgs', 'use',
+  'listen', 'listen-sessions', 'logs', 'trigger', 'test-activity', 'simulate', 'simulations', 'fixtures', 'sandbox', 'seed',
+];
 
 const OPS = ['list', 'get', 'create', 'update', 'delete'];
 
