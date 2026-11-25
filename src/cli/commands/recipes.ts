@@ -84,14 +84,17 @@ async function readRecipe(input: CommandInput, given: string): Promise<ReadRecip
 }
 
 /** The key that names this recipe's import: the SHA-256 of its JSON with every object's keys in order. */
-export function importKeyOf(recipe: Recipe): string {
+export function importKeyOf(recipe: Recipe, settings: { variableAnswers?: Record<string, number>; configurationOnly?: boolean; paused?: boolean } = {}): string {
   const canonical = (value: unknown): unknown =>
     Array.isArray(value)
       ? value.map(canonical)
       : typeof value === 'object' && value !== null
         ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical((value as Record<string, unknown>)[key])]))
         : value;
-  return `cli-${createHash('sha256').update(JSON.stringify(canonical(recipe))).digest('hex')}`;
+  // The answers and options change what an apply makes, so they are hashed with the recipe. A plain apply hashes the recipe alone.
+  const applied = Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== undefined && value !== false && !(typeof value === 'object' && Object.keys(value).length === 0)));
+  const hashed = Object.keys(applied).length === 0 ? recipe : { recipe, settings: applied };
+  return `cli-${createHash('sha256').update(JSON.stringify(canonical(hashed))).digest('hex')}`;
 }
 
 /** Siren's refusal of a recipe as three parts, each problem at its path, or the error as it came when it is another. */
@@ -308,7 +311,7 @@ export async function recipesApply(input: CommandInput): Promise<number> {
   try {
     job = await recipes.apply(read.recipe, {
       ...options,
-      ...(values.again === true ? {} : { importKey: importKeyOf(read.recipe) }),
+      ...(values.again === true ? {} : { importKey: importKeyOf(read.recipe, { ...options, variableAnswers: answers }) }),
       source: { kind: 'cli', ...(read.fileName === undefined ? {} : { fileName: read.fileName }) },
       ...(Object.keys(answers).length > 0 ? { variableAnswers: answers } : {}),
     });
@@ -324,7 +327,7 @@ export async function recipesApply(input: CommandInput): Promise<number> {
     throw refusalOf(error, read, again);
   }
 
-  if (values.wait === false || values['no-wait'] === true) {
+  if (values['no-wait'] === true) {
     if (json) run.print(JSON.stringify(job, null, 2));
     else {
       run.print(out.success(`Started importing ${out.bold(read.shown)} as ${job.jobId}.`));
@@ -367,7 +370,8 @@ async function follow(run: CommandContext, input: CommandInput, started: RecipeI
   }
   if (json) {
     run.print(JSON.stringify(job, null, 2));
-    return job.status === 'complete' ? 0 : 1;
+    // The same exit code as the text form: a complete import with failures still exits 1 (review of PR 94).
+    return job.status === 'complete' && job.failedItems === 0 ? 0 : 1;
   }
   spinner?.cancel();
   printImport(run, input, job, shown);

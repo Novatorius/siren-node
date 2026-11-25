@@ -130,14 +130,15 @@ describe('siren get, post, put, patch and delete', () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ status: 'active', number: '2', offset: '4' });
   });
 
-  it('follows every page with --all and prints one JSON array with --json', async () => {
+  it('follows every page with --all and prints one envelope holding them all with --json', async () => {
     const h = signedIn([
       reply(200, envelope([programs[0]], 1, 2, 2, 1)),
       reply(200, envelope([programs[1]], 2, 2, 2, 1)),
     ]);
     expect(await h.run(['get', '/programs', '--limit', '1', '--all', '--json'])).toBe(0);
     expect(h.http.requests.map((request) => new URL(request.url).searchParams.get('offset'))).toEqual([null, '1']);
-    expect(JSON.parse(h.out())).toEqual(programs);
+    // The same shape as one page, so a script reads .items either way (review of PR 94).
+    expect(JSON.parse(h.out())).toEqual({ items: programs, total: 2, page: 1, perPage: 2, totalPages: 1 });
   });
 
   it('says how many pages there are when it read one of several', async () => {

@@ -58,12 +58,19 @@ export function noteTypeOf(resource: string): string | undefined {
  * short form for a note on a record. Any other line is answered as it came.
  */
 export function noteShorthand(argv: readonly string[], words: readonly string[]): readonly string[] {
-  if (words[1] !== 'note' || words[2] === undefined) return argv;
+  if (words[1] !== 'note') return argv;
   const type = noteTypeOf(words[0] ?? '');
   if (type === undefined) return argv;
   const out = [...argv];
   const at = out.indexOf(words[0]!);
   const noteAt = out.indexOf('note', at + 1);
+  // With no id, such as `collaborators note --help`, it is notes add, which prints its help or names what is missing.
+  if (words[2] === undefined) {
+    if (at < 0 || noteAt < 0) return argv;
+    out[at] = 'notes';
+    out[noteAt] = 'add';
+    return out;
+  }
   const idAt = out.indexOf(words[2], noteAt + 1);
   if (at < 0 || noteAt < 0 || idAt < 0) return argv;
   out[at] = 'notes';
@@ -121,7 +128,7 @@ export async function notesList(input: CommandInput): Promise<number> {
     (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
   );
   if (values.json === true) {
-    run.print(JSON.stringify(items, null, 2));
+    run.print(JSON.stringify(body, null, 2));
     return 0;
   }
   const out = styleFor(io, 'stdout', values);

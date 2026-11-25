@@ -79,7 +79,7 @@ export async function enrollersList(input: CommandInput): Promise<number> {
     throw gated(error, ENROLLERS);
   }
   if (input.values.json === true) {
-    run.print(JSON.stringify(itemsOf(answer.body), null, 2));
+    run.print(JSON.stringify(answer.body, null, 2));
     return 0;
   }
   const enrollers = itemsOf(answer.body);
@@ -184,7 +184,7 @@ export async function enrollersLog(input: CommandInput): Promise<number> {
   }
   const lines = itemsOf(answer.body);
   if (input.values.json === true) {
-    run.print(JSON.stringify(lines, null, 2));
+    run.print(JSON.stringify(answer.body, null, 2));
     return 0;
   }
   if (lines.length === 0) {

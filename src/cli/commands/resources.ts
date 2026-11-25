@@ -280,8 +280,11 @@ async function sendRaw(input: CommandInput, method: HttpMethod): Promise<number>
   const { path, query } = apiPath(input.args[0]!);
   const deleteId = method === 'DELETE' ? recordIdOf(path) : undefined;
   const outgoing = await outgoingOf(input, method, path, query);
+  const fields = method === 'GET' ? fieldsOf(input.values.fields) : undefined;
   return send(input, {
     outgoing,
+    ...(method === 'GET' && input.values.ids === true ? { ids: true } : {}),
+    ...(fields === undefined ? {} : { fields }),
     json: input.values.json === true,
     dryRun: input.values['dry-run'] === true,
     all: input.values.all === true,
@@ -427,6 +430,9 @@ function pairs(input: CommandInput): Array<[string, string]> {
 export function setNested(target: Record<string, unknown>, key: string, value: unknown): void {
   const parts = key.split(/\[|\]\[|\]/).filter((part) => part !== '');
   if (parts.length === 0) throw new CliUsageError(`-d needs a key, and ${JSON.stringify(key)} names none.`);
+  // A key that reaches an object's prototype would change every object in the tool (review of PR 94).
+  const unsafe = parts.find((part) => part === '__proto__' || part === 'constructor' || part === 'prototype');
+  if (unsafe !== undefined) throw new CliUsageError(`-d can't set ${unsafe}. Use --data with a JSON body for a field Siren really names that.`);
   let node = target;
   for (const part of parts.slice(0, -1)) {
     const next = node[part];
@@ -590,15 +596,22 @@ function isEnvelope(body: unknown): body is Envelope {
  * a page comes back short or the envelope's last page is read. Answers the
  * items in one envelope whose `page` is 1 and `totalPages` 1.
  */
+/** The most pages --all reads, so a route that never says it has ended can't read forever. */
+const MAX_PAGES = 1000;
+
 async function allPages(first: Envelope, query: Record<string, string>, read: (query: Record<string, string>) => Promise<unknown>): Promise<Envelope> {
   const items = [...first.items];
   const perPage = first.perPage ?? first.items.length;
   let offset = Number(query.offset ?? 0) + first.items.length;
   let page = first.page ?? 1;
   const last = first.totalPages ?? Infinity;
-  while (perPage > 0 && items.length < (first.total ?? Infinity) && page < last) {
+  const seen = new Set(first.items.map((item) => JSON.stringify(item)));
+  while (perPage > 0 && items.length < (first.total ?? Infinity) && page < last && page < MAX_PAGES) {
     const next = await read({ ...query, number: String(perPage), offset: String(offset) });
     if (!isEnvelope(next) || next.items.length === 0) break;
+    // A route that ignores offset sends the same page again. Stop there rather than read forever (review of PR 94).
+    if (next.items.every((item) => seen.has(JSON.stringify(item)))) break;
+    for (const item of next.items) seen.add(JSON.stringify(item));
     items.push(...next.items);
     offset += next.items.length;
     page += 1;
@@ -661,7 +674,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const pick = (record: unknown) => (plan.fields !== undefined && isObject(record) ? Object.fromEntries(plan.fields.filter((field) => field in record).map((field) => [field, record[field]])) : record);
     const items = isEnvelope(body) ? body.items.map(pick) : Array.isArray(body) ? body.map(pick) : undefined;
     const shaped = items === undefined ? body : isEnvelope(body) ? { ...body, items } : items;
-    out(JSON.stringify(plan.all && isEnvelope(body) ? items : (shaped ?? null), null, 2));
+    out(JSON.stringify(shaped ?? null, null, 2));
     return;
   }
 

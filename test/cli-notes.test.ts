@@ -28,6 +28,15 @@ const signedInLive = (replies: Parameters<typeof harness>[0], options: Parameter
   return h;
 };
 
+describe('the note shorthand', () => {
+  it('prints the help for notes add on siren collaborators note --help (review of PR 94)', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['collaborators', 'note', '--help']), h.err()).toBe(0);
+    expect(h.out()).toContain('notes add <type:id> (<text> | --stdin)');
+    expect(h.http.requests).toHaveLength(0);
+  });
+});
+
 describe('siren notes --on', () => {
   it("reads one record's notes, newest first, one line each with its time and id", async () => {
     const h = signedIn([feed]);

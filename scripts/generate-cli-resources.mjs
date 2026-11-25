@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 export const SKIPPED_TAGS = [
   'apps', 'auth', 'get', 'post', 'put', 'patch', 'delete', 'help', 'version', 'login', 'logout', 'signup', 'whoami', 'orgs', 'use',
   'listen', 'listen-sessions', 'logs', 'trigger', 'test-activity', 'simulate', 'simulations', 'fixtures', 'sandbox', 'seed',
-  'notes', 'condition-sets', 'enrollers', 'enroller-triggers',
+  'notes', 'condition-sets', 'enrollers', 'enroller-triggers', 'recipes', 'resources',
 ];
 
 const OPS = ['list', 'get', 'create', 'update', 'delete'];

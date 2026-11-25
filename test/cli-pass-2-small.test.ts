@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseAppFile } from '../src/cli/app-file';
 import { COMMANDS, COMMAND_SPECS } from '../src/cli/run';
-import { LIVE_WRITES } from '../src/cli/targets';
+import { LIVE_SAFE_WRITES, LIVE_WRITES, commandLine } from '../src/cli/targets';
 import { AuthAnswers, EMAIL, PASSWORD, harness, session } from './cli-fakes';
 import { APP_KEY, AppAnswers, appRecord } from './apps-siren-answers';
 import { capturedReply } from './cloud-captures';
@@ -48,6 +48,21 @@ describe('finding 8: --live only on a command that changes a live organization',
       const changes = spec.readsOnly !== true && spec.offline !== true && spec.liveSafe !== true && command !== 'logout';
       expect(LIVE_WRITES.includes(command as never), command).toBe(changes);
     }
+  });
+
+  it('names every liveSafe command, so a hint for a note never adds --live (review of PR 94)', () => {
+    const safe = COMMANDS.filter((command) => COMMAND_SPECS[command].liveSafe === true);
+    expect([...LIVE_SAFE_WRITES].sort()).toEqual([...safe].sort());
+    expect(commandLine({ addressFlag: '', live: true }, 'notes delete 5 --yes')).toBe('siren notes delete 5 --yes');
+    expect(commandLine({ addressFlag: '', live: true }, 'programs delete 4')).toBe('siren programs delete 4 --live');
+  });
+
+  it('shows an unset url variable on a live Siren before asking anyone to sign in (review of PR 94)', async () => {
+    const h = harness([], { edition: 'production' });
+    h.write('siren.app.json', fileWith({ url: '${SIREN_APP_URL}', features }));
+    expect(await h.run(['apps', 'apply', '--base-url', UAT, '--live'])).toBe(1);
+    expect(h.err()).toContain('needs the environment variable SIREN_APP_URL');
+    expect(h.err()).not.toMatch(/sign in|siren login/i);
   });
 
   it('says siren apps init, with no --live, when a live apply finds no file', async () => {

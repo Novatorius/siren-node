@@ -252,7 +252,7 @@ async function appFileIn(cwd: string, env: Readonly<Record<string, string | unde
  * over goes to `--forward-to` with Siren's own headers, and the command
  * reports the handler's reply to Siren and prints one line. An ask's answer
  * that the handler then posted shows on its own line. Ctrl-C stops taking
- * deliveries, reports the ones in flight, closes the session and answers 0,
+ * deliveries, reports the ones in flight, closes the session and answers 130,
  * and Siren sends anything still waiting to the app's address. A session
  * Siren ended for silence, as after a laptop sleeps, is opened again. A
  * session another `siren listen` took over answers 1.

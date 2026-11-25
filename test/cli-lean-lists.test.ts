@@ -91,3 +91,34 @@ describe('generated help', () => {
     expect(h.out()).toContain('Create a program. Sends POST /programs.');
   });
 });
+
+describe('review of PR 94', () => {
+  it('stops --all when a route ignores offset and sends the same page again', async () => {
+    const page = { items: programs, page: 1, perPage: 2 };
+    const h = signedIn([reply(200, page), reply(200, page), reply(200, page)]);
+    expect(await h.run(['get', '/programs', '--all', '--ids']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['GET /programs', 'GET /programs']);
+    expect(h.out()).toBe('2\n1\n');
+  });
+
+  it('passes --ids and --fields through a raw get', async () => {
+    const h = signedIn([reply(200, envelope(programs)), reply(200, envelope(programs))]);
+    expect(await h.run(['get', '/programs', '--ids']), h.err()).toBe(0);
+    expect(h.out()).toBe('2\n1\n');
+    expect(await h.run(['get', '/programs', '--fields', 'name'])).toBe(0);
+    expect(h.out()).toContain('name\nPartner program\nReferral program\n');
+  });
+
+  it('leaves no generated record command on a word a hand-written command owns', async () => {
+    const { RESOURCE_COMMANDS } = await import('../src/cli/resources.generated');
+    const { COMMANDS } = await import('../src/cli/run');
+    const owned = new Set([...COMMANDS.map((command) => command.split(' ')[0]), 'resources']);
+    expect(RESOURCE_COMMANDS.map((resource) => resource.name).filter((name) => owned.has(name))).toEqual([]);
+  });
+
+  it('refuses -d keys that would reach the object prototype', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['post', '/programs', '-d', '__proto__[polluted]=1', '--dry-run'])).toBe(2);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});

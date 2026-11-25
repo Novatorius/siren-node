@@ -121,11 +121,15 @@ export const LIVE_WRITES = [
   'enrollers run',
 ] as const;
 
+/** The writes that change no program, reward or payout, so a hint never adds --live to them. Their specs say liveSafe. */
+export const LIVE_SAFE_WRITES = ['notes add', 'notes edit', 'notes delete'] as const;
+
 /** A raw route call that changes a record, such as `post /programs`, or a generated record command that does, such as `programs delete 7`. */
 const RECORD_WRITE = /^(?:(?:post|put|patch|delete) |[a-z][a-z-]* (?:create|update|delete)(?: |$))/;
 
 /** True when `words`, a command and its arguments, start with a command of {@link LIVE_WRITES}, or change a record ({@link RECORD_WRITE}). */
 function changesLive(words: string): boolean {
+  if (LIVE_SAFE_WRITES.some((command) => words === command || words.startsWith(`${command} `))) return false;
   return RECORD_WRITE.test(words) || LIVE_WRITES.some((command) => words === command || words.startsWith(`${command} `));
 }
 

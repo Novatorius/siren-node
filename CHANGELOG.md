@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- `apps.declare()` no longer refuses, before sending, an app with features other than custom
+  events and no `url`. Siren decides. A sandbox takes such an app, and `siren listen` carries its
+  requests, and a live organization answers 422 naming the url. Code that caught the old local
+  error catches the 422 `ValidationError` now.
+- `siren get --all --json` prints one envelope holding every page's items, the same shape as one
+  page, in place of a bare array.
 - Through a pipe, a generated list prints its table alone on standard output, starting at the
   margin, and its count, Next and tips on standard error. A script that read the count from
   standard output reads standard error now, or uses `--json`.

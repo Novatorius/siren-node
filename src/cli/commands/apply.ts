@@ -477,7 +477,8 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   // On a sandbox, siren listen carries the requests, so an app may go without a url.
   run.appFilePath = path;
   const withoutUrl = parsed.file === null ? parseAppFile(text, variables, { urlMayBeUnset: true }) : undefined;
-  if (withoutUrl?.file && (await run.signedIn()).edition !== 'production') parsed = withoutUrl;
+  // The edition the target reports, so a file problem shows before anyone is asked to sign in (review of PR 94).
+  if (withoutUrl?.file && (await run.targetEdition()) !== 'production') parsed = withoutUrl;
   if (parsed.file === null) {
     // CLI pass 3, must-fix 3: the problems print under the ✗ headline, each at its place.
     const problems = parsed.problems.map((problem) => {

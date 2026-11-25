@@ -113,6 +113,12 @@ describe('siren recipes apply', () => {
     expect(importKeyOf({ ...RECIPE, name: 'Other' })).not.toBe(importKeyOf(RECIPE));
     expect(importKeyOf(RECIPE)).toMatch(/^cli-[0-9a-f]{64}$/);
     expect(importKeyOf(RECIPE).length).toBeLessThanOrEqual(191);
+    // The answers and options are part of what is applied, so they are part of the key (review of PR 94, must-fix 1).
+    expect(importKeyOf(RECIPE, { variableAnswers: { partnerProgram: 4 } })).not.toBe(importKeyOf(RECIPE, { variableAnswers: { partnerProgram: 5 } }));
+    expect(importKeyOf(RECIPE, { variableAnswers: { a: 1, b: 2 } })).toBe(importKeyOf(RECIPE, { variableAnswers: { b: 2, a: 1 } }));
+    expect(importKeyOf(RECIPE, { configurationOnly: true })).not.toBe(importKeyOf(RECIPE));
+    expect(importKeyOf(RECIPE, { paused: true })).not.toBe(importKeyOf(RECIPE));
+    expect(importKeyOf(RECIPE, {})).toBe(importKeyOf(RECIPE));
     expect(createHash('sha256').update('x').digest('hex')).toHaveLength(64);
   });
 

@@ -4,6 +4,7 @@ import { BASE, bodyOf } from './record-fakes';
 import { harness, session } from './cli-fakes';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { requestRow } from './apps-siren-answers';
+import { resolveReferences } from '../src/cli/commands/fixtures';
 
 /*
  * `siren trigger`, `trigger ask`, `apps test`, `fixtures` and `simulate`.
@@ -216,6 +217,14 @@ describe('siren trigger ask <app> <feature>', () => {
     expect(script.err()).toContain('trigger ask acme-crm notify --live --yes');
   });
 
+  it("refuses a sample on a live organization when Siren doesn't say what kind the feature is", async () => {
+    const h = harness([reply(200, { key: 'acme-crm', name: 'Acme CRM', items: [] })], { edition: 'production' });
+    h.signedIn(live());
+    expect(await h.run(['trigger', 'ask', 'acme-crm', 'payout', '--base-url', BASE, '--live', '--yes'])).toBe(1);
+    expect(h.paths()).toEqual(['GET /apps/acme-crm']);
+    expect(h.err()).toContain("Siren didn't say what kind of feature acme-crm › payout is");
+  });
+
   it('refuses a payout method on a live organization outright, even with --yes, and names a sandbox', async () => {
     const h = harness([reply(200, app([{ key: 'payout', kind: 'payoutMethod' }]))], { edition: 'production' });
     h.signedIn(live());
@@ -302,6 +311,23 @@ describe('siren fixtures <file>', () => {
     json.write('flow.json', JSON.stringify({ fixtures: [{ name: 'visit', trigger: 'visit' }, { name: 'sale', trigger: 'sale', params: { wait: 0 } }] }));
     expect(await json.run(['fixtures', 'flow.json', '--json'])).toBe(0);
     expect(JSON.parse(json.out())).toEqual({ steps: [{ name: 'visit', trigger: 'visit', result: sale({ event: 'visit' }) }, { name: 'sale', trigger: 'sale', result: sale() }] });
+  });
+
+  it("refuses to send the tool's own settings or a secret-looking variable from the environment (review of PR 94)", () => {
+    const env = { SIREN_TOKEN: 'secret', STRIPE_SECRET_KEY: 'sk', DB_PASSWORD: 'pw', GITHUB_TOKEN: 'gh', SHOP: 'shopify' };
+    for (const name of ['SIREN_TOKEN', 'STRIPE_SECRET_KEY', 'DB_PASSWORD', 'GITHUB_TOKEN']) {
+      expect(() => resolveReferences(`\${.env:${name}}`, new Map(), env, 'fixtures.0.params.x')).toThrow(`fixtures.0.params.x reads \${.env:${name}}, which the tool doesn't send.`);
+    }
+    expect(resolveReferences('${.env:SHOP}', new Map(), env, 'fixtures.0.params.x')).toBe('shopify');
+  });
+
+  it('prints the finished steps with --json when a later step stops the run (review of PR 94)', async () => {
+    const h = harness([reply(201, sale())]);
+    h.signedIn();
+    h.write('flow.json', JSON.stringify({ fixtures: [{ name: 'sale', trigger: 'sale', params: { wait: 0 } }, { name: 'refund', trigger: 'refund', params: { transaction: '${sael:transactionId}' } }] }));
+    expect(await h.run(['fixtures', 'flow.json', '--json'])).toBe(1);
+    expect(JSON.parse(h.out())).toEqual({ steps: [{ name: 'sale', trigger: 'sale', result: sale() }] });
+    expect(h.err()).toContain('no step before it is named "sael"');
   });
 
   it('stops before a step whose reference names nothing, having sent the steps before it', async () => {

@@ -38,6 +38,13 @@ const logLine = {
 };
 
 describe('siren enrollers list and get', () => {
+  it("prints Siren's answer as it came with --json, and reads no triggers (review of PR 94)", async () => {
+    const h = signedIn([reply(200, { items: recorded.enrollers, total: 2 })]);
+    expect(await h.run(['enrollers', 'list', '--json']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['GET /enrollers']);
+    expect(JSON.parse(h.out())).toEqual({ items: recorded.enrollers, total: 2 });
+  });
+
   it('lists each enroller on one line with its status and what starts it, in words', async () => {
     const h = signedIn([list(recorded.enrollers), triggers()]);
     expect(await h.run(['enrollers', 'list']), h.err()).toBe(0);

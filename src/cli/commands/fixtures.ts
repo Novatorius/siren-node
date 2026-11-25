@@ -78,6 +78,13 @@ function at(value: unknown, path: string): unknown {
 export function resolveReferences(value: unknown, results: ReadonlyMap<string, unknown>, env: Readonly<Record<string, string | undefined>>, where: string): unknown {
   const lookup = (name: string, path: string, reference: string): unknown => {
     if (name === '.env') {
+      // A fixture file can come from anywhere, so it can't send the tool's own settings or a secret (review of PR 94).
+      if (/^SIREN_/i.test(path) || /(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|API_?KEY|AUTH)/i.test(path)) {
+        throw new CliRefusal(`${where} reads ${reference}, which the tool doesn't send.`, {
+          why: "A step can't read the tool's own SIREN_ settings or a variable whose name looks like a secret.",
+          fixText: 'Copy the value you mean under another name, or write it into the step.',
+        });
+      }
       const found = env[path];
       if (found === undefined) throw new CliRefusal(`${where} reads ${reference}, and ${path} is not set.`, { why: 'A step reads the environment when it runs.', fixText: `Set ${path} in the environment, or change the step.` });
       return found;
@@ -133,35 +140,41 @@ export async function fixtures(input: CommandInput): Promise<number> {
   const done: Array<{ name: string; trigger: string; result: unknown }> = [];
   let next: NextStep[] = [];
 
-  for (const [index, step] of steps.entries()) {
-    const params = resolveReferences(step.params, results, io.env, `fixtures.${index}.params`) as Record<string, unknown>;
-    let result: unknown;
-    let line: string;
-    if (step.trigger === 'ask') {
-      const app = appKeyArgument(String(params.app ?? ''));
-      const feature = featureKeyArgument(String(params.feature ?? ''));
-      await confirmLiveAsk(run, io, client, app, feature, values.yes === true, `fixtures ${input.args[0]} --live --yes`);
-      const request = await askAndWait(client, io, app, feature, waitSeconds(params.wait, ASK_WAIT_SECONDS), json);
-      result = request;
-      const shown = cleaned(request);
-      line = `${step.name}  asked ${app} › ${feature} · ${shown.status}${shown.answer === null ? '' : ` · ${JSON.stringify(shown.answer)}`}`;
-      const label = json ? (id: string) => id : await labelFor(shown.id);
-      next = [{ text: style.command(input.command(`apps requests ${label(shown.id)}`)), aside: 'each send and answer' }];
-    } else {
-      const activity = await triggerAndWait(client, io, activityBody(step.trigger, params), waitSeconds(params.wait, TRIGGER_WAIT_SECONDS), json);
-      result = activity;
-      const shown = cleaned(activity);
-      const waiting = openWaits(activity)[0]?.requestKey;
-      next = activityNext(style, input, activity, json || waiting === undefined ? undefined : await labelFor(waiting));
-      line = `${step.name}  ${eventName(shown.event).toLowerCase()} · ${activityRows(style, shown)
-        .filter(([label]) => label !== '')
-        .map(([label, value]) => `${label.toLowerCase()} ${value}`)
-        .slice(0, 2)
-        .join(' · ')}`;
+  // A script still reads what the steps before a stop made (review of PR 94).
+  try {
+    for (const [index, step] of steps.entries()) {
+      const params = resolveReferences(step.params, results, io.env, `fixtures.${index}.params`) as Record<string, unknown>;
+      let result: unknown;
+      let line: string;
+      if (step.trigger === 'ask') {
+        const app = appKeyArgument(String(params.app ?? ''));
+        const feature = featureKeyArgument(String(params.feature ?? ''));
+        await confirmLiveAsk(run, io, client, app, feature, values.yes === true, `fixtures ${input.args[0]} --live --yes`);
+        const request = await askAndWait(client, io, app, feature, waitSeconds(params.wait, ASK_WAIT_SECONDS), json);
+        result = request;
+        const shown = cleaned(request);
+        line = `${step.name}  asked ${app} › ${feature} · ${shown.status}${shown.answer === null ? '' : ` · ${JSON.stringify(shown.answer)}`}`;
+        const label = json ? (id: string) => id : await labelFor(shown.id);
+        next = [{ text: style.command(input.command(`apps requests ${label(shown.id)}`)), aside: 'each send and answer' }];
+      } else {
+        const activity = await triggerAndWait(client, io, activityBody(step.trigger, params), waitSeconds(params.wait, TRIGGER_WAIT_SECONDS), json);
+        result = activity;
+        const shown = cleaned(activity);
+        const waiting = openWaits(activity)[0]?.requestKey;
+        next = activityNext(style, input, activity, json || waiting === undefined ? undefined : await labelFor(waiting));
+        line = `${step.name}  ${eventName(shown.event).toLowerCase()} · ${activityRows(style, shown)
+          .filter(([label]) => label !== '')
+          .map(([label, value]) => `${label.toLowerCase()} ${value}`)
+          .slice(0, 2)
+          .join(' · ')}`;
+      }
+      results.set(step.name, result);
+      done.push({ name: step.name, trigger: step.trigger, result });
+      if (!json) io.stdout(`${style.success(style.fit(line, 78))}\n`);
     }
-    results.set(step.name, result);
-    done.push({ name: step.name, trigger: step.trigger, result });
-    if (!json) io.stdout(`${style.success(style.fit(line, 78))}\n`);
+  } catch (error) {
+    if (json && done.length > 0) io.stdout(`${JSON.stringify({ steps: done }, null, 2)}\n`);
+    throw error;
   }
 
   if (json) io.stdout(`${JSON.stringify({ steps: done }, null, 2)}\n`);

@@ -72,6 +72,15 @@ describe('apps-c16-4: the engagement kinds', () => {
     ]);
   });
 
+  it('lets only a url placeholder go unset for a sandbox, and still refuses one anywhere else (review of PR 94)', () => {
+    const elsewhere = parseAppFile(file({ staff: { kind: 'engagementFilter', name: '${SIREN_APP_SHOP}' } }, 'https://${SIREN_APP_HOST}/siren'), {}, { urlMayBeUnset: true });
+    expect(elsewhere.file).toBeNull();
+    expect(elsewhere.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features.staff.name`]);
+    const inUrl = parseAppFile(file({ staff: { kind: 'engagementFilter', name: 'Staff' } }, 'https://${SIREN_APP_HOST}/siren'), {}, { urlMayBeUnset: true });
+    expect(inUrl.problems).toEqual([]);
+    expect(inUrl.file === null ? [] : (inUrl as { unset?: string[] }).unset).toEqual(['SIREN_APP_HOST']);
+  });
+
   it('refuses an engagement kind with no url, since Siren asks the app at its address', () => {
     const parsed = parseAppFile(file({ staff: { kind: 'engagementFilter', name: 'Staff' } }, null), {});
     expect(parsed.problems.map((problem) => problem.path)).toEqual([`apps.${APP_KEY}.features`]);

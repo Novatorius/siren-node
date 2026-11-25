@@ -176,7 +176,15 @@ export const LIVE_REFUSED_KINDS: ReadonlySet<string> = new Set(['payoutMethod'])
 export async function confirmLiveAsk(run: CommandContext, io: CliIo, client: TestActivityClient, app: string, feature: string, yes: boolean, again: string): Promise<void> {
   if (run.current().edition !== 'production') return;
   const kind = await client.featureKind(app, feature);
-  if (kind !== null && LIVE_REFUSED_KINDS.has(kind)) {
+  // A kind the tool can't read could be a payout method, so a live organization gets no sample (review of PR 94).
+  if (kind === null) {
+    throw new CliRefusal(`Siren didn't say what kind of feature ${app} › ${feature} is, so the tool sends it no sample in ${orgLabel(run)}.`, {
+      why: 'A payout method gets no sample on a live organization, and the tool could not rule one out.',
+      fix: run.command(`apps show ${app}`),
+      fixWords: "to see the app's features",
+    });
+  }
+  if (LIVE_REFUSED_KINDS.has(kind)) {
     throw new CliRefusal(`${app} › ${feature} is a payout method, so Siren sends it no sample in ${orgLabel(run)}.`, {
       why: "An app that doesn't read the request's test flag could pay out on a sample.",
       fix: 'siren login --sandbox',
