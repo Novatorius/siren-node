@@ -110,7 +110,7 @@ describe('siren listen', () => {
     const h = harness([opened(), polled([delivery()]), reported(), closed()], stopAtFirstWait);
     h.signedIn();
 
-    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
 
     expect(local.received).toHaveLength(1);
     expect(local.received[0]!.body).toBe(fixture.body);
@@ -134,7 +134,7 @@ describe('siren listen', () => {
     const local = await handler(() => ({ status: 500, body: '{"error":"The function for payoutMethod acme-ledger failed"}' }));
     const h = harness([opened(), polled([delivery()]), reported('failed', '2026-11-24T19:03:15+00:00'), closed()], stopAtFirstWait);
     h.signedIn();
-    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
     expect(h.out()).toMatch(/ask {5}acme-ledger {9}500 /);
     expect(h.out().replace(/\s+/g, ' ')).toContain('The handler answered 500: The function for payoutMethod acme-ledger failed');
     for (const line of h.out().split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
@@ -146,7 +146,7 @@ describe('siren listen', () => {
     const port = (server!.address() as AddressInfo).port;
     await new Promise((done) => server!.close(done));
     server = undefined;
-    expect(await gone.run(['listen', '--app', KEY, '--forward-to', `localhost:${port}/siren`]), gone.err()).toBe(0);
+    expect(await gone.run(['listen', '--app', KEY, '--forward-to', `localhost:${port}/siren`]), gone.err()).toBe(130);
     expect(gone.out()).toMatch(/ask {5}acme-ledger {9}--- /);
     expect(gone.out()).toContain(`Nothing answered at localhost:${port} (connection refused).`);
     expect(gone.out()).toContain('Is your server running?');
@@ -158,7 +158,7 @@ describe('siren listen', () => {
     const event = delivery({ eventType: 'sale.created', eventId: 'evt_6a1f9c2e00', request: null, headers: { 'Content-Type': 'application/json' }, body: '{"id":1}' });
     const h = harness([opened(), polled([delivery(), event], [{ request: REQUEST, status: 'answered', answeredBy: 'app:12', answeredAt: '2026-11-24T19:02:12+00:00' }]), reported(), reported(), closed()], stopAtFirstWait);
     h.signedIn();
-    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
     expect(h.out()).toMatch(/event {3}sale\.created {8}200 .*evt_6a1f9c2e\n/);
     expect(h.out()).toMatch(/answer {2}acme-ledger {9}answered {5}apr_b79943ff\n/);
   });
@@ -168,7 +168,7 @@ describe('siren listen', () => {
     const idle = reply(410, { error: { code: 'listen_session_ended', message: 'This listen session ended because Siren heard nothing from it for 30 seconds.', context: { reason: 'listen_session_ended', endedBecause: 'idle' } } });
     const h = harness([opened(), idle, opened(), polled([]), closed()], stopAtFirstWait);
     h.signedIn();
-    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
     expect(h.paths()).toEqual(['POST /listen-sessions', `POST /listen-sessions/${SESSION}/poll`, 'POST /listen-sessions', `POST /listen-sessions/${SESSION}/poll`, `DELETE /listen-sessions/${SESSION}`]);
     expect(h.out()).toContain('a new one is open');
 
@@ -206,7 +206,7 @@ describe('siren listen', () => {
 
     const h = harness([opened(), polled([delivery()]), failed(), reported(), closed()], { onSleep: (count: number, abort: () => void) => (count === 2 ? abort() : undefined) });
     h.signedIn();
-    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
     expect(h.paths()).toEqual(['POST /listen-sessions', `POST /listen-sessions/${SESSION}/poll`, results, results, `DELETE /listen-sessions/${SESSION}`]);
     expect(bodyOf(h.http.requests[3])).toEqual(bodyOf(h.http.requests[2]));
     expect(local.received).toHaveLength(1);
@@ -215,7 +215,7 @@ describe('siren listen', () => {
 
     const never = harness([opened(), polled([delivery()]), failed(), failed(), failed(), closed()], { onSleep: (count: number, abort: () => void) => (count === 3 ? abort() : undefined) });
     never.signedIn();
-    expect(await never.run(['listen', '--app', KEY, '--forward-to', local.url]), never.err()).toBe(0);
+    expect(await never.run(['listen', '--app', KEY, '--forward-to', local.url]), never.err()).toBe(130);
     expect(never.paths().filter((path) => path === results)).toHaveLength(3);
     expect(never.err()).toContain('Siren could not record delivery 812 after 3 tries.');
     expect(never.err()).toContain('Siren counts a failed attempt and sends it again');
@@ -237,7 +237,7 @@ describe('siren listen', () => {
     );
     h.signedIn();
     const io = { ...h.io, stdoutTty: true, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } };
-    expect(await runCli(['listen', '--app', KEY, '--forward-to', local.url], io), h.err()).toBe(0);
+    expect(await runCli(['listen', '--app', KEY, '--forward-to', local.url], io), h.err()).toBe(130);
 
     const out = h.out();
     // Only the style module's own color codes are left, and no other control character.
@@ -259,7 +259,7 @@ describe('siren listen', () => {
     const local = await handler(() => ({ status: 200, body: '{}' }));
     const h = harness([opened(), polled([delivery()]), reported(), closed(2)], stopAtFirstWait);
     h.signedIn();
-    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url, '--json']), h.err()).toBe(0);
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url, '--json']), h.err()).toBe(130);
     const lines = h.out().trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
     expect(lines.map((line) => line.type)).toEqual(['session', 'delivery', 'closed']);
     expect(lines[1]).toMatchObject({ kind: 'ask', feature: 'acme-ledger', featureKind: 'payoutMethod', request: REQUEST, deliveryId: 812, httpStatus: 200, ok: true });
@@ -270,7 +270,7 @@ describe('siren listen', () => {
     const local = await handler(() => ({ status: 200, body: '{}' }));
     const h = harness([opened({ signingSecret: SECRET, session: { id: SESSION, app: KEY, address: null, events: null, forwardTo: null, openedAt: '', idleTimeoutSeconds: 30, nextPollMs: 1000 } }), polled([]), closed()], stopAtFirstWait);
     h.signedIn();
-    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(0);
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', local.url]), h.err()).toBe(130);
     expect(h.file('.env.sandbox')).toContain(`SIREN_SIGNING_SECRET=${SECRET}`);
     expect(h.printed()).not.toContain(SECRET);
     expect(h.out()).toContain('The app has no address');
@@ -288,7 +288,7 @@ describe('siren listen', () => {
     const fromFile = harness([opened(), polled([]), closed()], stopAtFirstWait);
     fromFile.signedIn();
     fromFile.write('siren.app.json', JSON.stringify({ version: 1, apps: { [KEY]: { name: 'Acme', url: local.url, features: { 'acme-ledger': { kind: 'payoutMethod', name: 'Ledger', currencies: ['USD'] } } } } }));
-    expect(await fromFile.run(['listen']), fromFile.err()).toBe(0);
+    expect(await fromFile.run(['listen']), fromFile.err()).toBe(130);
     expect(bodyOf(fromFile.http.requests[0])).toEqual({ app: KEY, forwardTo: local.url });
   });
 

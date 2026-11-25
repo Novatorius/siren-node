@@ -25,6 +25,9 @@ import { saveSecrets } from './apply';
  * is receipt, and the handler posts an ask's answer to Siren itself.
  */
 
+/** The exit code after Ctrl-C ends the run, as `logs tail` and `apps requests --follow` end. */
+const CTRL_C_EXIT = 130;
+
 /** The most deliveries the command holds at once. Each poll asks for at most this many. */
 export const MAX_IN_FLIGHT = 4;
 
@@ -425,7 +428,7 @@ export async function listen(input: CommandInput): Promise<number> {
   const returned = closed?.returned ?? 0;
   if (json) {
     emit({ type: 'closed', forwarded, ok: answeredOk, returned });
-    return 0;
+    return CTRL_C_EXIT;
   }
   const where = address === null ? '' : ` to ${shown(address)}`;
   run.print('');
@@ -440,7 +443,7 @@ export async function listen(input: CommandInput): Promise<number> {
       tips: [address === null ? 'The app has no address, so Siren holds nothing for it now.' : `Siren sends new requests to ${shown(address)} now.`],
     }),
   );
-  return 0;
+  return CTRL_C_EXIT;
 }
 
 /**
