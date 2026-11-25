@@ -116,33 +116,68 @@ describe('siren apps requests: the list', () => {
 });
 
 describe('short request ids', () => {
-  it('reads a request by its first eight characters, after finding the one id that starts with them', async () => {
-    const h = harness([list(waiting, older), list(), reply(200, { ...waiting, data: {}, answer: null, answeredByUser: null }), apps(), reply(200, [])], { env: UTC });
+  const STATUSES = ['pending', 'sent', 'delivered', 'answered', 'applied', 'needs_attention', 'dropped'];
+  const filler = (n: number, status = 'delivered') =>
+    Array.from({ length: n }, (_, at) => requestRow({ id: `apr_ff${String(at).padStart(30, '0')}`, status }));
+  const statusOf = (h: ReturnType<typeof harness>, at: number) => new URL(h.http.requests[at]!.url).searchParams.get('status');
+
+  it('reads a request by its first eight characters when the whole organization holds one id that starts with them', async () => {
+    const h = harness([list(waiting, older), reply(200, { ...waiting, data: {}, answer: null, answeredByUser: null }), apps(), reply(200, [])], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', 'b79943ff']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', `GET /apps/requests/${APP_REQUEST_ID}`, 'GET /apps', `GET /apps/${APP_KEY}/deliveries`]);
+    // Fewer than 50 requests in all, so one read covers the whole organization.
+    expect(h.paths()).toEqual(['GET /apps/requests', `GET /apps/requests/${APP_REQUEST_ID}`, 'GET /apps', `GET /apps/${APP_KEY}/deliveries`]);
   });
 
   it('takes a short id with or without apr_ for resend', async () => {
-    const h = harness([list(waiting), list(), reply(200, waiting)], { env: UTC });
+    const h = harness([list(waiting), reply(200, waiting)], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'resend', 'apr_b79943ff']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests', `POST /apps/requests/${APP_REQUEST_ID}/resend`]);
+    expect(h.paths()).toEqual(['GET /apps/requests', `POST /apps/requests/${APP_REQUEST_ID}/resend`]);
   });
 
-  it('refuses a short id that matches no request or several, and sends nothing more', async () => {
-    const none = harness([list(waiting), list()]);
+  it('counts the 4 characters after apr_, so apr_ alone or with 3 characters is no id, and nothing is sent', async () => {
+    for (const typed of ['apr_', 'apr_b79', 'b79', '']) {
+      const h = harness([list(waiting), reply(200, { status: 'accepted' })]);
+      h.signedIn();
+      expect(await h.run(['apps', 'answer', typed, '--body', '{"outcome":"paid"}']), typed).toBe(2);
+      expect(h.err()).toContain("isn't a request id");
+      expect(h.sent()).toEqual([]);
+    }
+  });
+
+  it('reads every state when the latest 50 are full, and finds an older request that matches', async () => {
+    const reads = [list(...filler(50)), ...STATUSES.map((status) => (status === 'needs_attention' ? list(requestRow({ status })) : list(...filler(3, status))))];
+    const h = harness([...reads, reply(200, { status: 'accepted' })]);
+    h.signedIn();
+    expect(await h.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}']), h.err()).toBe(0);
+    expect(h.paths()).toEqual([...Array.from({ length: 8 }, () => 'GET /apps/requests'), `POST /apps/requests/${APP_REQUEST_ID}/answer`]);
+    expect(Array.from({ length: 8 }, (_, at) => statusOf(h, at))).toEqual([null, ...STATUSES]);
+  });
+
+  it('refuses, and answers nothing, when a state holds 50 or more, so an older request could start the same way', async () => {
+    const reads = [list(waiting, ...filler(49)), ...STATUSES.map((status) => (status === 'delivered' ? list(...filler(50)) : list()))];
+    const h = harness([...reads, reply(200, { status: 'accepted' })]);
+    h.signedIn();
+    expect(await h.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}'])).toBe(1);
+    expect(h.err()).toContain("can't be sure b79943ff names one request");
+    expect(h.err()).toContain('whole id');
+    expect(h.paths()).not.toContain(`POST /apps/requests/${APP_REQUEST_ID}/answer`);
+  });
+
+  it('refuses a short id that matches no request, or several, which it lists, and answers none of them', async () => {
+    const none = harness([list(waiting)]);
     none.signedIn();
     expect(await none.run(['apps', 'requests', 'deadbeef'])).toBe(1);
-    expect(none.err()).toContain('Acme has no recent request that starts with deadbeef.');
+    expect(none.err()).toContain('Acme has no request that starts with deadbeef.');
     expect(none.err()).toContain('siren apps requests');
 
     const twin = requestRow({ id: 'apr_b79943ff00000000000000000000beef' });
-    const both = harness([list(waiting, twin), list()]);
+    const both = harness([list(waiting, twin), reply(200, { status: 'accepted' })]);
     both.signedIn();
     expect(await both.run(['apps', 'answer', 'b79943ff', '--body', '{"outcome":"paid"}'])).toBe(1);
-    expect(both.err()).toContain('2 requests start with b79943ff');
-    expect(both.paths()).toEqual(['GET /apps/requests', 'GET /apps/requests']);
+    expect(both.err()).toContain('2 requests start with b79943ff: b79943ff8ca3, b79943ff0000.');
+    expect(both.paths()).toEqual(['GET /apps/requests']);
   });
 
   it('refuses what is not a request id before sending anything, and shows what one looks like', async () => {
@@ -221,7 +256,7 @@ describe('siren apps requests <id>: one request', () => {
 
   it('in a terminal: a dim id, a colored state, dim data keys, and nothing past 80 columns', async () => {
     const stuck = requestRow({ status: 'needs_attention', lastError: 'Host not found' });
-    const h = harness([list(stuck), list(stuck), detail({ status: 'needs_attention', lastError: 'Host not found' }), apps(), reply(200, [sendOf(1, 500, 'upstream timeout', 'failed')])], { env: UTC });
+    const h = harness([list(stuck), detail({ status: 'needs_attention', lastError: 'Host not found' }), apps(), reply(200, [sendOf(1, 500, 'upstream timeout', 'failed')])], { env: UTC });
     h.signedIn();
     expect(await runCli(['apps', 'requests', 'b79943ff'], { ...h.io, stdoutTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } })).toBe(0);
     const text = h.out();

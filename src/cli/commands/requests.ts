@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { AppErrorCode, ConflictError, ErrorCode, NotFoundError, SirenError, appErrorCode } from '../../errors';
+import { AppRequestStatus } from '../../taxonomy';
 import type { App, AppAnswer, AppRequestDetail, AppRequestListParams, AppRequestRecord } from '../../record-types';
 import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument, orgNamed } from './apply';
@@ -23,7 +24,7 @@ const FOLLOW_EVERY_MS = 2000;
 /** A request id: `apr_` and 32 lowercase hex characters. */
 const REQUEST_ID = /^apr_[0-9a-f]{32}$/;
 
-/** A request id or its start, as git takes a commit's: at least 4 hex characters, with or without `apr_`. */
+/** A request id or its start, as git takes a commit's: at least 4 hex characters after any `apr_`, which every id shares. */
 const REQUEST_PREFIX = /^(?:apr_)?[0-9a-f]{4,32}$/;
 
 /** How many characters of a request id the tool shows, and every command takes. */
@@ -47,22 +48,48 @@ export function shortId(id: string): string {
   return id.replace(/^apr_/, '').slice(0, SHORT_ID);
 }
 
+/** The most requests `GET /apps/requests` answers in one list. A list this long may leave older requests out. */
+const LIST_LIMIT = 50;
+
 /**
- * The whole id for `typed`, a whole id or its start. A start is looked up
- * among the organization's latest requests and every one that needs
- * attention. Refuses one that matches none or several.
+ * The whole id for `typed`, a whole id or its start, after a search that
+ * covers the whole organization. Siren lists the latest 50 requests, with
+ * no paging. When that list holds fewer than 50, it holds every request.
+ * When it is full, the tool reads the latest 50 in each state, and the
+ * search covers the organization when every state holds fewer than 50.
+ * A start that matches several requests is refused with the list of them,
+ * never settled by picking one. A search that could not cover the
+ * organization is refused too, since an older request could start the
+ * same way, and the command must not act on the wrong one.
  */
 async function requestIdFor(run: CommandContext, typed: string, org: string): Promise<string> {
   if (REQUEST_ID.test(typed)) return typed;
   const start = typed.replace(/^apr_/, '');
   const siren = run.siren();
-  const rows = [...(await siren.apps.requests.list({})), ...(await siren.apps.requests.list({ status: 'needs_attention' }))];
-  const ids = [...new Set(rows.map((row) => row.id).filter((id) => id.startsWith(`apr_${start}`)))];
-  if (ids.length === 1) return ids[0]!;
-  if (ids.length === 0) {
-    throw new CliRefusal(`${org} has no recent request that starts with ${start}.`, { fix: run.command('apps requests'), fixWords: 'to list the latest, or give the whole id' });
+  const latest = await siren.apps.requests.list({});
+  const rows = [...latest];
+  let whole = latest.length < LIST_LIMIT;
+  if (!whole) {
+    whole = true;
+    for (const status of Object.values(AppRequestStatus)) {
+      const some = await siren.apps.requests.list({ status });
+      rows.push(...some);
+      if (some.length >= LIST_LIMIT) whole = false;
+    }
   }
-  throw new CliRefusal(`${ids.length} requests start with ${start}: ${ids.map((id) => shortIdOf(id, start)).join(', ')}.`, { why: 'Give more of the id.' });
+  const ids = [...new Set(rows.map((row) => row.id).filter((id) => id.startsWith(`apr_${start}`)))];
+  if (ids.length > 1) {
+    throw new CliRefusal(`${ids.length} requests start with ${start}: ${ids.map((id) => shortIdOf(id, start)).join(', ')}.`, { why: 'Give more of the id.' });
+  }
+  if (!whole) {
+    throw new CliRefusal(`${org} has more requests than Siren lists at once, so the tool can't be sure ${start} names one request.`, {
+      why: 'Give the whole id, apr_ and 32 characters, which the request view and --json show.',
+    });
+  }
+  if (ids.length === 0) {
+    throw new CliRefusal(`${org} has no request that starts with ${start}.`, { fix: run.command('apps requests'), fixWords: 'to list the latest' });
+  }
+  return ids[0]!;
 }
 
 /** Enough of `id` to tell it from the others that start with `start`. */
