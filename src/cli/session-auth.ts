@@ -114,7 +114,7 @@ export interface RegisterOrgParams {
 }
 
 /** The SDK's `User-Agent`, the one `HttpTransport` sends. */
-const USER_AGENT = 'siren-sdk-typescript/0.3.0';
+const USER_AGENT = 'siren-sdk-typescript/0.4.0';
 
 /** How long a session call may take, the SDK's default. */
 const DEFAULT_SESSION_TIMEOUT_MS = 30_000;

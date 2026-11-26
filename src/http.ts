@@ -325,7 +325,7 @@ export class HttpTransport {
       url,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'siren-sdk-typescript/0.3.0',
+        'User-Agent': 'siren-sdk-typescript/0.4.0',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(fields),
