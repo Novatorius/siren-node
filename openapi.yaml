@@ -98,6 +98,10 @@ tags:
     description: Links between collaborators and records outside Siren, such as WordPress users and products.
   - name: Settings
     description: The organization settings Siren shares with a connected site.
+  - name: Condition Sets
+    description: Saved rules that say which people match an audience.
+  - name: Enrollers
+    description: Rules that add or remove people from places when a moment happens.
 paths:
   /event/sale:
     post:
@@ -2958,6 +2962,720 @@ paths:
                 items: { $ref: '#/components/schemas/ConnectorWebhookDelivery' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  # Conventions in this file
+  # - `x-siren-auth` states who may call a route. Keys: `people` (a signed-in
+  #   person), `apiKey` (scopes, or none), `connectorSite` (a connected site's
+  #   token), `capability` and `plan` (the plan gate), `role` (the role check).
+  # - `x-unconfirmed: true` marks a field or answer read from code only, with no
+  #   test that asserts it. The comment above it says why.
+  # - Error envelope. On Siren Cloud a RestException answers
+  #   `{"error": {"message", "code"?, "context"}}` (saas/Strategies/RestStrategy.php
+  #   lines 258-283). A route that calls `$response->setError()` answers
+  #   `{"error": "<sentence>"}`, a plain string (saas/Http/Response.php line 110).
+  #   Enroller 404, 422, 500 answers are the string form. Condition set refusals,
+  #   page-size and validation refusals, the plan refusal and the enroller 409
+  #   are the object form. The WordPress strategy is not in this repository, so
+  #   the WordPress envelope is x-unconfirmed. The integration tests run a
+  #   test strategy that flattens `context` to the top level, so a test body
+  #   differs from a Cloud body.
+
+  /condition-sets:
+    get:
+      tags: [Condition Sets]
+      operationId: listConditionSets
+      summary: List condition sets
+      description: |
+        The organization's condition sets, archived ones included, oldest
+        first, as a bare array. The list is not paged and carries no
+        `x-siren-estimated-count` header and no envelope. With `usedBy=1` each
+        set also carries `usedBy`, which costs each registered use lister one
+        read per set.
+
+        A person signed in only. An API key is refused (401
+        `api_key_not_accepted`), and no connected-site token route lists it.
+        The plan must include `audience-conditions` (Plus and up on Siren
+        Cloud, and WordPress never refuses a capability). The person must be
+        allowed to read programs. A collaborator is refused with 403.
+        Source: lib/Plus/Service/ConditionSets/Rest/ListConditionSets.php.
+      x-siren-auth:
+        people: true
+        apiKey: false
+        connectorSite: false
+        capability: audience-conditions
+        plan: plus
+        role: read on programs
+      security:
+        - dashboardSession: []
+      parameters:
+        - name: usedBy
+          in: query
+          description: |
+            `1` or `true` adds `usedBy` to each set. Any other value, or none,
+            leaves it out. Read as a string compare against `1` and `true`
+            with no validation, so other values are ignored and never refused.
+          schema: { type: string, enum: ['1', 'true'] }
+      responses:
+        '200':
+          description: Every set, oldest first. An organization with none gets `[]`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConditionSet' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/ConditionSetForbidden' }
+        '500': { $ref: '#/components/responses/ConditionSetServerError' }
+
+  /condition-sets/conditions:
+    get:
+      tags: [Condition Sets]
+      operationId: listConditionSetConditions
+      summary: List the conditions a set can use
+      description: |
+        Every registered condition in registration order, as a bare array. An
+        editor builds its cards from it. The shared conditions come first,
+        then the ones the Plus enrollers register (the integration test
+        asserts the ids and their order). The catalog holds collaborator
+        conditions only, never a team-member condition.
+
+        Same auth as `GET /condition-sets`: a person only, plan capability
+        `audience-conditions`, read on programs.
+        Source: lib/Plus/Service/ConditionSets/Rest/ListConditions.php.
+      x-siren-auth:
+        people: true
+        apiKey: false
+        connectorSite: false
+        capability: audience-conditions
+        plan: plus
+        role: read on programs
+      security:
+        - dashboardSession: []
+      responses:
+        '200':
+          description: The catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConditionDefinition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/ConditionSetForbidden' }
+        '500': { $ref: '#/components/responses/ConditionSetServerError' }
+
+  /condition-sets/{id}:
+    get:
+      tags: [Condition Sets]
+      operationId: getConditionSet
+      summary: Get one condition set
+      description: |
+        One set as the list shows it. An archived set answers too, with its
+        `archivedAt`. The path takes digits only (`(?P<id>\d+)`), so a
+        non-numeric id matches no route and answers 404 `Not found.` from the
+        router, not the sentence below.
+
+        Same auth as `GET /condition-sets`.
+        Source: lib/Plus/Service/ConditionSets/Rest/GetConditionSet.php.
+      x-siren-auth:
+        people: true
+        apiKey: false
+        connectorSite: false
+        capability: audience-conditions
+        plan: plus
+        role: read on programs
+      security:
+        - dashboardSession: []
+      parameters:
+        - { $ref: '#/components/parameters/ConditionSetId' }
+      responses:
+        '200':
+          description: The set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConditionSet' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/ConditionSetForbidden' }
+        '404': { $ref: '#/components/responses/ConditionSetNotFound' }
+        '500': { $ref: '#/components/responses/ConditionSetServerError' }
+
+  /condition-sets/{id}/uses:
+    get:
+      tags: [Condition Sets]
+      operationId: listConditionSetUses
+      summary: List what uses a condition set
+      description: |
+        What uses the set, for its page's "Used by" and before an archive.
+        `usedBy` is every record the registered use listers name. `uses` is
+        the rule ids by consumer id, as a refused delete answers them, and it
+        also holds a use that only the usage event reported (such a use has no
+        entry in `usedBy`). `uses` is always a JSON object, `{}` when empty.
+
+        Same auth as `GET /condition-sets`.
+        Source: lib/Plus/Service/ConditionSets/Rest/ListConditionSetUses.php.
+      x-siren-auth:
+        people: true
+        apiKey: false
+        connectorSite: false
+        capability: audience-conditions
+        plan: plus
+        role: read on programs
+      security:
+        - dashboardSession: []
+      parameters:
+        - { $ref: '#/components/parameters/ConditionSetId' }
+      responses:
+        '200':
+          description: The uses.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConditionSetUses' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/ConditionSetForbidden' }
+        '404': { $ref: '#/components/responses/ConditionSetNotFound' }
+        '500': { $ref: '#/components/responses/ConditionSetServerError' }
+
+  /condition-sets/{id}/matches:
+    get:
+      tags: [Condition Sets]
+      operationId: countConditionSetMatches
+      summary: Count who matches a condition set now
+      description: |
+        How many collaborators match the set now, counted up to a cap
+        (`ConditionSetMatches::COUNT_CAP`, whose value this fragment did not
+        read). `more` is true when the count stopped at the cap. The cap
+        keeps one request from costing a whole check on a large organization.
+
+        Same auth as `GET /condition-sets`.
+        Source: lib/Plus/Service/ConditionSets/Rest/GetConditionSetMatchCount.php.
+      x-siren-auth:
+        people: true
+        apiKey: false
+        connectorSite: false
+        capability: audience-conditions
+        plan: plus
+        role: read on programs
+      security:
+        - dashboardSession: []
+      parameters:
+        - { $ref: '#/components/parameters/ConditionSetId' }
+      responses:
+        '200':
+          description: The count.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConditionSetMatchCount' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/ConditionSetForbidden' }
+        '404': { $ref: '#/components/responses/ConditionSetNotFound' }
+        '409': { $ref: '#/components/responses/ConditionSetUnreadable' }
+        '500': { $ref: '#/components/responses/ConditionSetServerError' }
+
+  /condition-sets/{id}/people:
+    get:
+      tags: [Condition Sets]
+      operationId: listConditionSetPeople
+      summary: List who matches a condition set now
+      description: |
+        One page of the collaborators who match the set now, judged live. The
+        route walks pages from `cursor` until it has `limit` matches or has
+        tested 5 pages (`MAX_PAGES`), whatever the organization's size. It
+        answers at most `limit` ids, lowest first. When a tested page holds
+        more matches than `limit`, the extra ids are dropped and `nextCursor`
+        is the last id returned. `nextCursor` is null at the end. The list is
+        not enveloped, has no `number`/`offset`, and sends no
+        `x-siren-estimated-count` header.
+
+        Same auth as `GET /condition-sets`.
+        Source: lib/Plus/Service/ConditionSets/Rest/ListConditionSetPeople.php.
+      x-siren-auth:
+        people: true
+        apiKey: false
+        connectorSite: false
+        capability: audience-conditions
+        plan: plus
+        role: read on programs
+      security:
+        - dashboardSession: []
+      parameters:
+        - { $ref: '#/components/parameters/ConditionSetId' }
+        - name: cursor
+          in: query
+          description: |
+            Where to start: the id of the last collaborator already seen, as a
+            previous `nextCursor` gave it. A value below 0 reads as 0. It is
+            cast to an integer with no validation, so text reads as 0 and is
+            never refused. Absent starts at the beginning.
+          schema: { type: integer, minimum: 0 }
+        - name: limit
+          in: query
+          description: |
+            Matches to return. A value above 25 is lowered to 25 and a value
+            below 1 is raised to 1 (the test sends 0 and gets one id). It is
+            cast to an integer with no validation, so text reads as 0, then 1.
+            Whether 500 is lowered to 25 is x-unconfirmed by a test, because
+            the test org holds only two people.
+          schema: { type: integer, minimum: 1, maximum: 25, default: 25 }
+      responses:
+        '200':
+          description: One page of matching collaborator ids.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConditionSetPeoplePage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/ConditionSetForbidden' }
+        '404': { $ref: '#/components/responses/ConditionSetNotFound' }
+        '409':
+          description: |
+            `context.type` is `condition_set_unreadable` when the set cannot
+            be judged (test: ConditionSetRoutesFlowTest, on the matches route,
+            which shares this refusal), or `condition_set_changed` when the
+            set's conditions changed during the walk (code only, so
+            x-unconfirmed on this route). Try the second again.
+          x-unconfirmed: true
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/ConditionSetServerError' }
+
+  /enrollers:
+    get:
+      tags: [Enrollers]
+      operationId: listEnrollers
+      summary: List enrollers
+      description: |
+        The organization's enrollers, oldest first by default, in Siren's list
+        envelope with the total also in `x-siren-estimated-count`. Each item
+        carries `needsFix`, why its stored settings need a fix in a manager's
+        words, or null.
+
+        `placeType` with `placeId` lists the enrollers that name that place in
+        the add list or the remove list of its kind, whatever their status. A
+        place the organization does not hold answers an empty page. `triggerId`
+        lists the enrollers that start on that moment. With it, `setting` and
+        `settingId` list only those whose stored settings hold that id under
+        that key. Both pairs must be sent together, and `setting` needs
+        `triggerId`. With `setting`, the route reads every row of that moment
+        and pages in memory, and the header counts the matches.
+
+        Needs read on enrollers. There is no plan gate, so an organization
+        whose plan dropped below Plus still lists its enrollers. On Siren
+        Cloud an API key needs `records:enrollers:read` or
+        `records:enrollers:manage`. A collaborator is refused with 403. Any
+        staff role may read (the integration test checks every staff role).
+        No connected-site route lists enrollers (x-unconfirmed: the absence
+        from the connector allow list is the only evidence).
+        Source: lib/Plus/Service/Enrollers/Rest/ListEnrollers.php.
+      x-siren-auth:
+        people: true
+        apiKey: ['records:enrollers:read', 'records:enrollers:manage']
+        connectorSite: false
+        capability: null
+        plan: none
+        role: read on enrollers (every staff role)
+      security:
+        - dashboardSession: []
+        - apiKey: ['records:enrollers:read']
+        - apiKey: ['records:enrollers:manage']
+      parameters:
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+        - name: orderBy
+          in: query
+          description: A stored column. `enabled` sorts by `status`. Any other value answers 400 `Validations failed.`.
+          schema:
+            type: string
+            enum: [id, name, status, enabled, triggerId, dateCreated, dateModified]
+            default: id
+        - name: order
+          in: query
+          description: Sort direction, in either case.
+          schema: { type: string, enum: [ASC, DESC, asc, desc], default: ASC }
+        - name: status
+          in: query
+          description: |
+            One status, or several joined by commas (`draft,active`). A value
+            that is not `draft`, `active` or `inactive`, or an empty list,
+            answers 400 `Validations failed.`.
+          schema: { type: string, examples: ['active', 'draft,active'] }
+        - name: placeType
+          in: query
+          description: Sent with `placeId`. Sending one without the other answers 400.
+          schema: { type: string, enum: [program, distributor, collaborator_group] }
+        - name: placeId
+          in: query
+          description: Sent with `placeType`. A whole number from 1.
+          schema: { type: integer, minimum: 1 }
+        - name: triggerId
+          in: query
+          description: A moment's id, as `GET /enroller-triggers` gives it. 1 to 100 characters.
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - name: setting
+          in: query
+          description: |
+            A setting key, 1 to 40 characters. Needs `settingId` and
+            `triggerId`.
+          schema: { type: string, minLength: 1, maxLength: 40 }
+        - name: settingId
+          in: query
+          description: Sent with `setting`. A whole number from 1.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: One page of enrollers.
+          headers:
+            x-siren-estimated-count:
+              schema: { type: integer }
+              description: |
+                Enrollers across all pages that match the filters. With no
+                filter it is the table's estimated count.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollerPage' }
+        '400':
+          description: |
+            `number` or `offset` out of range (`context.param` names it and
+            the message reads `number must be a whole number from 1 to 200.`
+            or `offset must be a whole number, 0 or greater.`), or a filter
+            failed validation (message `Validations failed.`, with
+            `context.failedValidations` naming each field).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /enrollers/{id}:
+    get:
+      tags: [Enrollers]
+      operationId: getEnroller
+      summary: Get one enroller
+      description: |
+        One enroller with every field flat under the names a save takes, plus
+        `needsFix` and `applyWaiting`. A target whose record was deleted is left
+        out of its list. `triggerArgs` is always a JSON object.
+
+        The path takes any word, and the id is cast to an integer, so a
+        non-numeric id reads as 0 and answers 404.
+
+        Same auth as `GET /enrollers`: no plan gate, read on enrollers.
+        Source: lib/Plus/Service/Enrollers/Rest/GetEnroller.php.
+      x-siren-auth:
+        people: true
+        apiKey: ['records:enrollers:read', 'records:enrollers:manage']
+        connectorSite: false
+        capability: null
+        plan: none
+        role: read on enrollers (every staff role)
+      security:
+        - dashboardSession: []
+        - apiKey: ['records:enrollers:read']
+        - apiKey: ['records:enrollers:manage']
+      parameters:
+        - { $ref: '#/components/parameters/EnrollerId' }
+      responses:
+        '200':
+          description: The enroller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollerDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EnrollerNotFound' }
+
+  /enrollers/{id}/log:
+    get:
+      tags: [Enrollers]
+      operationId: listEnrollerLog
+      summary: List an enroller's log
+      description: |
+        The enroller's log, newest first by id, in Siren's list envelope with
+        the total in `x-siren-estimated-count`. The order is fixed. Each line
+        carries a finished `message` in a manager's words and `happenedAt`.
+        `?number=1` answers when the enroller last fired, as
+        `items[0].happenedAt`. An enroller with no rows answers an empty page.
+
+        Same auth as `GET /enrollers`: no plan gate, read on enrollers.
+        Source: lib/Plus/Service/Enrollers/Rest/ListEnrollerFirings.php.
+      x-siren-auth:
+        people: true
+        apiKey: ['records:enrollers:read', 'records:enrollers:manage']
+        connectorSite: false
+        capability: null
+        plan: none
+        role: read on enrollers (every staff role)
+      security:
+        - dashboardSession: []
+        - apiKey: ['records:enrollers:read']
+        - apiKey: ['records:enrollers:manage']
+      parameters:
+        - { $ref: '#/components/parameters/EnrollerId' }
+        - { $ref: '#/components/parameters/Number' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200':
+          description: One page of log lines.
+          headers:
+            x-siren-estimated-count:
+              schema: { type: integer }
+              description: The enroller's log rows across all pages.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollerLogPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EnrollerNotFound' }
+        '500':
+          description: |
+            `{"error": "Something went wrong reading the enroller's log."}`.
+            Code only, so x-unconfirmed.
+          x-unconfirmed: true
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /enrollers/{id}/run-now:
+    get:
+      tags: [Enrollers]
+      operationId: countEnrollerRunNow
+      summary: Count what running an enroller now would do
+      description: |
+        What a run over the people who match the enroller's condition set now
+        would do. It moves nobody and writes nothing. People can start or stop
+        matching before a real run reaches them, so every screen says
+        "about". The count looks at up to 5000 people (`ESTIMATE_CAP`), and
+        `capped` says it stopped there.
+
+        The plan gate comes first (`enrollers`, Plus and up), then update on
+        enrollers, since the count is the first step of a write. A viewer is
+        refused with 403, and a program manager may call it (integration
+        test). An API key needs `records:enrollers:manage`, and the read
+        scope is not enough.
+        Source: lib/Plus/Service/Enrollers/Rest/GetEnrollerRunEstimate.php.
+      x-siren-auth:
+        people: true
+        apiKey: ['records:enrollers:manage']
+        connectorSite: false
+        capability: enrollers
+        plan: plus
+        role: update on enrollers
+      security:
+        - dashboardSession: []
+        - apiKey: ['records:enrollers:manage']
+      parameters:
+        - { $ref: '#/components/parameters/EnrollerId' }
+      responses:
+        '200':
+          description: The count.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollerRunEstimate' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/EnrollerWriteForbidden' }
+        '404': { $ref: '#/components/responses/EnrollerNotFound' }
+        '422': { $ref: '#/components/responses/EnrollerCannotRun' }
+        '500':
+          description: |
+            `{"error": "Something went wrong counting who this enroller would
+            move."}`. Nothing is written. Code only, so x-unconfirmed.
+          x-unconfirmed: true
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    post:
+      tags: [Enrollers]
+      operationId: startEnrollerRunNow
+      summary: Run an enroller now
+      description: |
+        Starts a run over the people who match the enroller's condition set
+        now, or joins the run already queued or running. The request moves
+        nobody. It queues a job (read its progress from `GET /jobs/{jobId}`)
+        and answers 202. An enroller that waits for its set's first check
+        joins that wait and answers 202 with `jobId` null. The work runs in a
+        unit of work, so a failed request queues nothing.
+
+        Same auth as the count: plan gate `enrollers`, update on enrollers, and
+        for an API key `records:enrollers:manage`. The request takes no body.
+        Source: lib/Plus/Service/Enrollers/Rest/StartEnrollerRun.php.
+      x-siren-auth:
+        people: true
+        apiKey: ['records:enrollers:manage']
+        connectorSite: false
+        capability: enrollers
+        plan: plus
+        role: update on enrollers
+      security:
+        - dashboardSession: []
+        - apiKey: ['records:enrollers:manage']
+      parameters:
+        - { $ref: '#/components/parameters/EnrollerId' }
+      responses:
+        '202':
+          description: The run is queued, joined, or waiting for the set's first check.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollerRunStarted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/EnrollerWriteForbidden' }
+        '404': { $ref: '#/components/responses/EnrollerNotFound' }
+        '409':
+          description: |
+            The enroller is being deleted in the background. `context.type`
+            is `ENROLLER_BEING_DELETED` and there is no `error.code`. The
+            message is "This enroller is being deleted, so it can't be
+            changed, made active, run or deleted again until that finishes.
+            If the delete fails, it stays inactive and you can try again."
+            (code in EnrollerBeingDeleted.php, and a test file,
+            EnrollerBeingDeletedFlowTest, exists, but this fragment did not
+            read its assertions, so x-unconfirmed.)
+          x-unconfirmed: true
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/EnrollerCannotRun' }
+        '500':
+          description: |
+            `{"error": "Something went wrong starting the run."}`. Code only,
+            so x-unconfirmed.
+          x-unconfirmed: true
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /enroller-triggers:
+    get:
+      tags: [Enrollers]
+      operationId: listEnrollerTriggers
+      summary: List the moments an enroller can start on
+      description: |
+        The triggers an enroller can use here, for the editor's picker, as
+        `{items, buyers}`. It is not paged and not enveloped, and sends no
+        count header. A trigger the registry holds is offered only when it
+        names a collaborator or a store customer, so a team-only trigger is
+        left out. An organization whose plan lacks `enrollers` gets
+        `{"items": [], "buyers": <bool>}`, and the route itself has no plan
+        gate. The path sits outside `/enrollers/` because on WordPress
+        `GET /enrollers/{id}` matches any word.
+
+        Needs read on enrollers. Same API key scopes as `GET /enrollers`.
+        Source: lib/Plus/Service/Enrollers/Rest/ListEnrollerTriggers.php.
+      x-siren-auth:
+        people: true
+        apiKey: ['records:enrollers:read', 'records:enrollers:manage']
+        connectorSite: false
+        capability: null
+        plan: none
+        role: read on enrollers (every staff role)
+      security:
+        - dashboardSession: []
+        - apiKey: ['records:enrollers:read']
+        - apiKey: ['records:enrollers:manage']
+      responses:
+        '200':
+          description: The triggers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollerTriggerList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+# ---------------------------------------------------------------------------
+# Left out of this fragment, without schemas. Every other enroller or
+# condition set route on main (59016aac), with its method and path.
+#
+# Condition sets (lib/Plus/Service/ConditionSets/Rest):
+#   POST   /condition-sets                  create a set (CreateConditionSet)
+#   PUT    /condition-sets/{id}             update, archive or restore a set, with `confirm` (UpdateConditionSet)
+#   DELETE /condition-sets/{id}             delete a set (DeleteConditionSet)
+#   POST   /condition-sets/matches          count who would match unsaved conditions (CountConditionMatches)
+#
+# Enrollers (lib/Plus/Service/Enrollers/Rest):
+#   POST   /enrollers                       create an enroller (CreateEnroller)
+#   PUT    /enrollers/{id}                  update an enroller (UpdateEnroller)
+#   DELETE /enrollers/{id}                  delete an enroller, in the background when it holds people (DeleteEnroller)
+#   GET    /enrollers/{id}/held             who a delete would ask about (ListEnrollerHeldPeople, per the ApiKeyRoutes comment)
+#   GET    /enroller-conflicts              (ListEnrollerConflicts, class named only, not read)
+#   GET    /enroller-loops                  (GetEnrollerLoops, class named only, not read)
+#   GET    /collaborators/{id}/membership-history   a collaborator's memberships (ListCollaboratorMembershipHistory)
+#   GET    /collaborators/{id}/enroller-log         a collaborator's enroller activity (ListCollaboratorEnrollerFirings)
+# No undo route and no bulk route exists under these paths on main. API keys reach all the enroller routes above
+# except the condition set ones, per saas/Auth/ApiKeyRoutes.php lines 153-171.
+# Enroller route scopes: reads take records:enrollers:read or :manage, and
+# create, update, delete and run-now take records:enrollers:manage.
+#
+# ---------------------------------------------------------------------------
+# GET /collaborators: every query parameter main accepts. For the other
+# session to fill that route's declaration. No schema. Read from
+# lib/Collaborators/Rest/Service/GetCollaborators.php (GC) and the middleware
+# it names. Middleware order (GC lines 260-275): read on collaborators,
+# AutoFilterByOwnerMiddleware, DefaultFieldsMiddleware, ValidationMiddleware,
+# FilterMiddleware, FieldResolverMiddleware, PageSizeMiddleware.
+#
+#  number     integer, default 10, below 1 or not a whole number answers 400
+#             "number must be a whole number from 1 to 200.", above 200 is
+#             lowered to 200. lib/Core/Service/Middlewares/PageSizeMiddleware.php
+#             (process(), DEFAULT_PAGE_SIZE and MAX_PAGE_SIZE).
+#  offset     integer, default 0. Two checks. ValidationMiddleware first
+#             (GC lines 298-300): IsType Integer and IsGreaterThan -1, which
+#             answers 400 "Validations failed.". Then PageSizeMiddleware:
+#             a negative or non-whole value answers 400 "offset must be a
+#             whole number, 0 or greater.".
+#  orderBy    string, default id, one of id, status, fullName, nickname,
+#             email, dateCreated, dateModified. Another value answers 400
+#             "Validations failed.". GC line 74 (SORTABLE_COLUMNS) and 294-295.
+#  order      string, default ASC, one of ASC, DESC, asc, desc. Another
+#             value answers 400. GC lines 296-297.
+#  fields     string, comma-separated field names. IsType String (GC lines
+#             288-289). With none, DefaultFieldsMiddleware sends
+#             id,status,fullName,nickname,email,createdDate,modifiedDate (GC
+#             line 94, the DEFAULT_FIELDS constant). Which other fields exist
+#             (aliases, referralCode, programs, distributors, creditBalances,
+#             groups) is the field resolver registry's business and this
+#             fragment did not read the registry, so the list is not
+#             confirmed here. The field resolver drops a default it has no
+#             resolver for.
+#  id         exact filter (GC line 83, FILTERABLE_COLUMNS). A comma-separated
+#             value is an IN list, items trimmed (lib/Core/Service/Middlewares/
+#             FilterMiddleware.php lines 97-103). No type validation: values
+#             are not checked as integers.
+#  status     exact filter, same rules as id, including the comma list. Not
+#             validated against the status words, so an unknown status lists
+#             nothing and never answers 400.
+#  fullName   exact filter, same rules. The comma rule applies, so a name that
+#             holds a comma is split into an IN list (FilterMiddleware lines
+#             97-103), which surprised me.
+#  nickname   exact filter, same rules as fullName.
+#  email      exact filter, same rules as fullName.
+#  s          search. A non-empty value adds an OR group of LIKE %s% over
+#             fullName, nickname and email (FilterMiddleware lines 115-126,
+#             GC line 88 SEARCHABLE_COLUMNS), and GC lines 150-153 also
+#             matches alias (tracking) codes through CollaboratorCodeSearch.
+#             A value that is empty or `0` is ignored (the middleware tests
+#             `!empty()`).
+#  programId  integer. Lists collaborators enrolled in the program, through
+#             the collaborator-programs junction table, answering no rows for
+#             a program with none (GC lines 157-160 and 215-250). Where a
+#             feature registers its own programId lookup (Plus collaborator
+#             groups do, RegisterProgramGroupCollaboratorListFilter.php line
+#             43) that lookup replaces it and also counts people who get the
+#             program through a group. Cast with (int), no validation.
+#  distributorId  integer, added by the distributions module
+#             (RegisterDistributorCollaboratorListFilter.php line 35): the
+#             collaborators the distributor covers. Cast with (int).
+#  buyersOnly integer, added by the Plus enroller engine
+#             (RegisterBuyerCollaboratorListFilter.php line 45): only the
+#             records an enroller made for a purchase.
+#  hideBuyers integer, same file line 46: leaves those records out, with one
+#             `id NOT IN` clause. No effect when the lookup is empty.
+# Each related-record param (programId, distributorId, buyersOnly,
+# hideBuyers) is a no-op when the module that adds it is not loaded, and
+# RelatedRecordFilterService.php lists every record when it is not sent.
+# Response: bare list wrapped by ListResponseWrapperInterceptor as
+# {items, total, page, perPage, totalPages}, with `x-siren-estimated-count`
+# and `Access-Control-Expose-Headers` set (GC lines 178-179). The total is the
+# table's estimated count when no filter is set, and a real count otherwise.
+# A caller bound to its own record (a collaborator) sees only its own row,
+# whatever it sends (AutoFilterByOwnerMiddleware).
 components:
   securitySchemes:
     apiKey:
@@ -3044,6 +3762,23 @@ components:
       in: header
       description: The same one-store filter as `propertyId`, sent as a header.
       schema: { type: integer, minimum: 1 }
+    ConditionSetId:
+      name: id
+      in: path
+      required: true
+      description: |
+        The set's id. The route pattern takes digits only, so another value
+        matches no route.
+      schema: { type: integer, minimum: 1 }
+    EnrollerId:
+      name: id
+      in: path
+      required: true
+      description: |
+        The enroller's id. The route pattern takes any word and the id is cast
+        to an integer, so a non-numeric id reads as 0 and answers 404.
+      schema: { type: integer, minimum: 1 }
+
   schemas:
     SalePayload:
       type: object
@@ -3708,6 +4443,461 @@ components:
         quantity: { type: integer, default: 1 }
         units: { type: string, example: USD }
         attributes: { type: object, additionalProperties: true }
+    ListEnvelope:
+      type: object
+      required: [items, total, page, perPage, totalPages]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Record' }
+        total: { type: integer, description: Records across all pages. }
+        page: { type: integer, description: 'floor(offset / number) + 1' }
+        perPage: { type: integer, description: The page size used. }
+        totalPages: { type: integer }
+    ConditionSet:
+      type: object
+      description: One condition set. Key order is asserted by the tests.
+      required: [id, name, conditions, sourceKey, lastCheckedAt, archivedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        conditions:
+          type: array
+          description: The conditions in the order the merchant set them, each already checked.
+          items:
+            type: object
+            required: [id, args]
+            properties:
+              id: { type: string, description: 'A condition id from `GET /condition-sets/conditions`.' }
+              args:
+                type: object
+                additionalProperties: true
+                description: The values for that condition's `args` definitions.
+        sourceKey:
+          type: [string, 'null']
+          description: |
+            Which recipe or source made the set, or null for one a person
+            made. The test asserts null for a set made by hand. The string
+            form is read from the type hint only, so x-unconfirmed.
+          x-unconfirmed: true
+        lastCheckedAt:
+          type: [string, 'null']
+          format: date-time
+          description: ATOM form, or null before the first check.
+        archivedAt:
+          type: [string, 'null']
+          format: date-time
+          description: ATOM form, or null while the set is not archived.
+        usedBy:
+          type: array
+          description: Present only on `GET /condition-sets?usedBy=1`.
+          items: { $ref: '#/components/schemas/ConditionSetUse' }
+
+    ConditionSetUse:
+      type: object
+      required: [type, id, name, enabled, onlyWhileMatching]
+      properties:
+        type:
+          type: string
+          description: |
+            The kind of record. The code names `notification_rule` and
+            `enroller`. A use lister may name another, and the screens call
+            any other a rule, so the enum is open.
+          examples: [notification_rule, enroller]
+        id: { type: integer }
+        name: { type: string }
+        enabled:
+          type: boolean
+          description: Whether the record acts now, a rule that is on or an enroller that is active.
+        onlyWhileMatching:
+          type: [boolean, 'null']
+          description: For an enroller, whether "Only while they match" is on. Null for a record with no such setting.
+        status:
+          type: string
+          description: |
+            The record's own status word, such as an enroller's `draft`,
+            `active` or `inactive`. The key is left out for a record that has
+            none.
+
+    ConditionSetUses:
+      type: object
+      required: [usedBy, uses]
+      properties:
+        usedBy:
+          type: array
+          items: { $ref: '#/components/schemas/ConditionSetUse' }
+        uses:
+          type: object
+          description: |
+            Rule ids by consumer id, such as `{"notifications": [3, 4]}` or
+            `{"enrollers": [8]}`. An empty object when nothing uses the set.
+          additionalProperties:
+            type: array
+            items: { type: integer }
+
+    ConditionDefinition:
+      type: object
+      required: [id, name, description, summaryTemplate, capability, args]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        summaryTemplate: { type: string }
+        capability:
+          type: [string, 'null']
+          description: |
+            The plan capability the condition needs, or null. The interface
+            says `?string` and no test asserts a value, so x-unconfirmed.
+          x-unconfirmed: true
+        args:
+          type: array
+          items: { $ref: '#/components/schemas/ArgDefinition' }
+
+    ArgDefinition:
+      type: object
+      description: |
+        One argument a piece takes. The same shape `GET /notifications/triggers`
+        gives. Source: lib/RuleTriggers/Core/Models/ArgDefinition.php, and the
+        triggers test asserts it equals `toArray()`.
+      required: [key, type, label, min, max, default, choices, required, recordType]
+      properties:
+        key: { type: string }
+        type:
+          type: string
+          enum: [int, money, currency, choice, ids, records, products, answer_tests]
+        label: { type: string }
+        min: { type: [integer, 'null'], description: 'The smallest number, or the fewest ids. Null for no limit.' }
+        max: { type: [integer, 'null'], description: 'The largest number, or the most ids. Null for no limit.' }
+        default:
+          description: The value a new piece starts with, or null.
+          oneOf:
+            - type: integer
+            - type: string
+            - type: array
+              items: { type: integer }
+            - type: 'null'
+        choices:
+          type: array
+          description: For a `choice`, each key and label in the order shown. A looked-up choice has none, and the editor asks `GET /rule-triggers/{id}/args/{key}/choices`.
+          items:
+            type: object
+            required: [key, label]
+            properties:
+              key: { type: string }
+              label: { type: string }
+        required: { type: boolean }
+        recordType:
+          type: [string, 'null']
+          description: |
+            For `ids` and `records`, the kind of record (`program`,
+            `distributor`, `collaborator_group` or `property` for `records`).
+            Always `product` for `products`. Null otherwise.
+        unit:
+          type: string
+          description: What a number counts, such as `days` or `days ago`. The key is present only when a unit is set.
+
+    ConditionSetMatchCount:
+      type: object
+      required: [count, more]
+      properties:
+        count: { type: integer, description: "Collaborators that match, up to the cap." }
+        more: { type: boolean, description: True when the count stopped at the cap. }
+
+    ConditionSetPeoplePage:
+      type: object
+      required: [collaboratorIds, nextCursor, unjudged]
+      properties:
+        collaboratorIds:
+          type: array
+          description: At most `limit` matching collaborator ids, lowest first.
+          items: { type: integer }
+        nextCursor:
+          type: [integer, 'null']
+          description: The cursor for the next request, or null at the end.
+        unjudged:
+          type: integer
+          description: How many people on the tested pages could not be checked.
+
+    EnrollerPlaceIds:
+      type: array
+      items: { type: integer }
+
+    Enroller:
+      type: object
+      description: |
+        An enroller as the list shows it. The key order is asserted by the
+        list test. A target is named by the list it sits in. A deleted
+        target is left out. Source: EnrollerPresenter.php.
+      required:
+        - id
+        - name
+        - status
+        - enabled
+        - triggerId
+        - triggerArgs
+        - addProgramIds
+        - addDistributorIds
+        - addGroupIds
+        - removeProgramIds
+        - removeDistributorIds
+        - removeGroupIds
+        - addForDays
+        - onlyWhileMatching
+        - dateCreated
+        - dateModified
+        - needsFix
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        status: { type: string, enum: [draft, active, inactive] }
+        enabled:
+          type: boolean
+          description: True only for an active enroller. Kept for callers written before statuses.
+        triggerId: { type: string, description: 'A moment id from `GET /enroller-triggers`, such as `approved` or `condition_set_entered`.' }
+        triggerArgs:
+          type: object
+          additionalProperties: true
+          description: 'The moment''s settings. Always a JSON object, empty as {}. A condition set moment holds {"set": id}.'
+        addProgramIds: { $ref: '#/components/schemas/EnrollerPlaceIds' }
+        addDistributorIds: { $ref: '#/components/schemas/EnrollerPlaceIds' }
+        addGroupIds: { $ref: '#/components/schemas/EnrollerPlaceIds' }
+        removeProgramIds: { $ref: '#/components/schemas/EnrollerPlaceIds' }
+        removeDistributorIds: { $ref: '#/components/schemas/EnrollerPlaceIds' }
+        removeGroupIds: { $ref: '#/components/schemas/EnrollerPlaceIds' }
+        addForDays:
+          type: [integer, 'null']
+          description: The time limit in days, or null for none. The list test asserts 7. The null form is read from the presenter's use, so x-unconfirmed.
+          x-unconfirmed: true
+        onlyWhileMatching:
+          type: boolean
+          description: Whether people leave again when they stop matching.
+        dateCreated: { type: string, description: 'Format Y-m-d H:i:s, not ISO 8601. The time zone is not stated in the code read, so x-unconfirmed.', x-unconfirmed: true }
+        dateModified: { type: string, description: 'Format `Y-m-d H:i:s`. Same note as `dateCreated`.', x-unconfirmed: true }
+        needsFix:
+          type: [string, 'null']
+          description: |
+            Why the stored settings need a fix, in a manager's words, or null.
+            The test asserts null for settings that fit. The string form is
+            code only, so x-unconfirmed.
+          x-unconfirmed: true
+
+    EnrollerDetail:
+      allOf:
+        - $ref: '#/components/schemas/Enroller'
+        - type: object
+          required: [applyWaiting]
+          properties:
+            applyWaiting:
+              description: |
+                The run that waits for the condition set's first check, or
+                null. The shape is read from code (EnrollerRuns::waiting),
+                so x-unconfirmed.
+              x-unconfirmed: true
+              oneOf:
+                - $ref: '#/components/schemas/EnrollerRunWaiting'
+                - type: 'null'
+
+    EnrollerPage:
+      allOf:
+        - $ref: '#/components/schemas/ListEnvelope'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Enroller' }
+
+    EnrollerRunWaiting:
+      type: object
+      required: [setId, kind, since, joined]
+      properties:
+        setId: { type: integer, description: The set whose first check it waits for. }
+        kind: { type: string, enum: [run_now, already_match] }
+        since: { type: string, format: date-time, description: ATOM form. }
+        joined: { type: boolean, description: True when the enroller was already waiting. }
+
+    EnrollerRunEstimate:
+      type: object
+      description: Key set asserted by EnrollerRunNowCountFlowTest.
+      required: [matching, willMove, renews, alreadyThere, capped, liveJobId, waitsForCheck, waiting, message]
+      properties:
+        matching: { type: integer, description: "People the count looked at, up to 5000 when `capped`." }
+        willMove: { type: integer, description: People the run would add somewhere or take out of somewhere. }
+        renews: { type: integer, description: People it would not move but whose time limit it would start again. }
+        alreadyThere: { type: integer, description: 'matching - willMove - renews, not below 0.' }
+        capped: { type: boolean, description: True when more people match than `matching` says. }
+        liveJobId:
+          type: [string, 'null']
+          description: The run of this enroller queued or running now. The test asserts null. A string form is read from the model's type, so x-unconfirmed.
+          x-unconfirmed: true
+        waitsForCheck: { type: boolean, description: "True when the set has had no check, so a run would wait for it." }
+        waiting:
+          description: The enroller's wait when it already waits, else null.
+          oneOf:
+            - $ref: '#/components/schemas/EnrollerRunWaiting'
+            - type: 'null'
+        message:
+          type: string
+          description: |
+            What the count found, in a manager's words, such as "About 1 of
+            the 2 people who match now would move." While the enroller waits
+            it is "Siren hasn't checked this condition set yet. This
+            enroller will act on the people who match once Siren has checked
+            this set, which can take up to a day, so there's nothing to run
+            now."
+
+    EnrollerRunStarted:
+      type: object
+      required: [jobId, joined, matching, waiting]
+      properties:
+        jobId:
+          type: [string, 'null']
+          description: The job `GET /jobs/{jobId}` reads. Null when the enroller joined a wait for its set's first check.
+        joined: { type: boolean, description: "True when a run was already queued, running or waiting, and this is that run." }
+        matching:
+          type: [integer, 'null']
+          description: People who matched when it was asked. Null when it joined a wait.
+        waiting:
+          description: Null when a job was queued.
+          oneOf:
+            - $ref: '#/components/schemas/EnrollerRunWaiting'
+            - type: 'null'
+
+    EnrollerLogPage:
+      allOf:
+        - $ref: '#/components/schemas/ListEnvelope'
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/EnrollerFiring' }
+
+    EnrollerFiring:
+      type: object
+      description: |
+        One log line. The stored structure plus one finished sentence. The
+        sentence never names the person. Source: EnrollerFiringPresenter.php.
+        The test asserts `id`, `collaboratorId`, `happenedAt` and `message`.
+        Every other field is read from the presenter, so is x-unconfirmed.
+      required: [id, enrollerId, collaboratorId, triggerId, depth, outcome, reason, errorClass, happenedAt, finishedAt, places, notes, missing, message, dates]
+      properties:
+        id: { type: integer }
+        enrollerId: { type: integer, x-unconfirmed: true }
+        collaboratorId: { type: [integer, 'null'], description: "Null when the row names no collaborator, for example `not_a_collaborator`." }
+        triggerId: { type: string, x-unconfirmed: true }
+        depth: { type: integer, description: 'Chain depth of enroller steps. The limit is EnrollerFiringContext::DEPTH_LIMIT.', x-unconfirmed: true }
+        outcome: { type: string, enum: [started, acted, unchanged, skipped, failed], x-unconfirmed: true }
+        reason:
+          type: [string, 'null']
+          description: |
+            Why it skipped or what kind of row it is. Known values:
+            not_a_collaborator, not_active, chain_limit, nothing_to_do,
+            settings_not_taken, plan_lacks_moment, guest, several_accounts,
+            staff_account, buyers_not_here, email_in_use,
+            buyer_purchases_not_counted, settings_name_missing,
+            settings_not_met, settings_no_longer_fit, time_limit_ended,
+            undone, loop_guard, run_finished, run_waits_for_check, moved,
+            enroller_deleted, delete_failed. A newer build may add more, so
+            treat the list as open.
+          x-unconfirmed: true
+        errorClass: { type: [string, 'null'], x-unconfirmed: true }
+        happenedAt: { type: string, description: 'The row''s fired time, `Y-m-d H:i:s`.' }
+        finishedAt: { type: [string, 'null'], description: 'Null while it has not finished. `Y-m-d H:i:s`.', x-unconfirmed: true }
+        places:
+          type: array
+          items: { $ref: '#/components/schemas/EnrollerFiringPlace' }
+          x-unconfirmed: true
+        notes:
+          type: array
+          description: 'Note codes such as `time_limit_not_applied`, `undo_not_applied`, `made_record`, `not_linked`, `set_changed`, `stopped_before_check`.'
+          items: { type: string }
+          x-unconfirmed: true
+        missing:
+          type: array
+          description: Records its settings named that the organization no longer had when it fired.
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              recordType: { type: string }
+              ids: { type: array, items: { type: integer } }
+          x-unconfirmed: true
+        message:
+          type: string
+          description: One finished sentence for a manager, such as "Added to Standard Referral and the group “New this month”." A message with no sentence reads "Nothing happened."
+        dates:
+          type: array
+          description: Each date the message holds, so a screen can show the reader's local day.
+          items:
+            type: object
+            properties:
+              text: { type: string }
+              at: { type: string, description: 'The stored end, `Y-m-d H:i:s`, UTC.' }
+          x-unconfirmed: true
+
+    EnrollerFiringPlace:
+      type: object
+      description: One place a firing acted on. Extra stored keys such as `endsAt`, `keptIn`, `whileEnding`, `stillIn` and `groupId` may appear, and this fragment does not list them.
+      properties:
+        type: { type: string, enum: [program, distributor, collaborator_group] }
+        id: { type: integer }
+        direction: { type: string, enum: [add, remove] }
+        result:
+          type: string
+          enum: [added, already_there, removed, not_there, missing, group_bound, on_both_lists, renewed, still_held, put_back]
+        name: { type: [string, 'null'], description: "The place's name now, or null when the place is gone." }
+        groupName: { type: [string, 'null'], description: Present only on a place with a `groupId`. }
+        groupId: { type: integer }
+        endsAt: { type: string }
+
+    EnrollerTrigger:
+      type: object
+      description: |
+        One moment an enroller can start on. `args` are the trigger's own
+        settings and then the ones other modules add. The tests assert `args`
+        and the `buyers` flag. The other fields are read from the controller.
+      required: [id, name, description, group, canStopMatching, entitled, requiredPlan, mayAwaitReview, args]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        group: { type: string, x-unconfirmed: true }
+        canStopMatching:
+          type: boolean
+          description: Whether the moment can undo, so "Only while they match" can be used.
+          x-unconfirmed: true
+        entitled:
+          type: boolean
+          description: Whether the organization's plan grants what the moment needs. A moment the plan does not grant is still listed.
+          x-unconfirmed: true
+        requiredPlan:
+          type: [string, 'null']
+          description: The lowest plan that grants the moment, or null for a moment every plan may use. On Siren Cloud a custom event needs Pro.
+          x-unconfirmed: true
+        mayAwaitReview:
+          type: boolean
+          description: True when the person the moment names may still be awaiting review. Today that is "Applied".
+          x-unconfirmed: true
+        buyersHere:
+          type: boolean
+          description: |
+            Present only on a purchase moment that names a store customer and
+            no collaborator. True on a standalone WordPress store, where a
+            purchase adds its buyer, and false on Siren Cloud and on a store
+            connected to it. A difference between WordPress and Siren Cloud.
+        args:
+          type: array
+          items: { $ref: '#/components/schemas/ArgDefinition' }
+
+    EnrollerTriggerList:
+      type: object
+      required: [items, buyers]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/EnrollerTrigger' }
+        buyers:
+          type: boolean
+          description: Whether a buyer can exist in the organization, for the collaborator list's buyer filter and badge.
   responses:
     PaginatedList:
       description: |
@@ -3811,3 +5001,82 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/OAuthError' }
+    ConditionSetForbidden:
+      description: |
+        403 for a caller the route refuses. With a plan that lacks the
+        `audience-conditions` capability, `error.code` is `plan_required` and
+        `error.context` is `{capability: "audience-conditions", plan: "plus"}`,
+        with the message "Your plan does not include this feature." A caller
+        who may not read programs, such as a collaborator, gets 403 with
+        `error.code` `not_permitted`. The plan check runs first.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ConditionSetNotFound:
+      description: |
+        No such set in the organization. Message "This condition set doesn't
+        exist." with an empty `context`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ConditionSetUnreadable:
+      description: |
+        The set uses a condition this site does not have, so it cannot be
+        judged. `context.type` is `condition_set_unreadable` and the message
+        is "This condition set uses a condition this site doesn't have. Edit
+        the set to choose another." (asserted in ConditionSetRoutesFlowTest).
+        There is no `error.code`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ConditionSetServerError:
+      description: |
+        A database failure. The message is "Something went wrong with
+        condition sets. Nothing was changed." and the route logs it at error
+        with the organization id. Asserted for `GET /condition-sets` only,
+        and the other routes share the same handler in code.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    EnrollerNotFound:
+      description: |
+        The enroller is not there or belongs to another organization. The
+        body is `{"error": "Enroller not found."}`, a plain string.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    EnrollerWriteForbidden:
+      description: |
+        403. With a plan that lacks `enrollers`, `error.code` is
+        `plan_required` and the message is "Your plan does not include this
+        feature." A role that may not update enrollers, such as a viewer, gets
+        403 (`not_permitted`). An API key holding only
+        `records:enrollers:read` gets `missing_scope` with
+        `context.scope` set to `records:enrollers:manage`. The plan check
+        runs first.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    EnrollerCannotRun:
+      description: |
+        The enroller cannot run now. The body is `{"error": "<sentence>"}`,
+        a plain string, and the sentence is one of these, checked in this
+        order. There is no code, so branch on the sentence only as a last
+        resort.
+        1. "Only an enroller that starts when someone starts matching a
+           condition set can run now, because only a condition set has
+           people who match it now."
+        2. "An enroller that starts when people stop matching can't be
+           applied to people who match now."
+        3. "The condition set this enroller starts from no longer exists, so
+           there is nobody to run it for."
+        4. "Set this enroller to Active before you run it."
+        5. "This enroller came with your store's move to Siren Cloud, and the
+           store hasn't switched over yet. Run it here once the store
+           switches over."
+        Sentences 1 and 4 are asserted in the tests, and 2, 3 and 5 are from
+        code (EnrollerRuns.php), so those three are x-unconfirmed.
+      x-unconfirmed: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

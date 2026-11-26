@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `openapi.yaml` documents the condition set routes (`/condition-sets` and its `conditions`, `uses`, `matches` and `people` reads) and the enroller routes (`/enrollers`, its `log` and `run-now`, and `/enroller-triggers`), read from Siren main 59016aac8d. Marks `x-unconfirmed` on the answers that no test asserts. The create, update and delete routes are not yet documented.
+
 ## [0.4.0] - 2026-11-18
 
 ### Breaking
