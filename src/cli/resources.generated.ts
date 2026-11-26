@@ -33,7 +33,7 @@ export interface ResourceCommand {
   readonly bulk?: { readonly path: string; readonly actions: readonly string[] };
 }
 
-/** Every generated resource, by name, from openapi.json (46 resources). */
+/** Every generated resource, by name, from openapi.json (48 resources). */
 export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
   {
     "name": "application-forms",
@@ -529,13 +529,15 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "programs",
           "distributors",
           "groups",
+          "ownPlacesOnly",
           "email",
           "status",
           "trackingId"
         ],
         "types": {
           "fullName": "string|null",
-          "nickname": "string"
+          "nickname": "string",
+          "ownPlacesOnly": "boolean|null"
         },
         "required": [
           "nickname",
@@ -553,6 +555,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "programs",
           "distributors",
           "groups",
+          "ownPlacesOnly",
           "email",
           "status",
           "trackingId",
@@ -560,7 +563,8 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "fullName": "string",
-          "nickname": "string"
+          "nickname": "string",
+          "ownPlacesOnly": "boolean|null"
         }
       },
       "delete": {
@@ -1238,6 +1242,73 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
     }
   },
   {
+    "name": "enroller-conflicts",
+    "ops": {
+      "list": {
+        "method": "GET",
+        "path": "/enroller-conflicts",
+        "query": [
+          "triggerId",
+          "id",
+          "ids",
+          "addProgramIds",
+          "addDistributorIds",
+          "addGroupIds",
+          "removeProgramIds",
+          "removeDistributorIds",
+          "removeGroupIds"
+        ],
+        "filters": [
+          {
+            "name": "triggerId",
+            "type": "string"
+          },
+          {
+            "name": "id",
+            "type": "integer"
+          },
+          {
+            "name": "ids",
+            "type": "string"
+          },
+          {
+            "name": "addProgramIds",
+            "type": "string"
+          },
+          {
+            "name": "addDistributorIds",
+            "type": "string"
+          },
+          {
+            "name": "addGroupIds",
+            "type": "string"
+          },
+          {
+            "name": "removeProgramIds",
+            "type": "string"
+          },
+          {
+            "name": "removeDistributorIds",
+            "type": "string"
+          },
+          {
+            "name": "removeGroupIds",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "enroller-loops",
+    "ops": {
+      "list": {
+        "method": "GET",
+        "path": "/enroller-loops"
+      }
+    }
+  },
+  {
     "name": "event-types",
     "ops": {
       "list": {
@@ -1587,6 +1658,7 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "status",
           "awardType",
           "payoutId",
+          "holdReason",
           "number",
           "from",
           "to",
@@ -1628,6 +1700,10 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           },
           {
             "name": "payoutId",
+            "type": "string"
+          },
+          {
+            "name": "holdReason",
             "type": "string"
           },
           {
@@ -2417,7 +2493,7 @@ export interface DeleteRoute {
   readonly param?: string;
 }
 
-/** Every DELETE route in openapi.json (40 routes). */
+/** Every DELETE route in openapi.json (42 routes). */
 export const DELETE_ROUTES: readonly DeleteRoute[] = [
   {
     "path": "/application-forms/{id}",
@@ -2478,6 +2554,10 @@ export const DELETE_ROUTES: readonly DeleteRoute[] = [
     "param": "propertyId"
   },
   {
+    "path": "/condition-sets/{id}",
+    "param": "id"
+  },
+  {
     "path": "/connect/webhook"
   },
   {
@@ -2505,6 +2585,10 @@ export const DELETE_ROUTES: readonly DeleteRoute[] = [
   },
   {
     "path": "/distributors/{id}",
+    "param": "id"
+  },
+  {
+    "path": "/enrollers/{id}",
     "param": "id"
   },
   {
