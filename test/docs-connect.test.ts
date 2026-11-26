@@ -4,7 +4,7 @@ import { specServes } from './spec-routes';
 
 /*
  * Slice 5 acceptance tests for packet P7: the reference docs describe the
- * connected-site surface. The README, the CHANGELOG's Unreleased section and
+ * connected-site surface. The README, the CHANGELOG's 0.4.0 section and
  * Siren's openapi.json are what a caller reads, so each new entry, class, method and
  * route must appear there.
  */
@@ -226,9 +226,9 @@ describe('P7: README', () => {
 });
 
 describe('P7: CHANGELOG', () => {
-  it('names every new entry, class, method and type under Unreleased', () => {
+  it('names every new entry, class, method and type under 0.4.0', () => {
     const changelog = read('CHANGELOG.md');
-    const start = changelog.indexOf('## [Unreleased]');
+    const start = changelog.indexOf('## [0.4.0]');
     const end = changelog.indexOf('\n## [', start + 1);
     const unreleased = changelog.slice(start, end < 0 ? undefined : end);
 

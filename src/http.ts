@@ -331,7 +331,7 @@ export class HttpTransport {
       url,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'siren-sdk-typescript/0.3.0',
+        'User-Agent': 'siren-sdk-typescript/0.4.0',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(fields),
@@ -519,7 +519,7 @@ export class HttpTransport {
     }
     headers.Authorization = `Bearer ${token}`;
     headers.Accept = 'application/json';
-    headers['User-Agent'] = 'siren-sdk-typescript/0.3.0';
+    headers['User-Agent'] = 'siren-sdk-typescript/0.4.0';
     if (body === undefined) return { method, url, headers, timeout };
     headers['Content-Type'] = 'application/json';
     return { method, url, headers, body, timeout };

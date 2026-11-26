@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli/run';
 import { HOOK_FRAMES } from '../src/cli/hook-frames';
+import { CLI_VERSION } from '../src/cli/version';
 import { ACCESS_1, EMAIL, REFRESH_1, harness, membershipAcme, membershipTwo, user } from './cli-fakes';
 import { reply } from './http-fakes';
 import { fakeScreen } from './cli-screen-fake';
@@ -42,7 +43,7 @@ describe('login screen: while it waits', () => {
     const { fake, code: exit } = await login([code(), approved()]);
     expect(exit).toBe(0);
     const first = strip(fake.writes.find((write) => write.includes(USER_CODE)) ?? '');
-    expect(first).toContain('Siren 0.3.0');
+    expect(first).toContain(`Siren ${CLI_VERSION}`);
     expect(first).toContain(`Code   ${USER_CODE}`);
     expect(first).toContain(`Link   ${LINK}`);
     expect(first).toContain('Waiting for approval');

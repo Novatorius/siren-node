@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /*
- * The README's configuration section and the CHANGELOG's Unreleased section
+ * The README's configuration section and the CHANGELOG's 0.4.0 section
  * are what a caller reads, so each of the bearer token, option and
  * own-property rules, the baseUrl character rule among them, must appear
  * in both.
@@ -51,8 +51,8 @@ describe('the docs describe the option and token rules', () => {
     expect(stated(section(read('README.md'), '## Configuration'), rule)).toBe(true);
   });
 
-  it.each(RULES)('the CHANGELOG Unreleased section states %s', (_name, rule) => {
-    expect(stated(section(read('CHANGELOG.md'), '## [Unreleased]'), rule)).toBe(true);
+  it.each(RULES)('the CHANGELOG 0.4.0 section states %s', (_name, rule) => {
+    expect(stated(section(read('CHANGELOG.md'), '## [0.4.0] - 2026-11-18'), rule)).toBe(true);
   });
 
   it('the README retries section states the most sends a call makes and how long it can take', () => {

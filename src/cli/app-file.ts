@@ -191,7 +191,7 @@ export function declarationFor(file: AppFile): { key: string; params: DeclareApp
  * any folder, with the tool installed globally, locally or run through npx.
  * Keep the version in step with package.json, as `CLI_VERSION` is.
  */
-export const APP_FILE_SCHEMA_PATH = 'https://unpkg.com/@novatorius/siren@0.3.0/siren.app.schema.json';
+export const APP_FILE_SCHEMA_PATH = 'https://unpkg.com/@novatorius/siren@0.4.0/siren.app.schema.json';
 
 /**
  * The text `apps init` writes: a file that passes {@link parseAppFile} once

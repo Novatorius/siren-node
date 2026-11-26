@@ -5,7 +5,7 @@ import { specServes } from './spec-routes';
 /*
  * Slice 2 acceptance tests for packet P8: the reference docs describe the
  * slice's public surface. The README's configuration section, the CHANGELOG's
- * Unreleased section and Siren's openapi.json are what a caller reads, so each new
+ * 0.4.0 section and Siren's openapi.json are what a caller reads, so each new
  * option, class and route must appear there, and no sentence may still say
  * every 401 is sent once.
  */
@@ -65,9 +65,9 @@ describe('P8: README configuration', () => {
 });
 
 describe('P8: CHANGELOG', () => {
-  it('names every new option, class and method under Unreleased', () => {
+  it('names every new option, class and method under 0.4.0', () => {
     const changelog = read('CHANGELOG.md');
-    const start = changelog.indexOf('## [Unreleased]');
+    const start = changelog.indexOf('## [0.4.0]');
     const end = changelog.indexOf('\n## [', start + 1);
     const unreleased = changelog.slice(start, end < 0 ? undefined : end);
 

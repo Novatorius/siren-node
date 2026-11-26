@@ -115,7 +115,7 @@ describe('P4: HttpTransport sends through the HttpClient seam', () => {
     expect(request.url).toBe(`${BASE_URL}/conversions?status=approved&number=5&offset=5`);
     expect(request.headers.Authorization).toBe('Bearer tok-1');
     expect(request.headers.Accept).toBe('application/json');
-    expect(request.headers['User-Agent']).toBe('siren-sdk-typescript/0.3.0');
+    expect(request.headers['User-Agent']).toBe('siren-sdk-typescript/0.4.0');
     expect(request.body).toBeUndefined();
     expect(request.timeout).toBe(1234);
   });
