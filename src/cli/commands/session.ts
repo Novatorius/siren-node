@@ -366,7 +366,8 @@ export async function whoami(input: CommandInput): Promise<number> {
     ['Org', `${clean(session.orgName)} (${session.orgSlug ? clean(session.orgSlug) : session.orgId}) · ${clean(session.role)}`],
     ...(others.length > 0 ? [['Also in', others.join(', ')] as const] : []),
     ['Siren', sirenRow(out, run.target.baseUrl, edition)],
-    ['Session', run.store.path],
+    // Review round 1, C27: in a terminal, ~ stands for the home folder, so the path fits the line.
+    ['Session', out.rich ? homeShort(run.store.path, input.io.env.HOME) : run.store.path],
   ];
   run.print(out.report({ headline: `Logged in as ${out.bold(clean(session.email))}`, rows }).replace(/\n$/, ''));
   return 0;
@@ -508,4 +509,11 @@ function messageOf(error: unknown): string {
 /** The Siren as a person reads it: its host and edition, with live in amber, since live is the one that makes a change risky. */
 function sirenRow(out: Style, baseUrl: string, edition: string): string {
   return `${new URL(baseUrl).host} · ${edition === 'live' ? out.amber('live') : 'sandbox'}`;
+}
+
+/** `path` with the home folder written as `~`, as a shell prints it, or `path` when it lies elsewhere. */
+function homeShort(path: string, home: string | undefined): string {
+  if (home === undefined || home === '' || home === '/') return path;
+  const base = home.replace(/\/+$/, '');
+  return path === base || path.startsWith(`${base}/`) ? `~${path.slice(base.length)}` : path;
 }

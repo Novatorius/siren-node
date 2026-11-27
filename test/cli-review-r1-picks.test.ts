@@ -64,3 +64,31 @@ describe('review round 1, C3: apply names only the features nothing picks', () =
     expect(said).not.toContain('picks notify-crm');
   });
 });
+
+describe('review round 1, C24: bare siren fits its next steps to the folder', () => {
+  it('offers diff and apply, not init, in a folder that holds siren.app.json', async () => {
+    const h = harness([]);
+    h.signedIn();
+    h.write('siren.app.json', '{}');
+    expect(await h.run([])).toBe(0);
+    expect(h.out()).toContain('siren apps diff');
+    expect(h.out()).not.toContain('siren apps init');
+  });
+
+  it('offers init in a folder without one', async () => {
+    const h = harness([]);
+    h.signedIn();
+    expect(await h.run([])).toBe(0);
+    expect(h.out()).toContain('siren apps init');
+  });
+});
+
+describe('review round 1, C27: a path longer than the line', () => {
+  it('breaks after a slash, keeps every character, and fits the width', async () => {
+    const { hanging } = await import('../src/cli/style');
+    const path = '/tmp/a-very-long-folder-name/that-keeps-going/and-going/until-it-is-wider/than-eighty/siren/credentials.json';
+    const text = hanging('  Session   ', path, '            ', 80);
+    for (const line of text.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80);
+    expect(text.split('\n').map((line) => line.trim()).join('').replace(/^Session\s*/, '')).toBe(path);
+  });
+});
