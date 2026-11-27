@@ -6,7 +6,7 @@ import type { HttpTransport } from '../../http';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { orgScope } from '../org';
-import { day } from '../record-view';
+import { day, zoneName } from '../record-view';
 import { clean, styleFor } from '../style';
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
@@ -214,10 +214,11 @@ export async function conditionSetsList(input: CommandInput): Promise<number> {
       clean(String(set.id ?? '')),
       clean(String(set.name ?? '')),
       `${count} ${count === 1 ? 'condition' : 'conditions'}`,
-      [typeof set.lastCheckedAt === 'string' ? `checked ${day(set.lastCheckedAt, zone)}` : 'not checked yet', ...(set.archivedAt ? ['archived'] : [])].join('  '),
+      [typeof set.lastCheckedAt === 'string' ? day(set.lastCheckedAt, zone) : 'not yet', ...(set.archivedAt ? ['archived'] : [])].join('  '),
     ];
   });
-  for (const line of columns(rows)) run.print(out.fold(line));
+  // A header row names each column, as every other list's does (review round 1, C28).
+  for (const line of out.table(['ID', 'NAME', 'CONDITIONS', `LAST CHECKED (${zoneName(zone)})`], rows, out.rich ? out.width : Number.POSITIVE_INFINITY)) run.print(line);
   printNext(input, out, [`condition-sets matches ${clean(String(sets[0]!.id))}`]);
   return 0;
 }

@@ -99,3 +99,27 @@ describe('a list and a raw get of its route ask the same way (C26)', () => {
     expect(asked(h).get('orderBy')).toBeNull();
   });
 });
+
+describe('list headers and paging (C28)', () => {
+  it('pages applications by perPage and page, with its status and form filters', async () => {
+    const h = signedIn([reply(200, { items: [{ id: 4, status: 'waiting' }], total: 1, waiting: 1 })]);
+    expect(await h.run(['applications', 'list', '--limit', '5', '--offset', '10', '--status', 'approved', '--form-id', '2']), h.err()).toBe(0);
+    expect(Object.fromEntries(asked(h))).toEqual({ perPage: '5', page: '3', status: 'approved', formId: '2' });
+  });
+
+  it('refuses an application status Siren does not take, and a page larger than Siren sends', async () => {
+    const h = signedIn([]);
+    expect(await h.run(['applications', 'list', '--status', 'pending'])).toBe(2);
+    expect(h.err()).toContain('--status takes waiting, approved, declined or all');
+    expect(await h.run(['applications', 'list', '--limit', '500'])).toBe(2);
+    expect(h.err()).toContain('--limit takes 100 or fewer here');
+    expect(h.http.requests).toHaveLength(0);
+  });
+
+  it('prints a header row over the condition sets', async () => {
+    const h = signedIn([reply(200, [{ id: 1, name: 'New this month', conditions: [{}, {}], lastCheckedAt: AT }])]);
+    expect(await h.run(['condition-sets', 'list']), h.err()).toBe(0);
+    expect(h.out().split('\n')[0]).toBe('ID  NAME            CONDITIONS    LAST CHECKED (UTC)');
+    expect(h.out()).toContain('2 conditions');
+  });
+});

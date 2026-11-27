@@ -122,7 +122,8 @@ function shownValues(filter: Filter): string[] {
  * so a wrong word is refused before anything is sent (review round 1, C11).
  */
 function filtersOf(route: ResourceRoute, resource?: ResourceCommand): Array<{ filter: Filter; flag: string; aliases?: Readonly<Record<string, string>>; note?: string }> {
-  return (route.filters ?? [])
+  const extra = resource !== undefined && resource.ops.list === route ? (PAGED_BY_PAGE[resource.name]?.filters ?? []) : [];
+  return [...(route.filters ?? []), ...extra]
     .map((given) => {
       const words = given.name === 'status' && given.values === undefined && resource !== undefined ? READ_STATUSES[resource.name] : undefined;
       const filter: Filter = words === undefined ? given : { ...given, values: [...words.values, ...Object.keys(words.aliases ?? {})] };
@@ -143,6 +144,37 @@ function filterHelp(filter: Filter, flag: string, note?: string): readonly [stri
 /** "a, b or c". */
 function orList(values: readonly string[]): string {
   return values.length < 2 ? values.join('') : `${values.slice(0, -1).join(', ')} or ${values.at(-1)}`;
+}
+
+/**
+ * The lists Siren pages by `page` and `perPage` in place of `offset` and
+ * `number`, with the filters openapi.json leaves out, from the route's
+ * controller. GET /applications (ListApplications) takes status, formId,
+ * page and perPage, at most 100 a page, so --limit sends perPage
+ * (review round 1, C28).
+ */
+const PAGED_BY_PAGE: Readonly<Record<string, { most: number; filters: readonly Filter[] }>> = {
+  applications: {
+    most: 100,
+    filters: [
+      { name: 'status', type: 'string', values: ['waiting', 'approved', 'declined', 'all'] },
+      { name: 'formId', type: 'integer' },
+    ],
+  },
+};
+
+/**
+ * A query that pages by `page` and `perPage`, from the `number` and
+ * `offset` --limit and --offset set, or `CliUsageError` for an offset that
+ * starts no page.
+ */
+function byPage(query: Record<string, string>, most: number): Record<string, string> {
+  const { number, offset, ...rest } = query;
+  const perPage = number === undefined ? undefined : Number(number);
+  if (perPage !== undefined && perPage > most) throw new CliUsageError(`--limit takes ${most} or fewer here, since Siren sends at most ${most} a page, and got ${perPage}.`);
+  const size = perPage ?? 25;
+  if (offset !== undefined && Number(offset) % size !== 0) throw new CliUsageError(`--offset takes a multiple of --limit here (${size}), since Siren pages this list by page, and got ${offset}.`);
+  return { ...rest, ...(perPage === undefined ? {} : { perPage: String(perPage) }), ...(offset === undefined || Number(offset) === 0 ? {} : { page: String(Number(offset) / size + 1) }) };
 }
 
 /** The query parameters the filter flags send, each value checked against its type, or `CliUsageError`. */
@@ -290,7 +322,7 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
   }
 
   const takesId = route.param !== undefined;
-  const shaped = optionsFor(route.method, op === 'list' && route.paginated === true);
+  const shaped = optionsFor(route.method, op === 'list' && (route.paginated === true || PAGED_BY_PAGE[resource.name] !== undefined));
   // A list's query parameters are flags of their own (lean output, section 5).
   const filters = op === 'list' ? filtersOf(route, resource) : [];
   const options: Options = { ...shaped.options, ...Object.fromEntries(filters.map(({ flag }) => [flag, { type: 'string' as const }])) };
@@ -513,7 +545,9 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
     Object.assign(base, listDefaults(input, resource, route, base, fields));
   }
   if (route.method !== 'GET' && route.method !== 'DELETE') checkFieldValues(input, resource, route, `${resource.name} ${op}`);
-  const outgoing = await outgoingOf(input, route.method, path, base, route.types);
+  const sent = await outgoingOf(input, route.method, path, base, route.types);
+  const paged = op === 'list' ? PAGED_BY_PAGE[resource.name] : undefined;
+  const outgoing = paged === undefined ? sent : { ...sent, query: byPage(sent.query, paged.most) };
   return send(input, {
     outgoing,
     ...(op === 'list' && input.values.ids === true ? { ids: true } : {}),
@@ -770,7 +804,8 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
   try {
     let { status, body } = await request(outgoing.query);
     if (plan.all && outgoing.method === 'GET' && isEnvelope(body)) {
-      body = await allPages(body, outgoing.query, async (query) => (await request(query)).body);
+      const paged = plan.resource === undefined ? undefined : PAGED_BY_PAGE[plan.resource.name];
+      body = await allPages(body, outgoing.query, async (query) => (await request(paged === undefined ? query : byPage(query, paged.most))).body);
     }
     // Amounts beside a currency print as money, read with the organization's currencies. --json and --ids keep Siren's integers.
     const shown = !plan.json && !plan.ids && holdsMoney(body) ? withMoney(body, await currenciesFor(input.io.configDir, `${run.target.baseUrl} ${run.current().orgId}`, input.io.now(), async () => parseJsonBody(await transport.request({ method: 'GET', path: '/registries/currencies', retriable: true })))) : body;
