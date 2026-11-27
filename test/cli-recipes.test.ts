@@ -261,6 +261,31 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
     expect(JSON.parse(h.out().slice(before))).toEqual(RECIPE);
   });
 
+  it('prints each recipe as its key over its name and description when 80 columns leave no room for the table (review round 1, C8)', async () => {
+    const catalog = {
+      success: true,
+      recipes: [
+        { id: 542, title: 'Introduce and Close Affiliate Program', slug: 'introduce-and-close-affiliate-program', description: 'A dual-attribution affiliate program that pays two stacking commissions on one sale.', fits: true, payload: '{}' },
+        { id: 543, title: 'Sales Override Commission Program', slug: 'tiered-sales-override-program', description: 'Launch a sales commission plan that pays each rep a percentage on the deals they close.', fits: true, payload: '{}' },
+      ],
+      store: { integrations: [], capabilities: [] },
+    };
+    const h = harness([reply(200, catalog)]);
+    h.signedIn();
+    expect(await runCli(['recipes', 'catalog'], tty(h))).toBe(0);
+    const lines = h.out().replace(/\u001b\[[\d;]*m/g, '').split('\n');
+    expect(lines.slice(0, 7)).toEqual([
+      'introduce-and-close-affiliate-program',
+      '  Introduce and Close Affiliate Program. A dual-attribution affiliate program',
+      '  that pays two stacking commissions on one sale.',
+      '',
+      'tiered-sales-override-program',
+      '  Sales Override Commission Program. Launch a sales commission plan that pays',
+      '  each rep a percentage on the deals they close.',
+    ]);
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(80);
+  });
+
   it('namesEntry matches an id as text or a number, or a slug, and firstSentence keeps one sentence', () => {
     expect(namesEntry({ id: 542, fits: true }, '542')).toBe(true);
     expect(namesEntry({ id: 'gold', fits: true }, 'GOLD')).toBe(true);
