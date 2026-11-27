@@ -60,31 +60,42 @@ describe("the map of record pages in Siren's app", () => {
     expect(recordTypeOf('webhook')).toBeUndefined();
   });
 
-  it("finds Siren's app beside its API, with api. read as app., and SIREN_APP_URL wins", () => {
+  it("finds Siren's app beside its API, with api. read as app., and SIREN_DASHBOARD_URL wins, never the app's own SIREN_APP_URL", () => {
     expect(appOrigin('https://api.sirenaffiliates.com/siren/v1', {})).toBe('https://app.sirenaffiliates.com');
     expect(appOrigin(SANDBOX_BASE_URL, {})).toBe(APP);
     expect(appOrigin('https://siren-pr-1254-cloud.tunnel.novatori.us/siren/v1', {})).toBe('https://siren-pr-1254-cloud.tunnel.novatori.us');
-    expect(appOrigin('https://api.example.com/siren/v1', { SIREN_APP_URL: 'https://dash.example.com/' })).toBe('https://dash.example.com');
+    expect(appOrigin('https://api.example.com/siren/v1', { SIREN_DASHBOARD_URL: 'https://dash.example.com/' })).toBe('https://dash.example.com');
+    // Review round 1: SIREN_APP_URL is the handler's address in siren.app.json, so a link never goes there.
+    expect(appOrigin('https://api.example.com/siren/v1', { SIREN_APP_URL: 'https://acme.example/siren' })).toBe('https://app.example.com');
     expect(recordLink(SANDBOX_BASE_URL, {}, 'acme two', 'program', 4)).toBe(`${APP}/programs/4/view?org=acme%20two`);
   });
 });
 
 describe('siren open', () => {
-  it('prints the page and opens nothing through a pipe', async () => {
-    const h = signedIn([]);
-    expect(await h.run(['open', 'collaborator', '208']), h.err()).toBe(0);
+  it('reads the record, prints its page, and opens nothing without --browser, even in a terminal (review round 1, C17)', async () => {
+    const h = signedIn([reply(200, { id: 208, fullName: 'Ana' })]);
+    expect(await runCli(['open', 'collaborator', '208'], { ...h.io, stdoutTty: true }), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['GET /collaborators/208']);
     expect(h.out()).toBe(`${APP}/collaborators/208/view?org=uat-org\n`);
     expect(h.opened).toEqual([]);
-    expect(h.paths()).toEqual([]);
   });
 
-  it('opens the page in the browser when standard output is a terminal, and says so', async () => {
-    const h = signedIn([]);
-    expect(await runCli(['open', 'conversion:5640'], { ...h.io, stdoutTty: true }), h.err()).toBe(0);
+  it('stops with one line and exit 1 for a record Siren does not hold, and prints no page (review round 1, C17)', async () => {
+    const h = signedIn([reply(404, { error: { message: 'Not found.', context: [] } })]);
+    expect(await h.run(['open', 'conversion', '999999'])).toBe(1);
+    expect(h.out()).toBe('');
+    expect(h.err()).toContain('Siren has no conversion 999999 in uat-org.');
+    expect(h.err()).toContain('siren conversions list');
+    expect(h.opened).toEqual([]);
+  });
+
+  it('opens the page in the browser with --browser, and says so', async () => {
+    const h = signedIn([reply(200, { id: 5640 })]);
+    expect(await runCli(['open', 'conversion:5640', '--browser'], { ...h.io, stdoutTty: true }), h.err()).toBe(0);
     expect(h.opened).toEqual([`${APP}/conversions/5640?org=uat-org`]);
     expect(h.err()).toContain('Opened it in your browser.');
-    const none = signedIn([], { opens: false });
-    expect(await runCli(['open', 'program', '4'], { ...none.io, stdoutTty: true }), none.err()).toBe(0);
+    const none = signedIn([reply(200, { id: 4 })], { opens: false });
+    expect(await runCli(['open', 'program', '4', '--browser'], { ...none.io, stdoutTty: true }), none.err()).toBe(0);
     expect(none.err()).toContain("Couldn't start a browser here");
   });
 
@@ -105,7 +116,15 @@ describe('siren open', () => {
     expect(h.err()).toContain('It takes collaborator, program');
     expect(await h.run(['open', 'collaborator'])).toBe(2);
     expect(await h.run(['open', 'collaborator', '../1'])).toBe(2);
+    expect(await h.run(['open', 'event', '4'])).toBe(2);
     expect(h.paths()).toEqual([]);
+  });
+
+  it('names no type list in its help', async () => {
+    const h = harness([]);
+    await h.run(['open', '--help']);
+    expect(h.out()).not.toContain('condition_set');
+    expect(h.out()).toContain('--browser');
   });
 });
 

@@ -42,8 +42,11 @@ export const LIST_PAGES: Readonly<Record<string, string>> = {
 /** Other words a person types for a type, such as `sale` for a transaction. */
 const ALIASES: Readonly<Record<string, string>> = { sale: 'transaction', reward: 'obligation' };
 
-/** Every type `siren open` takes, in the order its help names them. */
-export const OPEN_TYPES: readonly string[] = [...Object.keys(RECORD_PAGES), 'payout', 'application'];
+/**
+ * Every type `siren open` takes. An event is left out: Siren has no route
+ * that reads one, so open couldn't check that it exists.
+ */
+export const OPEN_TYPES: readonly string[] = [...Object.keys(RECORD_PAGES).filter((type) => type !== 'event'), 'payout', 'application'];
 
 /**
  * The record type a word names, or undefined: `collaborator`, the resource
@@ -85,14 +88,15 @@ export function recordPath(type: string, id: string | number, options: { fulfill
 }
 
 /**
- * Siren's app address for an API address: `SIREN_APP_URL` when set, else
+ * Siren's app address for an API address: `SIREN_DASHBOARD_URL` when set, else
  * the API's own origin, with `api.` in front of the host read as `app.`,
  * since Siren Cloud serves its API on api.sirenaffiliates.com and its app
  * on app.sirenaffiliates.com. The sandbox and the previews serve both on one
  * host.
  */
 export function appOrigin(baseUrl: string, env: Readonly<Record<string, string | undefined>>): string {
-  const set = env.SIREN_APP_URL?.trim();
+  // Not SIREN_APP_URL, which names the app's handler in siren.app.json (review round 1).
+  const set = env.SIREN_DASHBOARD_URL?.trim();
   if (set !== undefined && set !== '') return set.replace(/\/+$/, '');
   const url = new URL(baseUrl);
   if (url.hostname.startsWith('api.')) url.hostname = `app.${url.hostname.slice(4)}`;

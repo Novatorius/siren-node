@@ -2270,7 +2270,7 @@ These two read and change nothing, so a live organization needs no `--live`.
 | Command | What it does |
 | --- | --- |
 | `siren explain <type> <id>` | Says why a sale, conversion or reward paid what it did, in order: the engagement that won it, each conversion, and each reward with where it stands. A draft reward waits for its conversion to be approved, an approved one is owed, one in a payout is paid only once the payout is marked paid, and the summary says which. `--chain` shows the whole chain, from the opportunity, the sale and every engagement that competed for it, with Siren's reason when one lost, to the payout and its fulfillment. The types are `transaction` (or `sale`), `conversion`, `obligation` (or `reward`) and `engagement`. `--json` prints the summary, the state, the amounts by where they stand, and each step with its page. |
-| `siren open <type> <id>` | Prints the record's page in Siren's app, and opens it in the browser when standard output is a terminal. A payout opens on the fulfillment that holds it, since the app has no payout page, and an application opens on the applications list. |
+| `siren open <type> <id>` | Reads the record, then prints its page in Siren's app. A record Siren doesn't hold stops with one line, exit 1, and the list command to run. `--browser` opens the page too. A payout prints the fulfillment that holds it, since the app has no payout page, and an application prints the applications list. |
 
 `siren explain` reads `GET /notes/chain`, the read behind the record flow graph
 in Siren's app, and a Siren without that route gets a refusal that says so.
@@ -2279,8 +2279,9 @@ Every page address comes from one map of record type to page, checked against th
 Cloud app, and ends with `?org=<slug>`, so the app opens in the organization the command used. A
 record view, such as `siren collaborators get 1`, ends with the same address, and its `--json` holds
 it as `url`. The app's address is the API's own host, with `api.` read as `app.`, so
-`api.sirenaffiliates.com` links to `app.sirenaffiliates.com`. Set `SIREN_APP_URL` when your app
-lives elsewhere.
+`api.sirenaffiliates.com` links to `app.sirenaffiliates.com`. Set `SIREN_DASHBOARD_URL` when Siren's
+app lives elsewhere. `SIREN_APP_URL` is your own app's address in siren.app.json, so links never read
+it.
 
 ### Condition sets and enrollers
 
