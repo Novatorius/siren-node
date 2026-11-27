@@ -1044,7 +1044,7 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
     return new CliRefusal(`Siren has no route at ${method} ${path}.`, {
       why,
       fix: input.command('resources'),
-      fixWords: 'lists the records this tool reads and writes',
+      fixWords: 'to see the records this tool reads and writes',
       detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
     });
   }

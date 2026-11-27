@@ -99,7 +99,7 @@ const HEADER_WORDS: Readonly<Record<string, string>> = {
   collaboratorName: 'collaborator',
   programName: 'program',
   distributorName: 'distributor',
-  totalValue: 'total',
+  totalValue: 'amount',
   obligationAwardType: 'unit',
   awardType: 'unit',
   units: 'unit',

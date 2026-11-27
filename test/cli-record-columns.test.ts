@@ -22,7 +22,7 @@ describe('default columns (C13)', () => {
     const h = signedIn([reply(200, envelope([{ id: 9, status: 'complete', totalValue: 4200, currency: 'USD', dateCreated: AT }])), reply(404, { message: 'Not found.' })]);
     expect(await h.run(['transactions', 'list']), h.err()).toBe(0);
     expect(asked(h).get('fields')?.split(',')).toEqual(expect.arrayContaining(['totalValue', 'currency']));
-    expect(h.out().split('\n')[0]).toBe('ID  STATUS    TOTAL  CURRENCY  CREATED (UTC)');
+    expect(h.out().split('\n')[0]).toBe('ID  STATUS    AMOUNT  CURRENCY  CREATED (UTC)');
     expect(h.out()).toMatch(/^9 +complete +4200 +USD +Mar 2, 2025$/m);
   });
 
