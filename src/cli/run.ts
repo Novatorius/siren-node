@@ -834,7 +834,7 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   explain: {
     usage: 'explain <type> <id> [--chain]',
-    summary: "Say why a sale, conversion or reward paid what it did, in order: who won it, each conversion and each reward and where it stands, from a draft to paid. --chain shows the whole chain, from the sale and every engagement that competed for it to the payout. The types are transaction (or sale), conversion, obligation (or reward) and engagement.",
+    summary: "Say why a sale, conversion or reward paid what it did: who won it, the rule or rate behind each reward, each conversion and reward and where it stands, from a draft to paid, Siren's notes on the sale, and the app requests it caused, with their ids. --chain shows the whole chain, from the sale and every engagement that competed for it to the payout. Name a sale, conversion, reward or engagement and its id. A sale is a transaction and a reward an obligation, so those words work too.",
     group: 'Developer tools',
     short: 'Say why a sale paid what it did',
     options: { chain: { type: 'boolean' }, json: { type: 'boolean' } },

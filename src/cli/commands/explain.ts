@@ -11,6 +11,8 @@ import { clean, hanging, styleFor, wrapWords } from '../style';
 import { CliRefusal } from '../targets';
 import { gated } from './condition-sets';
 import { recordArgs } from './open';
+import { shortId } from './requests';
+import { kindName } from '../app-kinds';
 
 /*
  * `siren explain <type> <id>`: why a sale, a conversion or a reward paid
@@ -268,6 +270,142 @@ export function explain(chain: unknown, definitions: CurrencyDefinitions, link: 
   };
 }
 
+/** The words a person reads for a record type: a transaction is a sale and an obligation a reward, as the summary and the help say (review round 1, C27). */
+const SAID: Readonly<Record<string, string>> = { transaction: 'sale', obligation: 'reward' };
+const said = (type: string): string => SAID[type] ?? type;
+
+/** Money as --json gives it: the stored integer, its code, and the text the tool prints (review round 1, C4). */
+function moneyJson(amount: number, currency: string, definitions: CurrencyDefinitions): { amount: number; currency: string; formatted: string } {
+  return { amount, currency, formatted: money(amount, currency, definitions) };
+}
+
+/** The rule a program pays by, as a program read answers it: its incentive type and that type's settings. */
+export interface ExplainRule {
+  program: { id: number; name: string };
+  incentive: { id: string; name: string };
+  args: Record<string, unknown>;
+  text: string;
+}
+
+/** A request Siren sent an app about one of the sale's records. */
+export interface ExplainRequest {
+  id: string;
+  app: string | null;
+  feature: string;
+  kind: string;
+  status: string;
+  about: { type: string; id: string };
+}
+
+/** What explain reads beside the chain: the rules behind the amounts, Siren's notes on the sale, and the app requests the sale caused. */
+export interface ExplainExtras {
+  rules: ExplainRule[];
+  noted: Array<{ id: number; text: string }>;
+  /** Null when the requests could not be read, so no line claims none were sent. */
+  requests: ExplainRequest[] | null;
+}
+
+type Http = { request(request: { method: 'GET'; path: string; query?: Record<string, string>; retriable: boolean }): Promise<Response> };
+
+/** One GET as JSON, or undefined when it fails, so a missing part never hides the explanation. */
+async function readOrNothing(http: Http, path: string, query?: Record<string, string>): Promise<unknown> {
+  try {
+    return await parseJsonBody(await http.request({ method: 'GET', path, ...(query === undefined ? {} : { query }), retriable: true }));
+  } catch {
+    return undefined;
+  }
+}
+
+/** A setting as a number, from Siren's strings or numbers, or undefined. */
+const numberOf = (value: unknown): number | undefined => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? (Number.isFinite(Number(value)) ? Number(value) : undefined) : undefined);
+
+/**
+ * The rule a program pays by, in words. A percentage of the sale names the
+ * rate and works it out on the sale, so "18% of €109.00 is €19.62" shows
+ * why the reward is what it is. A fixed amount names the amount. Any other
+ * incentive names its type and settings, in Siren's words.
+ */
+export function ruleText(program: Row, sale: Explanation['sale'], definitions: CurrencyDefinitions): string {
+  const incentive = object(program.incentiveType) ?? {};
+  const args = object(program.incentiveTypeArgs) ?? {};
+  const name = `${text(program.name) || 'The program'} (program ${text(program.id)})`;
+  const units = typeof program.units === 'string' ? program.units : sale?.currency ?? null;
+  const percent = numberOf(args.transactionPercent);
+  if (percent !== undefined) {
+    const base = `${name} pays ${percent}% of each sale`;
+    if (sale === null || sale.amount === null || sale.currency === null) return `${base}.`;
+    const share = Math.round((sale.amount * percent) / 100);
+    return `${base}, and ${percent}% of ${money(sale.amount, sale.currency, definitions)} is ${money(share, sale.currency, definitions)}.`;
+  }
+  const fixed = Object.entries(args).find(([key]) => /^payoutPer/.test(key));
+  if (fixed !== undefined && numberOf(fixed[1]) !== undefined) {
+    const per = fixed[0].replace(/^payoutPer/, '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() || 'sale';
+    return `${name} pays ${money(numberOf(fixed[1]), units, definitions)} for each ${per === 'transaction' ? 'sale' : per}.`;
+  }
+  const settings = Object.entries(args)
+    .filter(([key]) => key !== 'activeConversionTypes' && key !== 'autoApprove')
+    .map(([key, value]) => `${clean(key)} ${clean(String(value))}`);
+  return `${name} pays by ${text(incentive.name) || text(incentive.id) || 'its incentive'}${settings.length === 0 ? '' : `, with ${settings.join(', ')}`}.`;
+}
+
+/**
+ * Reads what the chain leaves out (review round 1, the ruling on explain):
+ * each winning program, for the rule behind its reward; Siren's own notes
+ * on the sale, such as a distributor that left it out for its currency,
+ * which only siren activity showed before; and the organization's latest
+ * 100 app requests, kept to those about the sale, its conversions or its
+ * rewards. Each read that fails leaves its part out.
+ */
+async function extrasFor(http: Http, chain: unknown, explained: Explanation, definitions: CurrencyDefinitions): Promise<ExplainExtras> {
+  const answer = object(chain) ?? {};
+  const programs = new Map<string, Row>();
+  const about = new Set<string>();
+  for (const c of rows(answer.chains)) {
+    for (const t of rows(c.transactions)) about.add(`transaction ${text(t.id)}`);
+    for (const p of rows(c.paths)) {
+      const program = object(object(p.engagement)?.program);
+      if (text(p.state) === 'won' && program !== undefined && program.id != null) programs.set(String(program.id), program);
+      for (const v of rows(p.conversions)) about.add(`conversion ${text(v.id)}`);
+      for (const o of rows(p.obligations)) about.add(`obligation ${text(o.id)}`);
+    }
+  }
+  if (explained.sale !== null) about.add(`transaction ${explained.sale.id}`);
+  const saleId = explained.sale?.id;
+  const [read, notes, requests, apps] = await Promise.all([
+    Promise.all([...programs.keys()].slice(0, 5).map((id) => readOrNothing(http, `/programs/${id}`))),
+    saleId === undefined ? undefined : readOrNothing(http, '/notes', { sourceType: 'transaction', sourceId: String(saleId), number: '20', order: 'desc', fields: 'id,renderedContent,creationSource' }),
+    readOrNothing(http, '/apps/requests', { limit: '100' }),
+    readOrNothing(http, '/apps'),
+  ]);
+  const rules = read
+    .map(object)
+    .filter((program): program is Row => program !== undefined)
+    .map((program) => ({
+      program: { id: Number(program.id), name: text(program.name) },
+      incentive: { id: text(object(program.incentiveType)?.id), name: text(object(program.incentiveType)?.name) },
+      args: object(program.incentiveTypeArgs) ?? {},
+      text: ruleText(program, explained.sale, definitions),
+    }));
+  const noteRows = Array.isArray(notes) ? rows(notes) : rows(object(notes)?.items);
+  // Siren's notes from the sale itself, such as a distributor that left it out. The conversion and reward notes repeat the steps.
+  const noted = noteRows.filter((note) => note.creationSource === 'transaction' && typeof note.renderedContent === 'string' && note.renderedContent !== '').map((note) => ({ id: Number(note.id), text: clean(String(note.renderedContent)) }));
+  const appKeys = new Map(rows(Array.isArray(apps) ? apps : object(apps)?.items).map((app) => [String(app.id), text(app.key)]));
+  const listed = requests === undefined ? null : Array.isArray(requests) ? rows(requests) : rows(object(requests)?.items);
+  const found =
+    listed === null
+      ? null
+      : listed
+          .filter((request) => {
+            const subject = object(request.subject);
+            return subject !== undefined && about.has(`${text(subject.type)} ${text(subject.id)}`);
+          })
+          .map((request) => {
+            const subject = object(request.subject) ?? {};
+            return { id: text(request.id), app: appKeys.get(String(request.appId)) ?? null, feature: text(request.feature), kind: text(request.kind), status: text(request.status), about: { type: text(subject.type), id: text(subject.id) } };
+          });
+  return { rules, noted, requests: found };
+}
+
 const CHAIN = { name: 'sale chains', route: '/notes/chain' };
 
 /** `siren explain <type> <id> [--chain]`. */
@@ -287,18 +425,26 @@ export async function explainRecord(input: CommandInput): Promise<number> {
     }
     throw gated(error, CHAIN);
   }
-  const definitions =
-    values.json === true
-      ? undefined
-      : await currenciesFor(io.configDir, `${run.target.baseUrl} ${scope.orgId}`, io.now(), async () => parseJsonBody(await scope.http.request({ method: 'GET', path: '/registries/currencies', retriable: true })));
+  // --json reads them too, so its money carries the text the terminal shows (review round 1, C4).
+  const definitions = await currenciesFor(io.configDir, `${run.target.baseUrl} ${scope.orgId}`, io.now(), async () => parseJsonBody(await scope.http.request({ method: 'GET', path: '/registries/currencies', retriable: true }))).catch(() => undefined);
   const link = (recordType: string, recordId: unknown, extra: { fulfillmentId?: unknown } = {}) => recordLink(run.target.baseUrl, io.env, scope.orgSlug, recordType, String(recordId), extra);
   const explained = explain(chain, definitions, link, io.env.TZ);
   const wantsChain = values.chain === true;
   const steps = explained.steps.filter((one) => wantsChain || !one.chainOnly);
   const url = link(type, id);
+  const extras = await extrasFor(scope.http as unknown as Http, chain, explained, definitions);
 
   if (values.json === true) {
-    run.print(JSON.stringify({ record: { type, id: Number(id), url }, sale: explained.sale === null ? null : { ...explained.sale, url: link('transaction', explained.sale.id) }, state: explained.state, summary: explained.summary, earned: explained.earned, rewards: explained.rewards, capped: explained.capped, steps: steps.map(({ chainOnly: _chainOnly, ...rest }) => rest) }, null, 2));
+    const sums = (list: Array<{ amount: number; currency: string }>) => list.map((one) => moneyJson(one.amount, one.currency, definitions));
+    const sale = explained.sale === null ? null : { ...explained.sale, formatted: explained.sale.amount === null || explained.sale.currency === null ? null : money(explained.sale.amount, explained.sale.currency, definitions), url: link('transaction', explained.sale.id) };
+    const rewards = Object.fromEntries(Object.entries(explained.rewards).map(([state, list]) => [state, sums(list)]));
+    run.print(
+      JSON.stringify(
+        { record: { type, id: Number(id), url }, sale, state: explained.state, summary: explained.summary, earned: sums(explained.earned), rewards, rules: extras.rules, noted: extras.noted, requests: extras.requests, capped: explained.capped, steps: steps.map(({ chainOnly: _chainOnly, ...rest }) => rest) },
+        null,
+        2,
+      ),
+    );
     return 0;
   }
 
@@ -306,11 +452,14 @@ export async function explainRecord(input: CommandInput): Promise<number> {
   const err = styleFor(io, 'stderr', values);
   const s = explained.sale;
   const saleWords = s === null ? '' : `${s.name === null ? 'a sale' : clean(s.name)}, ${s.amount === null ? 'no amount' : money(s.amount, s.currency, definitions)}`;
-  const headline = s === null ? `${type} ${id}` : type === 'transaction' && String(s.id) === id ? `${type} ${id} · ${saleWords}` : `${type} ${id} · transaction ${s.id}, ${saleWords}`;
+  const headline = s === null ? `${said(type)} ${id}` : type === 'transaction' && String(s.id) === id ? `${said(type)} ${id} · ${saleWords}` : `${said(type)} ${id} · sale ${s.id}, ${saleWords}`;
   const width = out.width;
-  const lines = [out.bold(out.rich ? hanging('', headline, '  ', width) : headline), '', ...(out.rich ? wrapWords(explained.summary, width - 2).map((line) => `  ${line}`) : [`  ${explained.summary}`])];
+  const para = (words: string, indent = '  ') => (out.rich ? hanging(indent, words, indent, width).split('\n') : [`${indent}${words}`]);
+  const lines = [out.bold(out.rich ? hanging('', headline, '  ', width) : headline), '', ...para(explained.summary)];
+  // Review round 1: the rule or rate behind each reward.
+  for (const rule of extras.rules) lines.push(...para(rule.text));
   if (steps.length > 0) {
-    const labels = steps.map((one) => (one.type === null ? 'note' : `${one.type} ${one.id ?? ''}`.trim()));
+    const labels = steps.map((one) => (one.type === null ? 'note' : `${said(one.type)} ${one.id ?? ''}`.trim()));
     const labelWidth = Math.max(...labels.map((label) => label.length));
     const numberWidth = String(steps.length).length;
     lines.push('');
@@ -324,10 +473,28 @@ export async function explainRecord(input: CommandInput): Promise<number> {
       lines.push(`  ${String(at + 1).padStart(numberWidth)}  ${out.bold(labels[at]!.padEnd(labelWidth))}  ${first}`, ...rest.map((line) => `${' '.repeat(lead.length)}${line}`));
     }
   }
+  // Review round 1: Siren's notes on the sale, such as a distributor that left it out, which only siren activity showed before.
+  if (extras.noted.length > 0) {
+    lines.push('', out.bold('Siren noted on the sale'));
+    for (const note of extras.noted) lines.push(...para(note.text));
+  }
+  // Review round 1: the app requests the sale caused, with the ids siren apps requests takes.
+  if (extras.requests !== null) {
+    lines.push('', out.bold('Apps'));
+    if (extras.requests.length === 0) {
+      const pending = explained.steps.some((one) => one.type === 'conversion' && one.status === 'pending');
+      lines.push(...para(`Siren sent no app a request about this sale.${pending ? ' A post-conversion action waits until the conversion is approved.' : ''}`));
+    }
+    for (const request of extras.requests) {
+      const words = [request.app ?? `app ${request.feature}`, kindName(request.kind), request.status.replace(/_/g, ' '), `about ${said(request.about.type)} ${request.about.id}`].join(' · ');
+      lines.push(...para(`${out.dim(shortId(request.id))}  ${clean(words)}`));
+    }
+    if (extras.requests.length > 0) lines.push(...para(out.dim(`${run.command(`apps requests ${shortId(extras.requests[0]!.id)}`)} shows one.`)));
+  }
   lines.push('', url);
   run.print(lines.join('\n'));
-  const tip = (words: string) => io.stderr(`${err.rich ? err.dim(words) : words}\n`);
+  const tip = (words: string) => io.stderr(`${err.rich ? err.dim(hanging('', words, '', err.width)) : words}\n`);
   if (explained.capped) tip('Siren cut this chain short, since the sale had more engagements than it reads at once.');
-  if (!wantsChain && explained.steps.some((one) => one.chainOnly)) tip(`${run.command(`explain ${type} ${id} --chain`)} shows the whole chain, from the sale and every engagement that competed for it to the payout.`);
+  if (!wantsChain && explained.steps.some((one) => one.chainOnly)) tip(`${run.command(`explain ${said(type)} ${id} --chain`)} shows the whole chain, from the sale and every engagement that competed for it to the payout.`);
   return 0;
 }

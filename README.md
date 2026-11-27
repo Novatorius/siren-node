@@ -2269,11 +2269,13 @@ These two read and change nothing, so a live organization needs no `--live`.
 
 | Command | What it does |
 | --- | --- |
-| `siren explain <type> <id>` | Says why a sale, conversion or reward paid what it did, in order: the engagement that won it, each conversion, and each reward with where it stands. A draft reward waits for its conversion to be approved, an approved one is owed, one in a payout is paid only once the payout is marked paid, and the summary says which. `--chain` shows the whole chain, from the opportunity, the sale and every engagement that competed for it, with Siren's reason when one lost, to the payout and its fulfillment. The types are `transaction` (or `sale`), `conversion`, `obligation` (or `reward`) and `engagement`. `--json` prints the summary, the state, the amounts by where they stand, and each step with its page. |
+| `siren explain <type> <id>` | Says why a sale, conversion or reward paid what it did: who won it, the rule or rate behind each reward, such as "EU Partner Program (program 16) pays 18% of each sale, and 18% of €109.00 EUR is €19.62 EUR", each conversion and reward and where it stands, from a draft to paid, Siren's notes on the sale, such as a distributor that left it out for its currency, and the app requests the sale caused, each with the id `siren apps requests` takes. A reward is paid only once it sits in a payout marked paid. `--chain` shows every engagement that competed for the sale and the payouts. `--json` gives each amount as `{ amount, currency, formatted }`, such as `{ "amount": 1962, "currency": "EUR", "formatted": "€19.62 EUR" }`, with `rules`, `noted` and `requests`. A part whose read fails is left out, and `requests` is null then. |
 | `siren open <type> <id>` | Reads the record, then prints its page in Siren's app. A record Siren doesn't hold stops with one line, exit 1, and the list command to run. `--browser` opens the page too. A payout prints the fulfillment that holds it, since the app has no payout page, and an application prints the applications list. |
 
 `siren explain` reads `GET /notes/chain`, the read behind the record flow graph
-in Siren's app, and a Siren without that route gets a refusal that says so.
+in Siren's app, and a Siren without that route gets a refusal that says so. It also reads each
+winning program, the sale's notes, the organization's latest 100 app requests and its apps, so a
+request older than those hundred is left out.
 
 Every page address comes from one map of record type to page, checked against the routes of Siren's
 Cloud app, and ends with `?org=<slug>`, so the app opens in the organization the command used. A
