@@ -137,7 +137,7 @@ export function formatMoney(amount: number | string | null | undefined, code?: s
 /** A stored amount as the tool prints it: Siren's drawing, with a money currency's code after, as `$18.40 USD`. Undefined when it can't be read. */
 export function moneyText(amount: unknown, code: string | null | undefined, definitions: CurrencyDefinitions): string | undefined {
   if (typeof amount !== 'number' && typeof amount !== 'string') return undefined;
-  const definition = resolveCurrencyDefinition(code, definitions);
+  const definition = resolveCurrencyDefinition(code, definitions) ?? isoDefinition(code);
   if (definition === undefined || amount === '' || !Number.isFinite(Number(amount))) return undefined;
   const text = formatWithDefinition(Number(amount), definition);
   return definition.type === 'internal' || text.includes(definition.code) ? text : `${text} ${definition.code}`;
@@ -180,7 +180,7 @@ export function holdsMoney(value: unknown): boolean {
 
 /** The answer with each amount beside a currency drawn as money, at any depth. Amounts it can't read stay as they are. */
 export function withMoney<T>(value: T, definitions: CurrencyDefinitions): T {
-  if (definitions === undefined || definitions === null || definitions.length === 0) return value;
+  // With no registry, an ISO currency still prints as money (review round 1, C4). Only a ledger unit stays as stored.
   if (Array.isArray(value)) return value.map((member) => withMoney(member, definitions)) as T;
   if (!isObject(value)) return value;
   const out: Record<string, unknown> = {};
@@ -240,4 +240,35 @@ export async function currenciesFor(configDir: string, org: string, now: number,
     // Keeping them saves a request next time. Failing to keep them must not fail the command.
   }
   return items;
+}
+
+/**
+ * A definition for an ISO 4217 code from the runtime's own currency data,
+ * for when Siren's registry can't be read or doesn't list the code. Siren
+ * stores money in the currency's minor unit, which is the ISO scale, so
+ * 1962 EUR still prints as €19.62 EUR and never as the bare integer (review
+ * round 1, C4). Undefined for a code that isn't ISO, such as points, which
+ * only Siren's registry can draw.
+ */
+export function isoDefinition(code: string | null | undefined): CurrencyDefinition | undefined {
+  if (typeof code !== 'string' || !/^[A-Z]{3}$/.test(code) || !isoCodes().has(code)) return undefined;
+  try {
+    const format = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' });
+    const scale = format.resolvedOptions().maximumFractionDigits ?? 2;
+    const symbol = format.formatToParts(0).find((part) => part.type === 'currency')?.value ?? code;
+    return { code, symbol: symbol === code ? '' : symbol, symbolPosition: 'before', scale, decimalPlaces: scale, type: 'monetary' };
+  } catch {
+    return undefined;
+  }
+}
+
+let ISO_CODES: ReadonlySet<string> | undefined;
+
+/** The ISO 4217 codes the runtime knows, read once. Intl formats any three letters, so a ledger unit such as PTS must not pass for money. */
+function isoCodes(): ReadonlySet<string> {
+  if (ISO_CODES === undefined) {
+    const supported = (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf;
+    ISO_CODES = new Set(typeof supported === 'function' ? supported('currency') : []);
+  }
+  return ISO_CODES;
 }
