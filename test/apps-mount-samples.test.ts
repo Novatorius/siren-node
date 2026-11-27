@@ -52,7 +52,17 @@ vi.mock('fastify', async (importOriginal) => {
     const listen = app.listen.bind(app);
     // The sample's port 3000 becomes a free port of 127.0.0.1.
     app.listen = async (options: object) => {
-      servers.push({ close: () => app.close() });
+      // Node 19 and later close idle keep-alive sockets on server.close(), and
+      // Fastify leaves that to them. Node 18 waits for the socket the global
+      // fetch keeps open, for the 72 seconds Fastify's Keep-Alive header
+      // offers, so the test closes the idle ones itself, as Node 19 would.
+      servers.push({
+        close: () => {
+          const closing = app.close();
+          app.server.closeIdleConnections();
+          return closing;
+        },
+      });
       const address = await listen({ ...options, port: 0, host: '127.0.0.1' });
       listening.push(async () => (app.server.address() as AddressInfo).port);
       return address;
