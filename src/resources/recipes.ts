@@ -127,8 +127,13 @@ export interface RecipeCatalogFilters {
 
 /** One ready-made recipe, with whether it fits this org and the recipe itself. */
 export interface RecipeCatalogEntry {
-  id?: string;
+  /** Beacon's id, a number in today's catalog, or a string. */
+  id?: string | number;
+  /** The recipe's name. Beacon's catalog names it `title`, and an older one `name`. */
+  title?: string;
   name?: string;
+  /** Its words for a link, such as `introduce-and-close-affiliate-program`. */
+  slug?: string;
   description?: string;
   fits: boolean;
   unmetRequirements?: string[];

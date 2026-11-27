@@ -704,13 +704,14 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   'recipes apply': {
     usage: 'recipes apply <file|-> [flags]',
-    summary: "Preview a recipe, ask, apply it, and follow the import to its end. Siren applies the same recipe once, so a retry never imports it twice, and --again applies it again as an update. Needs siren login: an API key can't apply recipes yet.",
+    summary: "Preview a recipe, ask, apply it, and follow the import to its end, then list each record it made by id. Siren applies the same recipe once, so a retry never imports it twice. Siren makes a recipe's programs, groups and distributors anew on each apply, so --again stops before it would copy one this organization has, unless --copy. Needs siren login: an API key can't apply recipes yet.",
     group: 'Recipes',
     short: 'Preview, ask, then apply a recipe',
     options: {
       yes: { type: 'boolean' },
       var: { type: 'string' },
       again: { type: 'boolean' },
+      copy: { type: 'boolean' },
       'configuration-only': { type: 'boolean' },
       paused: { type: 'boolean' },
       'no-wait': { type: 'boolean' },
@@ -719,7 +720,8 @@ const SPECS: Record<Command, CommandSpec> = {
     flags: {
       yes: YES_FLAG,
       var: ['--var <key=id,…>', 'The record each of its variables uses, by id'],
-      again: ['--again', 'Apply it again, as an update, though it was applied before'],
+      again: ['--again', 'Apply it again though it was applied before. Stops when that would copy a record here'],
+      copy: ['--copy', 'With --again, make the copies anyway'],
       'configuration-only': ['--configuration-only', 'Leave out the people, mappings and group members'],
       paused: ['--paused', 'Make every program and distributor inactive'],
       'no-wait': ['--no-wait', 'Print the import id and stop, without following it'],

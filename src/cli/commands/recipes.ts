@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { ConflictError, SirenError } from '../../errors';
 import { RecipesResource, recipeProblems } from '../../resources/recipes';
-import type { Recipe, RecipeCatalogFilters, RecipeImport, RecipePreview, RecipeProblem } from '../../resources/recipes';
+import type { Recipe, RecipeCatalogEntry, RecipeCatalogFilters, RecipeImport, RecipePreview, RecipeProblem } from '../../resources/recipes';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { REPORT_WIDTH, clean, styleFor } from '../style';
@@ -156,6 +156,10 @@ interface Copies {
   count: number;
   line: string;
   list: string;
+  /** The section's word for one record, such as `program`. */
+  one: string;
+  /** The ids of the records here that share a name with the recipe's, in the order found. */
+  ids: number[];
 }
 
 /**
@@ -174,16 +178,23 @@ async function copiesOf(run: CommandContext, recipe: Recipe): Promise<Copies[]> 
       .filter((name): name is string => typeof name === 'string' && name.trim() !== '')
       .map((name) => name.trim().toLowerCase());
     if (wanted.length === 0) continue;
-    const here = new Set<string>();
+    const here = new Map<string, number[]>();
     for (let page = 1; page <= COPY_CHECK_PAGES; page++) {
-      const rows = (await kind.read(run, page)) as unknown as Array<{ name?: unknown }>;
-      for (const row of rows) if (typeof row.name === 'string') here.add(row.name.trim().toLowerCase());
+      const rows = (await kind.read(run, page)) as unknown as Array<{ name?: unknown; id?: unknown }>;
+      for (const row of rows) {
+        if (typeof row.name !== 'string') continue;
+        const name = row.name.trim().toLowerCase();
+        here.set(name, [...(here.get(name) ?? []), ...(typeof row.id === 'number' ? [row.id] : [])]);
+      }
       if (rows.length < 200) break;
     }
-    const count = wanted.filter((name) => here.has(name)).length;
+    const matched = wanted.filter((name) => here.has(name));
+    const count = matched.length;
     if (count === 0) continue;
     found.push({
       count,
+      one: kind.one,
+      ids: matched.flatMap((name) => here.get(name) ?? []),
       list: kind.list,
       line: count === 1 ? `1 ${kind.one} here already has this name. Applying makes a copy.` : `${count} ${kind.many} here already have these names. Applying makes copies.`,
     });
@@ -286,8 +297,20 @@ export async function recipesApply(input: CommandInput): Promise<number> {
     run.print(JSON.stringify({ preview, applied: false }, null, 2));
     return 1;
   }
+  const copies = values.again === true || !json ? await copiesOf(run, read.recipe) : [];
+  // Siren makes a recipe's programs, groups and distributors anew on each apply, so --again can't update them in place. It stops before it copies one (review round 1, C9).
+  if (values.again === true && values.copy !== true && copies.length > 0) {
+    const first = copies[0]!;
+    const named = copies.map((copy) => `${copy.count} ${copy.count === 1 ? copy.one : `${copy.one}s`}${copy.ids.length > 0 ? ` (${copy.ids.join(', ')})` : ''}`).join(' and ');
+    throw new CliRefusal(`Applying ${read.shown} again would copy ${named} this organization has.`, {
+      why: "Siren makes a recipe's programs, groups and distributors anew on every apply, so it can't update them in place. Nothing was sent.",
+      fixLead: first.ids.length > 0 ? `Change the one here with ${run.command(`${first.list} update ${first.ids[0]} -d <field>=<value>`)}, or run` : 'Rename it in the recipe, or run',
+      fix: run.command(`recipes apply ${given} --again --copy${values.yes === true ? ' --yes' : ''}`),
+      fixWords: 'to make the copies anyway',
+    });
+  }
   if (!json) {
-    for (const copy of await copiesOf(run, read.recipe)) run.print(out.warning(copy.line));
+    for (const copy of copies) run.print(out.warning(copy.line));
     run.print(out.report({ headline: `${out.bold(read.shown)} would make ${preview.sections.some((section) => section.count > 0) ? 'these' : 'nothing'}.`, mark: false, rows: sectionRows(preview) }).replace(/\n$/, ''));
   }
   if (values.yes !== true) {
@@ -382,7 +405,7 @@ async function follow(run: CommandContext, input: CommandInput, started: RecipeI
 function printImport(run: CommandContext, input: CommandInput, job: RecipeImport, shown: string): void {
   const out = styleFor(input.io, 'stdout', input.values);
   const people = job.collaboratorSummary;
-  const rows: Array<[string, string]> = [['Import', job.jobId], ['Progress', progressLine(job)]];
+  const rows: Array<[string, string]> = [['Import', job.jobId], ['Progress', progressLine(job)], ...madeRows(job)];
   if (people.added + people.updated + people.skipped + people.failed > 0) {
     rows.push(['People', `${people.added} added, ${people.updated} updated, ${people.skipped} skipped, ${people.failed} failed${people.emailed > 0 ? `, ${people.emailed} emailed` : ''}`]);
   }
@@ -396,6 +419,39 @@ function printImport(run: CommandContext, input: CommandInput, job: RecipeImport
   run.print(text);
   if (job.errorMessage) run.print(out.warning(say(job.errorMessage)));
   if (failures.length > 10) run.print(out.dim(`${failures.length - 10} more failed. ${run.command(`recipes status ${job.jobId} --json`)} lists them all.`));
+}
+
+/** The words a made record's row uses, by the recipe section Siren names it under. */
+const MADE_WORDS: Readonly<Record<string, string>> = {
+  programs: 'Program',
+  programGroups: 'Program group',
+  distributors: 'Distributor',
+  collaboratorGroups: 'Group',
+  collaborators: 'Person',
+};
+
+/**
+ * A row for each record the import made, with its id and name, such as
+ * ["Made", "program 7 · CLI review program"], from the import's `created`
+ * map (review round 1, C9 and C18). People are left out past the first
+ * five, since a recipe may add hundreds, and the People row counts them.
+ */
+export function madeRows(job: Pick<RecipeImport, 'created'>): Array<[string, string]> {
+  const created = (job.created ?? {}) as Record<string, unknown>;
+  const lines: string[] = [];
+  for (const [section, word] of Object.entries(MADE_WORDS)) {
+    // Siren lists each as {key, id, name}. A map of key to id is read too.
+    const value = created[section];
+    const entries = Array.isArray(value) ? (value as unknown[]) : typeof value === 'object' && value !== null ? Object.entries(value).map(([key, id]) => ({ key, id })) : [];
+    const records = entries.filter((entry): entry is { id?: unknown; name?: unknown; key?: unknown } => typeof entry === 'object' && entry !== null);
+    const shown = section === 'collaborators' ? records.slice(0, 5) : records;
+    for (const record of shown) {
+      const name = say(record.name ?? record.key ?? '');
+      lines.push(`${word.toLowerCase()} ${say(record.id ?? '?')}${name === '' ? '' : ` · ${name}`}`);
+    }
+    if (shown.length < records.length) lines.push(`and ${records.length - shown.length} more ${records.length - shown.length === 1 ? 'person' : 'people'}`);
+  }
+  return lines.map((line, at) => [at === 0 ? 'Made' : '', line]);
 }
 
 /** `siren recipes status <jobId>`: one import, its progress per section and how the people went. */
@@ -526,15 +582,41 @@ export async function recipesCatalog(input: CommandInput): Promise<number> {
   }
   const out = styleFor(input.io, 'stdout', input.values);
   if (catalog.recipes.length === 0) {
-    run.print('No ready-made recipes match.');
+    hint(input, out, 'No ready-made recipes match.');
     return 0;
   }
-  const rows = catalog.recipes.map((entry) => [say(String(entry.id ?? '')), say(String(entry.name ?? '')), entry.fits ? 'yes' : entry.requiredPlan ? `needs ${say(entry.requiredPlan)}` : 'no']);
-  const width = out.rich ? Math.min(input.io.screen?.size?.columns ?? REPORT_WIDTH, REPORT_WIDTH) : Number.POSITIVE_INFINITY;
-  for (const line of out.table(['ID', 'NAME', 'FITS'], rows, width)) run.print(line);
-  const first = catalog.recipes.find((entry) => typeof entry.id === 'string');
-  if (first !== undefined) hint(input, out, out.next(`${out.command(run.command(`recipes show ${say(String(first.id))} > recipe.json`))} saves one to edit and apply.`));
+  // A FITS column only when some recipe doesn't fit, since a column of yes tells the reader nothing (review round 1, C5).
+  const someDontFit = catalog.recipes.some((entry) => !entry.fits);
+  const rows = catalog.recipes.map((entry) => [
+    say(String(entry.slug ?? entry.id ?? '')),
+    say(String(titleOf(entry))),
+    say(firstSentence(entry.description)),
+    ...(someDontFit ? [entry.fits ? 'yes' : entry.requiredPlan ? `needs ${say(entry.requiredPlan)}` : 'no'] : []),
+  ]);
+  const width = out.rich ? out.width : Number.POSITIVE_INFINITY;
+  for (const line of out.table(['RECIPE', 'NAME', 'WHAT IT DOES', ...(someDontFit ? ['FITS'] : [])], rows, width)) run.print(line);
+  const first = catalog.recipes.find((entry) => entry.slug !== undefined || entry.id !== undefined);
+  if (first !== undefined) hint(input, out, out.next(`${out.command(run.command(`recipes show ${say(String(first.slug ?? first.id))} > recipe.json`))} saves one to edit and apply.`));
   return 0;
+}
+
+/** A catalog entry's name: Beacon's `title`, or `name` from an older catalog. */
+function titleOf(entry: RecipeCatalogEntry): string {
+  return typeof entry.title === 'string' && entry.title !== '' ? entry.title : typeof entry.name === 'string' ? entry.name : '';
+}
+
+/** The first sentence of a description, for a catalog row. The table wraps it, and never cuts it. */
+export function firstSentence(text: unknown): string {
+  if (typeof text !== 'string') return '';
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const end = /[.!?](?=\s|$)/.exec(flat);
+  return end === null ? flat : flat.slice(0, end.index + 1);
+}
+
+/** True when `given` names the entry: its id, as text or a number, or its slug. */
+export function namesEntry(entry: RecipeCatalogEntry, given: string): boolean {
+  const wanted = given.trim().toLowerCase();
+  return (entry.id !== undefined && String(entry.id).toLowerCase() === wanted) || (typeof entry.slug === 'string' && entry.slug.toLowerCase() === wanted);
 }
 
 /** `siren recipes show <catalogId>`: one ready-made recipe, on standard output. */
@@ -543,9 +625,13 @@ export async function recipesShow(input: CommandInput): Promise<number> {
   const id = input.args[0]!;
   await run.signedIn();
   const catalog = await catalogOf(run);
-  const entry = catalog.recipes.find((candidate) => candidate.id === id);
-  if (entry === undefined || entry.recipe === undefined) {
-    throw new CliRefusal(`The catalog has no recipe ${say(id)}.`, { why: "Beacon's catalog, as Siren serves it, names no recipe with that id.", fix: run.command('recipes catalog'), fixWords: 'to list them' });
+  // Beacon's ids are numbers and the argument is text, so they compare as text, and a slug names one too (review round 1, C5).
+  const entry = catalog.recipes.find((candidate) => namesEntry(candidate, id));
+  if (entry === undefined) {
+    throw new CliRefusal(`The catalog has no recipe ${say(id)}.`, { why: "Beacon's catalog, as Siren serves it, names no recipe with that id or slug.", fix: run.command('recipes catalog'), fixWords: 'to list them' });
+  }
+  if (entry.recipe === undefined) {
+    throw new CliRefusal(`The catalog lists ${say(titleOf(entry) || id)}, but carries no recipe for it.`, { why: 'Beacon sent its description without the recipe itself.', fix: run.command('recipes catalog'), fixWords: 'to pick another' });
   }
   run.print(JSON.stringify(entry.recipe, null, 2));
   return 0;
