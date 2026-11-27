@@ -416,6 +416,12 @@ export function typedLine(input: Partial<Pick<CommandInput, 'args' | 'values'>>,
 async function listResources(input: CommandInput): Promise<number> {
   const style = styleFor(input.io, 'stdout', {});
   const width = Math.max(...RESOURCE_COMMANDS.map((resource) => resource.name.length));
+  if (!style.rich) {
+    // Through a pipe, standard output holds one resource a line with its operations, and the rest goes to standard error (review round 1, C12).
+    input.io.stdout(`${RESOURCE_COMMANDS.map((resource) => `${resource.name.padEnd(width)}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`).join('\n')}\n`);
+    input.io.stderr(`${RESOURCE_COMMANDS.length} resources, generated from Siren's API\n\nNext\n  1  siren programs list\n\nsiren get <path> reaches any other route.\n`);
+    return 0;
+  }
   const lines = [
     style.success(`${style.bold(String(RESOURCE_COMMANDS.length))} resources, generated from Siren's API`),
     '',
@@ -772,9 +778,11 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
       style.report({
         headline: `Would send ${style.bold(`${outgoing.method} ${url}`)}`,
         ...(outgoing.body !== undefined ? { rows: [['body', JSON.stringify(outgoing.body)]] } : {}),
-        tips: ['Nothing was sent.'],
+        // Through a pipe the note goes to standard error, as every list's does (review round 1, C12).
+        ...(style.rich ? { tips: ['Nothing was sent.'] } : {}),
       }),
     );
+    if (!style.rich) input.io.stderr('Nothing was sent.\n');
     return 0;
   }
 
@@ -1149,7 +1157,7 @@ function extraFields(input: CommandInput): Record<string, unknown> {
 /** The line to run again with --yes. */
 function againLine(input: CommandInput, words: string, lead: readonly string[], typedIds: readonly string[]): string {
   const ids = input.values.stdin === true ? ' --stdin' : typedIds.length > 0 ? ` ${typedIds.join(' ')}` : '';
-  const extra = pairs(input).map(([key, value]) => ` -d ${key}=${value}`).join('');
+  const extra = pairs(input).map(([key, value]) => ` -d ${shellWord(`${key}=${value}`)}`).join('');
   return `${words}${lead.length > 0 ? ` ${lead.join(' ')}` : ''}${ids}${extra} --yes`;
 }
 
@@ -1161,7 +1169,8 @@ function printDryRun(input: CommandInput, run: CommandContext, bodies: ReadonlyA
   }
   const style = styleFor(input.io, 'stdout', {});
   for (const { path, body } of bodies) input.io.stdout(`Would send ${style.bold(`POST ${urlOf(run.target.baseUrl, { method: 'POST', path, query: {}, body })}`)}\n  ${JSON.stringify(body)}\n`);
-  input.io.stdout('Nothing was sent.\n');
+  // What would go out is the answer, on standard output, and the note beside it is chatter, on standard error (review round 1, C12).
+  input.io.stderr('Nothing was sent.\n');
 }
 
 function transportOf(input: CommandInput, run: CommandContext) {

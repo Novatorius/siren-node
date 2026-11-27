@@ -132,8 +132,10 @@ describe('the generated resource commands', () => {
   it('lists every resource with siren resources', async () => {
     const h = harness([]);
     expect(await h.run(['resources'])).toBe(0);
-    expect(h.out()).toContain(`${RESOURCE_COMMANDS.length} resources, generated from Siren's API`);
-    expect(h.out()).toMatch(/ {2}programs +list get create update delete\n/);
+    // Through a pipe, standard output holds one resource a line, and the count goes to standard error (review round 1, C12).
+    expect(h.err()).toContain(`${RESOURCE_COMMANDS.length} resources, generated from Siren's API`);
+    expect(h.out()).toMatch(/^programs +list get create update delete$/m);
+    expect(h.out().trim().split('\n')).toHaveLength(RESOURCE_COMMANDS.length);
   });
 });
 
@@ -182,7 +184,8 @@ describe('siren get, post, put, patch and delete', () => {
   it('prints the request with --dry-run and sends nothing, not even the edition read', async () => {
     const h = harness([]);
     expect(await h.run(['post', '/programs', '-d', 'name=Referral program', '--dry-run'])).toBe(0);
-    expect(h.out()).toBe(`Would send POST ${SANDBOX_BASE_URL}/programs\n\n  body   {"name":"Referral program"}\n\nNothing was sent.\n`);
+    expect(h.out()).toBe(`Would send POST ${SANDBOX_BASE_URL}/programs\n\n  body   {"name":"Referral program"}\n`);
+    expect(h.err()).toBe('Nothing was sent.\n');
     expect(h.sent()).toEqual([]);
   });
 

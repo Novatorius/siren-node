@@ -197,11 +197,12 @@ export async function conditionSetsList(input: CommandInput): Promise<number> {
   } catch (error) {
     throw gated(error, SETS);
   }
+  const sets = itemsOf(answer.body);
   if (input.values.json === true) {
-    run.print(JSON.stringify(answer.body, null, 2));
+    // Siren answers a bare array here. --json prints the page envelope every other list prints, so siblings read alike (review round 1, C12).
+    run.print(JSON.stringify(Array.isArray(answer.body) ? { items: answer.body, total: answer.body.length, page: 1, perPage: answer.body.length, totalPages: 1 } : answer.body, null, 2));
     return 0;
   }
-  const sets = itemsOf(answer.body);
   const out = styleFor(input.io, 'stdout', input.values);
   if (sets.length === 0) {
     input.io.stderr('This organization has no condition sets.\n');
