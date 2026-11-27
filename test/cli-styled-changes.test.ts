@@ -111,7 +111,7 @@ describe('siren apps rotate-key, rotate-secret and add-key', () => {
         `  Key   ${RAW_KEY_2.slice(0, 16)}… in acme/.env.sandbox`,
         '',
         'Next',
-        '  1  siren apps apply   give the key the scopes your app file names',
+        '  siren apps apply   give the key the scopes your app file names',
         '',
       ].join('\n'),
     );

@@ -332,11 +332,12 @@ export class Style {
       const width = Math.max(...next.map((step) => visibleLength(step.text)));
       lines.push('', this.bold('Next'));
       next.forEach((step, at) => {
-        const lead = `  ${at + 1}  ${step.text}`;
+        // One step needs no number (review round 1, C24).
+        const lead = next.length === 1 ? `  ${step.text}` : `  ${at + 1}  ${step.text}`;
         if (step.aside === undefined) return lines.push(lead);
         const gap = ' '.repeat(width - visibleLength(step.text) + 3);
         const beside = `${lead}${gap}${this.dim(step.aside)}`;
-        return lines.push(visibleLength(beside) <= this.width ? beside : lead, ...(visibleLength(beside) <= this.width ? [] : [`     ${this.dim(step.aside)}`]));
+        return lines.push(visibleLength(beside) <= this.width ? beside : lead, ...(visibleLength(beside) <= this.width ? [] : [`${next.length === 1 ? '  ' : '     '}${this.dim(step.aside)}`]));
       });
     }
     const tips = report.tips ?? [];
