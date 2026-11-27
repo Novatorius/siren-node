@@ -1,5 +1,8 @@
 import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { APP_FILE_NAME } from './app-file';
 import * as apply from './commands/apply';
 import * as requests from './commands/requests';
 import * as session from './commands/session';
@@ -409,22 +412,28 @@ export const COMMAND_SPECS: Readonly<Record<Command, Readonly<CommandSpec>>> = S
 /** Every option any command takes, for the first read of the line, which finds the command. */
 const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, ...Object.values(SPECS).map((spec) => spec.options));
 
-/** The widest a help line may be, so nothing wraps in an 80-column terminal. */
-const HELP_WIDTH = 80;
-
 /** `text` broken into lines of at most `width` characters, at spaces. */
 const wrap = wrapWords;
+
+/** The widest a flag or command name may be and keep its words beside it. A longer one gets a line of its own. */
+const NAME_ROOM = 30;
 
 /**
  * Two aligned columns under a heading, as gh prints them: the left one
  * padded to `column`, styled by `name`, and the right one wrapped beneath
- * itself so no line passes {@link HELP_WIDTH}.
+ * itself to `width`, the terminal's width. A left side too long for the
+ * column, such as a flag with a long list of values, takes a line of its
+ * own with its words under it, so one long flag never squeezes the rest
+ * (CLI review round 1, C20).
  */
-function columns(rows: ReadonlyArray<readonly [string, string]>, column: number, name: (text: string) => string): string[] {
-  const at = Math.max(column, ...rows.map(([left]) => left.length + 4));
+function columns(rows: ReadonlyArray<readonly [string, string]>, column: number, name: (text: string) => string, width: number): string[] {
+  const fits = rows.filter(([left]) => left.length + 4 <= NAME_ROOM);
+  const at = Math.max(column, ...fits.map(([left]) => left.length + 4));
   return rows.flatMap(([left, right]) => {
-    const [first = '', ...rest] = wrap(right, HELP_WIDTH - at);
-    return [`  ${name(left)}${' '.repeat(at - 2 - left.length)}${first}`, ...rest.map((line) => `${' '.repeat(at)}${line}`)];
+    const [first = '', ...rest] = wrap(right, Math.max(width - at, 20));
+    const under = rest.map((line) => `${' '.repeat(at)}${line}`);
+    if (left.length + 4 > at) return [`  ${name(left)}`, `${' '.repeat(at)}${first}`, ...under];
+    return [`  ${name(left)}${' '.repeat(at - 2 - left.length)}${first}`, ...under];
   });
 }
 
@@ -439,6 +448,7 @@ function commandRows(style: Style, commands: readonly Command[]): string[] {
     commands.map((command) => [command, SPECS[command].short] as const),
     22,
     (text) => style.bold(text),
+    style.width,
   );
 }
 
@@ -457,7 +467,7 @@ function helpText(style: Style): string {
     '',
     ...section(style, 'Usage', ['  siren <command> [flags]']),
     ...GROUPS.flatMap((group) => section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group)))),
-    ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text)),
+    ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text, style.width)),
     ...section(
       style,
       'Environment',
@@ -471,6 +481,7 @@ function helpText(style: Style): string {
         ],
         22,
         (text) => text,
+        style.width,
       ),
     ),
     ...section(style, 'Examples', ['  $ siren login', '  $ siren apps init', '  $ siren apps apply']),
@@ -496,12 +507,12 @@ function appsHelpText(style: Style): string {
 function commandHelp(style: Style, spec: CommandSpec): string {
   const own = Object.values(spec.flags);
   return [
-    ...wrap(spec.summary, HELP_WIDTH),
+    ...wrap(spec.summary, style.width),
     '',
     ...section(style, 'Usage', [`  siren ${spec.usage}`]),
-    ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text)) : []),
+    ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text, style.width)) : []),
     // CLI pass 3: the global flags once by name, since siren --help explains each.
-    ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, HELP_WIDTH - 2).map((line) => `  ${line}`)),
+    ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, style.width - 2).map((line) => `  ${line}`)),
     ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
     ...section(style, 'Learn more', learnMore(style, false)),
   ].join('\n');
@@ -512,12 +523,20 @@ async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
   const store = new CredentialStore(io.configDir);
   const token = io.env.SIREN_TOKEN !== undefined && io.env.SIREN_TOKEN !== '';
   const kept = token ? null : await store.get(target.baseUrl).catch(() => null);
+  // Review round 1, C24: in a folder that already holds siren.app.json, init has nothing to do.
+  const hasFile = (await readFile(join(io.cwd, APP_FILE_NAME), 'utf8').catch(() => undefined)) !== undefined;
   const next: Array<readonly [string, string]> = kept || token
-    ? [
-        ['siren apps init', 'write siren.app.json in this folder'],
-        ['siren apps apply', 'declare the app on Siren and save its key'],
-        ['siren apps requests --follow', 'watch what Siren sends it'],
-      ]
+    ? hasFile
+      ? [
+          ['siren apps diff', `show what ${APP_FILE_NAME} would change on Siren`],
+          ['siren apps apply', 'send the changes'],
+          ['siren apps requests --follow', 'watch what Siren sends it'],
+        ]
+      : [
+          ['siren apps init', 'write siren.app.json in this folder'],
+          ['siren apps apply', 'declare the app on Siren and save its key'],
+          ['siren apps requests --follow', 'watch what Siren sends it'],
+        ]
     : [
         ['siren login', 'log in, or siren signup to make an organization'],
         ['siren apps init', 'write siren.app.json in this folder'],
@@ -679,9 +698,9 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       // CLI pass 3, should-fix 15: a command typo and a flag typo share one shape, the three parts of every error.
       const lines = [style.failure(`${error.group} has no command ${style.bold(`"${error.word}"`)}.`)];
       if (error.guesses.length > 0) {
-        lines.push(hanging('  ', help), hanging(`${style.green('›')} `, `Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`));
+        lines.push(style.wrap('  ', help), style.wrap(`${style.green('›')} `, `Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`));
       } else {
-        lines.push(hanging('  ', 'The tool knows no command by that name.'), hanging(`${style.green('›')} `, `Run ${style.command(help.split(' lists')[0]!)} to list them.`));
+        lines.push(style.wrap('  ', 'The tool knows no command by that name.'), style.wrap(`${style.green('›')} `, `Run ${style.command(help.split(' lists')[0]!)} to list them.`));
       }
       io.stderr(`${lines.join('\n')}\n`);
       return 2;
@@ -694,7 +713,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
           : `Run ${style.command(spec === undefined || name === undefined ? 'siren --help' : `siren ${name} --help`)} to see ${spec === undefined ? 'the commands' : 'its options'}.`;
       io.stderr(
         style.rich
-          ? `${[style.failure(error.headline), hanging('  ', usage), hanging(`${style.green('›')} `, fix)].join('\n')}\n`
+          ? `${[style.failure(error.headline), style.wrap('  ', usage), style.wrap(`${style.green('›')} `, fix)].join('\n')}\n`
           : `siren: ${error.message}\n${usage}\n`,
       );
       return 2;

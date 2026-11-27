@@ -256,10 +256,12 @@ describe('cli pass 1, finding 6: the first apply says what comes next', () => {
     expect(h.prompts.at(-1)).not.toContain('last write wins');
     expect(h.out()).toContain('https://acme.example');
     expect(h.printed()).not.toContain('token=abc');
-    expect(h.out()).toContain('node --env-file=.env.sandbox');
+    expect(h.out().replace(/\s+/g, ' ')).toContain('With Node, start it with --env-file=.env.sandbox.');
+    expect(h.out()).not.toContain('server.js');
     expect(h.out()).toContain('siren apps requests --follow');
     expect(h.out()).toMatch(/\n  notify-crm +app:\d+ · /);
-    expect(h.out()).not.toContain('autofulfiller');
+    // Review round 1, C3: a feature no record picks yet says so, and how to pick it.
+    expect(h.out().replace(/\s+/g, ' ')).toContain('No program picks notify-crm yet, so Siren never sends it.');
   });
 });
 
@@ -286,7 +288,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
     h.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
     await h.run(['apps', 'init', '--key', APP_KEY]);
     expect(await h.run(['apps', 'apply', '--yes', '--live', '--base-url', UAT]), h.err()).toBe(0);
-    expect(h.out()).toContain(`\n  2  siren apps requests --follow --base-url ${UAT}\n`);
+    expect(h.out()).toContain(`\n  siren apps requests --follow --base-url ${UAT}`);
   });
 
   it('points $schema at the versioned schema on unpkg, which resolves with or without a local install, and the package ships that file', async () => {
@@ -303,10 +305,10 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
     expect(packed[0]?.files.map((file) => file.path)).toContain(schema.split(`${pkg.version}/`)[1]);
   }, 60_000);
 
-  it('says sign in to, not change, when login meets a live Siren without --live', async () => {
-    const h = harness([], { edition: 'production', stdin: PASSWORD });
-    expect(await h.run(['login', '--base-url', UAT, '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(h.err()).toContain(`uat.example.com is a live Siren. Logging in to a live organization needs --live, so none happens by accident. Run siren login --base-url ${UAT} --live.`);
+  it('logs in to a live Siren with no --live, since logging in changes nothing there (review round 1, C1)', async () => {
+    const h = harness([AuthAnswers.oneOrg()], { edition: 'production', stdin: PASSWORD });
+    expect(await h.run(['login', '--base-url', UAT, '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
+    expect(h.err()).not.toContain('is a live Siren');
     const help = harness([]);
     await help.run(['login', '--help']);
     expect(help.out()).not.toMatch(/--live\s+Change a live organization/);

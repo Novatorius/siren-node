@@ -127,17 +127,40 @@ describe('style: tables', () => {
     ['signups', 'off', 'Signups'],
   ];
 
-  it('aligns columns under a dim header in a terminal, and a plain header otherwise', () => {
+  it('aligns columns under a dim header in a terminal, and splits cells by tabs through a pipe (review round 1, C12)', () => {
     const styled = rich.table(['KEY', 'STATUS', 'NAME'], rows, 100);
     expect(styled[0]).toBe(`${ESC}2mKEY           STATUS  NAME${ESC}0m`);
     expect(styled[2]).toBe('signups       off     Signups');
-    expect(plain.table(['KEY', 'STATUS', 'NAME'], rows, 100)[0]).toBe('KEY           STATUS  NAME');
+    expect(plain.table(['KEY', 'STATUS', 'NAME'], rows, 100)).toEqual(['KEY\tSTATUS\tNAME', 'acme-payouts\ton\tAcme payouts and the long name that goes on', 'signups\toff\tSignups']);
   });
 
-  it('fits the width by shortening the last column with an ellipsis', () => {
-    const fitted = plain.table(['KEY', 'STATUS', 'NAME'], rows, 40);
-    for (const line of fitted) expect([...line].length).toBeLessThanOrEqual(40);
-    expect(fitted[1]).toMatch(/…$/);
+  it('fits the width by wrapping the last column under itself, and never cuts a value (review round 1, C8)', () => {
+    const fitted = rich.table(['KEY', 'STATUS', 'NAME'], rows, 44);
+    for (const line of fitted) expect(visibleLength(line)).toBeLessThanOrEqual(44);
+    expect(fitted.join('\n')).not.toContain('…');
+    expect(fitted[1]).toBe('acme-payouts  on      Acme payouts and the');
+    expect(fitted.slice(2, -1).every((line) => /^ {22}\S/.test(line))).toBe(true);
+    expect(fitted.slice(1, -1).map((line) => line.slice(22)).join(' ')).toBe('Acme payouts and the long name that goes on');
+    expect(fitted.at(-1)).toBe('signups       off     Signups');
+  });
+
+  it('narrows a wide middle column and wraps it in place, keeping every word and the columns after it (review round 1, C8)', () => {
+    const name = 'Acme very very very very very very long program name';
+    const lines = rich.table(['ID', 'NAME', 'STATUS'], [['1', name, 'active']], 40);
+    for (const line of lines) expect(visibleLength(line)).toBeLessThanOrEqual(40);
+    expect(lines[1]).toMatch(/^1   Acme .* active$/);
+    expect(lines.slice(1).map((line) => line.slice(4).replace(/ +active$/, '').trim()).join(' ')).toBe(name);
+  });
+
+  it('wraps to the terminal width it is given, and to 80 columns when it has none (review round 1, C8)', () => {
+    const wide = new Style({ tty: true, env: {}, columns: 120 });
+    const unknown = new Style({ tty: true, env: {} });
+    const piped = new Style({ tty: false, env: {}, columns: 120 });
+    expect([wide.width, unknown.width, piped.width]).toEqual([120, 80, 80]);
+    const text = 'word '.repeat(40).trim();
+    expect(Math.max(...wide.warning(text).split('\n').map(visibleLength))).toBeGreaterThan(80);
+    for (const line of wide.warning(text).split('\n')) expect(visibleLength(line)).toBeLessThanOrEqual(120);
+    for (const line of unknown.warning(text).split('\n')) expect(visibleLength(line)).toBeLessThanOrEqual(80);
   });
 });
 

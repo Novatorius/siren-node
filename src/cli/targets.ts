@@ -85,13 +85,13 @@ export function resolveTarget(flags: TargetFlags, env: Readonly<Record<string, s
 
 /**
  * The commands that change a live organization, so take `--live` there.
- * Every other command reads, works offline, or, like logout, needs no
- * `--live` (CLI pass 2, finding 8). A test holds this list to the command
+ * Every other command reads, works offline, or, like login and logout,
+ * needs no `--live`, since signing in changes nothing in an organization
+ * (CLI pass 2, finding 8, and review round 1, C1). A test holds this list to the command
  * table's `readsOnly` and `offline` marks.
  */
 export const LIVE_WRITES = [
   'signup',
-  'login',
   'apps apply',
   'apps answer',
   'apps resend',
@@ -140,7 +140,7 @@ function editionName(edition: Edition): string {
  * session was made for, and the `siren login` that makes a new one.
  */
 export function assertSessionMatches(target: Target, session: { edition: Edition; baseUrl?: string }, edition: Edition): void {
-  const login = commandLine(target, 'login', edition === 'production');
+  const login = commandLine(target, 'login', false);
   if (session.baseUrl !== undefined && session.baseUrl !== target.baseUrl) {
     throw new CliRefusal('Your session belongs to another Siren.', {
       why: `It was made for ${hostName(session.baseUrl)}, and this command is for ${hostName(target.baseUrl)}, so nothing was sent with it.`,

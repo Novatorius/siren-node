@@ -188,20 +188,22 @@ describe('cli pass 3, must-fix 3: problems in siren.app.json print under the ✗
   });
 });
 
-describe('cli pass 3, must-fix 4: browser login against a Siren without browser sign-in', () => {
-  it('says the Siren offers no browser login yet, and names siren login --password, in place of "Not found."', async () => {
-    const h = harness([reply(404, { error: { message: 'Not found.', context: [] } })], { interactive: true });
-    expect(await h.run(['login'])).toBe(1);
-    expect(h.paths()).toEqual(['POST /auth/cli/code']);
-    expect(h.err()).toContain("siren: sandbox.sirenaffiliates.com doesn't offer browser login yet.");
-    expect(h.err()).toContain('Run siren login --password.');
-    expect(h.err()).not.toMatch(/^siren: Not found\./m);
+describe('cli pass 3, must-fix 4, and review round 1, C1: browser login against a Siren without browser sign-in', () => {
+  it('says in one line the Siren has no browser login yet, then asks for the email and password in the same run', async () => {
+    const h = harness([reply(404, { error: { message: 'Not found.', context: [] } }), AuthAnswers.oneOrg()], { interactive: true, typed: [EMAIL], secrets: [PASSWORD] });
+    expect(await h.run(['login']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /auth/cli/code', 'POST /auth/login']);
+    expect(h.err()).toBe('sandbox.sirenaffiliates.com has no browser login yet, so siren asks for your email and password.\n');
+    expect(h.out()).toContain(`Logged in as ${EMAIL}`);
+    expect(h.printed()).not.toContain('Not found.');
+    expect(h.printed()).not.toContain('--password');
   });
 
-  it('keeps the flags that reach a live Siren in the fix', async () => {
-    const h = harness([reply(404, { error: { message: 'Not found.', context: [] } })], { interactive: true, edition: 'production' });
-    expect(await h.run(['login', '--base-url', UAT, '--live'])).toBe(1);
-    expect(h.err()).toContain(`Run siren login --password --base-url ${UAT} --live.`);
+  it('works the same on a live Siren, with no --live (review round 1, C1)', async () => {
+    const h = harness([reply(404, { error: { message: 'Not found.', context: [] } }), AuthAnswers.oneOrg()], { interactive: true, edition: 'production', typed: [EMAIL], secrets: [PASSWORD] });
+    expect(await h.run(['login', '--base-url', UAT]), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /auth/cli/code', 'POST /auth/login']);
+    expect(h.err()).not.toContain('--live');
   });
 });
 

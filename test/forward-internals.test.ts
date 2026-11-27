@@ -25,7 +25,7 @@ function transportOver() {
 const SDK_VALUES = {
   authorization: 'Bearer tok-1',
   accept: 'application/json',
-  'user-agent': 'siren-sdk-typescript/0.4.0',
+  'user-agent': 'siren-sdk-typescript/0.5.0',
   'content-type': 'application/json',
 };
 

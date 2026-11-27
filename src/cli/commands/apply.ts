@@ -11,7 +11,8 @@ import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
-import { REPORT_WIDTH, clean, hanging, styleFor, unbroken, visibleLength, wrapWords } from '../style';
+import { recordsPicking, unpickedLine } from '../feature-picks';
+import { clean, styleFor, unbroken, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import type { StoredSession } from '../credentials';
@@ -416,13 +417,17 @@ export async function appsApply(input: CommandInput): Promise<number> {
     // CLI pass 2, finding 2: a running service may hold the key, so never advise rotating it.
     else tips.push(`${envName} holds no key for ${key}, which is fine when your service has one. ${unbroken(run.command(`apps rotate-key ${key}`))} would save a new one here and revoke the one in use.`);
   }
-  const next = app.created
-    ? [
-        { text: out.command(`node --env-file=${envName} server.js`), aside: 'run your handler with its key' },
-        // A read, which needs no --live.
-        { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
-      ]
-    : [];
+  // Review round 1, C3: a feature no record picks never fires, so say which, and how to pick each.
+  const before = new Map((plan.current?.features ?? []).map((item) => [item.key, item]));
+  for (const item of app.features) {
+    if (item.status !== 'active' || recordsPicking(before.get(item.key)) > 0) continue;
+    const line = unpickedLine(item);
+    if (line !== undefined) tips.push(clean(line));
+  }
+  // Review round 1, C24: name the env file the handler loads, and no server file init never wrote.
+  if (app.created) tips.push(`Your handler reads its key and secret from ${envName}. With Node, start it with --env-file=${envName}.`);
+  // A read, which needs no --live.
+  const next = app.created ? [{ text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' }] : [];
   run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${clean(session.orgName)}`, rows, next, tips }).replace(/\n$/, ''));
   return 0;
 }
@@ -437,6 +442,8 @@ interface Plan {
   key: string;
   params: ReturnType<typeof declarationFor>['params'];
   changes: ReturnType<typeof appChanges>;
+  /** The app as Siren held it before, with each feature's `usedBy`, or undefined for a new app. */
+  current?: App;
   lines: string[];
   envPath: string;
   /** False when Siren holds the app and it is off, true when it is on, undefined for a new app. */
@@ -535,7 +542,7 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
   const on = current === undefined ? undefined : current.status === 'active';
-  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath, on };
+  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath, on, current };
 }
 
 /**
@@ -589,7 +596,7 @@ function printPlan(run: CommandContext, out: Style, plan: Plan): void {
   run.print('');
   for (const line of plan.lines) {
     // A terminal gets lines that fit it. A pipe gets each change on one line, for a script to read.
-    const [first = '', ...rest] = out.rich ? wrapWords(line, REPORT_WIDTH - 4) : [line];
+    const [first = '', ...rest] = out.rich ? wrapWords(line, out.width - 4) : [line];
     run.print(`  ${planMarker(out, line)} ${first}`);
     for (const more of rest) run.print(`    ${more}`);
   }
@@ -715,6 +722,9 @@ export async function appsScopes(input: CommandInput): Promise<number> {
   const allows = (entry: { resource: string; label: string }) => (entry.resource === 'events' ? `Send ${clean(entry.label).toLowerCase()} events` : clean(entry.label));
   const rows = Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => [clean(entry.scope), allows(entry)]));
   for (const line of out.table(['SCOPE', 'ALLOWS'], rows, widthOf(input, out))) run.print(line);
+  // The review's question on two names for one event (review round 1): say which list each name goes in.
+  run.aside(out, '');
+  run.aside(out, out.next(out.dim(`siren.app.json lists these under "scopes". An event: scope, such as event:sale, lets the key send that event to Siren. The events Siren sends your app have other names, such as sale.created, and go under "events", which ${unbroken(run.command('apps events'))} lists.`)));
   return 0;
 }
 
@@ -734,6 +744,8 @@ export async function appsEvents(input: CommandInput): Promise<number> {
   const out = styleFor(input.io, 'stdout', {});
   const rows = catalog.map((entry) => [clean(entry.event), clean(entry.label)]);
   for (const line of out.table(['EVENT', 'MEANS'], rows, widthOf(input, out))) run.print(line);
+  run.aside(out, '');
+  run.aside(out, out.next(out.dim(`siren.app.json lists these under "events", and Siren sends each to the app's url. Sending an event to Siren takes a scope with another name, such as event:sale for a sale, which goes under "scopes" and ${unbroken(run.command('apps scopes'))} lists.`)));
   return 0;
 }
 
@@ -763,8 +775,8 @@ export async function appsList(input: CommandInput): Promise<number> {
     );
     return 0;
   }
-  run.print(out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
-  run.print('');
+  run.aside(out, out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
+  if (out.rich) run.print('');
   const rows = apps.map((app) => {
     const count = attentionCount(app);
     return [
@@ -779,8 +791,8 @@ export async function appsList(input: CommandInput): Promise<number> {
   const waiting = apps.filter((app) => attentionCount(app) > 0);
   if (waiting.length === 1) attentionTip(run, out, waiting[0]!);
   else if (waiting.length > 1) {
-    run.print('');
-    run.print(out.next(`${out.command(run.command('apps requests --attention'))} lists the requests that need you.`));
+    if (out.rich) run.print('');
+    run.aside(out, out.next(`${out.command(run.command('apps requests --attention'))} lists the requests that need you.`));
   }
   return 0;
 }
@@ -833,14 +845,21 @@ export async function appsShow(input: CommandInput): Promise<number> {
   // Each feature's kind reads "Post-conversion action (postConversionAction)" when the line fits.
   // When it does not, the code name goes before NAME is cut, and a Kinds row above names the code names.
   const width = widthOf(input, out);
+  // Review round 1, C3: how many records pick each feature, when Siren says, since one no record picks never fires.
+  const counted = app.features.some((item) => Array.isArray(item.usedBy) || typeof item.uses === 'number');
+  const pickedCell = (item: AppFeature) => {
+    const count = recordsPicking(item);
+    return count === 0 ? (out.rich ? out.dim('none') : 'none') : String(count);
+  };
   const featureRows = (label: (kind: string) => string) =>
     app.features.map((item) => [
       clean(item.ref),
       clean(item.key),
       clean(label(item.kind)),
+      ...(counted ? [pickedCell(item)] : []),
       `${clean(item.name)}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
     ]);
-  const HEADERS = ['ID', 'KEY', 'KIND', 'NAME'];
+  const HEADERS = ['ID', 'KEY', 'KIND', ...(counted ? ['PICKED BY'] : []), 'NAME'];
   const full = featureRows(kindLabel);
   const fitsFull = out.table(HEADERS, full, Number.POSITIVE_INFINITY).every((line) => visibleLength(line) <= width);
   const features = fitsFull ? full : featureRows(kindName);
@@ -853,6 +872,9 @@ export async function appsShow(input: CommandInput): Promise<number> {
     run.print('');
     for (const line of out.table(HEADERS, features, width)) run.print(line);
   }
+  const unpicked = counted ? app.features.filter((item) => item.status === 'active' && recordsPicking(item) === 0).map(unpickedLine).filter((line): line is string => line !== undefined) : [];
+  if (unpicked.length > 0 && out.rich) run.print('');
+  for (const line of unpicked) run.aside(out, out.next(clean(line)));
   if (attentionCount(app) > 0) attentionTip(run, out, app);
   return 0;
 }
@@ -879,16 +901,15 @@ function addressCell(style: Style, app: App): string {
 }
 
 /** The widest a table may be: the terminal's columns, 80 in a terminal of unknown size, and no limit in a pipe. */
-function widthOf(input: CommandInput, style: Style): number {
-  if (!style.rich) return Number.POSITIVE_INFINITY;
-  return input.io.screen?.size?.columns ?? 80;
+function widthOf(_input: CommandInput, style: Style): number {
+  return style.rich ? style.width : Number.POSITIVE_INFINITY;
 }
 
 /** The tip under an app with requests that need a person: how many, and the command that lists them. */
 function attentionTip(run: CommandContext, out: Style, app: App): void {
   const count = attentionCount(app);
-  run.print('');
-  run.print(out.next(`${out.command(run.command(`apps requests --app ${app.key} --attention`))} lists the ${count} that ${count === 1 ? 'needs' : 'need'} you.`));
+  if (out.rich) run.print('');
+  run.aside(out, out.next(`${out.command(run.command(`apps requests --app ${app.key} --attention`))} lists the ${count} that ${count === 1 ? 'needs' : 'need'} you.`));
 }
 
 /** `siren apps on <key>`: turns the app on. */
@@ -1090,7 +1111,7 @@ export async function appsDelete(input: CommandInput): Promise<number> {
       // so a long key and organization never push the typed answer past 80 columns.
       const out = styleFor(io, 'stdout', values);
       run.print(out.warning(`Deleting ${out.bold(key)} from ${orgNamed(session)} can't be undone.`));
-      run.print(out.rich ? hanging('  ', `It revokes the key. Type ${out.bold(key)} to delete it.`) : `It revokes the key. Type ${key} to delete it.`);
+      run.print(out.rich ? out.wrap('  ', `It revokes the key. Type ${out.bold(key)} to delete it.`) : `It revokes the key. Type ${key} to delete it.`);
       typed = (await io.prompt('Key: ')).trim();
     }
     if (typed !== key) {

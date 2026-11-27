@@ -77,12 +77,12 @@ describe('should-fix 14: login ends with what to do next', () => {
   it('names siren apps init, or siren apps apply when the folder has siren.app.json', async () => {
     const h = harness([AuthAnswers.oneOrg(), AuthAnswers.oneOrg()], { stdin: PASSWORD });
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
-    expect(h.out()).toMatch(/\nNext\n {2}1 {2}siren apps init +write siren\.app\.json in this folder\n/);
+    expect(h.out()).toMatch(/\nNext\n {2}siren apps init +write siren\.app\.json in this folder\n/);
 
     h.write('siren.app.json', appFile);
     const before = h.out().length;
     expect(await h.run(['login', '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
-    expect(h.out().slice(before)).toMatch(/\nNext\n {2}1 {2}siren apps apply +declare the app on Siren and save its key\n/);
+    expect(h.out().slice(before)).toMatch(/\nNext\n {2}siren apps apply +declare the app on Siren and save its key\n/);
   });
 });
 

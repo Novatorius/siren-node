@@ -122,7 +122,7 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
     return { h, text: h.out().slice(before) };
   }
 
-  it('shows the plan with + markers and the organization, then a ✓ report with the key, each feature and two numbered steps', async () => {
+  it('shows the plan with + markers and the organization, then a ✓ report with the key, each feature and the next step', async () => {
     const { h, text } = await firstApply();
     expect(text).toBe(
       [
@@ -140,15 +140,22 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
         '  URL from      SIREN_APP_URL',
         '',
         'Next',
-        '  1  node --env-file=.env.sandbox server.js   run your handler with its key',
-        '  2  siren apps requests --follow             watch what Siren sends it',
+        '  siren apps requests --follow   watch what Siren sends it',
+        '',
+        // Review round 1, C3 and C24: what picks each new feature, and the env file, with no server file init never wrote.
+        'No program picks notify-crm yet, so Siren never sends it. Pick it on a program',
+        '  in the dashboard, or in a recipe with',
+        '  "postConversionActions":[{"type":"app:11"}].',
+        'No autofulfiller picks acme-ledger yet, so Siren never sends it. Pick it on an',
+        '  autofulfiller in the dashboard, or in a recipe with "method":"app:12".',
+        'Your handler reads its key and secret from .env.sandbox. With Node, start it',
+        '  with --env-file=.env.sandbox.',
         '',
       ].join('\n'),
     );
     expect(h.prompts.at(-1)).toBe('Make acme-payouts in Acme (3), sandbox? [y/N] ');
     expect(h.printed()).not.toContain(RAW_KEY);
     expect(h.printed()).not.toContain(SIGNING_SECRET);
-    expect(text).not.toContain('autofulfiller');
     expect(text).not.toContain(h.cwd);
   });
 
@@ -157,7 +164,7 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
     expect(text).toContain(`${ESC}1mPlan${ESC}0m`);
     expect(text).toMatch(/\u001b\[[\d;]+m\+\u001b\[0m makes the app/);
     expect(strip(text)).toContain('✓ Made acme-payouts in Acme');
-    expect(text).toContain(`${ESC}1mnode --env-file=.env.sandbox server.js${ESC}0m`);
+    expect(text).toContain(`${ESC}1msiren apps requests --follow${ESC}0m`);
     for (const line of strip(text).split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-styled-apply-new.txt');
   });
@@ -187,18 +194,8 @@ describe('siren apps list and show: tables (catalog mockup 2)', () => {
     const h = harness([reply(200, [appRecord({ needsAttention: 2 }), second])]);
     h.signedIn();
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
-    expect(h.out()).toBe(
-      [
-        '2 apps in Acme (3), sandbox',
-        '',
-        'APP           STATE  FEATURES  ATTENTION   ADDRESS',
-        'acme-payouts  on     2         2 requests  acme.example',
-        'ledger-sync   off    0         –           key only',
-        '',
-        'siren apps requests --app acme-payouts --attention lists the 2 that need you.',
-        '',
-      ].join('\n'),
-    );
+    expect(h.out()).toBe(['APP\tSTATE\tFEATURES\tATTENTION\tADDRESS', 'acme-payouts\ton\t2\t2 requests\tacme.example', 'ledger-sync\toff\t0\t–\tkey only', ''].join('\n'));
+    expect(h.err()).toBe(['2 apps in Acme (3), sandbox', 'siren apps requests --app acme-payouts --attention lists the 2 that need you.', ''].join('\n'));
   });
 
   it('show: the app in a block, then its features as a table, marks in the name column', async () => {
@@ -214,14 +211,13 @@ describe('siren apps list and show: tables (catalog mockup 2)', () => {
         '  Address   acme.example',
         '  Key       sk_test_0a0a0a0a…',
         '',
-        'ID      KEY          KIND                                           NAME',
-        'app:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM · archived',
-        'app:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger',
-        '',
-        'siren apps requests --app acme-payouts --attention lists the 1 that needs you.',
+        'ID\tKEY\tKIND\tNAME',
+        'app:11\tnotify-crm\tPost-conversion action (postConversionAction)\tTell the CRM · archived',
+        'app:12\tacme-ledger\tPayout method (payoutMethod)\tAcme ledger',
         '',
       ].join('\n'),
     );
+    expect(h.err()).toBe('siren apps requests --app acme-payouts --attention lists the 1 that needs you.\n');
   });
 
   it('is styled in a terminal and fits 80 columns', async () => {
