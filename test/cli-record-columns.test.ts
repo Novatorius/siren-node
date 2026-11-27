@@ -22,8 +22,9 @@ describe('default columns (C13)', () => {
     const h = signedIn([reply(200, envelope([{ id: 9, status: 'complete', totalValue: 4200, currency: 'USD', dateCreated: AT }])), reply(404, { message: 'Not found.' })]);
     expect(await h.run(['transactions', 'list']), h.err()).toBe(0);
     expect(asked(h).get('fields')?.split(',')).toEqual(expect.arrayContaining(['totalValue', 'currency']));
-    expect(h.out().split('\n')[0]).toBe('ID\tSTATUS\tAMOUNT\tCURRENCY\tCREATED (UTC)');
-    expect(h.out()).toMatch(/^9\tcomplete\t4200\tUSD\tMar 2, 2025$/m);
+    // With no registry, USD still prints as money, its code inside the amount (review round 1, C4).
+    expect(h.out().split('\n')[0]).toBe('ID\tSTATUS\tAMOUNT\tCREATED (UTC)');
+    expect(h.out()).toMatch(/^9\tcomplete\t\$42\.00 USD\tMar 2, 2025$/m);
   });
 
   it('asks for a conversion program id, so --json carries it', async () => {

@@ -86,12 +86,10 @@ describe('money in record commands', () => {
     expect(h.out()).toMatch(/value\s+€124\.31 EUR/);
   });
 
-  it('prints the stored integer when Siren answers no registry', async () => {
+  it('prints an ISO currency as money even when Siren answers no registry (review round 1, C4)', async () => {
     const h = signedIn([reply(200, envelope(payouts)), reply(404, { message: 'Not found.' })]);
     expect(await h.run(['payouts', 'list']), h.err()).toBe(0);
-    expect(h.out()).toContain('12431');
-    // With no registry to draw it, the amount keeps its currency column beside it.
-    expect(h.out()).toMatch(/VALUE\tCURRENCY/);
-    expect(h.out()).toMatch(/12431\tEUR/);
+    expect(h.out()).toContain('€124.31 EUR');
+    expect(h.out()).not.toMatch(/\b12431\b/);
   });
 });
