@@ -118,6 +118,9 @@ function keptWhole(command: string, width: number): string {
   return visibleLength(command) <= width - 10 ? command.replace(/ /g, '\u00a0') : command;
 }
 
+/** The narrowest a table column is made before its cells wrap, unless its header or values are narrower. */
+const MIN_COLUMN = 12;
+
 /** How many columns `text` takes, without its escape codes. */
 export function visibleLength(text: string): number {
   return [...text.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '')].length;
@@ -292,21 +295,37 @@ export class Style {
 
   /**
    * Rows aligned under a header, two spaces apart, the header dim. Nothing
-   * is ever cut: a row wider than `width` wraps its last column at word
-   * boundaries, each line under that column's start (CLI review round 1,
-   * C8). Pass `Infinity` for a pipe, where a row stays on one line.
+   * is ever cut (CLI review round 1, C8). When the rows are wider than
+   * `width`, the widest columns are narrowed until they fit, no column
+   * below its header or {@link MIN_COLUMN}, and each cell wraps at word
+   * boundaries inside its column, so a row may take several lines. Pass
+   * `Infinity` for a pipe, where a row stays on one line.
    */
   table(headers: readonly string[], rows: ReadonlyArray<readonly string[]>, width: number): string[] {
     const all = [headers, ...rows];
-    const widths = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
+    const natural = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
+    const widths = [...natural];
+    const total = () => widths.reduce((sum, one) => sum + one, 0) + 2 * (widths.length - 1);
+    // Narrow the widest column first, a column at a time, down to its header or MIN_COLUMN.
+    while (total() > width) {
+      const floor = (column: number) => Math.min(natural[column]!, Math.max(visibleLength(headers[column] ?? ''), MIN_COLUMN));
+      const candidates = widths.map((one, column) => [one - floor(column), column] as const).filter(([room]) => room > 0);
+      if (candidates.length === 0) break;
+      const [, widest] = candidates.reduce((best, next) => (widths[next[1]]! > widths[best[1]]! ? next : best));
+      widths[widest] = Math.max(floor(widest), widths[widest]! - (total() - width));
+    }
     const lines = (row: readonly string[]): string[] => {
-      const cells = row.map((cell, column) => (column === row.length - 1 ? cell : `${cell}${' '.repeat(widths[column]! - visibleLength(cell))}`));
-      const text = cells.join('  ');
-      if (visibleLength(text) <= width || row.length === 0) return [text];
-      const before = row.length === 1 ? '' : `${cells.slice(0, -1).join('  ')}  `;
-      const indent = visibleLength(before);
-      const [first = '', ...rest] = wrapWords(row.at(-1) ?? '', Math.max(width - indent, 20));
-      return [`${before}${first}`, ...rest.map((line) => `${' '.repeat(indent)}${line}`)];
+      const cells = row.map((cell, column) => (visibleLength(cell) <= widths[column]! ? [cell] : wrapWords(cell, widths[column]!)));
+      const height = Math.max(1, ...cells.map((cell) => cell.length));
+      return Array.from({ length: height }, (_, at) =>
+        cells
+          .map((cell, column) => {
+            const text = cell[at] ?? '';
+            return column === cells.length - 1 ? text : `${text}${' '.repeat(Math.max(0, widths[column]! - visibleLength(text)))}`;
+          })
+          .join('  ')
+          .trimEnd(),
+      );
     };
     return [lines(headers).map((line) => this.dim(line)).join('\n'), ...rows.flatMap(lines)];
   }

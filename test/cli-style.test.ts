@@ -144,6 +144,14 @@ describe('style: tables', () => {
     expect(fitted.at(-1)).toBe('signups       off     Signups');
   });
 
+  it('narrows a wide middle column and wraps it in place, keeping every word and the columns after it (review round 1, C8)', () => {
+    const name = 'Acme very very very very very very long program name';
+    const lines = plain.table(['ID', 'NAME', 'STATUS'], [['1', name, 'active']], 40);
+    for (const line of lines) expect([...line].length).toBeLessThanOrEqual(40);
+    expect(lines[1]).toMatch(/^1   Acme .* active$/);
+    expect(lines.slice(1).map((line) => line.slice(4).replace(/ +active$/, '').trim()).join(' ')).toBe(name);
+  });
+
   it('wraps to the terminal width it is given, and to 80 columns when it has none (review round 1, C8)', () => {
     const wide = new Style({ tty: true, env: {}, columns: 120 });
     const unknown = new Style({ tty: true, env: {} });
