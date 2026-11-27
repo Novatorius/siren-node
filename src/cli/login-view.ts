@@ -11,8 +11,9 @@ import { CLI_VERSION } from './version';
  * browser (Alex, 2026-11-24: "the login screen while we login can
  * absolutely show the siren logo"). Where the logo animation may play, the
  * logo floats in two halves on the left, with the wordmark, the code, the
- * link and a spinner on the right. The halves grip when the approval lands
- * and drift away when it fails. Everywhere else it prints plain lines, with
+ * link and a spinner on the right. The gripped logo is drawn at once when
+ * the approval lands, and the logo clears at once when it fails, so the
+ * shell's prompt never waits on a frame. Everywhere else it prints plain lines, with
  * a spinner when standard error is a terminal.
  */
 
@@ -34,20 +35,22 @@ export interface LoginEnd {
  * The password login's view (Alex, 2026-11-27: "Animate while also showing
  * the login at the same time"). Where the logo animation may play, the
  * first prompt draws the logo on the left, floating apart, with the email
- * and password prompts on the right, live from the first frame. The halves
- * grip when Siren accepts the password and drift away when it refuses.
+ * and password prompts on the right, live from the first frame. The gripped
+ * logo is drawn at once when Siren accepts the password, and the logo is
+ * cleared at once when it refuses.
  * Everywhere else it asks at the terminal's plain prompts.
  */
 export function passwordView(io: CliIo, values: Readonly<Record<string, unknown>>, siren: string): PasswordSignInView & LoginEnd {
   const flags = { quiet: values.quiet === true, json: false };
   const out = styleFor(io, 'stdout', {});
   const email = typeof values.email === 'string' && values.email !== '' ? values.email : undefined;
-  let stage: PasswordStage | null | undefined;
+  let stage: PasswordStage | null = null;
+  let starting: Promise<PasswordStage | null> | undefined;
   // The screen starts at the first question, so it shows the prompt with its first frame.
-  const screen = () => (stage === undefined ? (stage = startPasswordStage(io, flags, { version: CLI_VERSION, siren, email })) : stage);
+  const screen = () => (starting ??= startPasswordStage(io, flags, { version: CLI_VERSION, siren, email }).then((started) => (stage = started)));
   return {
-    prompt: (question) => (screen() ?? io).prompt(question),
-    promptSecret: (question) => (screen() ?? io).promptSecret(question),
+    prompt: async (question) => ((await screen()) ?? io).prompt(question),
+    promptSecret: async (question) => ((await screen()) ?? io).promptSecret(question),
     during: (work) => (stage ? stage.during(work) : work),
     async failed() {
       if (stage) await stage.failed();

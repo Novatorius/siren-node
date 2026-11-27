@@ -4,6 +4,7 @@ import type { CliIo } from '../src/cli/io';
 import { runCli } from '../src/cli/run';
 import { HOOK_FRAMES } from '../src/cli/hook-frames';
 import { CLI_VERSION } from '../src/cli/version';
+import { KEY_DRAIN_MS } from '../src/cli/io';
 import { AuthAnswers, EMAIL, PASSWORD, harness } from './cli-fakes';
 import { fakeScreen } from './cli-screen-fake';
 import type { FakeScreenOptions } from './cli-screen-fake';
@@ -57,7 +58,9 @@ describe('password login screen: the prompts are live from the first frame', () 
     const { fake, running, writtenAtListen, h } = start([AuthAnswers.oneOrg()]);
     await vi.waitFor(() => expect(fake.listening()).toBe(true));
     expect(writtenAtListen()).toBe(0);
-    expect(fake.waits).toEqual([]);
+    // One wait, the key drain, before anything is drawn, and no frame before the prompts.
+    expect(fake.waits).toEqual([KEY_DRAIN_MS]);
+    expect(fake.writtenAtWait).toEqual([0]);
     expect(fake.writtenAtTick).toEqual([]);
     const first = strip(fake.text());
     expect(first).toContain(`Siren ${CLI_VERSION}`);
@@ -115,6 +118,31 @@ describe('password login screen: the prompts are live from the first frame', () 
     expect(loginBody(h)).toEqual({ email: EMAIL, password: PASSWORD });
   });
 
+  /*
+   * Coordinator, 2026-11-27: a key typed before echo is off, or before a
+   * prompt is shown, was never an answer to it, and may be a password typed
+   * early. The screen reads keys from before it draws and drops what comes
+   * in before the prompts appear.
+   */
+  it('drops keys typed while the screen starts, before the prompts are drawn', async () => {
+    const { fake, running, h } = start([AuthAnswers.oneOrg()], [], { press: { at: 1, key: `early-${PASSWORD}\r` } });
+    await vi.waitFor(() => expect(fake.listening()).toBe(true));
+    await vi.waitFor(() => expect(strip(fake.text())).toContain('Email: '));
+    fake.press(`${EMAIL}\r${PASSWORD}\r`);
+    expect(await running, h.err()).toBe(0);
+    expect(loginBody(h)).toEqual({ email: EMAIL, password: PASSWORD });
+    for (const write of fake.writes) expect(write).not.toContain('early-');
+  });
+
+  it('stops on Ctrl-C typed while the screen starts, and sends nothing', async () => {
+    const { fake, running, h } = start([AuthAnswers.oneOrg()], [], { press: { at: 1, key: '\u0003' } });
+    expect(await running).toBe(1);
+    expect(h.err()).toContain('Stopped.');
+    expect(h.paths()).toEqual([]);
+    expect(fake.log).toEqual(['listen', 'stop']);
+    expect(fake.timers()).toBe(0);
+  });
+
   it('takes Backspace and Ctrl-U, and ignores arrow keys', async () => {
     const { fake, running, h } = start([AuthAnswers.oneOrg()]);
     await vi.waitFor(() => expect(fake.listening()).toBe(true));
@@ -144,13 +172,23 @@ describe('password login screen: the prompts are live from the first frame', () 
 });
 
 describe('password login screen: how it ends', () => {
-  it("grips the halves when Siren accepts the password, puts the ✓ line in the status line, and gives the terminal back", async () => {
+  /*
+   * The endings snap (coordinator, 2026-11-27, on Alex's rule that no command
+   * waits on an animation): one write draws the gripped logo with the ✓ line,
+   * and the next steps follow with no frame wait, so the shell's prompt
+   * comes back at once.
+   */
+  it('draws the gripped logo and the ✓ line at once when Siren accepts the password, and gives the terminal back', async () => {
     const { fake, running, h } = start([AuthAnswers.oneOrg()]);
     await vi.waitFor(() => expect(fake.listening()).toBe(true));
     fake.press(`${EMAIL}\r${PASSWORD}\r`);
     expect(await running, h.err()).toBe(0);
     const text = fake.text();
-    expect(text.lastIndexOf(LAST[3]!.trim())).toBeGreaterThan(text.indexOf('Logged in as'));
+    const ending = fake.writes.findIndex((write) => write.includes('Logged in as'));
+    expect(fake.writes[ending]).toContain(LAST[3]!.trim());
+    expect(fake.writes.slice(ending + 1).join('')).not.toMatch(/Logged in as|\u001b7/);
+    expect(fake.waits).toEqual([KEY_DRAIN_MS]);
+    expect(h.out()).toContain('siren apps init');
     expect(strip(text)).toContain(`✓ Logged in as ${EMAIL} · 1 organization`);
     expect(fake.text().endsWith(SHOW)).toBe(true);
     expect(fake.log).toEqual(['listen', 'stop']);
@@ -159,13 +197,15 @@ describe('password login screen: how it ends', () => {
     expect(h.credentials().sessions).toBeDefined();
   });
 
-  it('drifts the halves away when Siren refuses the password, then prints the ✗ line', async () => {
+  it('clears the logo at once when Siren refuses the password, then prints the ✗ line', async () => {
     const { fake, running, h } = start([AuthAnswers.wrongPassword()]);
     await vi.waitFor(() => expect(fake.listening()).toBe(true));
     fake.press(`${EMAIL}\rnot-it\r`);
     expect(await running).toBe(1);
-    const afterLogin = fake.writes.slice(fake.writes.findIndex((write) => write.includes('Logging in')));
-    expect(afterLogin.some((write) => write.includes(FIRST[3]!.trim()))).toBe(true);
+    const afterLogin = fake.writes.slice(fake.writes.findIndex((write) => write.includes('Logging in')) + 1);
+    expect(afterLogin.some((write) => write.includes(FIRST[3]!.trim()))).toBe(false);
+    expect(strip(afterLogin.join(''))).not.toMatch(/[⠁-⣿]/);
+    expect(fake.waits).toEqual([KEY_DRAIN_MS]);
     expect(fake.text().endsWith(SHOW)).toBe(true);
     expect(h.err()).toContain("Siren didn't accept that email and password.");
     expect(fake.log).toEqual(['listen', 'stop']);

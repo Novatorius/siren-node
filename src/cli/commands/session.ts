@@ -30,6 +30,16 @@ import { CliRefusal, CliUsageError, assertEditionAllowed, assertSessionMatches, 
  * first. Never prints a token.
  */
 export async function signup(input: CommandInput): Promise<number> {
+  // Echo goes off before anything is sent, so a password typed early is never shown or taken as an answer.
+  const release = input.values['password-stdin'] !== true && input.io.interactive ? input.io.holdKeys?.() : undefined;
+  try {
+    return await signupHeld(input);
+  } finally {
+    release?.();
+  }
+}
+
+async function signupHeld(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
   const passwordFromStdin = values['password-stdin'] === true;
@@ -137,6 +147,18 @@ function inCi(env: Readonly<Record<string, string | undefined>>): boolean {
  * token or the device code.
  */
 export async function login(input: CommandInput): Promise<number> {
+  // The password login turns echo off before it sends or draws anything, so a password typed early is
+  // never shown, and the prompts drop it rather than take it as an answer.
+  const asks = !usesBrowserSignIn(input.values) && input.values['password-stdin'] !== true && input.io.interactive;
+  const release = asks ? input.io.holdKeys?.() : undefined;
+  try {
+    return await loginHeld(input);
+  } finally {
+    release?.();
+  }
+}
+
+async function loginHeld(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const { io, values } = input;
   const passwordFromStdin = values['password-stdin'] === true;
