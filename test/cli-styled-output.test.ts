@@ -140,15 +140,22 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
         '  URL from      SIREN_APP_URL',
         '',
         'Next',
-        '  1  node --env-file=.env.sandbox server.js   run your handler with its key',
-        '  2  siren apps requests --follow             watch what Siren sends it',
+        '  1  siren apps requests --follow   watch what Siren sends it',
+        '',
+        // Review round 1, C3 and C24: what picks each new feature, and the env file, with no server file init never wrote.
+        'No program picks notify-crm yet, so Siren never sends it. Pick it on a program',
+        '  in the dashboard, or in a recipe with',
+        '  "postConversionActions":[{"type":"app:11"}].',
+        'No autofulfiller picks acme-ledger yet, so Siren never sends it. Pick it on an',
+        '  autofulfiller in the dashboard, or in a recipe with "method":"app:12".',
+        'Your handler reads its key and secret from .env.sandbox. With Node, start it',
+        '  with --env-file=.env.sandbox.',
         '',
       ].join('\n'),
     );
     expect(h.prompts.at(-1)).toBe('Make acme-payouts in Acme (3), sandbox? [y/N] ');
     expect(h.printed()).not.toContain(RAW_KEY);
     expect(h.printed()).not.toContain(SIGNING_SECRET);
-    expect(text).not.toContain('autofulfiller');
     expect(text).not.toContain(h.cwd);
   });
 
@@ -157,7 +164,7 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
     expect(text).toContain(`${ESC}1mPlan${ESC}0m`);
     expect(text).toMatch(/\u001b\[[\d;]+m\+\u001b\[0m makes the app/);
     expect(strip(text)).toContain('✓ Made acme-payouts in Acme');
-    expect(text).toContain(`${ESC}1mnode --env-file=.env.sandbox server.js${ESC}0m`);
+    expect(text).toContain(`${ESC}1msiren apps requests --follow${ESC}0m`);
     for (const line of strip(text).split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-styled-apply-new.txt');
   });

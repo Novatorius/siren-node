@@ -13,5 +13,12 @@
   [2mURL from[0m      SIREN_APP_URL
 
 [1mNext[0m
-  1  [1mnode --env-file=.env.sandbox server.js[0m   [2mrun your handler with its key[0m
-  2  [1msiren apps requests --follow[0m             [2mwatch what Siren sends it[0m
+  1  [1msiren apps requests --follow[0m   [2mwatch what Siren sends it[0m
+
+[2m› No program picks notify-crm yet, so Siren never sends it. Pick it on a program[0m
+[2m  in the dashboard, or in a recipe with[0m
+[2m  "postConversionActions":[{"type":"app:11"}].[0m
+[2m› No autofulfiller picks acme-ledger yet, so Siren never sends it. Pick it on an[0m
+[2m  autofulfiller in the dashboard, or in a recipe with "method":"app:12".[0m
+[2m› Your handler reads its key and secret from .env.sandbox. With Node, start it[0m
+[2m  with --env-file=.env.sandbox.[0m

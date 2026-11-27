@@ -11,6 +11,7 @@ import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
+import { recordsPicking, unpickedLine } from '../feature-picks';
 import { clean, styleFor, unbroken, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
@@ -416,13 +417,17 @@ export async function appsApply(input: CommandInput): Promise<number> {
     // CLI pass 2, finding 2: a running service may hold the key, so never advise rotating it.
     else tips.push(`${envName} holds no key for ${key}, which is fine when your service has one. ${unbroken(run.command(`apps rotate-key ${key}`))} would save a new one here and revoke the one in use.`);
   }
-  const next = app.created
-    ? [
-        { text: out.command(`node --env-file=${envName} server.js`), aside: 'run your handler with its key' },
-        // A read, which needs no --live.
-        { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
-      ]
-    : [];
+  // Review round 1, C3: a feature no record picks never fires, so say which, and how to pick each.
+  const before = new Map((plan.current?.features ?? []).map((item) => [item.key, item]));
+  for (const item of app.features) {
+    if (item.status !== 'active' || recordsPicking(before.get(item.key)) > 0) continue;
+    const line = unpickedLine(item);
+    if (line !== undefined) tips.push(clean(line));
+  }
+  // Review round 1, C24: name the env file the handler loads, and no server file init never wrote.
+  if (app.created) tips.push(`Your handler reads its key and secret from ${envName}. With Node, start it with --env-file=${envName}.`);
+  // A read, which needs no --live.
+  const next = app.created ? [{ text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' }] : [];
   run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${clean(session.orgName)}`, rows, next, tips }).replace(/\n$/, ''));
   return 0;
 }
@@ -437,6 +442,8 @@ interface Plan {
   key: string;
   params: ReturnType<typeof declarationFor>['params'];
   changes: ReturnType<typeof appChanges>;
+  /** The app as Siren held it before, with each feature's `usedBy`, or undefined for a new app. */
+  current?: App;
   lines: string[];
   envPath: string;
   /** False when Siren holds the app and it is off, true when it is on, undefined for a new app. */
@@ -535,7 +542,7 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   changes.dropped.forEach(({ item }, at) => refuseKindChange(item, uses[at], params.features ?? [], shown));
   const removals = changes.dropped.map(({ item }, at) => droppedLine(item, uses[at]));
   const on = current === undefined ? undefined : current.status === 'active';
-  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath, on };
+  return { shown, path, parsed: parsed as Plan['parsed'], shell, session, key, params, changes, lines: [...changes.lines, ...removals], envPath, on, current };
 }
 
 /**
@@ -833,14 +840,21 @@ export async function appsShow(input: CommandInput): Promise<number> {
   // Each feature's kind reads "Post-conversion action (postConversionAction)" when the line fits.
   // When it does not, the code name goes before NAME is cut, and a Kinds row above names the code names.
   const width = widthOf(input, out);
+  // Review round 1, C3: how many records pick each feature, when Siren says, since one no record picks never fires.
+  const counted = app.features.some((item) => Array.isArray(item.usedBy) || typeof item.uses === 'number');
+  const pickedCell = (item: AppFeature) => {
+    const count = recordsPicking(item);
+    return count === 0 ? (out.rich ? out.dim('none') : 'none') : String(count);
+  };
   const featureRows = (label: (kind: string) => string) =>
     app.features.map((item) => [
       clean(item.ref),
       clean(item.key),
       clean(label(item.kind)),
+      ...(counted ? [pickedCell(item)] : []),
       `${clean(item.name)}${item.status === 'archived' ? out.dim(' · archived') : ''}${planMark(item).replace(/^ {2}/, ' · ')}`,
     ]);
-  const HEADERS = ['ID', 'KEY', 'KIND', 'NAME'];
+  const HEADERS = ['ID', 'KEY', 'KIND', ...(counted ? ['PICKED BY'] : []), 'NAME'];
   const full = featureRows(kindLabel);
   const fitsFull = out.table(HEADERS, full, Number.POSITIVE_INFINITY).every((line) => visibleLength(line) <= width);
   const features = fitsFull ? full : featureRows(kindName);
@@ -853,6 +867,9 @@ export async function appsShow(input: CommandInput): Promise<number> {
     run.print('');
     for (const line of out.table(HEADERS, features, width)) run.print(line);
   }
+  const unpicked = counted ? app.features.filter((item) => item.status === 'active' && recordsPicking(item) === 0).map(unpickedLine).filter((line): line is string => line !== undefined) : [];
+  if (unpicked.length > 0 && out.rich) run.print('');
+  for (const line of unpicked) run.aside(out, out.next(clean(line)));
   if (attentionCount(app) > 0) attentionTip(run, out, app);
   return 0;
 }

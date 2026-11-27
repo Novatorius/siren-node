@@ -76,7 +76,9 @@ describe('finding 9: no app:id note on every apply', () => {
     h.write('siren.app.json', fileWith({ url: '${SIREN_APP_URL}', scopes: ['event:sale'], features }));
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.out()).toContain('app:11');
-    expect(h.out()).not.toMatch(/autofulfiller|stores/);
+    expect(h.out()).not.toMatch(/stores/);
+    // Review round 1, C3: what picks a new feature is said, since one nothing picks never fires.
+    expect(h.out()).toContain('No autofulfiller picks acme-ledger yet');
   });
 });
 

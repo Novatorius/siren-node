@@ -256,10 +256,12 @@ describe('cli pass 1, finding 6: the first apply says what comes next', () => {
     expect(h.prompts.at(-1)).not.toContain('last write wins');
     expect(h.out()).toContain('https://acme.example');
     expect(h.printed()).not.toContain('token=abc');
-    expect(h.out()).toContain('node --env-file=.env.sandbox');
+    expect(h.out().replace(/\s+/g, ' ')).toContain('With Node, start it with --env-file=.env.sandbox.');
+    expect(h.out()).not.toContain('server.js');
     expect(h.out()).toContain('siren apps requests --follow');
     expect(h.out()).toMatch(/\n  notify-crm +app:\d+ · /);
-    expect(h.out()).not.toContain('autofulfiller');
+    // Review round 1, C3: a feature no record picks yet says so, and how to pick it.
+    expect(h.out().replace(/\s+/g, ' ')).toContain('No program picks notify-crm yet, so Siren never sends it.');
   });
 });
 
@@ -286,7 +288,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
     h.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
     await h.run(['apps', 'init', '--key', APP_KEY]);
     expect(await h.run(['apps', 'apply', '--yes', '--live', '--base-url', UAT]), h.err()).toBe(0);
-    expect(h.out()).toContain(`\n  2  siren apps requests --follow --base-url ${UAT}\n`);
+    expect(h.out()).toContain(`\n  1  siren apps requests --follow --base-url ${UAT}`);
   });
 
   it('points $schema at the versioned schema on unpkg, which resolves with or without a local install, and the package ships that file', async () => {
