@@ -7,8 +7,8 @@ import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { findOrg, orgList } from '../org';
 import { clean, styleFor } from '../style';
-import { loginView } from '../login-view';
-import type { LoginView } from '../login-view';
+import { loginView, passwordView } from '../login-view';
+import type { LoginEnd } from '../login-view';
 import type { Style } from '../style';
 import { DeviceSignIn, PasswordSignIn, askLine, readPassword } from '../session-auth';
 import type { Edition, EmailConfirmationWindow, LoginResult, Membership, PersonalToken, SessionTokens } from '../session-auth';
@@ -163,25 +163,30 @@ export async function login(input: CommandInput): Promise<number> {
 
   const style = styleFor(io, 'stdout', {});
   const view = browser ? loginView(io, values) : undefined;
+  // --password asks beside the logo where it may play. --password-stdin asks nothing.
+  const prompts = !browser && !passwordFromStdin ? passwordView(io, values, new URL(run.target.baseUrl).host) : undefined;
+  const end = view ?? prompts;
   let result: LoginResult;
   try {
     result = view !== undefined
       ? await new DeviceSignIn(run.command('login'), view).signIn(run.auth, io)
-      : await new PasswordSignIn().signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
+      : await new PasswordSignIn(prompts).signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
   } catch (error) {
+    // The device login drifts its halves away itself. The password login's go here, before the ✗ line.
+    await prompts?.failed();
     throw signInRefusal(error, run.command('login'), run.target.baseUrl, view !== undefined);
   }
   try {
-    return await keepLogin(input, result, edition, style, view);
+    return await keepLogin(input, result, edition, style, end);
   } catch (error) {
     // The approval landed, but keeping the session failed: the halves drift away before the ✗ line.
-    await view?.failed();
+    await end?.failed();
     throw error;
   }
 }
 
 /** Keeps the session a login gave, says who is logged in, and grips the logo when the login was in the browser. */
-async function keepLogin(input: CommandInput, result: LoginResult, edition: Edition, style: Style, view: LoginView | undefined): Promise<number> {
+async function keepLogin(input: CommandInput, result: LoginResult, edition: Edition, style: Style, view: LoginEnd | undefined): Promise<number> {
   const run = contextOf(input);
   const { io } = input;
 

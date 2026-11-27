@@ -106,6 +106,7 @@ describe('security 4: Ctrl-C under the logo wins over an approval in flight', ()
       platform: 'linux',
       write: () => undefined,
       wait: async () => undefined,
+      every: () => () => undefined,
       listen: (callback) => {
         onKey = callback;
         return () => {

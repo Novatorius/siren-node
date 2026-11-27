@@ -24,6 +24,10 @@ export function fakeScreen(options: FakeScreenOptions = {}) {
   const log: string[] = [];
   let onKey: ((key: string) => void) | null = null;
   let exitHooks = 0;
+  /** The timers `every` started and has not stopped, which {@link tick} calls. */
+  const timers = new Set<() => void>();
+  /** How many writes came before each tick. */
+  const writtenAtTick: number[] = [];
   const screen: CliScreen = {
     size: options.tty === false ? null : { columns: options.columns ?? 80, rows: options.rows ?? 24 },
     platform: options.platform ?? 'linux',
@@ -34,6 +38,12 @@ export function fakeScreen(options: FakeScreenOptions = {}) {
       waits.push(ms);
       writtenAtWait.push(writes.length);
       if (options.press && options.press.at === waits.length) onKey?.(options.press.key);
+    },
+    every: (_ms, tick) => {
+      timers.add(tick);
+      return () => {
+        timers.delete(tick);
+      };
     },
     listen: (callback) => {
       if (options.keys === false) return null;
@@ -59,5 +69,27 @@ export function fakeScreen(options: FakeScreenOptions = {}) {
       };
     },
   };
-  return { screen, writes, waits, writtenAtWait, log, text: () => writes.join(''), pendingExitHooks: () => exitHooks };
+  return {
+    screen,
+    writes,
+    waits,
+    writtenAtWait,
+    writtenAtTick,
+    log,
+    text: () => writes.join(''),
+    pendingExitHooks: () => exitHooks,
+    /** Runs every live timer once, `times` times, as the clock would. */
+    tick: (times = 1) => {
+      for (let at = 0; at < times; at++) {
+        writtenAtTick.push(writes.length);
+        for (const timer of [...timers]) timer();
+      }
+    },
+    /** How many timers are running. */
+    timers: () => timers.size,
+    /** True while something reads keys. */
+    listening: () => onKey !== null,
+    /** Presses `key` now, as one chunk, which may hold many characters. */
+    press: (key: string) => onKey?.(key),
+  };
 }

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { CliIo } from '../src/cli/io';
 import { runCli } from '../src/cli/run';
 import { HOOK_FRAMES, HOOK_FRAME_MS, HOOK_WIDTH } from '../src/cli/hook-frames';
@@ -40,16 +40,57 @@ function beforeFirstWait(fake: ReturnType<typeof fakeScreen>) {
 }
 
 describe('apps-cli: the hook plays on first run', () => {
-  it('plays every frame on the first command in a terminal, with the wordmark and next step', async () => {
+  /*
+   * Alex, 2026-11-27, testing siren login --live --password: "the animation
+   * should not block the login". The welcome used to play all 58 frames
+   * before the first command started. It now draws at once and plays beside
+   * the command, which starts straight away and stills it with its first line.
+   */
+  it('draws the welcome and starts the command at once, never waiting on a frame', async () => {
     const { fake, run, h } = setup();
     expect(await run(OFFLINE), h.err()).toBe(0);
     const text = fake.text();
     expect(text.startsWith(HIDE)).toBe(true);
-    expect(text).toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]?.[3]?.trim());
-    expect(fake.waits).toHaveLength(FRAME_COUNT - 1);
+    expect(fake.waits).toEqual([]);
     expect(text).toContain('Siren');
     expect(text).toMatch(/siren --help/);
+    // The command's first line stilled the logo: the last frame, then the cursor back.
+    expect(fake.writes.at(-1)).toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]?.[3]?.trim());
     expect(text.lastIndexOf(SHOW)).toBeGreaterThan(text.lastIndexOf(HIDE));
+    expect(fake.timers()).toBe(0);
+    expect(fake.log).toEqual([]);
+    expect(fake.pendingExitHooks()).toBe(0);
+    expect(h.file('siren.app.json')).toContain('acme-payouts');
+  });
+
+  it('moves the logo while a command waits on Siren, and stills it before the command prints anything', async () => {
+    const h = harness([], { env: { COLORTERM: 'truecolor', TERM: 'xterm-256color' }, stdin: 'made-up-password\n' });
+    const fake = fakeScreen();
+    let open = () => undefined as void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const io: CliIo = {
+      ...h.io,
+      screen: fake.screen,
+      stdout: (text) => (fake.writes.push(`[stdout]${text}`), h.io.stdout(text)),
+      stderr: (text) => (fake.writes.push(`[stderr]${text}`), h.io.stderr(text)),
+      httpClient: { send: async (request) => (await gate, h.io.httpClient.send(request)) },
+    };
+    const running = runCli(['login', '--password-stdin', '--email', 'pat@example.invalid'], io);
+    await vi.waitFor(() => expect(fake.timers()).toBe(1));
+    const drawn = fake.writes.length;
+    fake.tick(5);
+    expect(fake.writes.length).toBe(drawn + 5);
+    expect(new Set(fake.writes.slice(drawn)).size).toBe(5);
+    open();
+    await running;
+    const firstOutput = fake.writes.findIndex((write) => write.startsWith('[stdout]') || write.startsWith('[stderr]'));
+    expect(firstOutput).toBeGreaterThan(drawn + 5);
+    expect(fake.writes[firstOutput - 1]).toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]?.[3]?.trim());
+    expect(fake.writes[firstOutput - 1]).toContain(SHOW);
+    expect(fake.writes.slice(firstOutput).every((write) => write.startsWith('['))).toBe(true);
+    expect(fake.timers()).toBe(0);
+    // It never read the keyboard, so the piped password stayed the command's.
+    expect(fake.log).toEqual([]);
   });
 
   it('remembers it played in the config folder, and stays still the second time', async () => {
@@ -182,19 +223,19 @@ describe('apps-cli: the hook never gets in the way', () => {
   it('plays in Windows Terminal, which draws braille', async () => {
     const { fake, run } = setup({ WT_SESSION: 'abc' }, { platform: 'win32' });
     await run(OFFLINE);
-    expect(fake.waits.length).toBeGreaterThan(0);
+    expect(fake.writes.length).toBeGreaterThan(0);
   });
 
   it('treats CI=false as no CI', async () => {
     const { fake, run } = setup({ CI: 'false' });
     await run(OFFLINE);
-    expect(fake.waits.length).toBeGreaterThan(0);
+    expect(fake.writes.length).toBeGreaterThan(0);
   });
 
   it('treats an empty NO_COLOR as unset, as no-color.org says', async () => {
     const { fake, run } = setup({ NO_COLOR: '' });
     await run(OFFLINE);
-    expect(fake.waits.length).toBeGreaterThan(0);
+    expect(fake.writes.length).toBeGreaterThan(0);
   });
 
   it('prints the wordmark and next step without the hook on siren alone when it is skipped', async () => {
@@ -206,9 +247,9 @@ describe('apps-cli: the hook never gets in the way', () => {
     expect(h.out()).not.toContain('\u001b[');
   });
 
-  it('jumps to the still logo when any key is pressed, and gives the keyboard back', async () => {
+  it('jumps to the still logo on siren alone when any key is pressed, and gives the keyboard back', async () => {
     const { fake, run, h } = setup({}, { press: { at: 3, key: 'x' } });
-    expect(await run(OFFLINE), h.err()).toBe(0);
+    expect(await run([]), h.err()).toBe(0);
     expect(fake.waits).toHaveLength(3);
     expect(fake.writes[fake.writes.length - 2]).toContain(HOOK_FRAMES[HOOK_FRAMES.length - 1]?.[3]?.trim());
     expect(fake.log).toEqual(['listen', 'stop']);
@@ -216,19 +257,18 @@ describe('apps-cli: the hook never gets in the way', () => {
     expect(fake.pendingExitHooks()).toBe(0);
   });
 
-  it('stops the command on Ctrl-C with exit code 130, the cursor shown and the keyboard given back', async () => {
-    const { fake, run, h } = setup({}, { press: { at: 2, key: '\u0003' } });
-    expect(await run(OFFLINE)).toBe(130);
+  it('stops siren alone on Ctrl-C with exit code 130, the cursor shown and the keyboard given back', async () => {
+    const { fake, run } = setup({}, { press: { at: 2, key: '\u0003' } });
+    expect(await run([])).toBe(130);
     expect(fake.waits).toHaveLength(2);
     expect(fake.text().endsWith(`${SHOW}\n`) || fake.text().endsWith(SHOW)).toBe(true);
     expect(fake.log).toEqual(['listen', 'stop']);
     expect(fake.pendingExitHooks()).toBe(0);
-    expect(() => h.file('siren.app.json')).toThrow();
   });
 
-  it('plays to the end with no key skip when standard input is not a terminal', async () => {
+  it('plays siren alone to the end with no key skip when standard input is not a terminal', async () => {
     const { fake, run } = setup({}, { keys: false });
-    await run(OFFLINE);
+    await run([]);
     expect(fake.waits).toHaveLength(FRAME_COUNT - 1);
   });
 });

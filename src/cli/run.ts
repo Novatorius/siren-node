@@ -583,6 +583,8 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   let hintCommand = (words: string) => `siren ${words}`;
   // The Siren a failed command was talking to, for the line --verbose adds.
   let targetUrl: string | undefined;
+  // Stills the first-run welcome when the command ends, if no output stilled it first.
+  let settle = async () => undefined as void;
   try {
     const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
     let words = loose.positionals;
@@ -627,6 +629,14 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       throw new CliUsageError(`siren ${name} takes ${range} ${most === 1 ? 'argument' : 'arguments'}, and got ${args.length}.`);
     }
 
+    // A login plays the logo itself, beside its code or its prompts. Any other command starts at once,
+    // with the first-run welcome beside it, never before it (Alex, 2026-11-27: "the animation should not block").
+    const ownsLogo = name === 'login' && (session.usesBrowserSignIn(values) || values.password === true);
+    if (!ownsLogo) {
+      const welcome = await firstRun(io, hookFlags(values), CLI_VERSION);
+      io = welcome.io;
+      settle = welcome.settle;
+    }
     const flags = targetFlags(values);
     const context = spec.offline
       ? null
@@ -648,9 +658,6 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const command = (words: string) => commandLine(hintTarget, words);
     hintCommand = context === null ? command : (words: string) => context.command(words);
     login = command('login');
-    // A browser sign-in plays the logo animation when the approval lands, so the first run waits for that moment.
-    const playsAtApproval = name === 'login' && session.usesBrowserSignIn(values);
-    if (!playsAtApproval && !(await firstRun(io, hookFlags(values), CLI_VERSION))) return 130;
     const kept = async () => {
       try {
         const target = context?.target ?? resolveTarget(flags, io.env, await remembered(io));
@@ -695,6 +702,8 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const verbose = argv.includes('--verbose') || io.env.SIREN_DEBUG === '1';
     io.stderr(style.error(tokenRefusal(error, login) ?? asRefusal(error, targetUrl, { name, args: typedArgs, command: hintCommand }), verbose));
     return 1;
+  } finally {
+    await settle();
   }
 }
 

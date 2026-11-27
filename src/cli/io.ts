@@ -73,6 +73,12 @@ export interface CliScreen {
   /** Waits between frames. */
   wait(ms: number): Promise<void>;
   /**
+   * Calls `tick` every `ms` until the answered function is called, for an
+   * animation that runs while the tool does other work, such as reading a
+   * prompt. The timer never keeps the process alive by itself.
+   */
+  every(ms: number, tick: () => void): () => void;
+  /**
    * When standard input is a terminal, puts it in raw mode and calls
    * `onKey` with each key typed, Ctrl-C included, and answers a function
    * that stops reading and gives the mode back. Answers null, and reads
@@ -194,6 +200,11 @@ function nodeScreen(): CliScreen {
       out.write(text);
     },
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    every: (ms, tick) => {
+      const timer = setInterval(tick, ms);
+      timer.unref();
+      return () => clearInterval(timer);
+    },
     listen: (onKey) => {
       const input = process.stdin;
       if (input.isTTY !== true) return null;
