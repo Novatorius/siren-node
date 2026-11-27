@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -118,13 +118,9 @@ describe('finding 4: prepare survives an install from a folder', () => {
     try {
       cpSync(join(root, 'scripts', 'prepare.mjs'), join(folder, 'scripts', 'prepare.mjs'));
       if (withDist) cpSync(join(root, 'package.json'), join(folder, 'dist', 'index.js'));
-      try {
-        const output = execFileSync(process.execPath, ['scripts/prepare.mjs'], { cwd: folder, encoding: 'utf8', stdio: 'pipe' });
-        return { status: 0, output };
-      } catch (error) {
-        const failed = error as { status: number; stderr: string };
-        return { status: failed.status, output: failed.stderr };
-      }
+      // prepare writes its lines to standard error, so npm pack --json keeps standard output for JSON.
+      const run = spawnSync(process.execPath, ['scripts/prepare.mjs'], { cwd: folder, encoding: 'utf8' });
+      return { status: run.status ?? 1, output: `${run.stdout}${run.stderr}` };
     } finally {
       rmSync(folder, { recursive: true, force: true });
     }
