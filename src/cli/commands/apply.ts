@@ -763,8 +763,8 @@ export async function appsList(input: CommandInput): Promise<number> {
     );
     return 0;
   }
-  run.print(out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
-  run.print('');
+  run.aside(out, out.bold(`${apps.length} ${apps.length === 1 ? 'app' : 'apps'} in ${orgNamed(session)}`));
+  if (out.rich) run.print('');
   const rows = apps.map((app) => {
     const count = attentionCount(app);
     return [
@@ -779,8 +779,8 @@ export async function appsList(input: CommandInput): Promise<number> {
   const waiting = apps.filter((app) => attentionCount(app) > 0);
   if (waiting.length === 1) attentionTip(run, out, waiting[0]!);
   else if (waiting.length > 1) {
-    run.print('');
-    run.print(out.next(`${out.command(run.command('apps requests --attention'))} lists the requests that need you.`));
+    if (out.rich) run.print('');
+    run.aside(out, out.next(`${out.command(run.command('apps requests --attention'))} lists the requests that need you.`));
   }
   return 0;
 }
@@ -886,8 +886,8 @@ function widthOf(_input: CommandInput, style: Style): number {
 /** The tip under an app with requests that need a person: how many, and the command that lists them. */
 function attentionTip(run: CommandContext, out: Style, app: App): void {
   const count = attentionCount(app);
-  run.print('');
-  run.print(out.next(`${out.command(run.command(`apps requests --app ${app.key} --attention`))} lists the ${count} that ${count === 1 ? 'needs' : 'need'} you.`));
+  if (out.rich) run.print('');
+  run.aside(out, out.next(`${out.command(run.command(`apps requests --app ${app.key} --attention`))} lists the ${count} that ${count === 1 ? 'needs' : 'need'} you.`));
 }
 
 /** `siren apps on <key>`: turns the app on. */

@@ -175,6 +175,17 @@ export class CommandContext {
     this.io.stdout(`${line}\n`);
   }
 
+  /**
+   * One line about the data, such as a count, a blank line or a tip: on
+   * standard output in a terminal, beside the data, and on standard error
+   * through a pipe, so standard output holds the data alone (CLI review
+   * round 1, C12). `out` is the style standard output was given.
+   */
+  aside(out: { rich: boolean }, line: string): void {
+    if (out.rich) this.print(line);
+    else this.warn(line);
+  }
+
   /** Writes one line to standard error. */
   warn(line: string): void {
     this.io.stderr(`${line}\n`);

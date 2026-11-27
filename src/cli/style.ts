@@ -298,10 +298,12 @@ export class Style {
    * is ever cut (CLI review round 1, C8). When the rows are wider than
    * `width`, the widest columns are narrowed until they fit, no column
    * below its header or {@link MIN_COLUMN}, and each cell wraps at word
-   * boundaries inside its column, so a row may take several lines. Pass
-   * `Infinity` for a pipe, where a row stays on one line.
+   * boundaries inside its column, so a row may take several lines.
+   * Through a pipe each row is one line of cells split by tabs, with no
+   * padding, so a script can split it (CLI review round 1, C12).
    */
   table(headers: readonly string[], rows: ReadonlyArray<readonly string[]>, width: number): string[] {
+    if (!this.rich) return [headers, ...rows].map((row) => row.map((cell) => cell.replace(/\t/g, ' ')).join('\t'));
     const all = [headers, ...rows];
     const natural = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
     const widths = [...natural];

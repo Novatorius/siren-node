@@ -22,7 +22,7 @@ import { reply } from './http-fakes';
 const exampleFile = readFileSync(new URL('../examples/apps/acme/siren.app.json', import.meta.url), 'utf8');
 const appEnv = { SIREN_APP_URL: 'https://acme.example/siren' };
 const DROPPED = 'apps-declare-200-dropped-selected-item';
-const ARCHIVED_LINE = /^app:1 +notify-crm +Post-conversion action \(postConversionAction\) +Tell the CRM · archived$/m;
+const ARCHIVED_LINE = /^app:1\tnotify-crm\tPost-conversion action \(postConversionAction\)\tTell the CRM · archived$/m;
 
 describe('apps-sdk-followups-1: an archived item', () => {
   it('apply marks the archived item beside it, and says once what archiving means and how to bring it back', async () => {
@@ -67,7 +67,7 @@ describe('apps-sdk-followups-1: an archived item', () => {
     expect(h.out()).not.toContain('keeps an archived feature');
     const before = h.out().length;
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
-    expect(h.out().slice(before)).toMatch(new RegExp(`\\n${APP_KEY} +on +${body.features.length} `));
+    expect(h.out().slice(before)).toMatch(new RegExp(`^${APP_KEY}\\ton\\t${body.features.length}\\t`, 'm'));
   });
 });
 
@@ -141,9 +141,9 @@ describe('apps-sdk-followups-1: how many of an app\'s requests need attention', 
     const h = harness([renamedReply('apps-list-200-count-1')]);
     h.signedIn();
     expect(await h.run(['apps', 'list', '--sandbox']), h.err()).toBe(0);
-    expect(h.out()).toMatch(/\nacme-payouts +on +\d+ +1 request /);
-    expect(h.out()).toMatch(/\nledger-sync +\S+ +\d+ +– /);
-    expect(h.out()).toContain('\nsiren apps requests --app acme-payouts --attention --sandbox lists the 1 that needs you.\n');
+    expect(h.out()).toMatch(/^acme-payouts\ton\t\d+\t1 request\t/m);
+    expect(h.out()).toMatch(/\nledger-sync\t\S+\t\d+\t–\t/);
+    expect(h.err()).toContain('siren apps requests --app acme-payouts --attention --sandbox lists the 1 that needs you.\n');
   });
 
   it('show says the count when it is above zero, and nothing when it is zero', async () => {
@@ -151,10 +151,10 @@ describe('apps-sdk-followups-1: how many of an app\'s requests need attention', 
     const h = harness([reply(200, { ...body, needsAttention: 2 }), renamedReply('apps-retrieve-200-with-count')]);
     h.signedIn();
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain('\nsiren apps requests --app acme-payouts --attention lists the 2 that need you.\n');
-    const before = h.out().length;
+    expect(h.err()).toContain('siren apps requests --app acme-payouts --attention lists the 2 that need you.\n');
+    const before = h.err().length;
     expect(await h.run(['apps', 'show', APP_KEY]), h.err()).toBe(0);
-    expect(h.out().slice(before)).not.toContain('--attention');
+    expect(h.err().slice(before)).not.toContain('--attention');
   });
 });
 

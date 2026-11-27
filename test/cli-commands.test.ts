@@ -589,7 +589,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     h.signedIn();
     expect(await h.run(['apps', 'requests', REQUEST]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', `GET /apps/${KEY}/deliveries`, LOOKUP]);
-    expect(h.out()).toMatch(/\n1  failed +500  +upstream timeout\n/);
+    expect(h.out()).toMatch(/\n1\tfailed\t500\tupstream timeout\n/);
     expect(h.out()).toContain('upstream timeout');
     expect(h.out()).toContain('{"received":true}');
     expect(h.out()).toContain('  payoutId  88');

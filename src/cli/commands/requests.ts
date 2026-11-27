@@ -161,7 +161,7 @@ interface Column {
 }
 
 /**
- * `siren apps requests`: the latest requests, oldest first, as a table, for
+ * `siren apps requests`: the latest requests, newest first, as a table, for
  * every app or the one `--app` names, and only those that need attention
  * with `--attention`, where the last column says why. In a terminal it
  * leaves out the sends, then the app, then what a request is about, until
@@ -269,39 +269,41 @@ export async function appsRequests(input: CommandInput): Promise<number> {
 
   if (values.follow !== true) {
     const rows = await read();
+    // Newest first, as every other list prints (review round 1, C26). --follow keeps the order they came in.
+    const newestFirst = [...rows].reverse();
     if (json) {
-      run.print(JSON.stringify(rows, null, 2));
+      run.print(JSON.stringify(newestFirst, null, 2));
       return 0;
     }
     const missing = unlisted();
     if (rows.length === 0 && missing.length > 0) {
-      for (const line of missing) run.print(line);
+      for (const line of missing) run.aside(out, line);
       return 0;
     }
     if (rows.length === 0) {
       if (appKey !== undefined) {
-        run.print(attention ? `No request of ${appKey} needs you.` : `No requests for ${appKey} yet.`);
-        run.print(out.next(`${out.command(run.command(`apps requests --app ${appKey} --follow`))} watches for them.`));
-      } else run.print(attention ? `Nothing needs you in ${org}.` : `No requests in ${org} yet.`);
+        run.aside(out, attention ? `No request of ${appKey} needs you.` : `No requests for ${appKey} yet.`);
+        run.aside(out, out.next(`${out.command(run.command(`apps requests --app ${appKey} --follow`))} watches for them.`));
+      } else run.aside(out, attention ? `Nothing needs you in ${org}.` : `No requests in ${org} yet.`);
       return 0;
     }
     label = await idLabelFor(run, rows.at(-1)!.id);
     if (label === whole) columns[0]!.cap = APP_REQUEST_ID_LENGTH;
     const count = `${rows.length} ${rows.length === 1 ? 'request' : 'requests'}${appKey === undefined ? '' : ` for ${appKey}`}`;
-    run.print(attention ? `${out.bold(count)} ${out.amber(rows.length === 1 ? 'needs you' : 'need you')} in ${org}` : `${out.bold(count)} in ${org}`);
-    run.print('');
+    run.aside(out, attention ? `${out.bold(count)} ${out.amber(rows.length === 1 ? 'needs you' : 'need you')} in ${org}` : `${out.bold(count)} in ${org}`);
+    if (out.rich) run.print('');
     // A terminal shows the newest TERMINAL_ROWS. Piped and --json, the list is whole.
-    const listed = out.rich ? rows.slice(-TERMINAL_ROWS) : rows;
+    const listed = out.rich ? newestFirst.slice(0, TERMINAL_ROWS) : newestFirst;
     const shown = fitting(columns, listed, width, false);
     for (const line of out.table(shown.map((column) => column.header), listed.map((row) => shown.map((column) => column.cell(row))), width)) run.print(line);
     const newest = label(rows.at(-1)!.id);
-    run.print('');
+    if (out.rich) run.print('');
     const hidden = rows.length - listed.length;
-    if (hidden > 0) run.print(out.dim(`${hidden} older ${hidden === 1 ? 'request is' : 'requests are'} not shown. --json prints them all.`));
+    if (hidden > 0) run.aside(out, out.dim(`${hidden} older ${hidden === 1 ? 'request is' : 'requests are'} not shown. --json prints them all.`));
     const one = out.command(run.command(`apps requests ${newest}`));
-    run.print(out.next(attention ? `${one} shows it, and ${out.command(run.command(`apps resend ${newest}`))} sends it again.` : `${one} shows one.`));
-    if (fromFile !== undefined) run.print(out.next(`${out.command(run.command('apps requests --all'))} lists every app's.`));
-    if (missing.length > 0) run.print(['', ...missing].join('\n'));
+    run.aside(out, out.next(attention ? `${one} shows it, and ${out.command(run.command(`apps resend ${newest}`))} sends it again.` : `${one} shows one.`));
+    if (fromFile !== undefined) run.aside(out, out.next(`${out.command(run.command('apps requests --all'))} lists every app's.`));
+    if (missing.length > 0) run.aside(out, ['', ...missing].join('\n'));
     return 0;
   }
 

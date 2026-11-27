@@ -391,11 +391,11 @@ export async function orgs(input: CommandInput): Promise<number> {
     const slug = clean(membership.orgSlug);
     return [mark, used ? style.bold(slug) : slug, clean(membership.orgName), clean(membership.role)] as const;
   });
-  const width = style.rich ? (input.io.screen?.size?.columns ?? 80) : Number.POSITIVE_INFINITY;
+  const width = style.rich ? style.width : Number.POSITIVE_INFINITY;
   for (const line of style.table(['', 'ORG', 'NAME', 'ROLE'], rows, width)) run.print(line);
   if (inUse === undefined && memberships.length > 1) {
-    run.print('');
-    run.print(style.next('Each command picks one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.'));
+    if (style.rich) run.print('');
+    run.aside(style, style.next('Each command picks one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.'));
   }
   return 0;
 }

@@ -187,18 +187,8 @@ describe('siren apps list and show: tables (catalog mockup 2)', () => {
     const h = harness([reply(200, [appRecord({ needsAttention: 2 }), second])]);
     h.signedIn();
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
-    expect(h.out()).toBe(
-      [
-        '2 apps in Acme (3), sandbox',
-        '',
-        'APP           STATE  FEATURES  ATTENTION   ADDRESS',
-        'acme-payouts  on     2         2 requests  acme.example',
-        'ledger-sync   off    0         –           key only',
-        '',
-        'siren apps requests --app acme-payouts --attention lists the 2 that need you.',
-        '',
-      ].join('\n'),
-    );
+    expect(h.out()).toBe(['APP\tSTATE\tFEATURES\tATTENTION\tADDRESS', 'acme-payouts\ton\t2\t2 requests\tacme.example', 'ledger-sync\toff\t0\t–\tkey only', ''].join('\n'));
+    expect(h.err()).toBe(['2 apps in Acme (3), sandbox', 'siren apps requests --app acme-payouts --attention lists the 2 that need you.', ''].join('\n'));
   });
 
   it('show: the app in a block, then its features as a table, marks in the name column', async () => {
@@ -214,14 +204,13 @@ describe('siren apps list and show: tables (catalog mockup 2)', () => {
         '  Address   acme.example',
         '  Key       sk_test_0a0a0a0a…',
         '',
-        'ID      KEY          KIND                                           NAME',
-        'app:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM · archived',
-        'app:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger',
-        '',
-        'siren apps requests --app acme-payouts --attention lists the 1 that needs you.',
+        'ID\tKEY\tKIND\tNAME',
+        'app:11\tnotify-crm\tPost-conversion action (postConversionAction)\tTell the CRM · archived',
+        'app:12\tacme-ledger\tPayout method (payoutMethod)\tAcme ledger',
         '',
       ].join('\n'),
     );
+    expect(h.err()).toBe('siren apps requests --app acme-payouts --attention lists the 1 that needs you.\n');
   });
 
   it('is styled in a terminal and fits 80 columns', async () => {

@@ -61,7 +61,7 @@ describe('finding 8: --live only on a command that changes a live organization',
     const h = harness([AuthAnswers.oneOrg(), reply(200, appRecord({ needsAttention: 2 })), reply(200, off)], { edition: 'production', stdin: PASSWORD, env: URL_ENV });
     expect(await h.run(['login', '--base-url', UAT, '--live', '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(`siren apps requests --app ${KEY} --attention lists the 2`);
+    expect(h.err()).toContain(`siren apps requests --app ${KEY} --attention lists the 2`);
 
     h.write('siren.app.json', fileWith({ url: '${SIREN_APP_URL}', features }));
     expect(await h.run(['apps', 'diff']), h.err()).toBe(0);
