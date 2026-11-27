@@ -73,10 +73,22 @@ describe('money in record commands', () => {
     expect(paths(h)).toEqual(['GET /payouts', 'GET /registries/currencies', 'GET /payouts']);
   });
 
-  it('keeps the stored integer in --json and reads no registry', async () => {
-    const h = signedIn([reply(200, envelope(payouts))]);
+  it('keeps the stored integer in --json and adds its text beside it (review round 1, C4)', async () => {
+    const h = signedIn([reply(200, envelope(payouts)), reply(200, REGISTRY)]);
     expect(await h.run(['payouts', 'list', '--json'])).toBe(0);
-    expect(JSON.parse(h.out()).items[0].value).toBe(12431);
+    expect(JSON.parse(h.out()).items[0]).toMatchObject({ value: 12431, currency: 'EUR', valueFormatted: '€124.31 EUR' });
+    expect(paths(h)).toEqual(['GET /payouts', 'GET /registries/currencies']);
+  });
+
+  it('keeps a money field\'s text when --fields names the field', async () => {
+    const h = signedIn([reply(200, envelope(payouts)), reply(200, REGISTRY)]);
+    expect(await h.run(['payouts', 'list', '--json', '--fields', 'id,value,currency'])).toBe(0);
+    expect(Object.keys(JSON.parse(h.out()).items[0])).toEqual(['id', 'value', 'valueFormatted', 'currency']);
+  });
+
+  it('prints ids alone with --ids and reads no registry', async () => {
+    const h = signedIn([reply(200, envelope(payouts))]);
+    expect(await h.run(['payouts', 'list', '--ids'])).toBe(0);
     expect(paths(h)).toEqual(['GET /payouts']);
   });
 

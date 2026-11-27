@@ -134,9 +134,9 @@ describe("a record view's page", () => {
     const h = signedIn([reply(200, payout), reply(200, [])]);
     expect(await h.run(['payouts', 'get', '613']), h.err()).toBe(0);
     expect(h.out().trimEnd().split('\n').at(-1)).toBe(`${APP}/fulfillments/39?org=uat-org`);
-    const json = signedIn([reply(200, payout)]);
+    const json = signedIn([reply(200, payout), reply(200, [])]);
     expect(await json.run(['payouts', 'get', '613', '--json']), json.err()).toBe(0);
-    expect(JSON.parse(json.out())).toEqual({ ...payout, url: `${APP}/fulfillments/39?org=uat-org` });
+    expect(JSON.parse(json.out())).toEqual({ ...payout, valueFormatted: '€218.70 EUR', url: `${APP}/fulfillments/39?org=uat-org` });
   });
 
   it('adds no page to a record the app has none for, such as a webhook', async () => {
