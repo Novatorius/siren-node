@@ -146,7 +146,7 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | Command | Sends | Prints |
 | --- | --- | --- |
 | `siren signup [--org-name] [--email] [--password-stdin] [--accept-terms]` | `GET /auth/signup-options`, then `POST /auth/register-org` once | The organization and the address signed in to. See "Confirmation and plan answers" for the other outcomes. |
-| `siren login` | signup-options, `POST /auth/cli/code`, then `POST /auth/cli/token` each interval | The logo with its halves apart beside the code, the link and a spinner while it waits, the halves gripping when the approval lands, then `Logged in as <email> · N organizations` and a Next with `siren apps init`, or `siren apps apply` in a folder with siren.app.json (CLI pass 3, should-fix 14). |
+| `siren login` | signup-options, `POST /auth/cli/code`, then `POST /auth/cli/token` each interval | The logo with its halves apart beside the code, the link and a spinner while it waits, the gripped logo drawn at once when the approval lands, then `Logged in as <email> · N organizations` and a Next with `siren apps init`, or `siren apps apply` in a folder with siren.app.json (CLI pass 3, should-fix 14). |
 | `siren login --password [--email]`, or `--password-stdin --email` | signup-options, `POST /auth/login`, and `POST /auth/select-org` with the first organization for a person in several | The same line, and the days left to confirm the address when Siren says so. `--email` alone is a usage error. |
 | `siren logout` | `POST /auth/logout` with the access token and the refresh token | That the session is forgotten. It forgets it even when Siren refuses, and it needs no `--live` (AP-A640). |
 | `siren whoami [--json]` | nothing, or with `SIREN_TOKEN` signup-options and `GET /personal-tokens/current` | Which credential is in use, who it acts as, the organization and role, and whether that Siren is live. For a session, the session file's path, and exit 1 when none is kept there (CLI pass 1, finding 2). For a token, its name, last four characters and expiry. |
@@ -261,18 +261,27 @@ test/cli-hidden-prompt.test.ts saw it in 45 of 60 runs before the fix and in non
 Where the hook may play, `--password` asks beside the logo (src/cli/hook.ts, `startPasswordStage`).
 Alex, 2026-11-27: "Animate while also showing the login at the same time." The first prompt draws
 the whole screen at once: the logo on the left with its halves floating apart, and on the right the
-wordmark, the Siren's host, `Email: ` and `Password: `, with the cursor at the first prompt. Standard
-input goes into raw mode before anything is drawn and stays there until the screen closes, so the
-terminal never echoes and the password is never drawn. A timer moves the halves every 50
+wordmark, the Siren's host, `Email: ` and `Password: `, with the cursor at the first prompt. The
+screen reads keys in raw mode from before anything is drawn until it closes, so the terminal never
+echoes and the password is never drawn. A timer moves the halves every 50
 milliseconds. It saves the cursor, redraws only the logo's columns and the status line, and puts
 the cursor back, so a key is echoed where it was typed and never waits for a frame. Keys typed ahead
-of a prompt, Enter included, wait for it. Backspace and Ctrl-U edit the line, and arrow keys are
-ignored. While Siren checks the password a spinner turns beside "Logging in". The halves grip and
-"✓ Logged in as …" takes the spinner's place when Siren accepts it, and they drift away before the ✗
-line when it refuses. Ctrl-C stops the login at a prompt or during the check, and nothing is kept.
+of the second prompt, Enter included, wait for it. Backspace and Ctrl-U edit the line, and arrow keys are
+ignored. While Siren checks the password a spinner turns beside "Logging in". When Siren accepts it,
+the gripped logo and "✓ Logged in as …" are drawn at once and the next steps follow. When it
+refuses, the logo clears at once and the ✗ line follows. Neither ending waits on a frame, here or in
+the browser login, so the shell's prompt comes back straight away. Ctrl-C stops the login at a prompt or during the check, and nothing is kept.
 The screen gives way to the plain prompts under every skip rule of the hook, when standard input or
 standard error is not a terminal, and when the logo and the prompts with room to type do not fit
 side by side or stacked.
+
+Echo goes off before the password login sends or draws anything. `siren login --password` and
+`siren signup` put standard input in raw mode first thing (`quietKeys` in src/cli/io.ts) and drop
+every key until a prompt reads, so a password typed while the command starts or waits on Siren is
+neither shown nor taken as an answer. Every prompt, the plain ones included, reads in raw mode, and
+for 20 milliseconds after echo goes off it drops what standard input holds before it writes its
+question. A key typed before the tool started was echoed by the terminal already, since no program
+can stop that, and it is dropped too. Ctrl-C while nothing reads keys stops the command.
 
 `DeviceSignIn` is the other, and `siren login` uses it by default in a terminal (Alex's ruling
 M105, contract/cli-signin.md in the run folder). It follows RFC 8628:
