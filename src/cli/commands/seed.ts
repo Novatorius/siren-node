@@ -4,7 +4,11 @@ import type { CommandInput } from '../context';
 import { orgScope } from '../org';
 import { onSandbox, orNotYet } from '../sandboxes';
 import { clean, styleFor } from '../style';
+import { SirenError } from '../../errors';
 import { CliRefusal, CliUsageError } from '../targets';
+
+/** A beginner's recipe on every plan in Beacon's catalog: one affiliate program. */
+export const STARTER_RECIPE = 'basic-affiliate-program';
 
 /*
  * `siren seed`: fills a sandbox organization with sample sales spread back
@@ -72,7 +76,21 @@ export async function seed(input: CommandInput): Promise<number> {
   const slug = clean(org.orgSlug);
   const http = org.http;
 
-  const queued = await orNotYet(run, 'seed', () => writeRecord<{ jobId: string; status: string; sales: number; collaborators: number; months: number }>(http, 'POST', '/sandbox/seed', body));
+  let queued: { jobId: string; status: string; sales: number; collaborators: number; months: number };
+  try {
+    queued = await orNotYet(run, 'seed', () => writeRecord<typeof queued>(http, 'POST', '/sandbox/seed', body));
+  } catch (error) {
+    // An empty sandbox has no program. A starter recipe makes one, so the refusal names it (review round 1, C18).
+    if (error instanceof SirenError && error.code === 'sandbox_seed_no_programs') {
+      throw new CliRefusal(`${clean(org.orgName)} has no active program, so no sale could earn anything.`, {
+        why: 'Seeding makes people and sales in the programs a sandbox has. Nothing was made.',
+        fixLead: 'Make a starter program with',
+        fix: `${run.command(`recipes show ${STARTER_RECIPE}`)} | ${run.command(`recipes apply - --yes${org.flag}`)}`,
+        fixWords: `and run this again. ${run.command('recipes catalog')} lists other setups`,
+      });
+    }
+    throw error;
+  }
   const style = styleFor(input.io, 'stdout', { json });
   if (input.values['no-wait'] === true) {
     if (json) input.io.stdout(`${JSON.stringify(queued, null, 2)}\n`);

@@ -2,10 +2,13 @@ import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { orNotYet } from '../sandboxes';
 import { styleFor } from '../style';
-import { CliUsageError } from '../targets';
+import { SirenError } from '../../errors';
+import type { CommandContext } from '../context';
+import { clean } from '../style';
+import { CliRefusal, CliUsageError } from '../targets';
 import { appTells, isApproved } from './trigger-tells';
 import { appKeyArgument } from './apply';
-import type { ActivityResult } from './trigger-client';
+import type { ActivityBody, ActivityResult } from './trigger-client';
 import { TestActivityClient, activityBody, activityReport, askAndWait, askReport, assertSandbox, confirmLiveAsk, openWaits, requestLabel, triggerAndWait, waitSeconds } from './trigger-client';
 
 /*
@@ -52,7 +55,12 @@ export async function trigger(input: CommandInput): Promise<number> {
   await assertSandbox(run, `trigger ${event}`);
   await run.signedIn();
   const client = new TestActivityClient(run);
-  let result = await orNotYet(run, 'trigger', () => triggerAndWait(client, io, body, seconds, json));
+  let result: ActivityResult;
+  try {
+    result = await orNotYet(run, 'trigger', () => triggerAndWait(client, io, body, seconds, json));
+  } catch (error) {
+    throw (await emptyOrgRefusal(input, run, error, body)) ?? error;
+  }
   // --approve approves each conversion the sale made, so Siren runs its post-conversion actions and tells the apps (review round 1, C3).
   if (approve) result = await approveAll(client, result);
 
@@ -65,6 +73,39 @@ export async function trigger(input: CommandInput): Promise<number> {
   const apps = await appTells(style, input, run, client, result);
   io.stdout(activityReport(style, input, run, result, label, apps));
   return 0;
+}
+
+/**
+ * The refusals an empty sandbox meets first, each with the one command that
+ * clears it (review round 1, C18), or undefined to keep Siren's own words.
+ * Siren's message stays the headline.
+ */
+export async function emptyOrgRefusal(input: Pick<CommandInput, 'command'>, run: CommandContext, error: unknown, body: ActivityBody): Promise<CliRefusal | undefined> {
+  if (!(error instanceof SirenError) || error.code === undefined) return undefined;
+  const said = clean(error.message.replace(/^Siren: /, ''));
+  const program = body.programId ?? Number(/^Program (\d+)/.exec(said)?.[1] ?? NaN);
+  if (error.code === 'no_collaborator' && Number.isInteger(program)) {
+    // Someone may be active in the org and not in this program. Enrolling them clears it.
+    let someone: number | undefined;
+    try {
+      someone = (await run.siren().collaborators.list({ status: 'active', number: 1 }))[0]?.id as number | undefined;
+    } catch {
+      someone = undefined;
+    }
+    if (someone !== undefined) {
+      return new CliRefusal(said, { why: `Nobody active is in program ${program}, so the sale has no one to credit. Nothing was made.`, fixLead: 'Enroll someone with', fix: input.command(`collaborator-programs create -d collaboratorId=${someone} -d programId=${program}`), fixWords: 'and run this again' });
+    }
+  }
+  if (error.code === 'no_collaborator') {
+    return new CliRefusal(said, { why: 'The sale has no one to credit, so nothing was made.', fixLead: 'Make sample collaborators in every active program with', fix: input.command('seed'), fixWords: 'and run this again' });
+  }
+  if (error.code === 'collaborator_not_enrolled' && body.collaboratorId !== undefined && Number.isInteger(program)) {
+    return new CliRefusal(said, { why: 'Only someone in the program can earn in it. Nothing was made.', fixLead: 'Enroll them with', fix: input.command(`collaborator-programs create -d collaboratorId=${body.collaboratorId} -d programId=${program}`), fixWords: 'and run this again' });
+  }
+  if (error.code === 'no_sale') {
+    return new CliRefusal(said, { why: 'A refund undoes a sale, and there is none to undo. Nothing was made.', fixLead: 'Make one with', fix: input.command('trigger sale'), fixWords: 'first' });
+  }
+  return undefined;
 }
 
 /** Approves each conversion the result left unapproved, then reads the sale again. A failed read keeps the result, with the statuses marked. */

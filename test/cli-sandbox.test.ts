@@ -391,6 +391,19 @@ describe('sandbox: every command runs only on a sandbox', () => {
   });
 });
 
+// Review round 1, C18.
+describe('sandbox: siren seed with no program', () => {
+  it('names a starter recipe to apply, piped from recipes show', async () => {
+    const h = harness([reply(409, { error: { message: 'This organization has no active program, so no sale could earn anything. Copy a setup in with siren sandbox create, or make a program first.', context: { type: 'sandbox_seed_no_programs' } } })]);
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
+    expect(await h.run(['seed'])).toBe(1);
+    const flat = h.err().replace(/\s+/g, ' ');
+    expect(flat).toContain('has no active program, so no sale could earn anything.');
+    expect(flat).toContain('Make a starter program with siren recipes show basic-affiliate-program | siren recipes apply - --yes and run this again.');
+    expect(flat).toContain('siren recipes catalog lists other setups');
+  });
+});
+
 // Review round 1, C2: a Siren older than the tool answers a bare 404, and each command says what that Siren lacks.
 describe('sandbox: a Siren without the sandbox routes', () => {
   const missing = () => reply(404, { error: { message: 'Not found.' } });

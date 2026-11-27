@@ -565,3 +565,39 @@ describe('siren trigger and the apps a program picks', () => {
     expect(h.http.requests).toHaveLength(0);
   });
 });
+
+// Review round 1, C18: each refusal an empty sandbox meets names the one command that clears it.
+describe('siren trigger in an empty sandbox', () => {
+  const refused = (message: string, code: string) => reply(409, { error: { message, code } });
+
+  it('names siren seed when the organization has nobody to credit', async () => {
+    const h = harness([refused('This organization has no active collaborator to credit.', 'no_collaborator')]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale'])).toBe(1);
+    const flat = h.err().replace(/\s+/g, ' ');
+    expect(flat).toContain('This organization has no active collaborator to credit.');
+    expect(flat).toContain('Make sample collaborators in every active program with siren seed and run this again.');
+  });
+
+  it('names the enrollment, with a real collaborator id, when the program has nobody', async () => {
+    const h = harness([refused('Program 2 has no active collaborator to credit.', 'no_collaborator'), reply(200, { items: [{ id: 17, status: 'active' }], total: 1 })]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale', '--program', '2'])).toBe(1);
+    expect(h.paths()).toEqual(['POST /test-activity', 'GET /collaborators']);
+    expect(h.err().replace(/\s+/g, ' ')).toContain('Enroll someone with siren collaborator-programs create -d collaboratorId=17 -d programId=2 and run this again.');
+  });
+
+  it('names the enrollment of the collaborator given when they are not in the program', async () => {
+    const h = harness([refused('Collaborator 42 is not enrolled in program 3.', 'collaborator_not_enrolled')]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale', '--collaborator', '42', '--program', '3'])).toBe(1);
+    expect(h.err().replace(/\s+/g, ' ')).toContain('siren collaborator-programs create -d collaboratorId=42 -d programId=3');
+  });
+
+  it('names trigger sale when a refund has no sale to undo', async () => {
+    const h = harness([refused('There is no sale to refund.', 'no_sale')]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'refund'])).toBe(1);
+    expect(h.err().replace(/\s+/g, ' ')).toContain('Make one with siren trigger sale first.');
+  });
+});
