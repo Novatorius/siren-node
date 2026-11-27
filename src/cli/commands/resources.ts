@@ -15,6 +15,7 @@ import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
 import { cell, recordRows, table } from './resource-output';
 import { recordView } from '../record-view';
+import { nearest } from '../suggest';
 import { READ_STATUSES, WRITE_NOTES, WRITE_VALUES } from '../record-values';
 import { currenciesFor, holdsMoney, withMoney } from '../money';
 
@@ -163,6 +164,38 @@ function filterQuery(input: CommandInput, route: ResourceRoute, resource?: Resou
 /** True when a list route takes both orderBy and order, so the tool can ask for newest first. */
 function ordersNewestFirst(route: ResourceRoute): boolean {
   return route.query?.includes('orderBy') === true && route.query.includes('order');
+}
+
+/**
+ * The fields a list asks Siren for, where Siren's own default leaves out
+ * what the table needs (review round 1, C13): a transaction's total and
+ * currency, a conversion's program, an obligation's collaborator. The rest
+ * are Siren's defaults, from each route's DEFAULT_FIELDS, so --fields can
+ * name any of them and an unknown one is caught against a real record.
+ */
+const LIST_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  transactions: ['id', 'status', 'totalValue', 'currency', 'dateCreated'],
+  conversions: ['id', 'engagementId', 'transactionId', 'obligationId', 'collaboratorName', 'amount', 'obligationAwardType', 'isTest', 'status', 'type', 'programId', 'programName', 'dateCreated', 'dateModified'],
+  obligations: ['id', 'collaboratorId', 'collaboratorName', 'status', 'awardType', 'value', 'payoutId', 'dateCreated', 'dateModified'],
+  collaborators: ['id', 'status', 'fullName', 'nickname', 'email', 'createdDate', 'modifiedDate'],
+  programs: ['id', 'name', 'description', 'status', 'units', 'incentiveType', 'incentiveResolverType', 'createdDate', 'modifiedDate'],
+};
+
+/**
+ * What a list adds to the query it sends, the same for `siren programs
+ * list` and `siren get /programs` (review round 1, C26): newest first where
+ * the route takes an order, and the fields {@link LIST_FIELDS} names with
+ * any --fields beside them. A query parameter the line names itself wins.
+ */
+function listDefaults(input: CommandInput, resource: ResourceCommand, route: ResourceRoute, query: Readonly<Record<string, string>>, fields: readonly string[] | undefined): Record<string, string> {
+  const named = [...pairs(input).map(([key]) => key), ...Object.keys(query)];
+  const added: Record<string, string> = {};
+  if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(added, { orderBy: 'id', order: 'desc' });
+  if (named.includes('fields')) return added;
+  const wanted = LIST_FIELDS[resource.name];
+  if (wanted !== undefined) added.fields = [...new Set([...wanted, ...(fields ?? [])])].join(',');
+  else if (fields !== undefined && route.query?.includes('fields')) added.fields = fields.join(',');
+  return added;
 }
 
 /** What a generated command does, in a sentence: "List programs, newest first.", "Show one program.", "Create a program." */
@@ -402,8 +435,9 @@ async function sendRaw(input: CommandInput, method: HttpMethod): Promise<number>
   const deleteId = method === 'DELETE' ? recordIdOf(path) : undefined;
   const matched = routeOf(method, path);
   if (matched !== undefined && method !== 'GET' && method !== 'DELETE') checkFieldValues(input, matched.resource, matched.route, `${method.toLowerCase()} ${path}`.replace(/^(\S+) .*$/, '$1'));
-  const outgoing = await outgoingOf(input, method, path, query, typesOf(method, path));
   const fields = method === 'GET' ? fieldsOf(input.values.fields) : undefined;
+  const listing = method === 'GET' && matched?.op === 'list' ? listDefaults(input, matched.resource, matched.route, query, fields) : {};
+  const outgoing = await outgoingOf(input, method, path, { ...query, ...listing }, typesOf(method, path));
   return send(input, {
     outgoing,
     ...(method === 'GET' && input.values.ids === true ? { ids: true } : {}),
@@ -453,10 +487,7 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
   const base: Record<string, string> = {};
   if (op === 'list') {
     Object.assign(base, filterQuery(input, route, resource));
-    // Newest first where the route takes an order, unless the line names one (lean output, section 5).
-    const named = [...pairs(input).map(([key]) => key), ...Object.keys(base)];
-    if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(base, { orderBy: 'id', order: 'desc' });
-    if (fields !== undefined && route.query?.includes('fields')) base.fields = fields.join(',');
+    Object.assign(base, listDefaults(input, resource, route, base, fields));
   }
   if (route.method !== 'GET' && route.method !== 'DELETE') checkFieldValues(input, resource, route, `${resource.name} ${op}`);
   const outgoing = await outgoingOf(input, route.method, path, base, route.types);
@@ -811,7 +842,12 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
   if (plan.fields !== undefined && listedRecords.length > 0) {
     const known = [...new Set(listedRecords.flatMap((record) => Object.keys(record)))];
     const unknown = plan.fields.filter((field) => !known.includes(field));
-    if (unknown.length > 0) throw new CliUsageError(`${unknown.map((field) => clean(field)).join(', ')} ${unknown.length === 1 ? "isn't a field" : "aren't fields"} of these records. They have ${known.map((field) => clean(field)).join(', ')}.`);
+    if (unknown.length > 0) {
+      // A typo names the field it was near, such as email for emial (review round 1, C10).
+      const meant = unknown.map((field) => nearest(field, known)).filter((field): field is string => field !== undefined);
+      const fixed = meant.length === unknown.length ? ` Did you mean --fields ${plan.fields.map((field) => (unknown.includes(field) ? nearest(field, known)! : field)).map(clean).join(',')}?` : '';
+      throw new CliUsageError(`${unknown.map((field) => clean(field)).join(', ')} ${unknown.length === 1 ? "isn't a field" : "aren't fields"} of these records. They have ${known.map((field) => clean(field)).join(', ')}.${fixed}`);
+    }
   }
   if (plan.ids && listed !== undefined) {
     for (const record of listedRecords) out(cell(record.id ?? record.key));

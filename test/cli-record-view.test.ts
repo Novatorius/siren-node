@@ -32,7 +32,7 @@ describe('siren collaborators get, as a record view', () => {
         '  nickname      nevavolkman2715',
         '  referralCode  KHK',
         // A timestamp keeps its time (review of PR 94).
-        '  created       Nov 25, 2026 18:57',
+        '  created       Nov 25, 2026 18:57 UTC',
         '  fields        none',
         '',
         '  programs (2)',
@@ -77,7 +77,7 @@ describe('siren programs get, as a record view', () => {
     expect(out.split('\n')[0]).toBe('program 1 · Referral Program');
     expect(out).toMatch(/\n {2}incentiveType +Percentage of Transaction \(saleTransactionPercentage\)\n/);
     expect(out).toMatch(/\n {2}incentiveTypeArgs\.transactionPercent +10\n/);
-    expect(out).toMatch(/\n {2}created +Nov 25, 2026 18:57\n/);
+    expect(out).toMatch(/\n {2}created +Nov 25, 2026 18:57 UTC\n/);
     expect(out).not.toContain('modified');
     expect(out).not.toContain('notes (');
   });

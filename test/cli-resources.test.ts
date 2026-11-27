@@ -59,7 +59,7 @@ describe('the generated resource commands', () => {
     // Through a pipe, standard output is the table alone, and the count, Next and tip go to standard error.
     const out = h.out();
     // The default columns leave units out, so the tip says how to pick others.
-    expect(out).toBe(['id  name              status', '1   Referral program  active', '2   Partner program   draft', ''].join('\n'));
+    expect(out).toBe(['ID  NAME              STATUS', '1   Referral program  active', '2   Partner program   draft', ''].join('\n'));
     expect(h.err()).toBe(['2 programs', '', 'Next', '  1  siren programs get 1', '', '--json prints the answer as JSON. --ids prints the ids alone. --fields picks the columns.', ''].join('\n'));
     for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
   });
@@ -150,7 +150,8 @@ describe('siren get, post, put, patch and delete', () => {
     const h = signedIn([reply(200, envelope(programs))]);
     expect(await h.run(['get', '/programs', '-d', 'status=active', '--limit', '2', '--offset', '4'])).toBe(0);
     const url = new URL(h.http.requests[0]!.url);
-    expect(Object.fromEntries(url.searchParams)).toEqual({ status: 'active', number: '2', offset: '4' });
+    // A raw get of a list route asks for what programs list does, newest first with its fields (review round 1, C26).
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ status: 'active', number: '2', offset: '4', orderBy: 'id', order: 'desc' });
   });
 
   it('follows every page with --all and prints one envelope holding them all with --json', async () => {
@@ -258,7 +259,7 @@ describe('siren get, post, put, patch and delete', () => {
     const h = signedIn([reply(200, envelope(programs))]);
     expect(await runCli(['programs', 'list'], { ...h.io, stdoutTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } })).toBe(0);
     expect(h.out()).toContain('✓');
-    expect(h.out()).toContain('\u001b[2mid  name');
+    expect(h.out()).toContain('\u001b[2mID  NAME');
     const plain = h.out().replace(/\u001b\[[\d;]*m/g, '');
     expect(plain).toContain('› --json prints the answer as JSON.');
     for (const line of plain.split('\n')) expect([...line].length).toBeLessThanOrEqual(80);
