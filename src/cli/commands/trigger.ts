@@ -3,7 +3,9 @@ import type { CommandInput } from '../context';
 import { orNotYet } from '../sandboxes';
 import { styleFor } from '../style';
 import { CliUsageError } from '../targets';
+import { appTells, isApproved } from './trigger-tells';
 import { appKeyArgument } from './apply';
+import type { ActivityResult } from './trigger-client';
 import { TestActivityClient, activityBody, activityReport, askAndWait, askReport, assertSandbox, confirmLiveAsk, openWaits, requestLabel, triggerAndWait, waitSeconds } from './trigger-client';
 
 /*
@@ -43,15 +45,42 @@ export async function trigger(input: CommandInput): Promise<number> {
   const body = activityBody(event, values);
   const seconds = waitSeconds(values.wait, TRIGGER_WAIT_SECONDS);
   const json = values.json === true;
+  const approve = values.approve === true;
+  if (approve && event !== 'sale') throw new CliUsageError('--approve takes a sale, since only a sale makes a conversion to approve.');
 
   const run = contextOf(input);
   await assertSandbox(run, `trigger ${event}`);
   await run.signedIn();
-  const result = await orNotYet(run, 'trigger', () => triggerAndWait(new TestActivityClient(run), io, body, seconds, json));
+  const client = new TestActivityClient(run);
+  let result = await orNotYet(run, 'trigger', () => triggerAndWait(client, io, body, seconds, json));
+  // --approve approves each conversion the sale made, so Siren runs its post-conversion actions and tells the apps (review round 1, C3).
+  if (approve) result = await approveAll(client, result);
 
-  if (json) io.stdout(`${JSON.stringify(result, null, 2)}\n`);
-  else io.stdout(activityReport(styleFor(io, 'stdout', {}), input, run, result, await requestLabel(run, openWaits(result)[0]?.requestKey)));
+  if (json) {
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return 0;
+  }
+  const style = styleFor(io, 'stdout', {});
+  const label = await requestLabel(run, openWaits(result)[0]?.requestKey);
+  const apps = await appTells(style, input, run, client, result);
+  io.stdout(activityReport(style, input, run, result, label, apps));
   return 0;
+}
+
+/** Approves each conversion the result left unapproved, then reads the sale again. A failed read keeps the result, with the statuses marked. */
+async function approveAll(client: TestActivityClient, result: ActivityResult): Promise<ActivityResult> {
+  const waiting = result.conversions.filter((one) => !isApproved(one));
+  if (waiting.length === 0) return result;
+  for (const conversion of waiting) await client.approve(conversion.id);
+  if (result.transactionId !== null) {
+    try {
+      const read = await client.sale(result.transactionId);
+      return { ...read, event: result.event, status: result.status, message: result.message, collaborator: result.collaborator };
+    } catch {
+      // The approvals stand. The report marks them below.
+    }
+  }
+  return { ...result, conversions: result.conversions.map((one) => (isApproved(one) ? one : { ...one, status: 'approved' })) };
 }
 
 /**

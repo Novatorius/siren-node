@@ -3,7 +3,7 @@ import { reply } from './http-fakes';
 import { BASE, bodyOf } from './record-fakes';
 import { harness, session } from './cli-fakes';
 import { SANDBOX_BASE_URL } from '../src/http';
-import { requestRow } from './apps-siren-answers';
+import { appRecord, requestRow } from './apps-siren-answers';
 import { resolveReferences } from '../src/cli/commands/fixtures';
 
 /*
@@ -63,7 +63,8 @@ describe('siren trigger <event>', () => {
     h.signedIn();
     expect(await h.run(['trigger', 'sale', '--collaborator', '42', '--program', '3', '--amount', '49.99', '--currency', 'USD']), h.err()).toBe(0);
 
-    expect(h.paths()).toEqual(['POST /test-activity']);
+    // The org's apps are read last, to say what each was sent. These tests answer none.
+    expect(h.paths()).toEqual(['POST /test-activity', 'GET /apps']);
     expect(bodyOf(h.http.requests[0])).toEqual({ event: 'sale', collaboratorId: 42, programId: 3, amount: '49.99', currency: 'USD' });
     const out = h.out();
     expect(out).toContain('Sale recorded in Acme (3), sandbox');
@@ -112,7 +113,7 @@ describe('siren trigger <event>', () => {
     ]);
     h.signedIn();
     expect(await h.run(['trigger', 'sale']), h.err()).toBe(0);
-    expect(h.paths()).toEqual(['POST /test-activity', 'GET /test-activity/sales/3307', 'GET /test-activity/sales/3307']);
+    expect(h.paths()).toEqual(['POST /test-activity', 'GET /test-activity/sales/3307', 'GET /test-activity/sales/3307', 'GET /apps']);
     expect(h.err()).toContain('Waiting on Acme CRM › Split the pool');
     expect(h.out()).toMatch(/Earns\s+Sam Lee/);
     expect(h.out()).toMatch(/Answered\s+Acme CRM › Split the pool · applied/);
@@ -124,7 +125,7 @@ describe('siren trigger <event>', () => {
     h.signedIn();
     expect(await h.run(['trigger', 'sale', '--wait', '4']), h.err()).toBe(0);
     // Then one idPrefix lookup, which finds the request by its short id, so the hint gives that (CLI pass 3).
-    expect(h.paths()).toEqual(['POST /test-activity', 'GET /test-activity/sales/3307', 'GET /test-activity/sales/3307', 'GET /apps/requests']);
+    expect(h.paths()).toEqual(['POST /test-activity', 'GET /test-activity/sales/3307', 'GET /test-activity/sales/3307', 'GET /apps/requests', 'GET /apps']);
     expect(Object.fromEntries(new URL(h.http.requests[3]!.url).searchParams)).toEqual({ idPrefix: 'apr_9c60190a' });
     expect(h.out()).toMatch(/Waits\s+Acme CRM › Split the pool · sent/);
     expect(h.out()).toMatch(/siren apps requests 9c60190a +the ask a reward waits on/);
@@ -133,7 +134,7 @@ describe('siren trigger <event>', () => {
     const none = harness([reply(201, open), reply(200, { requests: [requestRow({ id: 'apr_1111111111111111111111111111aaaa' }), requestRow({ id: 'apr_2222222222222222222222222222bbbb' }), requestRow({ id: REQUEST })], total: 3 })]);
     none.signedIn();
     expect(await none.run(['trigger', 'sale', '--wait', '0'])).toBe(0);
-    expect(none.paths()).toEqual(['POST /test-activity', 'GET /apps/requests']);
+    expect(none.paths()).toEqual(['POST /test-activity', 'GET /apps/requests', 'GET /apps']);
     expect(none.out()).toContain(`siren apps requests ${REQUEST}`);
   });
 
@@ -503,5 +504,64 @@ describe('siren trigger on a Siren without test activity', () => {
     expect(await h.run(['trigger', 'sale', '--collaborator', '42', '--program', '3', '--amount', '49.99'])).toBe(1);
     expect(h.err()).toContain('No collaborator 42');
     expect(h.err()).not.toContain("doesn't have test activity");
+  });
+});
+
+// Review round 1, C3: trigger says what it sent each app, or why it sent nothing, and --approve approves the sale.
+describe('siren trigger and the apps a program picks', () => {
+  const apps = () => reply(200, [appRecord()]);
+  const picks = (...types: string[]) => reply(200, { id: 3, postConversionActions: types.map((type) => ({ type })) });
+
+  it('says no program picks the app, and names the update that picks it, keeping what the program had', async () => {
+    const h = harness([reply(201, sale()), apps(), picks('bindCollaboratorToOpportunity')]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale', '--amount', '49.99']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /test-activity', 'GET /apps', 'GET /programs/3']);
+    expect(new URL(h.http.requests[2]!.url).searchParams.get('fields')).toBe('postConversionActions');
+    const flat = h.out().replace(/\s+/g, ' ');
+    expect(flat).toContain('Apps Acme › Tell the CRM: sent nothing. No program here picks it.');
+    expect(flat).toContain(`siren programs update 3 --data '{"postConversionActions":[{"type":"bindCollaboratorToOpportunity"},{"type":"app:11"}]}'`);
+    expect(flat).toContain('picks it in Partner program');
+  });
+
+  it('says the app waits for approval and names the approve command, before the refund', async () => {
+    const h = harness([reply(201, sale()), apps(), picks('app:11')]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale', '--amount', '49.99']), h.err()).toBe(0);
+    const out = h.out();
+    expect(out.replace(/\s+/g, ' ')).toContain('Acme › Tell the CRM: waits for conversion 1042 to be approved.');
+    expect(out.indexOf('siren conversions update 1042 -d status=approved')).toBeGreaterThan(-1);
+    expect(out.indexOf('siren conversions update 1042 -d status=approved')).toBeLessThan(out.indexOf('siren trigger refund --transaction 3307'));
+  });
+
+  it('says a feature the plan leaves out sent nothing, and why', async () => {
+    const locked = appRecord();
+    locked.features[0] = { ...locked.features[0]!, entitled: false, requiredPlan: 'Pro' } as never;
+    const h = harness([reply(201, sale()), reply(200, [locked]), picks('app:11')]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale']), h.err()).toBe(0);
+    expect(h.out().replace(/\s+/g, ' ')).toContain('Acme › Tell the CRM: sent nothing. It needs Pro.');
+  });
+
+  it('approves each conversion with --approve, reads the sale again, and names the tell Siren sent', async () => {
+    const approved = sale({ conversions: [{ ...sale().conversions[0]!, status: 'approved' }] });
+    const tell = requestRow({ id: 'apr_aaaabbbbccccddddeeeeffff00001111', feature: 'app:11', kind: 'postConversionAction', mode: 'tell', subject: { type: 'conversion', id: '1042' }, status: 'delivered' });
+    const h = harness([reply(201, sale()), reply(200, { id: 1042, status: 'approved' }), reply(200, approved), apps(), picks('app:11'), reply(200, { requests: [tell], total: 1 })]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale', '--amount', '49.99', '--approve']), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /test-activity', 'PUT /conversions/1042', 'GET /test-activity/sales/3307', 'GET /apps', 'GET /programs/3', 'GET /apps/requests']);
+    expect(bodyOf(h.http.requests[1])).toEqual({ status: 'approved' });
+    expect(new URL(h.http.requests[5]!.url).searchParams.get('appId')).toBe('4');
+    const flat = h.out().replace(/\s+/g, ' ');
+    expect(flat).toContain('1042 · sale in Partner program · approved');
+    expect(flat).toContain('Acme › Tell the CRM: told about conversion 1042 · delivered · apr_aaaabbbbccccddddeeeeffff00001111');
+    expect(flat).not.toContain('status=approved');
+  });
+
+  it('refuses --approve on anything but a sale, before anything is sent', async () => {
+    const h = harness([]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'refund', '--approve'])).toBe(2);
+    expect(h.http.requests).toHaveLength(0);
   });
 });
