@@ -413,7 +413,7 @@ export async function create(input: CommandInput): Promise<number> {
   ];
   // A copied app has no address, so its asks wait for siren listen or a url the person sets.
   if (apps.length === 0) rows.push(['Apps', `none on ${clean(copy.from.orgSlug)}`]);
-  copiedApps.forEach((app, index) => rows.push([index === 0 ? 'Apps' : '', style.fit(`${clean(app.key)} (no address, run siren listen or set one)`, 62)]));
+  copiedApps.forEach((app, index) => rows.push([index === 0 ? 'Apps' : '', `${clean(app.key)} (no address, run siren listen or set one)`]));
   const groups: string[] = [];
   for (const [stanza, label, one, many] of RECORD_STANZAS) {
     const count = stanzas[stanza];
@@ -425,7 +425,7 @@ export async function create(input: CommandInput): Promise<number> {
   if (settings.length > 0) rows.push(['Settings', settings.join(', ')]);
   // The two that always stay behind share a line. Their reasons are the tips.
   rows.push(['Not copied', 'collaborators, API keys, signing secrets']);
-  for (const item of notCopied.slice(2)) rows.push(['', style.fit(clean(`${item.what}, ${item.why}`), 62)]);
+  for (const item of notCopied.slice(2)) rows.push(['', clean(`${item.what}, ${item.why}`)]);
 
   const report: Report = {
     headline: '',

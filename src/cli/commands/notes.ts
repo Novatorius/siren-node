@@ -145,7 +145,7 @@ export async function notesList(input: CommandInput): Promise<number> {
   for (const [at, note] of items.entries()) {
     const when = typeof note.dateCreated === 'string' ? minute(note.dateCreated, zone) : '';
     const line = `${when}  ${out.dim(ids[at]!.padEnd(idWidth))}  ${clean(String(note.renderedContent ?? note.content ?? ''))}`;
-    run.print(out.rich ? out.fit(line, 80) : line);
+    run.print(out.fold(line));
   }
   if (total > items.length) {
     const more = `${items.length} of ${total} notes.${limit < 100 ? ' --limit 100 reads more.' : ''}`;

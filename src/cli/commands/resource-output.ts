@@ -10,10 +10,10 @@ import type { Style } from '../style';
  * Siren is cleaned of escape sequences and control characters first.
  */
 
-/** The widest line the tool prints. */
+/** The width the default columns are chosen for when no terminal is measured. */
 export const WIDTH = 80;
 
-/** The widest a table column grows before its values are cut. */
+/** The width a long column counts as when the default columns are chosen. Its values are never cut: the table wraps them. */
 const COLUMN = 30;
 
 /** A value as one short, cleaned line: text as it is, null as -, objects as compact JSON. */
@@ -23,12 +23,6 @@ export function cell(value: unknown): string {
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   // JSON escapes the C0 controls but not the C1 ones.
   return clean(JSON.stringify(value));
-}
-
-/** Cuts a line to `width` characters, with … at the end when it was longer. */
-export function clip(text: string, width: number): string {
-  const chars = [...text];
-  return chars.length <= width ? text : `${chars.slice(0, Math.max(0, width - 1)).join('')}…`;
 }
 
 /** True for a value a table column can show: text, a number, a boolean or null. */
@@ -98,22 +92,20 @@ function tableCell(value: unknown, options: TableOptions): string {
 
 /** A list as an aligned table, the header dim, indented two spaces unless told otherwise. */
 export function table(style: Style, rows: readonly Record<string, unknown>[], options: TableOptions = {}): string[] {
-  const width = style.rich ? WIDTH : Number.POSITIVE_INFINITY;
+  const width = style.rich ? style.width : Number.POSITIVE_INFINITY;
   const keys = options.keys ?? columns(rows, width);
   if (keys.length === 0) return [];
   const indent = options.indent ?? true;
   const lines = style.table(
     keys.map((key) => clean(key)),
-    rows.map((row) => keys.map((key) => style.fit(tableCell(row[key], options), COLUMN))),
+    rows.map((row) => keys.map((key) => tableCell(row[key], options))),
     width - (indent ? 2 : 0),
   );
   return indent ? lines.map((line) => `  ${line}`) : lines;
 }
 
-/** One record as labels and values for {@link Style.report}, `id` left out, each line inside {@link WIDTH} in a terminal and whole through a pipe. */
-export function recordRows(style: Style, record: Record<string, unknown>): Array<readonly [string, string]> {
+/** One record as labels and values for {@link Style.report}, `id` left out. The report wraps each value under itself, and no key or value is cut. */
+export function recordRows(_style: Style, record: Record<string, unknown>): Array<readonly [string, string]> {
   const keys = Object.keys(record).filter((key) => key !== 'id');
-  if (keys.length === 0) return [];
-  const width = Math.min(24, Math.max(...keys.map((key) => key.length)));
-  return keys.map((key) => [style.fit(clean(key), width), style.fit(cell(record[key]), WIDTH - width - 5)] as const);
+  return keys.map((key) => [clean(key), cell(record[key])] as const);
 }

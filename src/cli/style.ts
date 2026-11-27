@@ -238,14 +238,23 @@ export class Style {
   }
 
   /**
-   * `text` cut to `width` columns with an ellipsis in a terminal, and whole
-   * through a pipe or with --json, where a reader or a script wants every
-   * character. The same test as the rest of the style: `rich`.
+   * One line of aligned columns, or of text, wrapped at word boundaries to
+   * the terminal's width in a terminal, and whole through a pipe or with
+   * --json. A line that is too long breaks inside its last column, the one
+   * after its last run of two or more spaces, and each further line starts
+   * under that column. Nothing is ever cut (CLI review round 1, C8).
    */
-  fit(text: string, width: number): string {
-    if (!this.rich) return text;
-    const chars = [...text];
-    return chars.length > width ? `${chars.slice(0, Math.max(width - 1, 0)).join('')}…` : text;
+  fold(line: string): string {
+    if (!this.rich || visibleLength(line) <= this.width) return line;
+    const plain = line.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '');
+    const gap = [...plain.matchAll(/\S( {2,})(?=\S)/g)].at(-1);
+    let start = gap === undefined ? 0 : gap.index! + 1 + gap[1]!.length;
+    if (start > this.width - 20) start = 0;
+    const lead = start === 0 ? (plain.match(/^ */)?.[0] ?? '') : '';
+    const head = start === 0 ? lead : sliceVisible(line, start);
+    const tail = start === 0 ? line.slice(line.length - line.trimStart().length) : line.slice(head.length);
+    const indent = start === 0 ? `${lead}  ` : ' '.repeat(start);
+    return hanging(head, tail, indent, this.width);
   }
 
   /** "! The key is not saved.", wrapped to the terminal's width. */

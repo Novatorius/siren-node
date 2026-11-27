@@ -6,21 +6,26 @@ import { Style, visibleLength } from '../src/cli/style';
 
 /*
  * The devtools commands follow the CLI builder's restyle: in a terminal no
- * line passes 80 columns, and through a pipe every value is whole, since a
- * script or a reader of a log file wants every character. The style module
- * makes the call with `rich`, and `fit()` is the one place that cuts.
+ * line passes the terminal's width, and through a pipe every value is whole,
+ * since a script or a reader of a log file wants every character. Nothing is
+ * cut anywhere: a long value wraps at word boundaries (review round 1, C8).
  */
 
 const plain = new Style({ tty: false, env: {} });
 const rich = new Style({ tty: true, env: {} });
 const LONG = `Acme ${'very '.repeat(20)}long name`;
 
-describe('devtools output: 80 columns in a terminal, whole lines through a pipe', () => {
-  it('fit() cuts with an ellipsis only in a terminal', () => {
-    expect(rich.fit(LONG, 20)).toHaveLength(20);
-    expect(rich.fit(LONG, 20).endsWith('…')).toBe(true);
-    expect(plain.fit(LONG, 20)).toBe(LONG);
-    expect(rich.fit('short', 20)).toBe('short');
+describe('devtools output: the terminal width in a terminal, whole lines through a pipe', () => {
+  it('fold() wraps a long line under its last column in a terminal, and keeps it whole through a pipe', () => {
+    const line = `7518  complete  ${LONG}`;
+    const folded = rich.fold(line).split('\n');
+    expect(folded.length).toBeGreaterThan(1);
+    for (const one of folded) expect(visibleLength(one)).toBeLessThanOrEqual(80);
+    expect(folded.slice(1).every((one) => one.startsWith(' '.repeat(16)))).toBe(true);
+    expect(folded.map((one) => one.trim()).join(' ').split(/ +/)).toEqual(line.split(/ +/));
+    expect(plain.fold(line)).toBe(line);
+    expect(rich.fold('short')).toBe('short');
+    expect(new Style({ tty: true, env: {}, columns: 200 }).fold(line)).toBe(line);
   });
 
   it("a record list shows the default columns with whole values through a pipe, and fits 80 columns in a terminal", () => {
@@ -32,7 +37,7 @@ describe('devtools output: 80 columns in a terminal, whole lines through a pipe'
     for (const line of table(rich, rows)) expect(visibleLength(line), line).toBeLessThanOrEqual(80);
   });
 
-  it("siren trigger's rows keep a long name whole through a pipe and cut it in a terminal", () => {
+  it("siren trigger's rows keep a long name whole, in a terminal as through a pipe", () => {
     const result: ActivityResult = {
       event: 'sale',
       simulated: false,
@@ -48,6 +53,6 @@ describe('devtools output: 80 columns in a terminal, whole lines through a pipe'
     };
     const collaborator = (style: Style) => activityRows(style, result).find(([label]) => label === 'Collaborator')![1];
     expect(collaborator(plain)).toBe(`${LONG} (1)`);
-    expect(collaborator(rich).endsWith('…')).toBe(true);
+    expect(collaborator(rich)).toBe(`${LONG} (1)`);
   });
 });

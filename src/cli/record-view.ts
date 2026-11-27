@@ -1,4 +1,4 @@
-import { clean } from './style';
+import { clean, wrapWords } from './style';
 import type { Style } from './style';
 
 /*
@@ -6,17 +6,15 @@ import type { Style } from './style';
  * folder, section 1). The headline names the record. Scalars are aligned
  * `key  value` rows. A nested object is dotted rows, such as
  * `fields.tier  gold`. A list of objects is its own section, one line an
- * item. Nothing is cut mid-value: a terminal line is fitted to 80 columns,
- * and through a pipe every value is whole.
+ * item. Nothing is ever cut: in a terminal a long value wraps under itself
+ * at the terminal's width, and through a pipe every value is whole on its
+ * line (CLI review round 1, C8).
  */
-
-/** The widest line in a terminal. */
-const WIDTH = 80;
 
 /** The most items a section shows before "and N more". */
 const SECTION_ITEMS = 10;
 
-/** The widest a label grows in a terminal before it is cut. */
+/** The widest a label grows in a terminal beside its value. A longer one takes a line of its own, with the value under it. */
 const LABEL = 28;
 
 /** The keys that name a record, first found wins. The headline shows it, so its row is left out. */
@@ -228,14 +226,24 @@ export function recordView(style: Style, record: Record<string, unknown>, option
 
   const rich = style.rich;
   const labelWidth = Math.min(rich ? LABEL : Number.POSITIVE_INFINITY, Math.max(0, ...rows.map(([label]) => label.length))) + 2;
-  const fit = (text: string, width: number) => (rich ? style.fit(text, width) : text);
-  const lines = [style.bold(fit(title, WIDTH))];
+  const lines = [style.bold(rich ? style.wrap('', title) : title)];
   if (rows.length > 0) {
     lines.push('');
-    for (const [label, value] of rows) lines.push(`  ${style.dim(fit(label, labelWidth - 2).padEnd(labelWidth))}${fit(value, WIDTH - 2 - labelWidth)}`.trimEnd());
+    for (const [label, value] of rows) {
+      if (!rich) {
+        lines.push(`  ${label.padEnd(labelWidth)}${value}`.trimEnd());
+        continue;
+      }
+      const own = label.length > labelWidth - 2;
+      const at = own ? 4 : 2 + labelWidth;
+      const [first = '', ...rest] = wrapWords(value, Math.max(20, style.width - at));
+      if (own) lines.push(`  ${style.dim(label)}`, `    ${first}`.trimEnd());
+      else lines.push(`  ${style.dim(label.padEnd(labelWidth))}${first}`.trimEnd());
+      for (const more of rest) lines.push(`${' '.repeat(at)}${more}`);
+    }
   }
   for (const section of [...sections, ...extra]) {
-    lines.push('', `  ${style.bold(section.title)}`, ...section.lines.map((line) => fit(`    ${line}`, WIDTH)));
+    lines.push('', `  ${style.bold(section.title)}`, ...section.lines.map((line) => style.fold(`    ${line}`)));
   }
   return { lines, next };
 }

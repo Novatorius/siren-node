@@ -13,7 +13,7 @@ import type { DeleteRoute, ResourceCommand, ResourceOp, ResourceRoute } from '..
 import { fieldProblems, fieldsLine } from '../validation';
 import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
-import { cell, clip, recordRows, table, WIDTH } from './resource-output';
+import { cell, recordRows, table } from './resource-output';
 import { minute, recordView } from '../record-view';
 import { currenciesFor, holdsMoney, withMoney } from '../money';
 import type { ViewSection } from '../record-view';
@@ -273,7 +273,7 @@ async function listResources(input: CommandInput): Promise<number> {
   const lines = [
     style.success(`${style.bold(String(RESOURCE_COMMANDS.length))} resources, generated from Siren's API`),
     '',
-    ...RESOURCE_COMMANDS.map((resource) => clip(`  ${style.bold(resource.name.padEnd(width))}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`, WIDTH + (style.rich ? 8 : 0))),
+    ...RESOURCE_COMMANDS.map((resource) => style.fold(`  ${style.bold(resource.name.padEnd(width))}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`)),
     '',
     style.bold('Next'),
     `  1  ${style.command(`siren ${RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')?.name ?? RESOURCE_COMMANDS[0]?.name ?? 'programs'} list`)}`,
@@ -302,7 +302,7 @@ async function resourceHelp(input: CommandInput, resource: ResourceCommand): Pro
       `  siren ${resource.name} <${ops.join('|')}> [flags]`,
       '',
       style.bold('COMMANDS'),
-      ...rows.map(([left, right]) => clip(`  ${style.bold(left)}${' '.repeat(width - left.length)}${right}`, WIDTH + (style.rich ? 8 : 0))),
+      ...rows.map(([left, right]) => style.fold(`  ${style.bold(left)}${' '.repeat(width - left.length)}${right}`)),
       '',
       style.bold('LEARN MORE'),
       `  Run ${style.command(`siren ${resource.name} <command> --help`)} for its flags and an example.`,
@@ -594,7 +594,7 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     input.io.stdout(
       style.report({
         headline: `Would send ${style.bold(`${outgoing.method} ${url}`)}`,
-        ...(outgoing.body !== undefined ? { rows: [['body', style.fit(JSON.stringify(outgoing.body), WIDTH - 9)]] } : {}),
+        ...(outgoing.body !== undefined ? { rows: [['body', JSON.stringify(outgoing.body)]] } : {}),
         tips: ['Nothing was sent.'],
       }),
     );
@@ -795,7 +795,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
       return;
     }
     const lines = [headline];
-    const shown = records.length === rows.length ? table(style, records, dated) : rows.map((row) => style.fit(`  ${cell(row)}`, WIDTH));
+    const shown = records.length === rows.length ? table(style, records, dated) : rows.map((row) => style.fold(`  ${cell(row)}`));
     if (shown.length > 0) lines.push('', ...shown);
     lines.push(...hints, '', style.next(style.dim(tip)));
     out(lines.join('\n'));
@@ -823,7 +823,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     return;
   }
 
-  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}${org === undefined ? '' : ` in ${org}`}.`, ...(body !== undefined && body !== null ? { rows: [['answer', clip(cell(body), WIDTH - 11)]] } : {}) }));
+  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}${org === undefined ? '' : ` in ${org}`}.`, ...(body !== undefined && body !== null ? { rows: [['answer', cell(body)]] } : {}) }));
 }
 
 function pastTense(method: HttpMethod): string {

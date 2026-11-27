@@ -18,8 +18,6 @@ import { CliRefusal, CliUsageError } from '../targets';
  * the audience-conditions capability serves. Enrollers start from them.
  */
 
-/** The widest line in a terminal. */
-const WIDTH = 80;
 
 /** How many matching people `matches` names unless --limit says, and the most Siren's people page gives. */
 const MATCH_ROWS = 5;
@@ -219,7 +217,7 @@ export async function conditionSetsList(input: CommandInput): Promise<number> {
       [typeof set.lastCheckedAt === 'string' ? `checked ${day(set.lastCheckedAt, zone)}` : 'not checked yet', ...(set.archivedAt ? ['archived'] : [])].join('  '),
     ];
   });
-  for (const line of columns(rows)) run.print(out.rich ? out.fit(line, WIDTH) : line);
+  for (const line of columns(rows)) run.print(out.fold(line));
   printNext(input, out, [`condition-sets matches ${clean(String(sets[0]!.id))}`]);
   return 0;
 }
@@ -257,7 +255,7 @@ export async function conditionSetsGet(input: CommandInput): Promise<number> {
   }
   const out = styleFor(input.io, 'stdout', input.values);
   const zone = input.io.env.TZ;
-  const fit = (text: string) => (out.rich ? out.fit(text, WIDTH) : text);
+  const fit = (text: string) => out.fold(text);
   const conditions = itemsOf(set.conditions);
   const rows: Array<[string, string]> = [
     ['checked', typeof set.lastCheckedAt === 'string' ? day(set.lastCheckedAt, zone) : 'not yet'],
@@ -347,7 +345,7 @@ export async function conditionSetsMatches(input: CommandInput): Promise<number>
     return 0;
   }
   const out = styleFor(input.io, 'stdout', input.values);
-  const fit = (text: string) => (out.rich ? out.fit(text, WIDTH) : text);
+  const fit = (text: string) => out.fold(text);
   const lines = [`${peopleCount(count, more)} ${count === 1 && !more ? 'matches' : 'match'} condition set ${given} now.`];
   if (people.length > 0) {
     lines.push('', ...columns(people.map((person) => [clean(String(person.id ?? '')), clean(String(person.fullName ?? person.name ?? '')), clean(String(person.email ?? ''))])).map((line) => fit(`  ${line}`)));

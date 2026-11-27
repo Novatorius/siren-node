@@ -20,8 +20,6 @@ import type { IdLabel } from './requests';
 /** How long the tool waits between reads while an app's answer is open, in milliseconds. */
 export const POLL_EVERY_MS = 2000;
 
-/** The widest a line may be, so nothing wraps in an 80-column terminal. */
-const WIDTH = 80;
 
 /** An amount in minor units, and its currency code or award type. */
 export interface Amount {
@@ -324,10 +322,9 @@ export function openWaits(result: ActivityResult): ActivityWait[] {
   return result.waits.filter((wait) => isOpen(wait.status));
 }
 
-/** Rows cut so each line fits 80 columns beside the widest label in a terminal. Through a pipe each value stays whole. */
-function fitted(style: Style, rows: Array<readonly [string, string]>): Array<readonly [string, string]> {
-  const label = Math.max(0, ...rows.map(([name]) => name.length)) + 3;
-  return rows.map(([name, value]) => [name, style.fit(value, WIDTH - 2 - label)] as const);
+/** Rows as the report prints them: it wraps each value under itself, and nothing is cut. */
+function fitted(_style: Style, rows: Array<readonly [string, string]>): Array<readonly [string, string]> {
+  return rows;
 }
 
 /** The name of each program the conversions name, by id. */
@@ -411,7 +408,7 @@ export function activityReport(style: Style, input: CommandInput, run: CommandCo
   const open = openWaits(result);
   const tips = [
     ...(open.length > 0 ? ['A reward that waits is settled once the app answers.'] : []),
-    ...(result.message !== null && result.message !== '' ? [style.fit(result.message, WIDTH - 2)] : []),
+    ...(result.message !== null && result.message !== '' ? [result.message] : []),
   ];
   return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: activityRows(style, result), next, tips });
 }
@@ -433,7 +430,7 @@ export function simulationReport(style: Style, run: CommandContext, raw: Activit
     tips: [
       'Nothing was written.',
       ...(result.waits.length > 0 ? ["A simulation sends no ask, so an app's answer can't be shown here."] : []),
-      ...(result.message !== null && result.message !== '' && count === 0 ? [style.fit(result.message, WIDTH - 2)] : []),
+      ...(result.message !== null && result.message !== '' && count === 0 ? [result.message] : []),
     ],
   });
 }
