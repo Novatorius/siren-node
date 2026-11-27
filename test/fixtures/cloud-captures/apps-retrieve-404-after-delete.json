@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-11-17T09:09:33.258Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "GET /siren/v1/apps/acme-payouts",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": null,
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "App not found.",
+        "context": []
+      }
+    }
+  }
+}

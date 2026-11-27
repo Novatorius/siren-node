@@ -1,0 +1,2050 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/apps.ts",
+    "find": "    const app = await writeRecord<Record<string, unknown>>(this.http, 'PUT', path, sent);",
+    "replace": "    const app = await writeRecord<Record<string, unknown>>(this.http, 'PUT', path, {});",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.declare > sends the whole app once with PUT"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/apps.ts",
+    "find": "    const path = appPath(key, 'apps.declare()');",
+    "replace": "    const path = String(appPath(key, 'apps.declare()'));",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/resources/apps.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (Math.abs(now - t) > tolerance + 1e9)",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-cli: apps.declare > is sent once"
+    ]
+  },
+  {
+    "id": "verify-legacy-fallback",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (v2 === undefined) throw new SignatureVerificationError('The request has no X-Siren-Signature-V2 header.');",
+    "replace": "  if (v2 === undefined) return JSON.parse(String(rawBody)) as AppRequest;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses a request with no timestamped signature"
+    ]
+  },
+  {
+    "id": "verify-tolerance-dropped",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (Math.abs(now - t) > tolerance + 1e9)",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses a timestamp more than 300 seconds off"
+    ]
+  },
+  {
+    "id": "verify-tolerance-boundary",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (Math.abs(now - t) >= tolerance)",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses a timestamp more than 300 seconds off"
+    ]
+  },
+  {
+    "id": "verify-tolerance-one-sided",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Math.abs(now - t) > tolerance)",
+    "replace": "  if (now - t > tolerance)",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses a timestamp more than 300 seconds off"
+    ]
+  },
+  {
+    "id": "verify-tolerance-option-ignored",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const tolerance = given.toleranceSeconds ?? defaultTolerance;",
+    "replace": "  const tolerance = defaultTolerance;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > reads toleranceSeconds"
+    ]
+  },
+  {
+    "id": "verify-time-not-signed",
+    "file": "src/resources/app-requests.ts",
+    "find": "update(`${t}.`)",
+    "replace": "update('')",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > checks the request Siren signed"
+    ]
+  },
+  {
+    "id": "verify-timestamp-header-ignored",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (stamp !== undefined && stamp !== String(t)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses an X-Siren-Timestamp that differs"
+    ]
+  },
+  {
+    "id": "verify-event-ignored",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (event !== undefined && event !== 'app.request') {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses an ordinary webhook"
+    ]
+  },
+  {
+    "id": "verify-empty-secret",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof secret !== 'string' || secret === '')",
+    "replace": "  if (typeof secret !== 'string')",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses an empty secret or a bad tolerance"
+    ]
+  },
+  {
+    "id": "verify-tolerance-range",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (!Number.isInteger(tolerance) || tolerance < 1 || tolerance > MAX_TOLERANCE_SECONDS) {",
+    "replace": "  if (!Number.isInteger(tolerance) || tolerance < 1 || tolerance > MAX_TOLERANCE_SECONDS * 10) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses an empty secret or a bad tolerance"
+    ]
+  },
+  {
+    "id": "verify-version-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    body.version === 1 &&\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses a signed body that is not an app request"
+    ]
+  },
+  {
+    "id": "verify-ask-fields-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    (body.mode === 'tell' || (typeof body.answerBy === 'string' && typeof body.answerUrl === 'string'))",
+    "replace": "    true",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > refuses a signed body that is not an app request"
+    ]
+  },
+  {
+    "id": "verify-first-v1-only",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const matched = signatures.some(",
+    "replace": "  const matched = signatures.slice(0, 1).some(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > reads headers in any case"
+    ]
+  },
+  {
+    "id": "verify-delivery-dropped",
+    "file": "src/resources/app-requests.ts",
+    "find": "  const delivery = readHeader(headers, 'X-Siren-Delivery');",
+    "replace": "  const delivery = undefined as string | undefined;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.verifyRequest > checks the request Siren signed"
+    ]
+  },
+  {
+    "id": "verify-parsed-body",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof rawBody !== 'string' && !(rawBody instanceof Uint8Array)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses a parsed body with SirenError"
+    ]
+  },
+  {
+    "id": "verify-clock-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof now !== 'number' || !Number.isFinite(now)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses a clock that is not a finite number"
+    ]
+  },
+  {
+    "id": "verify-options-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (options !== undefined && !isJsonObject(options)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses options that are not an object"
+    ]
+  },
+  {
+    "id": "verify-two-times",
+    "file": "src/resources/app-requests.ts",
+    "find": "times.length === 1 && ",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: verifyAppRequest > refuses a V2 header that names two times"
+    ]
+  },
+  {
+    "id": "declare-requests-key",
+    "file": "src/resources/apps.ts",
+    "find": "  if (typeof key !== 'string' || key.length > 64 || !APP_KEY.test(key) || key === 'requests') {",
+    "replace": "  if (typeof key !== 'string' || key.length > 64 || !APP_KEY.test(key)) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.declare > refuses a bad key"
+    ]
+  },
+  {
+    "id": "declare-item-fields-unpicked",
+    "file": "src/resources/apps.ts",
+    "find": "        const copy = pickFields(item, AppsResource.ITEM_FIELDS, (field) => `Siren: apps.declare() does not take ${field} on an item.`);",
+    "replace": "        const copy = { ...item } as Record<string, unknown>;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.declare > refuses a bad key"
+    ]
+  },
+  {
+    "id": "declare-name-url-optional",
+    "file": "src/resources/apps.ts",
+    "find": "    if (sent.name == null || sent.url == null) throw new SirenError('Siren: apps.declare() needs a name and a url.');",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.declare > refuses a bad key"
+    ]
+  },
+  {
+    "id": "declare-one-secret-accepted",
+    "file": "src/resources/apps.ts",
+    "find": "    if (created && (typeof app.rawKey !== 'string' || typeof app.signingSecret !== 'string')) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.declare > throws UnexpectedResponseError"
+    ]
+  },
+  {
+    "id": "declare-shape-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "  return isJsonObject(body) && typeof body.key === 'string' && Array.isArray(body.items) ? undefined :",
+    "replace": "  return true ? undefined :",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.declare > throws UnexpectedResponseError"
+    ]
+  },
+  {
+    "id": "declare-toJSON-reaches-body",
+    "file": "src/resources/apps.ts",
+    "find": "    const sent = pickFields(params, AppsResource.DECLARE_FIELDS, (field) => `Siren: apps.declare() does not take ${field}.`);",
+    "replace": "    pickFields(params, AppsResource.DECLARE_FIELDS, (field) => `Siren: apps.declare() does not take ${field}.`);\n    const sent = params as unknown as Record<string, unknown>;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.declare > sends only its own fields"
+    ]
+  },
+  {
+    "id": "declare-params-not-object",
+    "file": "src/resources/apps.ts",
+    "find": "    if (!isJsonObject(params)) throw new SirenError('Siren: apps.declare() needs the app as an object.');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a bad key on every call"
+    ]
+  },
+  {
+    "id": "declare-secrets-not-text",
+    "file": "src/resources/apps.ts",
+    "find": "    if (created && (typeof app.rawKey !== 'string' || typeof app.signingSecret !== 'string')) {",
+    "replace": "    if (created && (app.rawKey === undefined || app.signingSecret === undefined)) {",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a declare whose secrets are not text"
+    ]
+  },
+  {
+    "id": "list-rows-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "      rows.map((row) => appProblem(row, 'GET /apps')).find((problem) => problem !== undefined),",
+    "replace": "      rows.length < 0 ? 'never' : undefined,",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a list with a row that is not an app"
+    ]
+  },
+  {
+    "id": "retrieve-shape-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    return readObject<App>(this.http, path, {}, (body) => appProblem(body, `GET ${path}`));",
+    "replace": "    return readObject<App>(this.http, path, {});",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a retrieve, a status change and a rotation"
+    ]
+  },
+  {
+    "id": "status-shape-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: app });\n    return app;",
+    "replace": "    return app;",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a retrieve, a status change and a rotation"
+    ]
+  },
+  {
+    "id": "rotate-shape-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    if (problem !== undefined) throw new UnexpectedResponseError(problem, { data: app });\n    if (typeof app.rawKey",
+    "replace": "    if (typeof app.rawKey",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a retrieve, a status change and a rotation"
+    ]
+  },
+  {
+    "id": "key-check-skipped-on-delete",
+    "file": "src/resources/apps.ts",
+    "find": "    await deleteRecord(this.http, appPath(key, 'apps.delete()'));",
+    "replace": "    await deleteRecord(this.http, `/apps/${key}`);",
+    "expect": "caught",
+    "failing": [
+      "apps answers that are not apps > refuses a bad key on every call"
+    ]
+  },
+  {
+    "id": "status-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    if (status !== 'active' && status !== 'inactive') throw new SirenError('Siren: apps.setStatus() takes active or inactive.');",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps reads and changes > turns an app on and off once"
+    ]
+  },
+  {
+    "id": "rotate-secrets-unchecked",
+    "file": "src/resources/apps.ts",
+    "find": "    if (typeof app.rawKey !== 'string' || typeof app.signingSecret !== 'string') {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps reads and changes > rotates once"
+    ]
+  },
+  {
+    "id": "requests-rows-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    Array.isArray(body.requests) && body.requests.every(isJsonObject)",
+    "replace": "    Array.isArray(body.requests)",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests > refuses an unknown filter or status"
+    ]
+  },
+  {
+    "id": "requests-status-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (status !== undefined && !REQUEST_STATUSES.includes(status as string)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests > refuses an unknown filter or status"
+    ]
+  },
+  {
+    "id": "request-id-loose",
+    "file": "src/resources/app-requests.ts",
+    "find": "const REQUEST_ID = /^apr_[0-9a-f]{32}$/;",
+    "replace": "const REQUEST_ID = /^apr_[0-9a-fA-F]{32}/;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests > resends once, and refuses a bad id"
+    ]
+  },
+  {
+    "id": "requests-filter-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "    if (!filters.includes(key)) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests > refuses an unknown filter or status"
+    ]
+  },
+  {
+    "id": "requests-params-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (!isJsonObject(params)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: listAppRequests > refuses filters that are not an object"
+    ]
+  },
+  {
+    "id": "resend-retried",
+    "file": "src/resources/app-requests.ts",
+    "find": "  return writeRecord<AppRequestRecord>(http, 'POST', `/apps/requests/${key}/resend`, undefined);",
+    "replace": "  return writeRecord<AppRequestRecord>({ request: (r) => http.request({ ...r, retriable: true }) }, 'POST', `/apps/requests/${key}/resend`, undefined);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests > resends once"
+    ]
+  },
+  {
+    "id": "answer-retried",
+    "file": "src/resources/app-requests.ts",
+    "find": "      const response = await http.request(request);",
+    "replace": "      const response = await http.request({ ...request, retriable: true });",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > is sent once"
+    ]
+  },
+  {
+    "id": "answer-size-boundary",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (Buffer.byteLength(json, 'utf8') > maxBytes) {",
+    "replace": "  if (Buffer.byteLength(json, 'utf8') >= maxBytes) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > refuses a bad id, an answer that is not an object"
+    ]
+  },
+  {
+    "id": "answer-outcome-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "  if (typeof copy.outcome !== 'string' || copy.outcome === '') {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > refuses a bad id, an answer that is not an object"
+    ]
+  },
+  {
+    "id": "answer-class-instance",
+    "file": "src/resources/app-requests.ts",
+    "find": "  return proto === Object.prototype || proto === null;",
+    "replace": "  return true;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > refuses a bad id, an answer that is not an object"
+    ]
+  },
+  {
+    "id": "answer-receipt-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "reply.status !== 'accepted' || ",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > raises each of Siren"
+    ]
+  },
+  {
+    "id": "answer-duplicate-unchecked",
+    "file": "src/resources/app-requests.ts",
+    "find": "(reply.duplicate !== undefined && typeof reply.duplicate !== 'boolean')",
+    "replace": "false",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > raises each of Siren"
+    ]
+  },
+  {
+    "id": "answer-json-unwritable",
+    "file": "src/resources/app-requests.ts",
+    "find": "  } catch (cause) {\n    throw new SirenError(`${method} could not write the answer as JSON.`, { cause });\n  }",
+    "replace": "  } finally {\n  }",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: answerAppRequest > refuses an answer JSON cannot write"
+    ]
+  },
+  {
+    "id": "answer-receipt-status-dropped",
+    "file": "src/resources/app-requests.ts",
+    "find": "      statusCode: status,\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: answerAppRequest > gives a receipt of the wrong shape the status"
+    ]
+  },
+  {
+    "id": "sandbox-default-dropped",
+    "file": "src/client.ts",
+    "find": "    if (defaulted) return SANDBOX_BASE_URL;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: sandbox and live keys > sends a sandbox key with no baseUrl to the sandbox"
+    ]
+  },
+  {
+    "id": "sandbox-key-to-live",
+    "file": "src/client.ts",
+    "find": "    if (origin === new URL(DEFAULT_BASE_URL).origin) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: sandbox and live keys > refuses a sandbox key sent to the live API"
+    ]
+  },
+  {
+    "id": "live-key-to-sandbox",
+    "file": "src/client.ts",
+    "find": "  if (apiKey.startsWith('sk_live_') && origin === new URL(SANDBOX_BASE_URL).origin) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: sandbox and live keys > refuses a sandbox key sent to the live API"
+    ]
+  },
+  {
+    "id": "sandbox-origin-raw",
+    "file": "src/client.ts",
+    "find": "  const origin = new URL(resolved).origin;",
+    "replace": "  const origin = resolved;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: sandbox and live keys > refuses a sandbox key sent to the live API"
+    ]
+  },
+  {
+    "id": "sandbox-message-quotes-key",
+    "file": "src/client.ts",
+    "find": "cannot reach the live API. Leave",
+    "replace": "cannot reach the live API with ${apiKey}. Leave",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: sandbox and live keys > refuses a sandbox key sent to the live API"
+    ]
+  },
+  {
+    "id": "file-stanza-allowed",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (['version', 'name', 'description', 'apps'].includes(key)) continue;",
+    "replace": "    if (['version', 'name', 'description', 'apps', 'programs'].includes(key)) continue;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses any recipe stanza"
+    ]
+  },
+  {
+    "id": "file-two-apps",
+    "file": "src/cli/app-file.ts",
+    "find": "  if (appKeys.length !== 1) {",
+    "replace": "  if (appKeys.length < 1) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses a file with no app or with two"
+    ]
+  },
+  {
+    "id": "file-env-unset-silent",
+    "file": "src/cli/app-file.ts",
+    "find": "        this.problem(path, where, `${path} needs the environment variable ${name}, which is not set.`);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > names the key and the variable"
+    ]
+  },
+  {
+    "id": "file-duplicate-key",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (twice) this.problems.push(",
+    "replace": "      if (false) this.problems.push(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses a key written twice"
+    ]
+  },
+  {
+    "id": "file-currencies-anywhere",
+    "file": "src/cli/app-file.ts",
+    "find": "    } else if (entry.currencies !== undefined) {",
+    "replace": "    } else if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses each broken app or item field"
+    ]
+  },
+  {
+    "id": "file-window-upper",
+    "file": "src/cli/app-file.ts",
+    "find": "(window as number) > MAX_ANSWER_WINDOW_MINUTES)",
+    "replace": "(window as number) > MAX_ANSWER_WINDOW_MINUTES + 1)",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses each broken app or item field"
+    ]
+  },
+  {
+    "id": "file-http-allowed",
+    "file": "src/cli/app-file.ts",
+    "find": "  return url.protocol === 'https:' || (url.protocol === 'http:' && LOCAL_HOSTS.includes(url.hostname));",
+    "replace": "  return url.protocol === 'https:' || url.protocol === 'http:';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses each broken app or item field",
+      "apps-cli: the app file > takes http only"
+    ]
+  },
+  {
+    "id": "file-http-local-loose",
+    "file": "src/cli/app-file.ts",
+    "find": "LOCAL_HOSTS.includes(url.hostname)",
+    "replace": "LOCAL_HOSTS.some((host) => url.hostname.startsWith(host))",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > takes http only"
+    ]
+  },
+  {
+    "id": "file-kind-unchecked",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (typeof entry.kind !== 'string' || !KINDS.includes(entry.kind)) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses each broken app or item field"
+    ]
+  },
+  {
+    "id": "file-column-off",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (next === '}') return result;\n      if (next !== ',') {\n        this.at -= 1;\n",
+    "replace": "      if (next === '}') return result;\n      if (next !== ',') {\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > gives the line and column"
+    ]
+  },
+  {
+    "id": "edition-live-unguarded",
+    "file": "src/cli/targets.ts",
+    "find": "  if (edition === 'production' && !target.live) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
+    ]
+  },
+  {
+    "id": "edition-sandbox-live",
+    "file": "src/cli/targets.ts",
+    "find": "  if (edition === 'sandbox' && target.live) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > keeps --live for a live organization"
+    ]
+  },
+  {
+    "id": "edition-missing-is-sandbox",
+    "file": "src/cli/session-auth.ts",
+    "find": "    return body.edition === 'sandbox' ? 'sandbox' : 'production';",
+    "replace": "    return body.edition === 'production' ? 'production' : 'sandbox';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
+    ]
+  },
+  {
+    "id": "login-edition-unchecked",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const edition = await run.targetEdition();\n  assertEditionAllowed(run.target, edition);\n\n  let result: LoginResult;",
+    "replace": "  const edition = await run.targetEdition();\n\n  let result: LoginResult;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
+    ]
+  },
+  {
+    "id": "signup-edition-unchecked",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const edition = await run.targetEdition();\n  assertEditionAllowed(run.target, edition);\n\n  const orgName",
+    "replace": "  const edition = await run.targetEdition();\n\n  const orgName",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refuses a live Siren without --live"
+    ]
+  },
+  {
+    "id": "default-target-live",
+    "file": "src/cli/targets.ts",
+    "find": "    chosen = flags.live ? LIVE_BASE_URL : SANDBOX_BASE_URL;",
+    "replace": "    chosen = LIVE_BASE_URL;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > chooses the sandbox unless told otherwise"
+    ]
+  },
+  {
+    "id": "sandbox-with-live-allowed",
+    "file": "src/cli/targets.ts",
+    "find": "  if (flags.sandbox && flags.live) throw",
+    "replace": "  if (false) throw",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > answers exit code 2"
+    ]
+  },
+  {
+    "id": "credentials-mode-unchecked",
+    "file": "src/cli/credentials.ts",
+    "find": "        if ((mode & 0o077) !== 0) {",
+    "replace": "        if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refuses a credentials file"
+    ]
+  },
+  {
+    "id": "credentials-file-0644",
+    "file": "src/cli/credentials.ts",
+    "find": "      await writeFile(temporary, `${JSON.stringify(file, null, 2)}\\n`, { mode: 0o600, flag: 'wx' });",
+    "replace": "      await writeFile(temporary, `${JSON.stringify(file, null, 2)}\\n`, { mode: 0o644, flag: 'wx' });",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > signs up on the sandbox"
+    ]
+  },
+  {
+    "id": "credentials-dir-open",
+    "file": "src/cli/credentials.ts",
+    "find": "    const made = await mkdir(this.configDir, { recursive: true, mode: 0o700 });\n    if (made !== undefined && POSIX) await chmod(this.configDir, 0o700);",
+    "replace": "    await mkdir(this.configDir, { recursive: true });",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > signs up on the sandbox"
+    ]
+  },
+  {
+    "id": "credentials-shape-unchecked",
+    "file": "src/cli/credentials.ts",
+    "find": "  if (version !== 1 || typeof sessions !== 'object'",
+    "replace": "  if (typeof sessions !== 'object'",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > refuses a credentials file of another shape"
+    ]
+  },
+  {
+    "id": "refresh-not-before-expiry",
+    "file": "src/cli/context.ts",
+    "find": "    if (session.accessExpiresAt - REFRESH_EARLY_SECONDS <= this.io.now() / 1000) return this.refresh();",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refreshes an access token that has run out"
+    ]
+  },
+  {
+    "id": "refresh-refusal-raw",
+    "file": "src/cli/context.ts",
+    "find": "    } catch (error) {\n      throw refreshRefusal(error, this.command('login'));",
+    "replace": "    } catch (error) {\n      throw error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refreshes once after a 401"
+    ]
+  },
+  {
+    "id": "refresh-not-kept",
+    "file": "src/cli/context.ts",
+    "find": "    await this.store.put(this.target.baseUrl, this.session);\n    return tokens.accessToken;",
+    "replace": "    return tokens.accessToken;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refreshes an access token that has run out"
+    ]
+  },
+  {
+    "id": "refresh-unavailable-signs-out",
+    "file": "src/cli/context.ts",
+    "find": "  if (error instanceof ConnectionError || error instanceof ApiError) {",
+    "replace": "  if (error instanceof ConnectionError) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > keeps the session and says to try again when Siren cannot renew it"
+    ]
+  },
+  {
+    "id": "refresh-plan-raw",
+    "file": "src/cli/context.ts",
+    "find": "  if (plan !== undefined) return new CliRefusal(plan);\n  if (error instanceof ConnectionError",
+    "replace": "  if (error instanceof ConnectionError",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > keeps the session and says to try again when Siren cannot renew it"
+    ]
+  },
+  {
+    "id": "session-route-not-refreshed",
+    "file": "src/cli/context.ts",
+    "find": "      return call(await this.refresh());",
+    "replace": "      throw error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > refreshes once and asks again"
+    ]
+  },
+  {
+    "id": "no-session-message",
+    "file": "src/cli/context.ts",
+    "find": "Run ${this.command('login')} first.",
+    "replace": "Sign in first.",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says to sign in"
+    ]
+  },
+  {
+    "id": "login-org-by-id-only",
+    "file": "src/cli/commands/session.ts",
+    "find": "  return memberships.find((membership) => membership.orgSlug === wanted || String(membership.orgId) === wanted);",
+    "replace": "  return memberships.find((membership) => String(membership.orgId) === wanted);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > picks one of several organizations"
+    ]
+  },
+  {
+    "id": "login-first-org-silently",
+    "file": "src/cli/commands/session.ts",
+    "find": "    org = choice === undefined ? undefined : findOrg(memberships, choice);",
+    "replace": "    org = (choice === undefined ? undefined : findOrg(memberships, choice)) ?? memberships[0];",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > picks one of several organizations"
+    ]
+  },
+  {
+    "id": "select-org-plan-raw",
+    "file": "src/cli/commands/session.ts",
+    "find": "      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);\n    } catch (error) {\n      throw signInRefusal(error, run.command('login'));",
+    "replace": "      tokens = await run.auth.selectOrg(result.verificationToken, org.orgId);\n    } catch (error) {\n      throw error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > says what to do about a plan when choosing"
+    ]
+  },
+  {
+    "id": "login-other-org-kept",
+    "file": "src/cli/commands/session.ts",
+    "find": "    if (wanted !== undefined && findOrg([org], wanted) === undefined) {",
+    "replace": "    if (wanted === 'never-an-org') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > refuses --org that names another organization"
+    ]
+  },
+  {
+    "id": "stdin-password-trimmed",
+    "file": "src/cli/session-auth.ts",
+    "find": "  if (fromStdin) password = (await io.readStdin()).replace(/\\r?\\n$/, '');",
+    "replace": "  if (fromStdin) password = (await io.readStdin()).trim();",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > sends the password with a line break at its end taken off"
+    ]
+  },
+  {
+    "id": "logout-keeps-refresh",
+    "file": "src/cli/session-auth.ts",
+    "find": "    await this.send('POST', '/auth/logout', { refreshToken }, accessToken, false, [refreshToken]);",
+    "replace": "    await this.send('POST', '/auth/logout', {}, accessToken, false, [refreshToken]);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > logs out by revoking both tokens"
+    ]
+  },
+  {
+    "id": "logout-forgets-all",
+    "file": "src/cli/credentials.ts",
+    "find": "    delete file.sessions[baseUrl];",
+    "replace": "    file.sessions = {};",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > logs out by revoking both tokens"
+    ]
+  },
+  {
+    "id": "use-org-id-text",
+    "file": "src/cli/session-auth.ts",
+    "find": "    return asTokens(await this.send('POST', '/auth/switch-org', { orgId }, accessToken), '/auth/switch-org');",
+    "replace": "    return asTokens(await this.send('POST', '/auth/switch-org', { orgId: String(orgId) }, accessToken), '/auth/switch-org');",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > lists the organizations and switches"
+    ]
+  },
+  {
+    "id": "orgs-no-marker",
+    "file": "src/cli/commands/session.ts",
+    "find": "membership.orgId === session.orgId ? '*' : ' '",
+    "replace": "' '",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > lists the organizations and switches"
+    ]
+  },
+  {
+    "id": "signup-terms-unchecked",
+    "file": "src/cli/commands/session.ts",
+    "find": "  if (!accepted) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > refuses sign-up without the terms"
+    ]
+  },
+  {
+    "id": "flags-not-needed",
+    "file": "src/cli/commands/session.ts",
+    "find": "  if (missing.length > 0) throw new CliUsageError(",
+    "replace": "  if (false) throw new CliUsageError(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the session > asks for --email and --password-stdin before sending"
+    ]
+  },
+  {
+    "id": "usage-exit-1",
+    "file": "src/cli/run.ts",
+    "find": "      return 2;\n    }\n    io.stderr(`siren: ${(error instanceof Error",
+    "replace": "      return 1;\n    }\n    io.stderr(`siren: ${(error instanceof Error",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > answers exit code 2"
+    ]
+  },
+  {
+    "id": "parse-not-strict",
+    "file": "src/cli/run.ts",
+    "find": "    return parseArgs({ args: [...argv], options, strict: true, allowPositionals: true });",
+    "replace": "    return parseArgs({ args: [...argv], options, strict: false, allowPositionals: true });",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > answers exit code 2"
+    ]
+  },
+  {
+    "id": "positionals-unchecked",
+    "file": "src/cli/run.ts",
+    "find": "    if (args.length < spec.positionals[0] || args.length > spec.positionals[1]) {",
+    "replace": "    if (args.length > spec.positionals[1]) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > answers exit code 2"
+    ]
+  },
+  {
+    "id": "help-misses-one",
+    "file": "src/cli/run.ts",
+    "find": "    ...COMMANDS.map((command) =>",
+    "replace": "    ...COMMANDS.slice(1).map((command) =>",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > lists every command for --help"
+    ]
+  },
+  {
+    "id": "version-drifts",
+    "file": "src/cli/run.ts",
+    "find": "export const CLI_VERSION = '0.3.0';",
+    "replace": "export const CLI_VERSION = '0.3.1';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > lists every command for --help"
+    ]
+  },
+  {
+    "id": "bin-points-elsewhere",
+    "file": "package.json",
+    "find": "\"siren\": \"./dist/cli.js\"",
+    "replace": "\"siren\": \"./dist/cli.cjs\"",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the siren command in the package > names dist/cli.js as the siren bin"
+    ]
+  },
+  {
+    "id": "apply-prints-key",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  run.print(`Key ${rawKey.slice(0, 16)} and its signing secret are in ${envPath}.`);",
+    "replace": "  run.print(`Key ${rawKey} and its signing secret are in ${envPath}.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
+    ]
+  },
+  {
+    "id": "env-fallback-silent",
+    "file": "src/cli/commands/apply.ts",
+    "find": "        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,",
+    "replace": "        '',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
+    ]
+  },
+  {
+    "id": "env-file-open-mode",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    await writeFile(temporary, `${lines.join('\\n')}\\n`, { mode: 0o600, flag: 'wx' });",
+    "replace": "    await writeFile(temporary, `${lines.join('\\n')}\\n`, { flag: 'wx' });",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply",
+      "apps-cli internals: the env file > never leaves the new key in a file wider than 0600"
+    ]
+  },
+  {
+    "id": "env-lines-appended",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (at >= 0) lines[at] = `${name}=${value}`;\n    else lines.push(`${name}=${value}`);",
+    "replace": "    lines.push(`${name}=${value}`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
+    ]
+  },
+  {
+    "id": "env-written-on-update",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  await run.remember(key, envPath);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "  const loose = app as unknown as { rawKey: string; signingSecret: string };\n  await saveSecrets(run, envPath, loose.rawKey, loose.signingSecret);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
+    ]
+  },
+  {
+    "id": "problems-without-line",
+    "file": "src/cli/commands/apply.ts",
+    "find": "      io.stderr(`${shown}:${problem.line}:${problem.column}: ",
+    "replace": "      io.stderr(`${shown}: ",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > prints each problem in the app file"
+    ]
+  },
+  {
+    "id": "init-no-gitignore",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (!(ignored ?? '').split(/\\r?\\n/).includes('.env.*')) {",
+    "replace": "  if (ignored === 'never-a-gitignore') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > writes an app file and keeps env files out of git"
+    ]
+  },
+  {
+    "id": "init-overwrites",
+    "file": "src/cli/commands/apply.ts",
+    "find": "{ flag: 'wx' }",
+    "replace": "{ flag: 'w' }",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > writes an app file and keeps env files out of git"
+    ]
+  },
+  {
+    "id": "init-key-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {\n    throw new CliUsageError('--key takes",
+    "replace": "  if (false) {\n    throw new CliUsageError('--key takes",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: apply and the app key > refuses an app key Siren would refuse"
+    ]
+  },
+  {
+    "id": "delete-without-yes",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (values.yes !== true) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > deletes only with --yes"
+    ]
+  },
+  {
+    "id": "delete-typed-key-ignored",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (typed !== key) throw new CliRefusal(",
+    "replace": "    if (typed === undefined) throw new CliRefusal(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: apply and the app key > deletes in a terminal only when the key is typed"
+    ]
+  },
+  {
+    "id": "delete-in-use-plain",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (error instanceof ConflictError && appErrorCode(error) === 'app_in_use')",
+    "replace": "    if (error instanceof ConflictError && appErrorCode(error) === 'never_sent')",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > deletes only with --yes"
+    ]
+  },
+  {
+    "id": "requests-app-unfiltered",
+    "file": "src/cli/commands/requests.ts",
+    "find": "        if (appId !== undefined && row.appId !== appId) continue;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > lists the latest requests"
+    ]
+  },
+  {
+    "id": "requests-attention-ignored",
+    "file": "src/cli/commands/requests.ts",
+    "find": "values.attention ? { status: 'needs_attention' } : {}",
+    "replace": "{}",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > lists the latest requests"
+    ]
+  },
+  {
+    "id": "follow-repeats",
+    "file": "src/cli/commands/requests.ts",
+    "find": "        if (seen.get(row.id) === row.status) continue;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > follows the requests"
+    ]
+  },
+  {
+    "id": "follow-ignores-ctrl-c",
+    "file": "src/cli/commands/requests.ts",
+    "find": "      await io.sleep(FOLLOW_EVERY_MS);\n      if (io.signal?.aborted) return 0;",
+    "replace": "      await io.sleep(FOLLOW_EVERY_MS);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > follows the requests"
+    ]
+  },
+  {
+    "id": "show-other-requests",
+    "file": "src/cli/commands/requests.ts",
+    "find": "\n    .filter((delivery) => delivery.eventId.startsWith(`${id}.`))",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > shows one request"
+    ]
+  },
+  {
+    "id": "show-id-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (!REQUEST_ID.test(id)) throw new CliUsageError(",
+    "replace": "  if (id === 'never') throw new CliUsageError(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: requests > refuses a request id it cannot read"
+    ]
+  },
+  {
+    "id": "show-id-with-list-options",
+    "file": "src/cli/commands/requests.ts",
+    "find": "    if (values.app !== undefined || values.attention === true || values.follow === true) {",
+    "replace": "    if (values.app === 'never') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: requests > refuses a request id it cannot read"
+    ]
+  },
+  {
+    "id": "answer-duplicate-hidden",
+    "file": "src/cli/commands/requests.ts",
+    "find": "receipt.duplicate ? 'Siren already had this answer. Nothing changed.' : ",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > posts an answer with the session"
+    ]
+  },
+  {
+    "id": "answer-both-sources",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if ((body === undefined) === (file === undefined)) throw",
+    "replace": "  if (body === undefined && file === undefined) throw",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: requests > refuses an answer given both as --body and --file"
+    ]
+  },
+  {
+    "id": "example-no-dedupe",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "      if (handled.has(request.id)) return { status: 200, body: received };\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > answers a repeat"
+    ]
+  },
+  {
+    "id": "example-failed-counts",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "        (error) => log(`${request.id}: could not answer, and will answer again when Siren sends it again: ${error.message}`),",
+    "replace": "        (error) => {\n          handled.add(request.id);\n          log(`${request.id}: could not answer: ${error.message}`);\n        },",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > answers again after an answer that failed"
+    ]
+  },
+  {
+    "id": "example-accepts-unverified",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "        return { status: 400, body: JSON.stringify({ error: 'unverified' }) };",
+    "replace": "        return { status: 200, body: '{}' };",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > refuses a request it cannot check"
+    ]
+  },
+  {
+    "id": "example-reference",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "reference: `acme-${data.payoutId}`",
+    "replace": "reference: 'acme'",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > answers Siren"
+    ]
+  },
+  {
+    "id": "example-remainder-lost",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "    shares[index] += 1;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > pays a payout"
+    ]
+  },
+  {
+    "id": "example-inflight-twice",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "      if (answering.has(request.id)) return { status: 200, body: received, answered: answering.get(request.id) };\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "the example app, beyond the contract > answers once when a repeat arrives"
+    ]
+  },
+  {
+    "id": "example-sale-unattributed",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "  if (visit.opportunityId === undefined) {\n",
+    "replace": "  if (visit.opportunityId === -1) {\n",
+    "expect": "caught",
+    "failing": [
+      "the example app, beyond the contract > sends no sale when Siren opens no opportunity"
+    ]
+  },
+  {
+    "id": "docs-answer-key",
+    "file": "openapi.yaml",
+    "find": "        app_answer_unauthorized.\n      security:\n        - apiKey: []\n",
+    "replace": "        app_answer_unauthorized.\n      security:\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > openapi.yaml documents the answer route"
+    ]
+  },
+  {
+    "id": "docs-cli-heading",
+    "file": "README.md",
+    "find": "## Command-line tool\n",
+    "replace": "## The CLI\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the README shows the command-line tool"
+    ]
+  },
+  {
+    "id": "docs-changelog-sandbox",
+    "file": "CHANGELOG.md",
+    "find": "goes to `SANDBOX_BASE_URL`.",
+    "replace": "goes to the sandbox.",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the CHANGELOG names"
+    ]
+  },
+  {
+    "id": "error-code-not-first",
+    "file": "src/errors.ts",
+    "find": "  if (typeof error.code === 'string' && error.code !== '') return error.code;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps reads and changes > reads an app error code"
+    ]
+  },
+  {
+    "id": "error-code-no-reason",
+    "file": "src/errors.ts",
+    "find": "    if (typeof reason === 'string' && reason !== '') return reason;\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps reads and changes > reads an app error code"
+    ]
+  },
+  {
+    "id": "target-http-any-host",
+    "file": "src/cli/targets.ts",
+    "find": "  if (url.protocol === 'http:' && !LOCAL_HOSTS.includes(url.hostname)) {",
+    "replace": "  if (url.protocol === 'gopher:' && !LOCAL_HOSTS.includes(url.hostname)) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > answers exit code 2"
+    ]
+  },
+  {
+    "id": "target-http-local-narrow",
+    "file": "src/cli/targets.ts",
+    "find": "const LOCAL_HOSTS = ['localhost', '127.0.0.1', 'host.docker.internal'];",
+    "replace": "const LOCAL_HOSTS = ['localhost'];",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > takes plain http only for a Cloud on this machine"
+    ]
+  },
+  {
+    "id": "file-fill-anywhere",
+    "file": "src/cli/app-file.ts",
+    "find": "    const isUrl = /^apps\\.[^.]+\\.url$/.test(path);",
+    "replace": "    const isUrl = path !== '';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > fills a placeholder only in the url"
+    ]
+  },
+  {
+    "id": "file-fill-any-name",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (!/^SIREN_APP_[A-Z0-9_]+$/.test(name)) {",
+    "replace": "      if (!/^[A-Z0-9_]+$/.test(name)) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > fills a placeholder only in the url"
+    ]
+  },
+  {
+    "id": "file-filled-unreported",
+    "file": "src/cli/app-file.ts",
+    "find": "      this.filled.add(name);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "file-description-optional",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (typeof top.description !== 'string') this.problem(",
+    "replace": "    if (top.description !== undefined && typeof top.description !== 'string') this.problem(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file > refuses each broken app or item field"
+    ]
+  },
+  {
+    "id": "file-unclosed-placeholder",
+    "file": "src/cli/app-file.ts",
+    "find": "    if (text.replace(PLACEHOLDER, '').includes('${')) {",
+    "replace": "    if (false) {",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a placeholder with no closing brace"
+    ]
+  },
+  {
+    "id": "file-empty-variable-fills",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (set === undefined || set === '') {",
+    "replace": "      if (set === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a placeholder with no closing brace"
+    ]
+  },
+  {
+    "id": "file-lists-unchecked",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (app[list] !== undefined && !isTextList(app[list])) {",
+    "replace": "      if (false) {",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses scopes or events"
+    ]
+  },
+  {
+    "id": "file-url-unparsed",
+    "file": "src/cli/app-file.ts",
+    "find": "  } catch {\n    return false;\n  }",
+    "replace": "  } catch {\n    return true;\n  }",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses scopes or events"
+    ]
+  },
+  {
+    "id": "file-top-not-object",
+    "file": "src/cli/app-file.ts",
+    "find": "      this.problem('', this.where(''), 'An app file is a JSON object.');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a file that is not a JSON object"
+    ]
+  },
+  {
+    "id": "reader-proto-assigned",
+    "file": "src/cli/app-file.ts",
+    "find": "  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });",
+    "replace": "  target[key] = value;",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > keeps __proto__ as a plain key"
+    ]
+  },
+  {
+    "id": "reader-unicode-escape",
+    "file": "src/cli/app-file.ts",
+    "find": "        out += String.fromCharCode(parseInt(this.text.slice(this.at + 2, this.at + 6), 16));",
+    "replace": "        out += 'u';",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > reads \\u escapes"
+    ]
+  },
+  {
+    "id": "reader-bad-escape-place",
+    "file": "src/cli/app-file.ts",
+    "find": "        this.fail(this.at, 'JSON does not read this backslash escape.');",
+    "replace": "        this.fail(this.at + 1, 'JSON does not read this backslash escape.');",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > reads \\u escapes"
+    ]
+  },
+  {
+    "id": "reader-unclosed-string-place",
+    "file": "src/cli/app-file.ts",
+    "find": "      if (character === undefined) this.fail(start, 'This string is not closed before the end of the file.');",
+    "replace": "      if (character === undefined) this.fail(this.at, 'This string is not closed before the end of the file.');",
+    "expect": "caught",
+    "failing": [
+      "the app file, beyond the contract > refuses a file that ends inside a string"
+    ]
+  },
+  {
+    "id": "reader-raw-line-break",
+    "file": "src/cli/app-file.ts",
+    "find": "[^\"\\\\\\u0000-\\u001f]",
+    "replace": "[^\"\\\\\\u0000-\\u0009\\u000b-\\u001f]",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the app file's JSON reader > refuses a raw line break"
+    ]
+  },
+  {
+    "id": "signup-off-raw",
+    "file": "src/cli/commands/session.ts",
+    "find": "    if ((error as SirenError).statusCode === 404) {",
+    "replace": "    if ((error as SirenError).statusCode === 410) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "signup-unconfirmed-vague",
+    "file": "src/cli/commands/session.ts",
+    "find": "        `Open it from your inbox, confirm the address, then run ${run.command('login')}.`,",
+    "replace": "        'Confirm it.',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "signup-window-silent",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n  if (pending !== null) run.print(pending);",
+    "replace": "  const pending = confirmationLine(registered.emailConfirmation ?? registered.tokens.emailConfirmation, io.now());\n  void pending;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "login-window-silent",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const pending = confirmationLine(tokens.emailConfirmation, io.now());\n  if (pending !== null) run.print(pending);",
+    "replace": "  const pending = confirmationLine(tokens.emailConfirmation, io.now());\n  void pending;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "login-unconfirmed-raw",
+    "file": "src/cli/commands/session.ts",
+    "find": "  if (code === 'email_unconfirmed') {",
+    "replace": "  if (code === 'email_not_confirmed') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "login-plan-raw",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const plan = planLine(code, login);\n  return plan === undefined ? error : new CliRefusal(plan);",
+    "replace": "  return error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > says what to do when Siren asks"
+    ]
+  },
+  {
+    "id": "logout-needs-live",
+    "file": "src/cli/commands/session.ts",
+    "find": "  const session = await run.store.get(run.target.baseUrl);\n  if (session === null) throw new CliRefusal(`You are not signed in to ${run.target.baseUrl}.`);\n  run.adopt(session);",
+    "replace": "  const session = await run.signedIn();",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren signup, login and the session > logs out by revoking both tokens"
+    ]
+  },
+  {
+    "id": "apply-prints-url",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  for (const line of appLines(app, false)) run.print(line);",
+    "replace": "  for (const line of appLines(app)) run.print(line);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
+    ]
+  },
+  {
+    "id": "apply-no-key-silent",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    run.print(`${key} already exists, and this machine holds no key for it: ${envPath} has no SIREN_API_KEY. Run ${run.command(`apps rotate ${key}`)} to make a new key and save it there.`);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
+    ]
+  },
+  {
+    "id": "apply-no-key-wrong-line",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "  if ((await envValue(envPath, 'SIREN_BASE_URL')) === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
+    ]
+  },
+  {
+    "id": "apply-later-sends-more",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  await run.remember(key, envPath);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "replace": "  await siren.apps.retrieve(key);\n  await run.remember(key, envPath);\n  if ((await envValue(envPath, 'SIREN_API_KEY')) === undefined) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > leaves the env file as it is"
+    ]
+  },
+  {
+    "id": "apply-not-remembered",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);\n    await run.remember(key, envPath);",
+    "replace": "    const saved = await saveSecrets(run, key, envPath, app.rawKey, app.signingSecret, false);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > declares the app on the first apply"
+    ]
+  },
+  {
+    "id": "rotate-to-cwd",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    envPath = session.envFiles?.[key];",
+    "replace": "    envPath = join(io.cwd, run.envFileName());",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
+    ]
+  },
+  {
+    "id": "rotate-unknown-guesses",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    envPath = session.envFiles?.[key];",
+    "replace": "    envPath = session.envFiles?.[key] ?? join(io.cwd, run.envFileName());",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
+    ]
+  },
+  {
+    "id": "rotate-other-siren-silent",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (held !== undefined && held !== run.target.baseUrl) {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this rotate is for",
+    "replace": "  if (held !== undefined && held === '') {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this rotate is for",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending",
+      "apps-cli internals: the stored files before a secret is sent > stops rotate before sending when the env file holds the key of another Siren"
+    ]
+  },
+  {
+    "id": "rotate-app-file-unremembered",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret, true);\n  await run.remember(key, envPath);",
+    "replace": "  const saved = await saveSecrets(run, key, envPath, rotated.rawKey, rotated.signingSecret, true);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > refuses to rotate before sending"
+    ]
+  },
+  {
+    "id": "rotate-app-file-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (!(await isFile(appFile))) throw new CliRefusal(",
+    "replace": "    if (false) throw new CliRefusal(",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: apply and the app key > refuses --app-file that names no file in a folder that exists"
+    ]
+  },
+  {
+    "id": "saved-path-relative",
+    "file": "src/cli/commands/apply.ts",
+    "find": "and its signing secret are in ${envPath}.`);",
+    "replace": "and its signing secret are in ${envPath.slice(envPath.lastIndexOf('/') + 1)}.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > rotates the key into the env file apply wrote"
+    ]
+  },
+  {
+    "id": "delete-open-asks-off",
+    "file": "src/cli/commands/apply.ts",
+    "find": "Answer them, or wait for them to end: ${run.command(`apps requests --app ${key}`)}`);",
+    "replace": "Turn it off instead with siren apps off ${key}.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > deletes only with --yes"
+    ]
+  },
+  {
+    "id": "example-env-guesses",
+    "file": "examples/apps/acme/env.mjs",
+    "find": "    if (found.length > 1) throw new Error(`Both ${found.join(' and ')} are here. Set SIREN_ENV_FILE to the one to use.`);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > reads the env file apply wrote"
+    ]
+  },
+  {
+    "id": "example-env-unchecked",
+    "file": "examples/apps/acme/env.mjs",
+    "find": "  const missing = NAMES.filter((name) => !values[name]);",
+    "replace": "  const missing = NAMES.filter((name) => values[name] === 'never');",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > reads the env file apply wrote"
+    ]
+  },
+  {
+    "id": "example-sale-is-test",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "    source: 'acme-example',\n  });",
+    "replace": "    source: 'acme-example',\n    test: true,\n  });",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > sends a real sale with the app's own key"
+    ]
+  },
+  {
+    "id": "example-sale-no-opportunity",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "    trackingId: visit.opportunityId,",
+    "replace": "    trackingId: 0,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > sends a real sale with the app's own key"
+    ]
+  },
+  {
+    "id": "example-scope-missing",
+    "file": "examples/apps/acme/siren.app.json",
+    "find": "\"scopes\": [\"event:site-visited\", \"event:sale\"],",
+    "replace": "\"scopes\": [\"event:site-visited\"],",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > declares the scopes a sale needs",
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "example-window-long",
+    "file": "examples/apps/acme/siren.app.json",
+    "find": "\"currencies\": [\"USD\"], \"answerWindowMinutes\": 1 }",
+    "replace": "\"currencies\": [\"USD\"], \"answerWindowMinutes\": 4320 }",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > declares the scopes a sale needs",
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "example-split-window-default",
+    "file": "examples/apps/acme/siren.app.json",
+    "find": "\"name\": \"Acme split\", \"answerWindowMinutes\": 1 }",
+    "replace": "\"name\": \"Acme split\" }",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > declares the scopes a sale needs",
+      "apps-cli: the app file > reads the example app"
+    ]
+  },
+  {
+    "id": "docs-drop-by-key",
+    "file": "README.md",
+    "find": "Drop a\nrepeat by the request's `id`. The `Idempotency-Key` header is not signed, so never use it to drop a\nrepeat.",
+    "replace": "Drop a repeat by its `Idempotency-Key` header.",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the README shows the command-line tool"
+    ]
+  },
+  {
+    "id": "docs-count-three",
+    "file": "README.md",
+    "find": "It also has thirteen methods the PHP SDK does not have yet",
+    "replace": "It also has three methods the PHP SDK does not have yet",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the parity section counts thirteen"
+    ]
+  },
+  {
+    "id": "docs-changelog-constructor",
+    "file": "CHANGELOG.md",
+    "find": "- `new Siren()` sends an `sk_test_` key to the sandbox when no `baseUrl` is given, and throws for a\n  test key with the live address or a live key with the sandbox.\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the CHANGELOG names the apps calls"
+    ]
+  },
+  {
+    "id": "env-written-in-place",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    await writeFile(temporary, `${lines.join('\\n')}\\n`, { mode: 0o600, flag: 'wx' });\n    await rename(temporary, path);",
+    "replace": "    await writeFile(path, `${lines.join('\\n')}\\n`, { mode: 0o600 });\n    await (await import('node:fs/promises')).chmod(path, 0o600);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > never leaves the new key in a file wider than 0600",
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
+    ]
+  },
+  {
+    "id": "env-link-followed",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (found?.isSymbolicLink()) {",
+    "replace": "  if (found?.isSymbolicLink() && path === '') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+    ]
+  },
+  {
+    "id": "env-other-kind-written",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (found !== undefined && !found.isFile()) return { kind: 'other',",
+    "replace": "  if (found !== undefined && path === '') return { kind: 'other',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link",
+      "apps-cli: siren apps init, apply and the app key > refuses before sending when the env file cannot be written as a regular file"
+    ]
+  },
+  {
+    "id": "rotate-env-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);",
+    "replace": "  if (problem !== undefined && key === '') throw new CliRefusal(`${problem.line} Nothing was sent, and the old key still works.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link"
+    ]
+  },
+  {
+    "id": "apply-link-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (problem !== undefined) throw new CliRefusal(`${problem.line} Nothing was sent.`);",
+    "replace": "  if (problem !== undefined && key === '') throw new CliRefusal(`${problem.line} Nothing was sent.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses an env file that is a symbolic link",
+      "apps-cli: siren apps init, apply and the app key > refuses before sending when the env file cannot be written as a regular file"
+    ]
+  },
+  {
+    "id": "env-temp-left",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    await rm(temporary, { force: true });\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
+    ]
+  },
+  {
+    "id": "apply-other-siren-unchecked",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (held !== undefined && held !== run.target.baseUrl) {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this apply is for",
+    "replace": "  if (held !== undefined && held === '') {\n    throw new CliRefusal(\n      `${envPath} holds the key for ${held}, and this apply is for",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the stored files before a secret is sent > stops a later apply before sending when the env file holds the key of another Siren"
+    ]
+  },
+  {
+    "id": "login-store-read-late",
+    "file": "src/cli/commands/session.ts",
+    "find": "  needsFlags(io, [\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n  // A credentials file the tool would refuse stops the command here, before the password leaves the machine.\n  await run.store.get(run.target.baseUrl);\n",
+    "replace": "  needsFlags(io, [\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the stored files before a secret is sent > refuses a credentials file others can read before the password leaves the machine"
+    ]
+  },
+  {
+    "id": "signup-store-read-late",
+    "file": "src/cli/commands/session.ts",
+    "find": "    [values['org-name'], '--org-name <name>'],\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n  // A credentials file the tool would refuse stops the command here, before the password leaves the machine.\n  await run.store.get(run.target.baseUrl);\n",
+    "replace": "    [values['org-name'], '--org-name <name>'],\n    [values.email, '--email <address>'],\n    [passwordFromStdin || undefined, '--password-stdin'],\n  ]);\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the stored files before a secret is sent > refuses a credentials file others can read before the password leaves the machine"
+    ]
+  },
+  {
+    "id": "secrets-redact-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "  for (const secret of [...secrets].filter(isFilled).sort((a, b) => b.length - a.length)) out = out.split(secret).join('[redacted]');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a password Siren echoes back",
+      "apps-cli internals: no secret in an error > keeps a token out of a refused answer",
+      "apps-cli internals: no secret in an error > keeps a password and a bearer token out of an error the transport throws"
+    ]
+  },
+  {
+    "id": "secrets-scrub-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "scrub(parseJson(reply.body), hidden)",
+    "replace": "parseJson(reply.body)",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a password Siren echoes back",
+      "apps-cli internals: no secret in an error > keeps a token out of a refused answer"
+    ]
+  },
+  {
+    "id": "secrets-token-fields-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "      value: TOKEN_FIELDS.has(key.toLowerCase().replace(/[_-]/g, '')) ? '[redacted]'",
+    "replace": "      value: key === '' ? '[redacted]'",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a token out of a refused answer"
+    ]
+  },
+  {
+    "id": "secrets-transport-redact-off",
+    "file": "src/cli/session-auth.ts",
+    "find": "failed: ${redact(error.message, hidden)}`",
+    "replace": "failed: ${error.message}`",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: no secret in an error > keeps a password and a bearer token out of an error the transport throws"
+    ]
+  },
+  {
+    "id": "docs-resend-answered-refused",
+    "file": "src/errors.ts",
+    "find": "  /** 409 from the resend route: the request is applied, or it would be sent and its app is off. */",
+    "replace": "  /** 409 from the resend route: the request is answered or applied, or its app is off. */",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > every description of resend follows merged Siren"
+    ]
+  },
+  {
+    "id": "docs-resend-fake-old",
+    "file": "test/apps-siren-answers.ts",
+    "find": "        message: 'This request cannot be sent again: it is applied, or its app is off.',",
+    "replace": "        message: 'Already answered.',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > every description of resend follows merged Siren"
+    ]
+  },
+  {
+    "id": "docs-readme-handler-await",
+    "file": "README.md",
+    "find": "app.post('/siren', express.raw({ type: 'application/json' }), (req, res, next) => {\n  acme.handle(req.body, req.headers).then((reply) => res.status(reply.status).type('application/json').send(reply.body), next);",
+    "replace": "app.post('/siren', express.raw({ type: 'application/json' }), async (req, res) => {\n  const reply = await acme.handle(req.body, req.headers);\n  res.status(reply.status).type('application/json').send(reply.body);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli docs > the README's request handler hands each request"
+    ]
+  },
+  {
+    "id": "env-fate-prints-secret",
+    "file": "src/cli/commands/apply.ts",
+    "find": "        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair.`,",
+    "replace": "        `Siren shows a pair only once, so this one is lost. Run ${run.command(`apps rotate ${key}`)} to issue a new pair. ${rawKey} ${signingSecret}`,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
+    ]
+  },
+  {
+    "id": "env-folder-missing-allowed",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    if (code === 'ENOENT' || code === 'ENOTDIR') return { kind: 'other', line: `${folder} does not exist,",
+    "replace": "    if (code === '') return { kind: 'other', line: `${folder} does not exist,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses before sending an env path whose folder is missing or cannot be written"
+    ]
+  },
+  {
+    "id": "env-folder-unwritable-allowed",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    return { kind: 'other', line: `The tool cannot write to ${folder}, so it cannot save ${path}.` };",
+    "replace": "    return undefined;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > refuses before sending an env path whose folder is missing or cannot be written"
+    ]
+  },
+  {
+    "id": "example-unanswerable-thrown",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "      let answer;\n      try {\n        answer = answerFor(request);\n      } catch (error) {\n        log(`${request.id}: cannot answer this ask, so it gets 500 and no answer: ${error.message}`);\n        return { status: 500, body: JSON.stringify({ error: 'unanswerable' }) };\n      }",
+    "replace": "      const answer = answerFor(request);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > answers an ask it cannot answer with 500"
+    ]
+  },
+  {
+    "id": "example-pool-guessed",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "    if (!Number.isSafeInteger(Number(data.amount)) || !Array.isArray(data.metrics) || data.metrics.length === 0) {",
+    "replace": "    if (!Number.isSafeInteger(Number(data.amount))) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > answers an ask it cannot answer with 500"
+    ]
+  },
+  {
+    "id": "example-payout-guessed",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "    if (typeof data.payoutId !== 'number' && typeof data.payoutId !== 'string') throw new Error('a payout ask needs data.payoutId.');\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > answers an ask it cannot answer with 500"
+    ]
+  },
+  {
+    "id": "example-listener-unguarded",
+    "file": "examples/apps/acme/handler.mjs",
+    "find": "        (error) => {\n          log(`Could not handle a request, and answered 500: ${error.message}`);\n          res.writeHead(500, { 'Content-Type': 'application/json' });\n          res.end(JSON.stringify({ error: 'failed' }));\n        },",
+    "replace": "        (error) => {\n          throw error;\n        },",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app keeps serving > the server's listener answers 500"
+    ]
+  },
+  {
+    "id": "env-temp-name-hidden",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const temporary = join(dirname(path), `${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);",
+    "replace": "  const temporary = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > names every file that ever holds the key so the ignore line apps init writes covers it"
+    ]
+  },
+  {
+    "id": "rotate-revoked-silent",
+    "file": "src/cli/commands/apply.ts",
+    "find": "        (revoked ? `The old key in ${envPath} was revoked when Siren rotated it, so stop using it. ` : '') +",
+    "replace": "        (revoked ? '' : '') +",
+    "expect": "caught",
+    "failing": [
+      "apps-cli internals: the env file > leaves the old env file whole when a write no check foresaw fails"
+    ]
+  }
+]

@@ -1,7 +1,9 @@
 /**
  * Browser-safe storefront module, exported as `@novatorius/siren/storefront`.
  *
- * It uses `fetch` and no Node built-ins, and it takes no API key. Siren's
+ * It uses `fetch` and no Node built-ins, and it takes no API key. `track`
+ * sends a custom event from the page with a browser token the app's own
+ * server hands it. Siren's
  * storefront routes are public: a merchant's own site calls them from the
  * shopper's browser. So are Siren Cloud's application form routes, which
  * `getApplicationForm`, `submitApplication` and `verifyApplication` call.
@@ -24,6 +26,7 @@ import type {
 
 export * from './constants';
 export * from './applications';
+export * from './track';
 export type * from './types';
 
 /** The two URLs a storefront needs. */

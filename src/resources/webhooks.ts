@@ -1,19 +1,29 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { SignatureVerificationError, UnexpectedResponseError } from '../errors';
+import { SignatureVerificationError, SirenError, UnexpectedResponseError } from '../errors';
 import { parseJsonBody, type HttpTransport } from '../http';
 import type {
-  CreatedWebhookSubscription,
-  CreateWebhookSubscriptionParams,
+  UpdateWebhookSubscriptionParams,
+  WebhookDelivery,
   WebhookEvent,
   WebhookCatalogEntry,
   WebhookHeaders,
   WebhookSubscription,
+  WebhookTestResult,
 } from '../types';
+import { pickFields } from './create-fields';
+import { isJsonObject, readList, readObject, recordId, writeRecord } from './record-requests';
 
 const SIGNATURE_PREFIX = 'sha256=';
 const HEX_DIGEST_PATTERN = /^[0-9a-f]{64}$/i;
 
-function readHeader(headers: WebhookHeaders | undefined, name: string): string | undefined {
+/**
+ * Reads one header in any case, from a Fetch `Headers` object or Node's
+ * `req.headers`, taking an array value's first item. Answers `undefined`
+ * for a missing or empty header. `apps.verifyRequest()` reads the same way.
+ *
+ * @internal
+ */
+export function readHeader(headers: WebhookHeaders | undefined, name: string): string | undefined {
   if (!headers) return undefined;
   if (typeof (headers as Headers).get === 'function') {
     const value = (headers as Headers).get(name);
@@ -63,6 +73,34 @@ function isPropertyEnvelope(
   );
 }
 
+/**
+ * The event a checked delivery's JSON object carries, as `constructEvent`
+ * answers it: the type and delivery id from `X-Siren-Event` and
+ * `X-Siren-Delivery`, or from a connected site's envelope, whose `data` is
+ * the payload. Answers `undefined` when nothing names the event's type.
+ * `apps.requestHandler()` reads an event at an app's address the same way.
+ *
+ * @internal
+ */
+export function webhookEventFrom(body: Record<string, unknown>, headers: WebhookHeaders | undefined): WebhookEvent | undefined {
+  let type = readHeader(headers, 'x-siren-event')?.trim() || undefined;
+  let deliveryId = readHeader(headers, 'x-siren-delivery')?.trim() || undefined;
+  const envelope = isPropertyEnvelope(body, type, deliveryId);
+  if (envelope) {
+    type = body.type as string;
+    deliveryId = body.id as string;
+  }
+  if (type === undefined) return undefined;
+
+  const event: WebhookEvent = {
+    type,
+    data: envelope ? (body.data as Record<string, unknown>) : body,
+    body,
+  };
+  if (deliveryId !== undefined) event.deliveryId = deliveryId;
+  return event;
+}
+
 function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
   const bytes = typeof rawBody === 'string' ? Buffer.from(rawBody, 'utf8') : rawBody;
   return createHmac('sha256', secret).update(bytes).digest();
@@ -71,28 +109,113 @@ function computeDigest(rawBody: string | Uint8Array, secret: string): Buffer {
 /**
  * Manage webhook subscriptions (`/webhooks`).
  *
- * Takes an API key with a webhook scope, or a signed-in dashboard session's
- * access token. `webhook-subscriptions:read` opens `list()`, and
- * `webhook-subscriptions:manage` opens every method here. The key must be
- * organization-wide, because subscriptions are not kept by store. A key bound
- * to one store gets a `StoreKeyNotAllowedError`.
+ * Takes a signed-in dashboard session's access token. Siren refuses an API
+ * key on every `/webhooks` route with 401 `api_key_not_accepted`, raised as
+ * `ApiKeyNotAcceptedError`, and the `webhook-subscriptions:*` scopes are
+ * retired. There is no create call: Siren has no `POST /webhooks`. An app
+ * gets its address from `apps.create()` or `apps.update()`.
+ *
+ * `retrieve()`, `update()`, `test()` and `deliveries()` refuse an id that is
+ * not a positive whole number with `SirenError` before sending, and throw
+ * `NotFoundError` for a subscription the organization does not have.
+ *
+ * Deprecated: an app holds its address now, and each method names the app
+ * call that replaces it. Siren refuses these routes for a subscription an
+ * app owns, with 409 `app_owned_subscription`. These calls go when Siren
+ * removes `/webhooks`.
  */
 export class WebhookSubscriptionsResource {
+  /** The fields {@link update} sends, the four `PUT /webhooks/{id}` reads (UpdateWebhookSubscription.php). */
+  static readonly UPDATE_FIELDS = ['targetUrl', 'events', 'status', 'description'] as const;
+
   constructor(private readonly http: HttpTransport) {}
 
   /**
-   * Register a URL to receive event callbacks.
+   * Reads one subscription with `GET /webhooks/{id}`. The answer never holds
+   * the signing secret, which Siren shows only once, on create. Retries on a
+   * network error, 429 or 5xx, as a read. Throws `UnexpectedResponseError`
+   * when a 2xx body is not a JSON object.
    *
-   * The response's `signingSecret` is returned exactly once — store it to
-   * verify future deliveries. This write is never auto-retried.
+   * @deprecated An app holds its address now. Read it as the app's `address` from
+   * `apps.retrieve()`. This call goes when Siren removes its route.
    */
-  create(params: CreateWebhookSubscriptionParams): Promise<CreatedWebhookSubscription> {
-    return this.http.requestData<CreatedWebhookSubscription>({
-      method: 'POST',
-      path: '/webhooks',
-      body: params,
-      retriable: false,
-    });
+  async retrieve(id: number): Promise<WebhookSubscription> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.retrieve')}`;
+    return readObject<WebhookSubscription>(this.http, path);
+  }
+
+  /**
+   * Changes a subscription with `PUT /webhooks/{id}`, sent once, and answers
+   * it as it now stands. Send only the fields to change. `status: 'paused'`
+   * stops deliveries and `'active'` starts them again. Sending the same
+   * update again after a lost answer sets the same values, so it is safe.
+   *
+   * Sends a new object holding only the {@link UPDATE_FIELDS} that `params`
+   * gives. Throws `SirenError` before sending when `params` holds any other
+   * key, with exactly `webhooks.subscriptions.update() cannot send "{key}".
+   * Siren's update route reads only targetUrl, events, status and
+   * description.` Also throws `SirenError` before sending when no field is
+   * left that is not `null` or `undefined`, because Siren skips a null
+   * field and an update with nothing left to change fails there with a 500.
+   * Siren answers 400, raised as `BadRequestError`, for a target URL that is
+   * not a public https endpoint.
+   *
+   * @deprecated An app holds its address now. Change its `url` or `events` with `apps.update()`.
+   * Siren refuses this route for a subscription an app owns. This call goes when Siren removes its
+   * route.
+   */
+  async update(id: number, params: UpdateWebhookSubscriptionParams): Promise<WebhookSubscription> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.update')}`;
+    const body = pickFields(
+      params,
+      WebhookSubscriptionsResource.UPDATE_FIELDS,
+      (key) =>
+        `webhooks.subscriptions.update() cannot send "${key}". Siren's update route reads only targetUrl, events, status and description.`,
+    );
+    if (Object.values(body).every((value) => value === null)) {
+      throw new SirenError(
+        'webhooks.subscriptions.update() needs at least one of targetUrl, events, status or description that is not null or undefined. Siren skips a null field and cannot apply an update with nothing to change.',
+      );
+    }
+    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);
+  }
+
+  /**
+   * Sends the subscription one signed `webhook.test` delivery now, with
+   * `POST /webhooks/{id}/test`, and answers what the endpoint did. Siren
+   * answers 200 whether or not the delivery arrived, so read `delivered`.
+   * The test shows in {@link deliveries}.
+   *
+   * Sent once, since each call makes Siren send a request. Siren allows 20
+   * tests an hour for one subscription and 60 in all from one address, and
+   * answers more with 429, raised as `RateLimitError`. It answers 409,
+   * raised as `ConflictError`, for a paused subscription. Throws
+   * `UnexpectedResponseError` when a 2xx body is not a JSON object.
+   *
+   * @deprecated An app holds its address now. Send it a test with `apps.test()`. Siren refuses this
+   * route for a subscription an app owns. This call goes when Siren removes its route.
+   */
+  async test(id: number): Promise<WebhookTestResult> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.test')}/test`;
+    return writeRecord<WebhookTestResult>(this.http, 'POST', path, undefined);
+  }
+
+  /**
+   * The subscription's latest deliveries, newest first, at most 50, from
+   * `GET /webhooks/{id}/deliveries`. Each holds the payload Siren sent, its
+   * status, how many tries it took and the first 200 bytes of the endpoint's
+   * answer. Retries on a network error, 429 or 5xx, as a read, through
+   * `readList`. Throws `UnexpectedResponseError` when a 2xx body is not a
+   * JSON array, or when a row in it is not a JSON object.
+   *
+   * @deprecated An app holds its address now. Read its deliveries with `apps.deliveries()`. Siren
+   * refuses this route for a subscription an app owns. This call goes when Siren removes its route.
+   */
+  async deliveries(id: number): Promise<WebhookDelivery[]> {
+    const path = `/webhooks/${recordId(id, 'webhooks.subscriptions.deliveries')}/deliveries`;
+    return readList<WebhookDelivery>(this.http, path, (rows) =>
+      rows.every(isJsonObject) ? undefined : `Siren answered GET ${path} with a delivery that is not a JSON object.`,
+    );
   }
 
   /**
@@ -102,6 +225,9 @@ export class WebhookSubscriptionsResource {
    * when the body is not a list or an entry is not an object. It is a
    * retriable read, like `list()`: the transport retries it on 429 and 5xx
    * up to `maxRetries`.
+   *
+   * @deprecated An app holds its address now. Read the events it may receive from `apps.events()`.
+   * This call goes when Siren removes its route.
    */
   async events(): Promise<WebhookCatalogEntry[]> {
     const path = '/webhooks/events';
@@ -118,7 +244,12 @@ export class WebhookSubscriptionsResource {
     return body as WebhookCatalogEntry[];
   }
 
-  /** List webhook subscriptions. */
+  /**
+   * List webhook subscriptions.
+   *
+   * @deprecated An app holds its address now. Read each app's `address` from `apps.list()`. This
+   * call goes when Siren removes its route.
+   */
   list(): Promise<WebhookSubscription[]> {
     return this.http.requestData<WebhookSubscription[]>({
       method: 'GET',
@@ -127,7 +258,12 @@ export class WebhookSubscriptionsResource {
     });
   }
 
-  /** Delete a webhook subscription. */
+  /**
+   * Delete a webhook subscription.
+   *
+   * @deprecated An app holds its address now. Remove it with `apps.update()` and `url: null`. Siren
+   * refuses this route for a subscription an app owns. This call goes when Siren removes its route.
+   */
   async delete(id: number): Promise<void> {
     await this.http.request({
       method: 'DELETE',
@@ -207,33 +343,18 @@ export class WebhooksResource {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new SignatureVerificationError('The webhook payload must be a JSON object.');
     }
-    const body = parsed as Record<string, unknown>;
-
-    let type = readHeader(headers, 'x-siren-event')?.trim() || undefined;
-    let deliveryId = readHeader(headers, 'x-siren-delivery')?.trim() || undefined;
-    const envelope = isPropertyEnvelope(body, type, deliveryId);
-    if (envelope) {
-      type = body.type as string;
-      deliveryId = body.id as string;
-    }
+    const event = webhookEventFrom(parsed as Record<string, unknown>, headers);
 
     // A plain subscription's body never names its event. Without the
     // X-Siren-Event header there is nothing to dispatch on, so refuse the
     // delivery loudly rather than return an event with an empty type that
     // matches no handler. Code written for 0.1.0 passes no headers.
-    if (type === undefined) {
+    if (event === undefined) {
       throw new SignatureVerificationError(
         "Siren names this delivery's event in the X-Siren-Event header, and the body does not " +
           'carry it. Pass the request headers as the fourth argument to constructEvent.',
       );
     }
-
-    const event: WebhookEvent = {
-      type,
-      data: envelope ? (body.data as Record<string, unknown>) : body,
-      body,
-    };
-    if (deliveryId !== undefined) event.deliveryId = deliveryId;
     return event;
   }
 

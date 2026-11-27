@@ -1,12 +1,11 @@
 /**
- * Every event type Siren can deliver to a webhook subscription, matching the
+ * Every event type Siren can deliver to an app's address, matching the
  * list Siren serves at `GET /webhooks/events`, plus `All`
  * (`"*"`) to subscribe to everything. Use these constants instead of raw
  * strings for autocomplete and typo protection:
  *
  * ```ts
- * await siren.webhooks.subscriptions.create({
- *   targetUrl: 'https://example.com/webhooks/siren',
+ * await siren.apps.update('acme-payouts', {
  *   events: [WebhookEventType.ConversionApproved, WebhookEventType.PayoutPaid],
  * });
  * ```

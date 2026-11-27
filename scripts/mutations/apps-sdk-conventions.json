@@ -1,0 +1,148 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/resources/webhooks.ts",
+    "find": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);",
+    "replace": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, {});",
+    "expect": "caught",
+    "failing": [
+      "apps-sdk-gaps: webhooks.subscriptions.update"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/resources/webhooks.ts",
+    "find": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);",
+    "replace": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, { ...body });",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/resources/webhooks.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/resources/webhooks.ts",
+    "find": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);",
+    "replace": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, {});",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-sdk-gaps: webhooks.subscriptions.retrieve"
+    ]
+  },
+  {
+    "id": "s2-update-sends-params",
+    "file": "src/resources/webhooks.ts",
+    "find": "    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, body);",
+    "replace": "    void body;\n    return writeRecord<WebhookSubscription>(this.http, 'PUT', path, params);",
+    "expect": "caught",
+    "failing": [
+      "sends a new object, so a toJSON the caller inherits cannot change the body"
+    ]
+  },
+  {
+    "id": "deliveries-row-check-dropped",
+    "file": "src/resources/webhooks.ts",
+    "find": "      rows.every(isJsonObject) ? undefined : `Siren answered GET ${path} with a delivery that is not a JSON object.`,",
+    "replace": "      rows.length < 0 ? `Siren answered GET ${path} with a delivery that is not a JSON object.` : undefined,",
+    "expect": "caught",
+    "failing": [
+      "names the bad row and carries the status Siren sent and the body"
+    ]
+  },
+  {
+    "id": "readlist-check-ignored",
+    "file": "src/resources/record-requests.ts",
+    "find": "  const problem = check === undefined ? undefined : check(body);\n  if (problem !== undefined) {\n    throw new UnexpectedResponseError(problem, { statusCode: response.status, data: body });\n  }\n  return body as T[];",
+    "replace": "  const problem = check === undefined ? undefined : check([]);\n  if (problem !== undefined) {\n    throw new UnexpectedResponseError(problem, { statusCode: response.status, data: body });\n  }\n  return body as T[];",
+    "expect": "caught",
+    "failing": [
+      "P1: readList"
+    ]
+  },
+  {
+    "id": "fulfillments-empty-filter-allowed",
+    "file": "src/resources/fulfillments.ts",
+    "find": "      if (value === '') {",
+    "replace": "      if (value === 'never-sent') {",
+    "expect": "caught",
+    "failing": [
+      "refuses a payoutStatus of"
+    ]
+  },
+  {
+    "id": "fulfillments-list-filter-allowed",
+    "file": "src/resources/fulfillments.ts",
+    "find": "      if (typeof value !== 'string') {",
+    "replace": "      if (typeof value !== 'string' && !Array.isArray(value)) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a payoutStatus that is not one string"
+    ]
+  },
+  {
+    "id": "fulfillments-currency-unchecked",
+    "file": "src/resources/fulfillments.ts",
+    "find": "    for (const key of ['payoutStatus', 'currency'] as const) {",
+    "replace": "    for (const key of ['payoutStatus'] as const) {",
+    "expect": "caught",
+    "failing": [
+      "refuses a currency of"
+    ]
+  },
+  {
+    "id": "private-send-made-public",
+    "file": "src/resources/events.ts",
+    "find": "  private async send(",
+    "replace": "  async send(",
+    "expect": "caught",
+    "failing": [
+      "error TS2578"
+    ]
+  },
+  {
+    "id": "unrecorded-node-only-method",
+    "file": "src/resources/payouts.ts",
+    "find": "  retrieve(id: number, params: RetrieveParams = {}): Promise<T> {",
+    "replace": "  markSeen(): number {\n    return 1;\n  }\n\n  retrieve(id: number, params: RetrieveParams = {}): Promise<T> {",
+    "expect": "caught",
+    "failing": [
+      "puts every public method of the Siren client in exactly one of the two tables"
+    ]
+  },
+  {
+    "id": "readme-node-only-row-dropped",
+    "file": "README.md",
+    "find": "| `siren.webhooks.subscriptions.deliveries()` | `GET /webhooks/{id}/deliveries` | Reads the latest 50 deliveries, newest first. |\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "lists each Node-only method once"
+    ]
+  },
+  {
+    "id": "openapi-put-fields-dropped",
+    "file": "openapi.yaml",
+    "find": "                status: { type: string, enum: [active, paused] }\n                description: { type: string }\n      responses:\n        '200':\n          description: The subscription as it now stands (bare object).",
+    "replace": "      responses:\n        '200':\n          description: The subscription as it now stands (bare object).",
+    "expect": "caught",
+    "failing": [
+      "documents the four fields PUT /webhooks/{id} reads"
+    ]
+  },
+  {
+    "id": "changelog-fulfillments-entry-dropped",
+    "file": "CHANGELOG.md",
+    "find": "- `siren.fulfillments` (`FulfillmentsResource`) reads",
+    "replace": "- `siren.fulfillments` reads",
+    "expect": "caught",
+    "failing": [
+      "names each new call, resource, scope list and type"
+    ]
+  }
+]

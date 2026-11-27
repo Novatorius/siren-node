@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-11-17T09:03:36.503Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "GET /siren/v1/auth/signup-options",
+  "query": null,
+  "request": {
+    "authorization": null,
+    "contentType": null,
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "shortSignup": false,
+      "edition": "sandbox"
+    }
+  }
+}

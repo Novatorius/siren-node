@@ -1,11 +1,12 @@
 export { Siren } from './client';
 export { WebhookEventType } from './event-types';
 export { ApiKeyScope, LEDGER_READ_SCOPES, eventScope } from './api-key-scopes';
+export { ApiKeyRecordScope, API_KEY_RECORD_SCOPES } from './api-key-scopes';
 export { ConnectorScope } from './auth/connector-scope';
 export type { AccessTokenSource } from './auth/access-token-source';
 export { StaticAccessToken } from './auth/static-access-token';
 export { CallbackAccessTokenSource } from './auth/callback-access-token-source';
-export { FetchHttpClient, HttpClientError } from './http';
+export { FetchHttpClient, HttpClientError, DEFAULT_BASE_URL, SANDBOX_BASE_URL } from './http';
 export type { HttpClient, HttpRequest, HttpResponse, HttpMethod } from './http';
 export {
   EventSlug,
@@ -49,6 +50,8 @@ export {
   UnexpectedResponseError,
   ConnectionError,
   SignatureVerificationError,
+  AppHandlerError,
+  AppSlowTellError,
 } from './errors';
 export type { SirenErrorDetails, FailedValidation } from './errors';
 export type {
@@ -58,6 +61,8 @@ export type {
   SirenAccessTokenOptions,
   EventResult,
   IngestOptions,
+  BrowserToken,
+  BrowserTokenHandlerOptions,
   LineItem,
   SaleFields,
   LiveSaleParams,
@@ -70,22 +75,20 @@ export type {
   WebhookEvent,
   WebhookHeaders,
   WebhookSubscription,
-  CreatedWebhookSubscription,
-  CreateWebhookSubscriptionParams,
   WebhookCatalogEntry,
-  ApiKey,
+  UpdateWebhookSubscriptionParams,
+  WebhookTestResult,
+  WebhookDelivery,
   ApiKeyScopeEntry,
   ApiKeyScopeGroups,
-  CreatedApiKey,
-  CreateApiKeyParams,
   ListParams,
   SirenList,
 } from './types';
 export { ForwardedEventSlug, FORWARDED_EVENT_VERSION } from './connect/forwarded-events';
 export type * from './connect/forwarded-events';
 export { EventsResource } from './resources/events';
+export type { BrowserTokenHandler, NodeRequestLike, NodeResponseLike } from './resources/events';
 export { WebhooksResource, WebhookSubscriptionsResource } from './resources/webhooks';
-export { ApiKeysResource } from './resources/api-keys';
 export { RecordsResource, ConversionsResource, TransactionsResource } from './resources/records';
 export type { RetrieveParams } from './resources/records';
 
@@ -126,5 +129,36 @@ export { CustomCurrenciesResource } from './resources/custom-currencies';
 export { CreditsResource } from './resources/credits';
 export { MappingsResource } from './resources/mappings';
 export { SettingsResource } from './resources/settings';
+export { PayoutsResource } from './resources/payouts';
+export { FulfillmentsResource } from './resources/fulfillments';
+export { FeatureKind, AppStatus, AppRequestStatus, AppRequestMode } from './taxonomy';
+export type { FeatureQuestions, FeatureAnswers, FeatureTells, FeatureQuestion, FeatureAnswer, FeatureTell } from './feature-kind';
+export { AppSource } from './taxonomy';
+export { AppErrorCode, appErrorCode } from './errors';
+export type {
+  AppRequestHandler,
+  AppRequestHandlerWith,
+  AppRequestHandlerOptions,
+  AppRequestInput,
+  AppRequestReply,
+  AppSimulation,
+  AppNodeRequest,
+  AppWaitUntil,
+  AppFastifyPlugin,
+  AppFastifyInstance,
+  AppFastifyRequest,
+  AppFastifyReply,
+  AppFunctionFor,
+  AppSimulatedAnswer,
+  AppLogger,
+} from './resources/app-request-handler';
+export { TELL_TIME_LIMIT_SECONDS } from './resources/app-request-handler';
+export {
+  AppsResource,
+  AppFeaturesResource,
+  AppRequestsResource,
+  MAX_APP_ANSWER_BYTES,
+  DEFAULT_APP_REQUEST_TOLERANCE_SECONDS,
+} from './resources/apps';
 
 export { Siren as default } from './client';

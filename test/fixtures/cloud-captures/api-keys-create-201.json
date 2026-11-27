@@ -1,0 +1,38 @@
+{
+  "capturedAt": "2026-11-17T09:07:29.775Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/api-keys",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "curl/8.5.0",
+    "idempotencyKey": null,
+    "body": {
+      "label": "e2e plain key",
+      "scopes": [
+        "event:sale"
+      ]
+    }
+  },
+  "response": {
+    "status": 201,
+    "contentType": "application/json",
+    "body": {
+      "id": 2,
+      "keyPrefix": "sk_test_ca5f0609",
+      "label": "e2e plain key",
+      "status": "active",
+      "propertyId": null,
+      "scopes": [
+        "event:sale"
+      ],
+      "expiresAt": null,
+      "lastUsedAt": null,
+      "revokedAt": null,
+      "dateCreated": "2026-11-17 09:07:29",
+      "dateModified": "2026-11-17 09:07:29",
+      "rawKey": "<RAWKEY>"
+    }
+  }
+}

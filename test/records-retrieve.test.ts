@@ -23,7 +23,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The body as the SDK parses it: JSON when it parses, else undefined, as apiKeys.scopes() reports it. */
+/** The body as the SDK parses it: JSON when it parses, else undefined, as apps.scopes() reports it. */
 function parsed(text: string): unknown {
   try {
     return text === '' ? undefined : (JSON.parse(text) as unknown);
@@ -128,11 +128,12 @@ describe.each(RESOURCES)('P7: %s.retrieve', (_name, path, retrieve, record) => {
   });
 });
 
+// Obligations have no retrieve, as in the PHP SDK.
+// test/payouts-fulfillments.test.ts covers payouts.retrieve.
 describe('P7: the other ledger readers', () => {
-  it('give obligations and payouts no retrieve, as the PHP SDK does', () => {
+  it('give obligations no retrieve, as the PHP SDK does', () => {
     const ctx = makeClient([jsonResponse(200, [])]);
 
     expect('retrieve' in ctx.client.obligations).toBe(false);
-    expect('retrieve' in ctx.client.payouts).toBe(false);
   });
 });

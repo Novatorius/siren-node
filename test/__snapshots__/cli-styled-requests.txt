@@ -1,0 +1,8 @@
+[1m3 requests[0m in Acme (3), sandbox
+
+[2mID        WHEN              APP           FEATURE          STATE[0m
+[2mc0ffee01[0m  Nov 17 09:14 UTC  acme-payouts  Payout method    [33m● needs attention[0m
+[2mb79943ff[0m  Nov 17 09:14 UTC  acme-payouts  Payout method    [36m● waiting[0m
+[2m01234567[0m  Nov 16 08:00 UTC  acme-payouts  Post-conversion  [38;5;49m✓ delivered[0m
+
+[2m›[0m [1msiren apps requests c0ffee01[0m shows one.

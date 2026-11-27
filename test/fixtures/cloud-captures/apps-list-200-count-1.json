@@ -1,0 +1,130 @@
+{
+  "capturedAt": "2026-11-17T12:36:06.447Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 57999d085, http://localhost:33918",
+  "route": "GET /siren/v1/apps",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "node",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": [
+      {
+        "id": 1,
+        "key": "acme-payouts",
+        "name": "Acme",
+        "description": "Siren's example app.",
+        "status": "active",
+        "webhookSubscriptionId": 1,
+        "apiKeyId": 1,
+        "dateCreated": "2026-11-17 12:16:03",
+        "dateModified": "2026-11-17 12:16:03",
+        "url": "http://host.docker.internal:33915",
+        "events": [],
+        "scopes": [
+          "event:site-visited",
+          "event:sale"
+        ],
+        "apiKeyPrefix": "sk_test_6cce5aa0",
+        "items": [
+          {
+            "id": 1,
+            "ref": "app:1",
+            "appId": 1,
+            "kind": "postConversionAction",
+            "key": "notify-crm",
+            "name": "Tell the CRM",
+            "description": "",
+            "settings": {},
+            "status": "active",
+            "dateCreated": "2026-11-17 12:16:03",
+            "dateModified": "2026-11-17 12:16:03"
+          },
+          {
+            "id": 2,
+            "ref": "app:2",
+            "appId": 1,
+            "kind": "fulfillmentMethod",
+            "key": "acme-ledger",
+            "name": "Acme ledger",
+            "description": "",
+            "settings": {
+              "currencies": [
+                "USD"
+              ],
+              "answerWindowMinutes": 1
+            },
+            "status": "active",
+            "dateCreated": "2026-11-17 12:16:03",
+            "dateModified": "2026-11-17 12:16:03"
+          },
+          {
+            "id": 3,
+            "ref": "app:3",
+            "appId": 1,
+            "kind": "distributionResolver",
+            "key": "acme-split",
+            "name": "Acme split",
+            "description": "",
+            "settings": {
+              "answerWindowMinutes": 1
+            },
+            "status": "active",
+            "dateCreated": "2026-11-17 12:16:03",
+            "dateModified": "2026-11-17 12:16:03"
+          }
+        ],
+        "needsAttention": 1
+      },
+      {
+        "id": 2,
+        "key": "ledger-sync",
+        "name": "Ledger sync",
+        "description": "A second app that hears about conversions and allocations.",
+        "status": "inactive",
+        "webhookSubscriptionId": 2,
+        "apiKeyId": 3,
+        "dateCreated": "2026-11-17 12:18:20",
+        "dateModified": "2026-11-17 12:18:20",
+        "url": "http://host.docker.internal:33916",
+        "events": [],
+        "scopes": [],
+        "apiKeyPrefix": "sk_test_aafc1d97",
+        "items": [
+          {
+            "id": 4,
+            "ref": "app:4",
+            "appId": 2,
+            "kind": "postConversionAction",
+            "key": "note-conversion",
+            "name": "Note each conversion",
+            "description": "",
+            "settings": {},
+            "status": "active",
+            "dateCreated": "2026-11-17 12:18:20",
+            "dateModified": "2026-11-17 12:18:20"
+          },
+          {
+            "id": 5,
+            "ref": "app:5",
+            "appId": 2,
+            "kind": "postAllocationAction",
+            "key": "note-allocation",
+            "name": "Note the allocation",
+            "description": "",
+            "settings": {},
+            "status": "active",
+            "dateCreated": "2026-11-17 12:18:20",
+            "dateModified": "2026-11-17 12:18:20"
+          }
+        ],
+        "needsAttention": 0
+      }
+    ]
+  }
+}

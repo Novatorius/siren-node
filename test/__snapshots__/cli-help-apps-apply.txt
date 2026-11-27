@@ -1,0 +1,20 @@
+Show what siren.app.json changes, ask, then declare the app and save its key
+beside the file.
+
+USAGE
+  siren apps apply [file] [flags]
+
+FLAGS
+  --yes               Skip the question. Needed with no terminal
+  --json              Print the plan and the app as JSON
+
+GLOBAL FLAGS
+  --sandbox, --live, --base-url, --org, --quiet, --verbose and --help work with
+  every command. siren --help explains them.
+
+EXAMPLES
+  $ siren apps apply
+  $ siren apps apply --live --yes
+
+LEARN MORE
+  Read the guide at https://github.com/Novatorius/siren-node#command-line-tool

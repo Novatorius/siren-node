@@ -1,0 +1,57 @@
+{
+  "capturedAt": "2026-11-17T12:36:06.062Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 57999d085, http://localhost:33918",
+  "route": "GET /siren/v1/apps/requests/apr_e221f712e2dd08c2daa566d3ac5ce340",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "node",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "id": "apr_e221f712e2dd08c2daa566d3ac5ce340",
+      "appId": 1,
+      "item": "app:1",
+      "kind": "postConversionAction",
+      "mode": "tell",
+      "subject": {
+        "type": "conversion",
+        "id": "2"
+      },
+      "status": "needs_attention",
+      "sendCount": 1,
+      "answerBy": null,
+      "answeredBy": null,
+      "answeredAt": null,
+      "lastError": "Could not connect to the host.",
+      "createdAt": "2026-11-17T12:21:12+00:00",
+      "data": {
+        "conversion": {
+          "id": 2,
+          "type": "sale",
+          "status": "complete",
+          "engagementId": 2,
+          "opportunityId": 2,
+          "collaboratorId": 1,
+          "transactionId": 2,
+          "obligationId": 2
+        },
+        "reward": {
+          "value": 500,
+          "units": "USD"
+        },
+        "program": {
+          "id": 1,
+          "name": "Partners"
+        }
+      },
+      "answer": null,
+      "answeredByUser": null
+    }
+  }
+}

@@ -1,14 +1,22 @@
 import type {
+  FeatureKind,
+  AppRequestMode,
+  AppRequestStatus,
+  AppSource,
+  AppStatus,
   CollaboratorStatus,
   ConversionStatus,
   CreditHoldStatus,
   CustomCurrencyType,
   DistributorStatus,
+  FulfillmentStatus,
   OpportunityStatus,
+  PayoutStatus,
   ProgramGroupSorter,
   ProgramStatus,
 } from './taxonomy';
-import type { ListParams } from './types';
+import type { FeatureAnswers, FeatureQuestions, FeatureTells } from './feature-kind';
+import type { ListParams, WebhookEvent } from './types';
 
 /*
  * Wire types for the record resources: collaborators, their
@@ -835,4 +843,1296 @@ export interface RecoveredCredit {
   alreadyCredited: number[];
   credited: number[];
   result: BulkResult | null;
+}
+
+/**
+ * A payout: what Siren owes one collaborator in one currency, inside a
+ * fulfillment. `payouts.list()` and `payouts.retrieve()` answer the default
+ * fields below unless `fields` names others.
+ */
+export interface Payout {
+  id: number;
+  status?: PayoutStatus | (string & {});
+  /** In the currency's smallest unit, such as cents, as a whole number. */
+  value?: number;
+  currency?: string;
+  collaboratorId?: number;
+  fulfillmentId?: number;
+  /** As ISO 8601 with an offset, or `null` until it is paid. */
+  datePaid?: string | null;
+  /** As ISO 8601 with an offset. */
+  dateCreated?: string | null;
+  /** As ISO 8601 with an offset. */
+  dateModified?: string | null;
+  /** Why the last automatic payment failed. `null` unless the caller sees the whole organization. */
+  failureReason?: string | null;
+  dateFailed?: string | null;
+  /**
+   * Why an unpaid payout waits on its collaborator's payout setup, such as
+   * `stripe_account_missing`, `stripe_account_incomplete` or
+   * `paypal_email_missing`, or `null` for one that does not wait.
+   */
+  waitingReason?: string | null;
+  dateWaiting?: string | null;
+  /** With `include: 'extended'` or by name in `fields`. */
+  collaboratorName?: string;
+  /** With `include: 'extended'` or by name in `fields`. */
+  collaboratorEmail?: string;
+  [field: string]: unknown;
+}
+
+/**
+ * One payout inside a fulfillment's `payouts` field. Siren builds it from
+ * the stored payout, so its dates are `Y-m-d H:i:s` rather than ISO 8601,
+ * and it carries the collaborator's name.
+ */
+export interface FulfillmentPayout {
+  id: number;
+  status?: PayoutStatus | (string & {});
+  value?: number;
+  currency?: string;
+  collaboratorId?: number;
+  collaboratorName?: string;
+  fulfillmentId?: number;
+  datePaid?: string | null;
+  failureReason?: string | null;
+  dateFailed?: string | null;
+  waitingReason?: string | null;
+  dateWaiting?: string | null;
+  /**
+   * The app a `processing` payout waits on to answer whether it paid, and
+   * the key of Siren's request to it. `null` when the payout waits on no
+   * app. A person can't mark such a payout paid or unpaid until the request
+   * is answered.
+   */
+  waitingOnApp?: { name: string; requestKey: string } | null;
+  dateCreated?: string | null;
+  dateModified?: string | null;
+  [field: string]: unknown;
+}
+
+/**
+ * A fulfillment: one batch of payouts. Siren answers `id`, `status`,
+ * `dateCreated` and `dateModified` unless `fields` names others or the read
+ * asks for `include: 'extended'`.
+ */
+export interface Fulfillment {
+  id: number;
+  status?: FulfillmentStatus | (string & {});
+  /** As ISO 8601 with an offset. */
+  dateCreated?: string | null;
+  /** As ISO 8601 with an offset. */
+  dateModified?: string | null;
+  payoutCount?: number;
+  paidCount?: number;
+  /** Every payout that is not paid, the failed and waiting ones included. */
+  unpaidCount?: number;
+  failedCount?: number;
+  /** Payouts waiting on their collaborator's payout setup. Only by name in `fields`. */
+  waitingCount?: number;
+  /** The sum of the payouts' values, in the currency's smallest unit. */
+  totalValue?: number;
+  /** The first payout's currency, or `null` for a fulfillment with none. */
+  currency?: string | null;
+  /** With `include: 'extended'` on `retrieve()`, or by name in `fields`. */
+  payouts?: FulfillmentPayout[];
+  [field: string]: unknown;
+}
+
+/** Filters and sorting for `fulfillments.list()`. */
+export interface FulfillmentListParams extends RecordListParams {
+  status?: FulfillmentStatus | (string & {}) | ReadonlyArray<string>;
+  /**
+   * Only fulfillments that hold at least one payout in this status:
+   * `paid`, `unpaid`, `processing`, `failed`, or `waiting` for an unpaid
+   * payout held for its collaborator's payout setup. `failed` finds the
+   * batches that need attention.
+   */
+  payoutStatus?: 'paid' | 'unpaid' | 'processing' | 'failed' | 'waiting';
+  /** Only fulfillments holding a payout in this currency. */
+  currency?: string;
+  /**
+   * The first day to include, `YYYY-MM-DD`, both days included. With no
+   * `payoutStatus` the days are the day a payout was paid, and with one the
+   * day it was made.
+   */
+  from?: string;
+  /** The last day to include, `YYYY-MM-DD`. */
+  to?: string;
+  orderBy?: 'id' | 'status' | 'dateCreated';
+}
+
+/*
+ * Siren apps. Shapes from Siren's app routes (lib/Apps/Service/Rest and
+ * AppSerializer, AppItemAdapter, AppRequestSerializer, read on the
+ * apps-records and apps-exchange branches) and the request envelope
+ * (AppRequestEnvelope, tests/Fixtures/apps-exchange/signed-request.json).
+ */
+
+/** A conversion an `incentiveType` pays, as its `conversionTypes` setting lists it. */
+export type AppConversionType = 'sale' | 'lead' | 'renewal';
+
+/**
+ * One feature an app declares, as `apps.declare()` and `apps.features.create()`
+ * send it. Its `kind` and `key` lock once
+ * Siren makes it: a record selects it by id and a file names it by kind and
+ * key.
+ */
+export interface AppFeatureDeclaration {
+  kind: FeatureKind;
+  /** Lowercase letters and digits joined by single dashes, at most 64. Unique within the app and kind. */
+  key: string;
+  /** At most 100 characters. Siren shows it as "{App name}: {feature name}" in pickers. */
+  name: string;
+  /** At most 500 characters. */
+  description?: string;
+  /** Required for a `payoutMethod` and refused for any other kind: the currency codes it pays. */
+  currencies?: string[];
+  /** Minutes Siren waits for an answer to an ask, 1 to 43200. Siren's default is 1440, or 60 for a distribution resolver. */
+  answerWindowMinutes?: number;
+  /**
+   * A `metricCalculation`'s setting, refused for any other kind: whether the
+   * score is an amount of money in the distributor's currency. Left out, the
+   * score counts points.
+   */
+  scoresMoney?: boolean;
+  /**
+   * Required for an `incentiveType` and refused for any other kind: the
+   * conversions it pays, each once, from `sale`, `lead` and `renewal`. A
+   * program offers the type only for these.
+   */
+  conversionTypes?: AppConversionType[];
+  /**
+   * A `customEvent`'s fields, refused for any other kind: each field name
+   * to `{type, required}`, the fields a send carries besides the
+   * collaborator.
+   */
+  fields?: Record<string, CustomEventField>;
+  /**
+   * A `customEvent`'s allowed domains, refused for any other kind: the
+   * websites whose pages may send the event from a visitor's browser, such
+   * as `example.com` or `*.example.com`. Empty or left out, only the app's
+   * server may send it. Siren refuses a bare `*`, a scheme, a port and a path.
+   */
+  domains?: string[];
+}
+
+/** One field of a custom event's send, as an app declares it. */
+export interface CustomEventField {
+  /** The field's type, as Siren's custom event types read it, such as `string`, `number` or `boolean`. */
+  type: string;
+  /** Whether a send without it is refused. */
+  required?: boolean;
+}
+
+/**
+ * The whole app, as `PUT /apps/{key}` takes it every time. A field left out
+ * reads as empty: no `url` removes the address and its delivery log, and no
+ * `scopes` empties the active key's scopes.
+ */
+export interface DeclareAppParams {
+  name: string;
+  description?: string;
+  /**
+   * The public https address Siren sends each request to. Optional: an app
+   * with no `url` is a key-only app. An app with features needs one.
+   */
+  url?: string | null;
+  /** API key scopes the app's own key holds. An app may hold none. They reach only an active key. */
+  scopes?: string[];
+  /** Ordinary webhook events the app also receives at the same address with the same secret. They need a `url`. */
+  events?: string[];
+  /**
+   * The problem contacts: email addresses Siren tells when something is
+   * wrong with the app, at most ten. Unlike the other fields, left out it
+   * keeps the app's own, and `[]` leaves none.
+   */
+  contacts?: string[];
+  features?: AppFeatureDeclaration[];
+}
+
+/**
+ * Whether the organization's plan can use a feature, or the events Siren
+ * sends to an app's address, as Siren's AppPlanAccess answers it.
+ * `requiredCapability` and `requiredPlan` are null when `entitled` is true.
+ * When the plan lacks more than one capability, they name the one in the
+ * highest tier, such as `outbound-apps` and `pro`.
+ */
+export interface AppPlanAccess {
+  entitled: boolean;
+  requiredCapability: string | null;
+  requiredPlan: string | null;
+}
+
+/** A feature of an app, as Siren answers it. A record selects it by `ref`. */
+export interface AppFeature extends AppPlanAccess {
+  id: number;
+  /** `app:{id}`, the value a program, distributor or autofulfiller stores. */
+  ref: string;
+  appId: number;
+  kind: FeatureKind | (string & {});
+  key: string;
+  name: string;
+  description: string;
+  settings: {
+    currencies?: string[];
+    answerWindowMinutes?: number;
+    scoresMoney?: boolean;
+    conversionTypes?: AppConversionType[];
+    fields?: Record<string, CustomEventField>;
+    domains?: string[];
+  };
+  status: 'active' | 'archived' | (string & {});
+  dateCreated?: string | null;
+  dateModified?: string | null;
+  [field: string]: unknown;
+}
+
+/** One record that selects a feature: a program or distributor by id, an autofulfiller by its currency code. */
+export interface AppFeatureUse {
+  record: 'program' | 'distributor' | 'autofulfiller' | (string & {});
+  id: number | string;
+}
+
+/** One feature as its own routes answer it: the feature, how many records select it, and up to 100 of them. */
+export interface AppFeaturePage extends AppFeature {
+  uses: number;
+  usedBy: AppFeatureUse[];
+}
+
+/** What `apps.features.delete()` answers: archived while a record selects it, with the feature, or deleted, with `feature` null. */
+export interface RemovedAppFeature {
+  archived: boolean;
+  feature: AppFeaturePage | null;
+}
+
+/**
+ * A new feature, as `apps.features.create()` takes it: a declaration whose
+ * `key` may be left out. Siren then makes the key from the name, adding
+ * `-2`, `-3` when the app already holds it.
+ */
+export type CreateAppFeatureParams = Omit<AppFeatureDeclaration, 'key'> & {
+  /** Lowercase letters and digits joined by single dashes, at most 64. Left out, Siren makes it from `name`. */
+  key?: string;
+};
+
+/** The fields `apps.features.update()` changes. A feature's kind and key never change. */
+export interface UpdateAppFeatureParams {
+  name?: string;
+  description?: string;
+  currencies?: string[];
+  answerWindowMinutes?: number | null;
+  /** A metric calculation's setting: whether its score is money. */
+  scoresMoney?: boolean;
+  /** An incentive type's setting: the conversions it pays. */
+  conversionTypes?: AppConversionType[];
+  /** A custom event's fields. */
+  fields?: Record<string, CustomEventField>;
+  /** A custom event's allowed domains. */
+  domains?: string[];
+}
+
+/** An app's active API key as Siren shows it: never more than its prefix and its last four characters. */
+export interface AppApiKey {
+  id: number;
+  /** `sk_test_` or `sk_live_` and 8 more characters. */
+  prefix: string;
+  /** The raw key's last four characters, so a screen shows `***9f3c`. Null for a key made before Siren kept them. */
+  lastFour: string | null;
+  scopes: string[];
+  propertyId: number | null;
+  lastUsedAt: string | null;
+  dateCreated: string | null;
+}
+
+/** An app's address, the webhook subscription Siren sends its requests and events to. Never its signing secret. */
+export interface AppAddress {
+  id: number;
+  url: string;
+  events: string[];
+  /** `paused` while the app is off. */
+  status: 'active' | 'paused' | (string & {});
+  dateCreated: string | null;
+}
+
+/** An app as Siren's app routes answer it. No read ever carries its raw key or signing secret. */
+export interface App {
+  id: number;
+  key: string;
+  name: string;
+  description: string;
+  status: AppStatus | (string & {});
+  /** Which door made the app: `code` (the app file), `dashboard` or `site`. It never changes. */
+  source: AppSource | (string & {});
+  /**
+   * @deprecated Siren no longer answers it. Read `address.id`. An app finds
+   * its parts by their `appId` now (apps-own-parts.md on Siren's
+   * int/preview-apps).
+   */
+  webhookSubscriptionId?: number | null;
+  /** @deprecated Siren no longer answers it. Read `apiKey.id`. */
+  apiKeyId?: number | null;
+  /** The address's url, or null when the app has no address. */
+  url: string | null;
+  /** The events Siren sends to the address, `[]` with no address. */
+  events: string[];
+  /** The active key's scopes, `[]` with no key. */
+  scopes: string[];
+  /**
+   * The problem contacts, lowercased email addresses, `[]` when the app
+   * names none and the org's admins hear instead. A Siren older than the
+   * field leaves it out.
+   */
+  contacts?: string[];
+  /** The first 16 characters of the app's key, `sk_test_` or `sk_live_` and 8 more, or null with no key. */
+  apiKeyPrefix: string | null;
+  /** The active key, or null when the app holds none. */
+  apiKey: AppApiKey | null;
+  /** The address, or null when the app holds none. */
+  address: AppAddress | null;
+  features: AppFeature[];
+  /** Whether the plan lets Siren send events to the app's address. Events go out of Siren and need Pro. */
+  eventsAccess: AppPlanAccess;
+  /** How many of the app's requests need a person now, as Siren's AppAttention counts them. */
+  needsAttention: number;
+  dateCreated?: string | null;
+  dateModified?: string | null;
+  [field: string]: unknown;
+}
+
+/** The two secrets Siren shows once, each by the route that made it. */
+export interface AppSecrets {
+  /** The app's API key, `sk_test_` in the sandbox and `sk_live_` on the live deployment. */
+  rawKey: string;
+  /** The secret Siren signs each request to the app with. */
+  signingSecret: string;
+}
+
+/**
+ * What `apps.declare()` answers. `created` is true, and `rawKey` present,
+ * only when this call made the app, since only the first declaration makes a
+ * key. `signingSecret` is present whenever this call made an address: on the
+ * first declaration with a `url`, and on a later one that adds a `url` the
+ * app had no address for.
+ */
+export type DeclaredApp =
+  | (App & { created: true; rawKey: string; signingSecret?: string })
+  | (App & { created: false; signingSecret?: string });
+
+/**
+ * @deprecated `apps.rotate()` is gone, since Siren removed
+ * `POST /apps/{key}/rotate`. `apps.rotateKey()` answers {@link AppWithRawKey}
+ * and `apps.rotateSecret()` answers {@link AppWithSigningSecret}.
+ */
+export type RotatedApp = App & AppSecrets;
+
+/** An app with the raw key a key route made, shown this once. */
+export type AppWithRawKey = App & { rawKey: string };
+
+/** An app with the signing secret a route made, shown this once. */
+export type AppWithSigningSecret = App & { signingSecret: string };
+
+/** A new app from the dashboard's door, as `apps.create()` sends it to `POST /apps`. */
+export interface CreateAppParams {
+  name: string;
+  description?: string;
+  /** Makes an address. */
+  url?: string | null;
+  /** A list, even `[]`, makes a key with these scopes. Leave it out for an address-only app. */
+  scopes?: string[] | null;
+  /** The events Siren sends to the address. They need a `url`. */
+  events?: string[] | null;
+  /** The problem contacts, email addresses Siren tells when something is wrong with the app. */
+  contacts?: string[] | null;
+}
+
+/** What `apps.create()` answers: the app, `rawKey` when it made a key and `signingSecret` when it made an address. */
+export type CreatedApp = App & { rawKey?: string; signingSecret?: string };
+
+/**
+ * A change to an app, as `apps.update()` sends it to `PATCH /apps/{key}`.
+ * Only the fields sent change. `url: null` removes the address.
+ */
+export interface UpdateAppParams {
+  name?: string;
+  description?: string;
+  url?: string | null;
+  events?: string[];
+  scopes?: string[];
+  /** Replaces the problem contacts. `[]` leaves none, and the org's admins hear instead. */
+  contacts?: string[];
+}
+
+/** What `apps.update()` answers: the app, and `signingSecret` when the change made an address. */
+export type UpdatedApp = App & { signingSecret?: string };
+
+/** One settings field a feature's kind takes, as the kinds catalog describes it. */
+export interface AppFeatureKindSetting {
+  field: string;
+  label: string;
+  /** `integer`, `boolean`, or `currencies`, a list of currency codes Siren knows for the org. */
+  type: 'integer' | 'boolean' | 'currencies' | (string & {});
+  required: boolean;
+  min?: number;
+  max?: number;
+  help?: string;
+  [field: string]: unknown;
+}
+
+/** One kind of feature an app may add, from `GET /apps/kinds` (AppItemKindCatalog::catalog() and AppPlanAccess). */
+export interface AppFeatureKindEntry extends AppPlanAccess {
+  kind: FeatureKind | (string & {});
+  /** The documentation's term, such as `payout method`. */
+  term: string;
+  /** The readable name, such as `Payout method`. */
+  name: string;
+  description: string;
+  /** `tell`: Siren waits for no answer. `ask`: Siren waits for the app's answer. */
+  mode: 'tell' | 'ask' | (string & {});
+  /** `out`: something goes out of Siren to the app, which needs Pro. `in`: the app's logic comes in. */
+  direction: 'out' | 'in' | (string & {});
+  /** Other names people use for it, such as `autofulfiller`. */
+  aliases: string[];
+  /** The documentation page that uses the term, or null. */
+  docs: string | null;
+  settings: AppFeatureKindSetting[];
+  [field: string]: unknown;
+}
+
+/** A request Siren sent an app, as `GET /apps/requests` lists it. The data and the answer stay out. */
+export interface AppRequestRecord {
+  /** The request key, `apr_` and 32 hex characters, the same on every send. */
+  id: string;
+  appId: number;
+  /** `app:{id}` of the feature Siren acted for. */
+  feature: string;
+  kind: FeatureKind | (string & {});
+  mode: AppRequestMode | (string & {});
+  /** True for a test request (`AppRequestSerializer` adds it then). Siren leaves it out otherwise. */
+  test?: boolean;
+  subject: { type: string; id: string };
+  status: AppRequestStatus | (string & {});
+  sendCount: number;
+  answerBy: string | null;
+  /** `app:{appId}` or `user:{userId}`. */
+  answeredBy: string | null;
+  answeredAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  [field: string]: unknown;
+}
+
+/**
+ * One request as `GET /apps/requests/{requestKey}` answers it
+ * (AppRequestSerializer::toDetail()): the list's fields, the data Siren
+ * sent, the answer it took, and the person who gave that answer.
+ */
+export interface AppRequestDetail extends AppRequestRecord {
+  /** The `data` Siren sent the app, `{}` when there was none. */
+  data: Record<string, unknown>;
+  /** The answer Siren took, or null before one. A tell takes none. */
+  answer: Record<string, unknown> | null;
+  /** The person behind a `user:{id}` answer, or null when the app answered, before an answer, or when that user is gone. */
+  answeredByUser: { id: number; email: string } | null;
+}
+
+/** Filters and paging for `apps.requests.list()`. */
+export interface AppRequestListParams {
+  status?: AppRequestStatus;
+  /**
+   * How many requests to answer, 1 to 100. Siren answers 50 without it.
+   * Siren reads it with `needs_attention` from pkt/apps-attention-paging. An
+   * older Siren ignores it there and answers at most 50.
+   */
+  limit?: number;
+  /** Keeps the requests older than this one, a request id, to read the next page. With `needs_attention` too, as `limit`. */
+  before?: string;
+  /**
+   * Finds requests by the start of their id: `apr_` and 4 to 32 hex
+   * characters in either case, as the command-line tool prints an id short.
+   * Siren answers at most two of the organization's matches, newest first,
+   * so one row is the request and two mean the start fits more than one.
+   * It takes no other filter and no paging. Siren reads it from feat/apps
+   * 76d5bbdf83. An older Siren ignores it and answers its latest requests.
+   */
+  idPrefix?: string;
+  /**
+   * Keeps to one app's requests, by the app's numeric id, as `App.id` holds
+   * it. Siren reads it on the plain list, a page of it, and
+   * `needs_attention` (ListAppRequests at feat/apps 76d5bbdf83). Not with
+   * `idPrefix`.
+   */
+  appId?: number;
+}
+
+/**
+ * An app's answer to an ask: a JSON object with an `outcome` the feature's kind
+ * reads, such as `{ outcome: 'paid', reference: 'TX-88213' }` for a
+ * fulfillment method. At most 16384 bytes as JSON.
+ */
+export interface AppAnswer {
+  outcome: string;
+  [field: string]: unknown;
+}
+
+/** What the answer route says. `duplicate` is true when Siren already held this same answer. */
+export interface AppAnswerReceipt {
+  status: 'accepted';
+  duplicate: boolean;
+}
+
+/**
+ * The fields every request Siren sends an app carries, from its signed body.
+ * `D` is the kind's payload, such as {@link DistributionResolverQuestion}.
+ */
+interface AppRequestBase<D = Record<string, unknown>> {
+  version: 1;
+  /**
+   * The request's id, `apr_` and 32 hex characters. It is the dedupe id:
+   * the same on every send of this request, so write once by `id`. The
+   * signature covers it. `feature.id` names the feature, and `deliveryId`
+   * names one delivery, so neither drops a repeat.
+   */
+  id: string;
+  type: 'app.request';
+  /** The app's key. */
+  app: string;
+  /**
+   * The feature the request is for: its `kind`, its `key` in the app, and
+   * `feature.id`, which names the feature in Siren, such as `app:12`. `feature.id`
+   * names the feature, not the request.
+   */
+  feature: { kind: FeatureKind | (string & {}); key: string; id: string };
+  /**
+   * True for a test request, such as one `siren trigger ask` sent: Siren
+   * checks a test ask's answer by the kind's rules and applies nothing.
+   * False when Siren left the field out, as it does for every real request.
+   * Never move money or write records for a test request. Answer it as
+   * usual and stop there.
+   */
+  test: boolean;
+  createdAt: string;
+  /** The kind's payload. Its fields belong to the feature's kind. */
+  data: D;
+  /** The signed `t` of `X-Siren-Signature-V2`, in Unix seconds. */
+  timestamp: number;
+  /**
+   * The `X-Siren-Delivery` header, `{id}.{send number}`, when the request
+   * carried one. It names one delivery and changes on every send, so drop a
+   * repeat by `id` instead.
+   */
+  deliveryId?: string;
+}
+
+/** A request that needs no answer. `D` is the kind's payload. */
+export interface AppTell<D = Record<string, unknown>> extends AppRequestBase<D> {
+  mode: 'tell';
+  /** False: a tell needs no answer. The same as `mode === 'ask'`, as the PHP and Python SDKs name it. */
+  readonly isAsk: false;
+}
+
+/** A request that waits for the app's answer. `D` is the kind's question. */
+export interface AppAsk<D = Record<string, unknown>> extends AppRequestBase<D> {
+  mode: 'ask';
+  /** True: an ask waits for the app's answer. The same as `mode === 'ask'`, as the PHP and Python SDKs name it. */
+  readonly isAsk: true;
+  /**
+   * When Siren sends the request again, or marks it as needing attention:
+   * an ISO 8601 time as Siren sends it, such as `2026-11-17T13:20:03+00:00`.
+   * `new Date(request.answerBy)` reads it.
+   */
+  answerBy: string;
+  /** Where the answer goes. `apps.requests.answer(id, answer)` posts to the same route. */
+  answerUrl: string;
+}
+
+/** A checked request from Siren, as `apps.verifyRequest()` answers it. */
+export type AppRequest = AppTell | AppAsk;
+
+/**
+ * A currency as Siren's API describes one (`CurrencyAdapter::toArray()`),
+ * the shape `programs.currencyTypes()` lists, with every field present. A
+ * stored amount is the shown amount times `10^scale`. `decimalPlaces` is how
+ * many digits a person sees, never more than `scale`. Read an amount with
+ * `apps.shownAmount(value, currency)`.
+ */
+export interface AppCurrency extends ProgramCurrency {
+  /** The currency code, such as `USD`, or the code of an organization's own currency, such as `POINTS`. */
+  id: string;
+  symbol: string;
+  position: 'before' | 'after' | (string & {});
+  name: string;
+  /** Digits of a stored amount that sit after the decimal point, 0 to 8. Every built-in currency is 2, yen included. */
+  scale: number;
+  /** Digits a person sees after the decimal point, 0 to `scale`. Yen shows 0. */
+  decimalPlaces: number;
+  /** `monetary` for money, `internal` for points or store credit an organization defined. */
+  type: CustomCurrencyType | (string & {});
+}
+
+/**
+ * The data of a `postConversionAction` tell, sent after a conversion is
+ * approved (Siren's `AppActionSubjects::forConversion()`).
+ */
+export interface PostConversionActionTell {
+  conversion: {
+    id: number;
+    type: string;
+    status: string;
+    engagementId: number;
+    opportunityId: number;
+    collaboratorId: number;
+    transactionId: number | null;
+    obligationId: number | null;
+  };
+  /**
+   * The reward, or null when the conversion has none. `value` is the stored
+   * integer, not the amount a person reads: 10000 in yen is 100 yen. Read it
+   * with `apps.shownAmount(reward.value, reward.currency)`. `units` is the
+   * currency code.
+   */
+  reward: { value: number; units: string; currency: AppCurrency } | null;
+  program: { id: number; name: string };
+}
+
+/**
+ * The data of a `postAllocationAction` tell, sent after an allocation
+ * completes (Siren's `AppActionSubjects::forAllocation()`). The subject id is
+ * `{distributionId}:{obligationId}`.
+ */
+export interface PostAllocationActionTell {
+  allocation: {
+    distributionId: number;
+    obligationId: number;
+    collaboratorId: number;
+    status: string;
+    /** The stored integer, not the amount a person reads. Read it with `apps.shownAmount(value, currency)`. */
+    value: number;
+    /** The currency code. */
+    units: string;
+    currency: AppCurrency;
+  };
+  distributor: { id: number; name: string };
+}
+
+/**
+ * One conversion in an `incentiveResolver` ask: a collaborator the sale,
+ * renewal or lead converted. `collaboratorStatus` is as it was at the sale,
+ * even when Siren asks again later. `engagementCreatedDate` is an ISO 8601
+ * time.
+ */
+export interface IncentiveResolverConversion {
+  conversionId: number;
+  engagementId: number;
+  collaboratorId: number;
+  collaboratorStatus: string;
+  score: number;
+  engagementCreatedDate: string;
+}
+
+/**
+ * The data of an `incentiveResolver` ask (Siren's `AppRewardQuestion::build()`):
+ * Siren asks the app how to split a program's reward pool among the
+ * conversions one sale, renewal or lead made. `reason` is `sale` while the
+ * rewards are not made yet, and `refund` when a partial refund asks again
+ * about rewards already made. `transaction` is null for a lead. The
+ * program's `status` is as it was at the sale. `conversionType` is one of
+ * the conversion types Siren registers (RegisterCoreConversionTypes.php).
+ * Answer with an {@link IncentiveResolverAnswer}.
+ */
+export interface IncentiveResolverQuestion {
+  /** `AppRewardQuestion::REASON_SALE` or `REASON_REFUND`, the only two `build()` takes. */
+  reason: 'sale' | 'refund';
+  program: { id: number; name: string; status: string };
+  conversionType: AppConversionType;
+  transaction: { id: number; units: string; currency: AppCurrency } | null;
+  /** The reward pool, a stored integer. Read it with `apps.shownAmount(pool.value, pool.currency)`. */
+  pool: { value: number; units: string; currency: AppCurrency };
+  conversions: IncentiveResolverConversion[];
+}
+
+/**
+ * The answer to an `incentiveResolver` ask, such as
+ * `{ outcome: 'rewards', units: 'USD', rewards: { '1042': 900, '1043': null } }`.
+ * `units` is the pool's. `rewards` holds every `conversionId` of the
+ * question as text and no other, each a whole number of 0 or more in the
+ * pool's stored units, or null for a collaborator who earns nothing. The
+ * rewards may add up to more than the pool.
+ */
+export interface IncentiveResolverAnswer extends AppAnswer {
+  outcome: 'rewards';
+  units: string;
+  rewards: Record<string, number | null>;
+}
+
+/**
+ * One engagement in an `incentiveType` ask: an active engagement the program
+ * holds on the opportunity at the sale, or one of a renewal's or refunded
+ * award's engagements. `createdDate` is an ISO 8601 time.
+ */
+export interface AppIncentiveTypeEngagement {
+  engagementId: number;
+  collaboratorId: number;
+  score: number;
+  createdDate: string;
+}
+
+/** One line of the transaction in an `incentiveType` ask, refund lines included. `value` is a stored integer. */
+export interface AppIncentiveTypeLine {
+  id: number;
+  type: string;
+  name: string;
+  quantity: number;
+  value: number;
+}
+
+/**
+ * The data of an `incentiveType` ask (Siren's `AppIncentiveTypeQuestion::build()`):
+ * Siren asks the app which engagements one sale, lead or renewal converts on
+ * a program and the pool the program's resolver divides among them.
+ * `reason` is `sale` until the award is made, and `refund` when a partial
+ * refund asks again about an award already made, which then lists the
+ * award's `conversions`. `transaction` is null for a lead, which names its
+ * `binding` instead. `total` is the sum of the lines in the transaction's
+ * units, in the stored integer form. Answer with an {@link IncentiveTypeAnswer}.
+ */
+export interface IncentiveTypeQuestion {
+  reason: 'sale' | 'refund';
+  program: { id: number; name: string; units: string };
+  conversionType: AppConversionType;
+  opportunity: { id: number };
+  transaction: {
+    id: number;
+    status: string;
+    units: string;
+    currency: AppCurrency | null;
+    total: number;
+    lines: AppIncentiveTypeLine[];
+  } | null;
+  binding: { type: string; id: string } | null;
+  engagements: AppIncentiveTypeEngagement[];
+  conversions?: Array<{ conversionId: number; engagementId: number }>;
+}
+
+/**
+ * The answer to an `incentiveType` ask. `{ outcome: 'award', units, pool,
+ * engagementIds }` converts the engagements chosen, each once and each from
+ * the question, and the program's resolver divides `pool`, a whole number at
+ * or above 0 in the stored integer form of the program's `units`.
+ * `{ outcome: 'none' }` awards nothing on the program. A refund's answer
+ * changes only the pool. Siren refuses any other shape with 422
+ * `app_answer_invalid`.
+ */
+export type IncentiveTypeAnswer =
+  | (AppAnswer & { outcome: 'award'; units: string; pool: number; engagementIds: number[] })
+  | (AppAnswer & { outcome: 'none' });
+
+/**
+ * One engagement in a `programGroupSorter` ask: an active engagement a
+ * program holds on the opportunity at the sale. `createdDate` is an ISO 8601
+ * time.
+ */
+export interface ProgramGroupSorterEngagement {
+  engagementId: number;
+  collaboratorId: number;
+  score: number;
+  createdDate: string;
+}
+
+/** One program in a `programGroupSorter` ask, with its engagements oldest first. */
+export interface ProgramGroupSorterProgram {
+  id: number;
+  name: string;
+  engagements: ProgramGroupSorterEngagement[];
+}
+
+/**
+ * The data of a `programGroupSorter` ask (Siren's
+ * `AppGroupOrderQuestion::build()`): Siren asks the app the order to try a
+ * program group's programs in for one sale or lead. `programs`
+ * lists each program of the group that takes the conversion once, in the
+ * order the group holds them. `transaction` is null for a lead, and its
+ * `total` is a stored integer. Answer with an {@link ProgramGroupSorterAnswer}.
+ */
+export interface ProgramGroupSorterQuestion {
+  group: { id: number; name: string };
+  /** One of the conversion types Siren registers (RegisterCoreConversionTypes.php), as `AppGroupOrderQuestion::build()` copies it from the work. */
+  conversionType: AppConversionType;
+  opportunity: { id: number };
+  transaction: { id: number; units: string; total: number } | null;
+  programs: ProgramGroupSorterProgram[];
+}
+
+/**
+ * The answer to a `programGroupSorter` ask, such as
+ * `{ outcome: 'sorted', programIds: [9, 12] }`. `programIds` holds every
+ * program id of the question exactly once, in the order Siren tries them.
+ * The first program that converts wins the group.
+ */
+export interface ProgramGroupSorterAnswer extends AppAnswer {
+  outcome: 'sorted';
+  programIds: number[];
+}
+
+/**
+ * One collaborator's metric in a `distributionResolver` ask: what the
+ * collaborator scored in the distribution's period, and how many times a
+ * trigger counted.
+ */
+export interface AppDistributionMetric {
+  metricId: number;
+  collaboratorId: number;
+  score: number;
+  triggerCount: number;
+}
+
+/**
+ * The data of a `distributionResolver` ask (Siren's
+ * `AppDistributionQuestion::build()`): Siren asks the app how to divide a
+ * distributor's pool among the collaborators who scored in the period.
+ * `pool.value` is what this ask offers, a stored integer, and the shares may
+ * add up to it and never past it. `pool.total` is the whole pool and
+ * `pool.paid` what collaborators already hold from it, so a first ask has
+ * `paid` 0 and `value` equal to `total`, and a continued ask leaves out each
+ * collaborator who already holds a share. Answer with an
+ * {@link DistributionResolverAnswer}, which `apps.splitPool()` helps build.
+ */
+export interface DistributionResolverQuestion {
+  distribution: { id: number; distributorId: number; periodStart: string; periodEnd: string };
+  distributor: { id: number; name: string };
+  pool: { value: number; total: number; paid: number; units: string; currency: AppCurrency };
+  metrics: AppDistributionMetric[];
+}
+
+/**
+ * The answer to a `distributionResolver` ask, such as
+ * `{ outcome: 'allocated', units: 'USD', shares: { '41': 6000, '43': 4000 } }`.
+ * `units` is the pool's. `shares` holds every `metricId` of the question as
+ * text and no other, each a whole number of 0 or more in the pool's stored
+ * units and a whole step of the currency, 100 for yen. They add up to the
+ * pool's `value` at most.
+ */
+export interface DistributionResolverAnswer extends AppAnswer {
+  outcome: 'allocated';
+  units: string;
+  shares: Record<string, number>;
+}
+
+/**
+ * What an ask's function returns when the app will answer later with
+ * `apps.requests.answer()`: `answers.later()`, the one value of this type.
+ * The handler then posts nothing and reports nothing.
+ */
+export interface AppAnswerLater {
+  readonly [answerLaterBrand]: true;
+}
+declare const answerLaterBrand: unique symbol;
+
+/** What an ask's function returns: the answer `A`, or `answers.later()`, now or as a promise. */
+export type AppAskResult<A extends AppAnswer> = A | AppAnswerLater | Promise<A | AppAnswerLater>;
+
+/**
+ * The function `apps.requestHandler().on(kind, ...)` takes for each kind of
+ * feature, so the request and the answer are typed by the kind. A tell's
+ * function returns nothing. An ask's function returns the answer, which the
+ * handler posts, or `answers.later()` when the app answers later with
+ * `apps.requests.answer()`. An ask's function that returns nothing is an
+ * error, which `onError` gets.
+ */
+export type AppFeatureFunctions = {
+  [K in keyof FeatureTells]: (request: AppTell<FeatureTells[K]>) => void | Promise<void>;
+} & {
+  [K in keyof FeatureQuestions]: (request: AppAsk<FeatureQuestions[K]>) => AppAskResult<FeatureAnswers[K]>;
+};
+
+/**
+ * The function `apps.requestHandler().on(kind, ...)` takes for a kind the
+ * `extraKinds` option names. It gets the request as `apps.verifyRequest()`
+ * answers it. For a tell it returns nothing, and for an ask the answer or
+ * `answers.later()`.
+ */
+export type AppRequestFunction = (request: AppRequest) => AppAnswer | AppAnswerLater | void | Promise<AppAnswer | AppAnswerLater | void>;
+
+/** The function `apps.requestHandler().onEvent(type, fn)` takes. Siren gets 200 when it returns, and 500 when it throws. */
+export type AppEventFunction = (event: WebhookEvent) => void | Promise<void>;
+
+/**
+ * A pool as `apps.splitPool()` reads it: the stored integer `value` and its
+ * `currency`, as a resolver's question carries them.
+ */
+export interface AppSplitPool {
+  value: number;
+  currency: Pick<AppCurrency, 'scale' | 'decimalPlaces'> & Partial<AppCurrency>;
+}
+
+/** The weights `apps.splitPool()` takes: an object of id to weight, or a list of `[id, weight]` pairs. */
+export type AppSplitWeights = Readonly<Record<string, number>> | ReadonlyArray<readonly [string | number, number] | ReadonlyArray<string | number>>;
+
+/**
+ * What caused a metric, in a metric ask. `id` is the metric event's key.
+ * For a sale, `type` is `transaction` and `causeId` is the transaction id
+ * as text. Both are null when the cause has no record.
+ */
+export interface AppMetricCause {
+  id: string;
+  type: string | null;
+  causeId: string | null;
+}
+
+/**
+ * The sale behind a metric, in a metric ask, or null when no sale caused
+ * it. `excludedLineIds` lists the sale's lines the metric leaves out.
+ */
+export interface AppMetricSale {
+  transactionId: number;
+  conversionId: number | null;
+  excludedLineIds: number[];
+}
+
+/**
+ * The data of a `metricCalculation` ask: Siren asks the app to score one
+ * metric for a distributor's period. `opportunityId` and `points` may be
+ * null. Answer with an {@link MetricCalculationAnswer}.
+ */
+export interface MetricCalculationQuestion {
+  distributor: { id: number; name: string };
+  /** The period being scored. `periodEnd` is an ISO 8601 time. */
+  distribution: { id: number; periodEnd: string };
+  metricType: string;
+  /** The distributor's metric type row that selects this calculation. */
+  distributorMetricTypeId: number;
+  /** The collaborator whose activity caused the metric. */
+  triggeringCollaborator: { id: number; name: string };
+  opportunityId: number | null;
+  points: number | null;
+  cause: AppMetricCause;
+  sale: AppMetricSale | null;
+}
+
+/**
+ * The answer to a `metricCalculation` ask, such as
+ * `{ outcome: 'scores', results: [{ collaboratorId: 7, score: 10 }] }`.
+ * Siren takes at most 50 results, each collaborator once, each in the
+ * organization and not in the trash, and each score a whole number of 0 or
+ * more. An empty list scores nobody.
+ */
+export interface MetricCalculationAnswer extends AppAnswer {
+  outcome: 'scores';
+  results: Array<{ collaboratorId: number; score: number }>;
+}
+
+/**
+ * The data of a `metricFilter` ask: Siren asks the app whether one
+ * collaborator's metric counts for a distributor. `opportunityId` and
+ * `points` may be null. Answer with an {@link MetricFilterAnswer}.
+ */
+export interface MetricFilterQuestion {
+  distributor: { id: number; name: string };
+  distribution: { id: number };
+  collaborator: { id: number; name: string };
+  metricType: string;
+  opportunityId: number | null;
+  points: number | null;
+  cause: AppMetricCause;
+  sale: AppMetricSale | null;
+}
+
+/**
+ * The answer to a `metricFilter` ask: `{ outcome: 'allow' }` counts the
+ * metric, and `{ outcome: 'suppress', reason }` drops it. The reason is
+ * plain text of 1 to 200 characters.
+ */
+export type MetricFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+
+/** One member of a collaborator group in a `collaboratorGroupStructure` ask. */
+export interface AppCollaboratorGroupMember {
+  collaboratorId: number;
+  name: string;
+  /**
+   * The collaborator's status at the trigger, such as `active` or `inactive`.
+   * Siren credits the member by it, as the trigger would have inline.
+   */
+  status: string;
+  /** The member's metadata as the group holds it. */
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * The data of a `collaboratorGroupStructure` ask: Siren asks the app for a
+ * collaborator group's shape among the `members` in the question, once per
+ * cascade trigger on the group. `for` names the program (an engagement
+ * cascade) or the distributor (a metric cascade). `cause.id` is 16 hex
+ * characters, the trigger's own random id. The ask also carries the fields
+ * of the trigger it interrupts, which differ by side, so they stay open
+ * here. {@link CollaboratorGroupStructureDistributorQuestion} types a
+ * distributor's and {@link CollaboratorGroupStructureProgramQuestion} a
+ * program's. Answer with an {@link CollaboratorGroupStructureAnswer}.
+ */
+export interface CollaboratorGroupStructureQuestion {
+  group: { id: number; name: string };
+  members: AppCollaboratorGroupMember[];
+  for: { type: 'program' | 'distributor'; id: number };
+  /** The collaborator whose activity set off the cascade. */
+  triggeringCollaborator: { id: number; name: string };
+  cause: { id: string; [field: string]: unknown };
+  [field: string]: unknown;
+}
+
+/**
+ * A `collaboratorGroupStructure` ask for a distributor's metric cascade. It
+ * carries the fields of a metric calculation's question beside the group's,
+ * and its `cause` is a metric's.
+ */
+export interface CollaboratorGroupStructureDistributorQuestion extends CollaboratorGroupStructureQuestion {
+  for: { type: 'distributor'; id: number };
+  distributor: { id: number; name: string };
+  /** The period being scored. `periodEnd` is an ISO 8601 time. */
+  distribution: { id: number; periodEnd: string };
+  metricType: string;
+  distributorMetricTypeId: number;
+  opportunityId: number | null;
+  points: number | null;
+  cause: AppMetricCause & { [field: string]: unknown };
+  sale: AppMetricSale | null;
+}
+
+/**
+ * A `collaboratorGroupStructure` ask for a program's engagement cascade. It
+ * carries the fields of an engagement calculation's question beside the
+ * group's (Siren's `AppGroupStructureQuestion::forEngagement()`), and its
+ * `cause` is an engagement's. `args` holds the settings a person gave the
+ * engagement type, as text by name, or an empty object.
+ */
+export interface CollaboratorGroupStructureProgramQuestion extends CollaboratorGroupStructureQuestion {
+  for: { type: 'program'; id: number };
+  program: { id: number; name: string };
+  engagementType: string;
+  programEngagementTypeId: number;
+  args: Record<string, string>;
+  opportunity: AppEngagementOpportunity;
+  cause: AppEngagementCause & { [field: string]: unknown };
+}
+
+/**
+ * A chain answer to a `collaboratorGroupStructure` ask, such as
+ * `{ outcome: 'structure', shape: 'chain', order: [63, 57, 42] }`. `order`
+ * lists every member's `collaboratorId` of the question once, top of the
+ * chain first. Siren reads it as its built-in linear chain, where a lower
+ * position is higher up.
+ */
+export interface CollaboratorGroupStructureChainAnswer extends AppAnswer {
+  outcome: 'structure';
+  shape: 'chain';
+  order: number[];
+}
+
+/**
+ * A tree answer to a `collaboratorGroupStructure` ask, such as
+ * `{ outcome: 'structure', shape: 'tree', parents: { '42': 57, '57': 63, '63': null } }`.
+ * `parents` holds every member's `collaboratorId` of the question as text
+ * once, each mapped to another member's `collaboratorId`, or null for a top
+ * member. The parents form no cycle. Siren reads it as its parent and child
+ * structure.
+ */
+export interface CollaboratorGroupStructureTreeAnswer extends AppAnswer {
+  outcome: 'structure';
+  shape: 'tree';
+  parents: Record<string, number | null>;
+}
+
+/**
+ * The answer to a `collaboratorGroupStructure` ask, a chain or a tree.
+ * Siren refuses one that breaks the rules above with 422
+ * `app_answer_invalid`.
+ */
+export type CollaboratorGroupStructureAnswer = CollaboratorGroupStructureChainAnswer | CollaboratorGroupStructureTreeAnswer;
+
+/**
+ * The data of a `payoutMethod` ask: Siren asks the app to pay one payout.
+ * `payout.attempt` starts at 1 and rises when Siren asks again about the
+ * same payout, such as after a failed answer and a retry. `amount.value` is
+ * a whole number in the currency's smallest unit. Pay each `payout.id` at
+ * most once, and when Siren asks again about a payout the app already paid,
+ * answer `paid` with the first reference. Answer with an
+ * {@link PayoutMethodAnswer}.
+ */
+export interface PayoutMethodQuestion {
+  payout: { id: number; fulfillmentId: number; attempt: number };
+  /** What to pay, a stored integer. Read it with `apps.shownAmount(amount.value, amount.currency)`. */
+  amount: { value: number; units: string; currency: AppCurrency };
+  /** `email` is null when the collaborator has no email address. */
+  collaborator: { id: number; name: string; email: string | null };
+}
+
+/**
+ * The answer to a `payoutMethod` ask: `{ outcome: 'paid', reference }` where
+ * `reference` is the payment's id in the app's own system, 1 to 191
+ * characters.
+ */
+export interface PayoutMethodPaidAnswer extends AppAnswer {
+  outcome: 'paid';
+  reference: string;
+}
+
+/**
+ * The answer to a `payoutMethod` ask when the app could not pay:
+ * `{ outcome: 'failed', reason }`, where `reason` is 1 to 500 characters.
+ */
+export interface PayoutMethodFailedAnswer extends AppAnswer {
+  outcome: 'failed';
+  reason: string;
+}
+
+/** The answer to a `payoutMethod` ask: paid with a reference, or failed with a reason. */
+export type PayoutMethodAnswer = PayoutMethodPaidAnswer | PayoutMethodFailedAnswer;
+
+/**
+ * The trigger behind an engagement ask. `id` is the trigger's own random id,
+ * so two visits make two asks. `event` is the engagement type that fired.
+ * `occurredAt` is an ISO 8601 time, and the engagements the answer makes are
+ * dated then.
+ */
+export interface AppEngagementCause {
+  id: string;
+  event: string;
+  occurredAt: string;
+}
+
+/**
+ * The opportunity in an engagement ask, with the customer Siren matched it
+ * to, or null when it matched none.
+ */
+export interface AppEngagementOpportunity {
+  id: number;
+  customerId: number | null;
+}
+
+/**
+ * The data of an `engagementCalculation` ask (Siren's
+ * `AppEngagementQuestion::forCalculation()`): Siren asks the app who earns
+ * an engagement, and its score, when an engagement type a program picks
+ * this calculation for triggers. `args` holds the settings a person gave
+ * that engagement type, as text by name. Answer with an
+ * {@link EngagementCalculationAnswer}.
+ */
+export interface EngagementCalculationQuestion {
+  program: { id: number; name: string };
+  engagementType: string;
+  /** The program's engagement type row that selects this calculation. */
+  programEngagementTypeId: number;
+  args: Record<string, string>;
+  opportunity: AppEngagementOpportunity;
+  /** The collaborator whose action triggered the engagement. */
+  triggeringCollaborator: { id: number; name: string };
+  cause: AppEngagementCause;
+}
+
+/**
+ * The answer to an `engagementCalculation` ask, such as
+ * `{ outcome: 'engagements', results: [{ collaboratorId: 7, score: 10 }] }`.
+ * Siren takes at most 50 results, each collaborator once, each in the
+ * organization and not in the trash, and each score a whole number of 0 or
+ * more. An empty list makes no engagement.
+ */
+export interface EngagementCalculationAnswer extends AppAnswer {
+  outcome: 'engagements';
+  results: Array<{ collaboratorId: number; score: number }>;
+}
+
+/**
+ * The data of an `engagementFilter` ask (Siren's
+ * `AppEngagementQuestion::forFilter()`): Siren asks the app whether an
+ * engagement may be made for one collaborator on a program. Answer with an
+ * {@link EngagementFilterAnswer}.
+ */
+export interface EngagementFilterQuestion {
+  program: { id: number; name: string };
+  /** The collaborator the engagement would credit. */
+  collaborator: { id: number; name: string };
+  opportunity: AppEngagementOpportunity;
+  engagementType: string;
+  cause: AppEngagementCause;
+}
+
+/**
+ * The answer to an `engagementFilter` ask: `{ outcome: 'allow' }` makes the
+ * engagement, and `{ outcome: 'suppress', reason }` stops it. The reason is
+ * plain text of 1 to 200 characters, which Siren notes on the opportunity.
+ */
+export type EngagementFilterAnswer = (AppAnswer & { outcome: 'allow' }) | (AppAnswer & { outcome: 'suppress'; reason: string });
+
+/**
+ * One of a sale's own lines in a `transactionFilter` ask. `value` is the
+ * line's unit value, a stored whole number in the transaction's units, and
+ * `quantity` a whole number. `productId` is null when the line names no
+ * product.
+ */
+export interface AppTransactionLine {
+  id: number;
+  type: 'lineItem' | 'discount' | 'fee' | 'shipping' | 'tax';
+  name: string;
+  quantity: number;
+  value: number;
+  productId: string | null;
+}
+
+/**
+ * The data of a `transactionFilter` ask: Siren asks the app which of a
+ * sale's own lines count, once per sale for each program or distributor that
+ * picks the filter. `for` names that program or distributor. The subject id
+ * is `{opportunityId}:{programId}:t{transactionId}` for a program's lines
+ * and `{distributorId}:t{transactionId}` for a distributor's.
+ * `distribution` is null for a program, and for a distributor the period
+ * the sale's value lands in. `refundDistribution` is null, or the later
+ * period a refund came in while the ask was open. Refunds reuse the stored
+ * answer, so refund lines are never sent. Answer with an
+ * {@link TransactionFilterAnswer}.
+ */
+export interface TransactionFilterQuestion {
+  for: { type: 'program' | 'distributor'; id: number; name: string };
+  /**
+   * `currency` is null for a sale with no lines, since Siren reads it from
+   * the first line (`AppTransactionFilterQuestion::build()`).
+   */
+  transaction: { id: number; units: string; currency: AppCurrency | null };
+  lines: AppTransactionLine[];
+  distribution: { id: number } | null;
+  refundDistribution: { id: number } | null;
+}
+
+/**
+ * The answer to a `transactionFilter` ask, such as
+ * `{ outcome: 'filtered', include: [5501, 5502] }`. `include` lists the ids
+ * of the question's lines that count, each at most once. An empty list
+ * includes nothing. A line counts when any filter the record picks includes
+ * it. Siren refuses an id the question lacks with 422 `app_answer_invalid`.
+ */
+export interface TransactionFilterAnswer extends AppAnswer {
+  outcome: 'filtered';
+  include: number[];
+}
+
+/**
+ * A stored amount as a person reads it, from `apps.shownAmount()`, the three
+ * ways Siren's own `CurrencyAmountService` gives one.
+ */
+export interface ShownAmount {
+  /** `value / 10^scale` as a number, for arithmetic: 15 for 1500 in dollars, 100 for 10000 in yen. */
+  amount: number;
+  /**
+   * Plain text with the currency's decimal places, no symbol and no
+   * grouping: `15.00`, `100`. Its sign is `text`'s, so a negative that
+   * rounds to zero reads `-0.00`, as Siren's `format()` prints it.
+   */
+  decimal: string;
+  /** The text a person reads: `$15.00`, `¥100`, `10,000 pts`. */
+  text: string;
+}
+
+/** Options for `apps.verifyRequest()`. */
+export interface VerifyAppRequestOptions {
+  /** How far the signed timestamp may be from `now`, either way. Whole seconds from 1 to 3600. Default 300. */
+  toleranceSeconds?: number;
+  /** The receiver's clock in Unix seconds. Default `Date.now() / 1000`. Tests pass a fixed clock. */
+  now?: number;
 }

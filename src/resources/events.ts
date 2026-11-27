@@ -3,12 +3,30 @@ import { SirenError } from '../errors';
 import type { HttpTransport } from '../http';
 import { parseJsonBody } from '../http';
 import { EventSlug } from '../taxonomy';
-import type { EventResult, IngestOptions, RefundParams, SaleParams, SiteVisitedParams } from '../types';
+import type {
+  BrowserToken,
+  BrowserTokenHandlerOptions,
+  EventResult,
+  IngestOptions,
+  RefundParams,
+  SaleParams,
+  SiteVisitedParams,
+} from '../types';
+import type { AccessTokenSource } from '../auth/access-token-source';
 import { ForwardedEventSlug as ForwardedSlugs } from '../connect/forwarded-events';
 import type { ForwardOptions, ForwardedEventEnvelope, ForwardedEventSlug } from '../connect/forwarded-events';
 
 /** The 28 slugs `forward` sends. Any other slug would become a custom event. */
 const FORWARDED_SLUGS: ReadonlySet<string> = new Set(Object.values(ForwardedSlugs));
+
+/** Siren's built-in event slugs, which keep sending with the client's own credential. */
+const BUILT_IN_SLUGS: ReadonlySet<string> = new Set(Object.values(EventSlug));
+
+/** A custom event's key, as Siren's event route reads one. */
+const EVENT_KEY = /^[A-Za-z0-9_-]{1,100}$/;
+
+/** The most bytes `browserTokenHandler` reads of a request body. */
+const HANDLER_BODY_LIMIT = 4096;
 
 /** A UUID as `EventWireFormat` reads one, any version, either case. */
 const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,6 +110,14 @@ export class EventsResource {
    * This also keeps `ingest('site-visited', ...)` to the same rule as
    * `siteVisited`.
    *
+   * A client built with `apiKey` sends a custom event, any slug other than
+   * `sale`, `refund`, `site-visited` and the forwarded slugs, with a
+   * short-lived app token, since Siren takes only the owning app's token
+   * there. The SDK trades the key for one at `POST /oauth/token` the first
+   * time, keeps it, gets a new one when fewer than two minutes are left, and
+   * after a 401 gets a new one and sends once more. A key that belongs to no
+   * app sends with the key as before. The caller never sees a token.
+   *
    * `options.headers` go out on the send, and on the one resend after a 401,
    * beneath the SDK's own: a name that matches `Authorization`, `Accept`,
    * `User-Agent` or `Content-Type` in any case is dropped. A connected site
@@ -109,14 +135,109 @@ export class EventsResource {
    * the object's own `headers` and `timeout` are read.
    */
   async ingest(slug: string, payload: Record<string, unknown>, options?: IngestOptions): Promise<EventResult> {
-    if (options === undefined) return this.send(slug, payload, false);
+    const tokens = this.tokensFor(slug);
+    if (options === undefined) return this.send(slug, payload, false, undefined, undefined, tokens);
     const given: unknown = options;
     if (!isPlainObject(given)) {
       throw new SirenError('Siren: events.ingest takes its options as an object.');
     }
     const headers = ingestHeaders(ownOption(given, 'headers'));
     const timeout = ownOption(given, 'timeout');
-    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout));
+    return this.send(slug, payload, false, headers, timeout === undefined ? undefined : resolveTimeout(timeout), tokens);
+  }
+
+  /**
+   * A browser token for one of the app's custom events, for the app's
+   * server to hand a web page: `{token, expiresIn, url}`. The page sends the
+   * event to `url` with `?access_token=` and the token, from a website on
+   * the event's allowed domains. The storefront module's `track` does that
+   * for the page, with {@link browserTokenHandler} on the server.
+   *
+   * One token is kept per event and reused until fewer than 60 seconds of
+   * its 10 minutes are left, so a busy page costs about one grant every nine
+   * minutes.
+   *
+   * Throws `SirenError` when the client was built with `accessToken` rather
+   * than the app's `apiKey`, or `eventKey` is not an event key. Throws
+   * `BadRequestError` with code `invalid_scope` when Siren refuses the
+   * event: it is not one of the app's active custom events, or it allows no
+   * domain. Throws `AuthenticationError` with code `invalid_client` when
+   * Siren doesn't know the key or it was revoked, and `BadRequestError`
+   * with code `unauthorized_client` when the key belongs to no app.
+   */
+  async browserToken(eventKey: string): Promise<BrowserToken> {
+    const tokens = this.http.appTokens;
+    if (tokens === null) {
+      throw new SirenError("Siren: events.browserToken needs a client built with the app's apiKey.");
+    }
+    if (typeof eventKey !== 'string' || !EVENT_KEY.test(eventKey)) {
+      throw new SirenError('Siren: events.browserToken takes an event key of letters, digits, dashes and underscores.');
+    }
+    const { token, expiresIn } = await tokens.browserToken(eventKey);
+    return { token, expiresIn, url: this.http.urlFor(`/event/${encodeURIComponent(eventKey)}`) };
+  }
+
+  /**
+   * A request handler for the app's server that answers a page's request
+   * for a browser token, the server half of the storefront module's
+   * `track`. Mount it at `/siren/token`, where `track` asks by default:
+   *
+   * ```ts
+   * app.post('/siren/token', siren.events.browserTokenHandler());           // Express
+   * export const POST = siren.events.browserTokenHandler();                 // Next.js app route
+   * export default siren.events.browserTokenHandler();                      // Next.js pages route
+   * ```
+   *
+   * It reads the event key from a JSON body `{"event": "..."}`, or from the
+   * query `?event=`. It answers 200 with {@link browserToken}'s object, 400
+   * `{error}` when the event is missing, is not in `options.events` when that
+   * list is given, or is one Siren refuses, and 502 `{error}` when Siren
+   * can't be reached or refuses the key. Every answer is JSON with
+   * `Cache-Control: no-store`.
+   *
+   * It takes Node's `(req, res)`, as Express and Next.js pages routes call
+   * it, reading `req.body` when a body parser already read it, and a Web
+   * `Request`, returning a `Response`, as Next.js app routes call it.
+   */
+  browserTokenHandler(options: BrowserTokenHandlerOptions = {}): BrowserTokenHandler {
+    const allowed = options.events === undefined ? null : new Set(options.events);
+    const answer = async (eventKey: unknown): Promise<HandlerAnswer> => {
+      if (typeof eventKey !== 'string' || !EVENT_KEY.test(eventKey)) {
+        return { status: 400, body: { error: 'Name the event to get a token for, as {"event": "your-event-key"}.' } };
+      }
+      if (allowed !== null && !allowed.has(eventKey)) {
+        return { status: 400, body: { error: 'This server gives no token for that event.' } };
+      }
+      try {
+        return { status: 200, body: await this.browserToken(eventKey) };
+      } catch (error) {
+        if (error instanceof SirenError && error.statusCode === 400 && error.code === 'invalid_scope') {
+          return { status: 400, body: { error: error.message } };
+        }
+        return { status: 502, body: { error: 'Siren could not give a token just now. Try again shortly.' } };
+      }
+    };
+
+    const handler = async (req: unknown, res?: unknown): Promise<Response | void> => {
+      if (res === undefined && isWebRequest(req)) {
+        const { status, body } = await answer(await eventFromWebRequest(req));
+        return new Response(JSON.stringify(body), { status, headers: HANDLER_HEADERS });
+      }
+      const node = req as NodeRequestLike;
+      const out = res as NodeResponseLike;
+      const { status, body } = await answer(await eventFromNodeRequest(node));
+      out.statusCode = status;
+      for (const [name, value] of Object.entries(HANDLER_HEADERS)) out.setHeader(name, value);
+      out.end(JSON.stringify(body));
+    };
+    return handler as BrowserTokenHandler;
+  }
+
+  /** The app's token source for a custom event's send, or undefined to send with the client's own credential. */
+  private tokensFor(slug: string): AccessTokenSource | undefined {
+    const tokens = this.http.appTokens;
+    if (tokens === null || BUILT_IN_SLUGS.has(slug) || FORWARDED_SLUGS.has(slug)) return undefined;
+    return tokens;
   }
 
   /**
@@ -197,6 +318,7 @@ export class EventsResource {
     retriable: boolean,
     headers?: Record<string, string>,
     timeout?: number,
+    tokens?: AccessTokenSource,
   ): Promise<EventResult> {
     const response = await this.http.request({
       method: 'POST',
@@ -205,6 +327,7 @@ export class EventsResource {
       retriable,
       ...(headers !== undefined ? { headers } : {}),
       ...(timeout !== undefined ? { timeout } : {}),
+      ...(tokens !== undefined ? { tokens } : {}),
     });
     const result: EventResult = {};
 
@@ -261,4 +384,109 @@ function ingestHeaders(given: unknown): Record<string, string> | undefined {
 /** Whether `value` is an object that is not an array, as a JSON object decodes. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The handler `events.browserTokenHandler` returns. Called with a Web
+ * `Request` it answers a `Response`. Called with Node's `(req, res)` it
+ * writes the answer to `res`.
+ */
+export interface BrowserTokenHandler {
+  (request: Request): Promise<Response>;
+  (req: NodeRequestLike, res: NodeResponseLike): Promise<void>;
+}
+
+/** The part of Node's `IncomingMessage`, or Express's request, the handler reads. */
+export interface NodeRequestLike {
+  url?: string;
+  body?: unknown;
+  query?: unknown;
+  [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
+}
+
+/** The part of Node's `ServerResponse` the handler writes. */
+export interface NodeResponseLike {
+  statusCode: number;
+  setHeader(name: string, value: string): unknown;
+  end(body: string): unknown;
+}
+
+interface HandlerAnswer {
+  status: number;
+  body: unknown;
+}
+
+const HANDLER_HEADERS: Readonly<Record<string, string>> = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'no-store',
+};
+
+/** Whether the handler was given a Web `Request`. */
+function isWebRequest(value: unknown): value is Request {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { url?: unknown }).url === 'string' &&
+    typeof (value as { text?: unknown }).text === 'function' &&
+    typeof (value as { headers?: { get?: unknown } }).headers?.get === 'function'
+  );
+}
+
+/** The event key a Web `Request` names, in its JSON body or its query. */
+async function eventFromWebRequest(request: Request): Promise<unknown> {
+  let text = '';
+  try {
+    text = request.body === null ? '' : await request.text();
+  } catch {
+    text = '';
+  }
+  return eventFromBody(text.length > HANDLER_BODY_LIMIT ? '' : text) ?? eventFromUrl(request.url);
+}
+
+/** The event key a Node request names, in its parsed or raw body, or its query. */
+async function eventFromNodeRequest(req: NodeRequestLike): Promise<unknown> {
+  let fromBody: unknown;
+  if (req.body !== undefined) {
+    fromBody = typeof req.body === 'string' ? eventFromBody(req.body) : eventOf(req.body);
+  } else if (typeof req[Symbol.asyncIterator] === 'function') {
+    fromBody = eventFromBody(await readLimited(req as AsyncIterable<unknown>));
+  }
+  if (fromBody !== undefined) return fromBody;
+  if (isPlainObject(req.query) && req.query.event !== undefined) return req.query.event;
+  return typeof req.url === 'string' ? eventFromUrl(req.url) : undefined;
+}
+
+/** Reads a Node request body as text, giving up past {@link HANDLER_BODY_LIMIT} bytes. */
+async function readLimited(stream: AsyncIterable<unknown>): Promise<string> {
+  const chunks: string[] = [];
+  let size = 0;
+  const decoder = new TextDecoder();
+  for await (const chunk of stream) {
+    const text = typeof chunk === 'string' ? chunk : decoder.decode(chunk as Uint8Array, { stream: true });
+    size += text.length;
+    if (size > HANDLER_BODY_LIMIT) return '';
+    chunks.push(text);
+  }
+  return chunks.join('');
+}
+
+function eventFromBody(text: string): unknown {
+  if (text.trim() === '') return undefined;
+  try {
+    return eventOf(JSON.parse(text) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
+function eventOf(body: unknown): unknown {
+  return isPlainObject(body) ? body.event : undefined;
+}
+
+function eventFromUrl(url: string): unknown {
+  try {
+    return new URL(url, 'http://localhost').searchParams.get('event') ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -1,0 +1,15 @@
+{
+  "name": "siren-example-signups",
+  "private": true,
+  "type": "module",
+  "description": "Siren's custom event example. It sends a newsletter signup from its server and from its pages.",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node --env-file=.env.sandbox start.mjs"
+  },
+  "dependencies": {
+    "@novatorius/siren": "file:../../.."
+  }
+}

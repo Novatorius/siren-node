@@ -1,6 +1,6 @@
 {
   "name": "@novatorius/siren",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Official Siren SDK for Node.js and TypeScript — affiliate and incentive tracking for any commerce stack.",
   "keywords": [
     "siren",
@@ -29,7 +29,10 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=18.3"
+  },
+  "bin": {
+    "siren": "./dist/cli.js"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -64,6 +67,16 @@
         "types": "./dist/connect.d.cts",
         "default": "./dist/connect.cjs"
       }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
     }
   },
   "publishConfig": {
@@ -74,7 +87,9 @@
     "dist",
     "README.md",
     "LICENSE",
-    "openapi.yaml"
+    "openapi.yaml",
+    "scripts/prepare.mjs",
+    "siren.app.schema.json"
   ],
   "sideEffects": false,
   "scripts": {
@@ -82,13 +97,21 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepare": "tsup"
+    "prepare": "node scripts/prepare.mjs",
+    "prepublishOnly": "node scripts/check-release.mjs"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^22.10.0",
+    "ajv": "^8.17.1",
+    "express": "^5.3.0",
+    "fastify": "^5.12.8",
     "tsup": "^8.3.5",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "overrides": {
+    "light-my-request": "6.6.0"
   },
   "typesVersions": {
     "*": {

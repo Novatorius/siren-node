@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Siren, SignatureVerificationError, WebhookEventType, ApiError } from '../src/index';
+import { Siren, SignatureVerificationError, WebhookEventType } from '../src/index';
 import { emptyResponse, jsonResponse, makeClient, TEST_API_KEY } from './helpers';
 
 const SECRET = 'whsec_test_secret_do_not_use';
@@ -271,46 +271,6 @@ describe('WebhookEventType', () => {
 });
 
 describe('webhooks.subscriptions', () => {
-  it('creates a subscription and surfaces the one-time signingSecret', async () => {
-    const ctx = makeClient([
-      jsonResponse(201, {
-        id: 5,
-        targetUrl: 'https://example.com/webhooks/siren',
-        events: ['conversion.approved'],
-        status: 'active',
-        signingSecret: 'whsec_only_returned_once',
-      }),
-    ]);
-
-    const sub = await ctx.client.webhooks.subscriptions.create({
-      targetUrl: 'https://example.com/webhooks/siren',
-      events: [WebhookEventType.ConversionApproved],
-    });
-
-    const call = ctx.lastCall();
-    expect(call.method).toBe('POST');
-    expect(call.url).toBe('https://api.sirenaffiliates.com/siren/v1/webhooks');
-    expect(call.body).toEqual({
-      targetUrl: 'https://example.com/webhooks/siren',
-      events: ['conversion.approved'],
-    });
-    expect(sub.signingSecret).toBe('whsec_only_returned_once');
-  });
-
-  it('never auto-retries subscription creation', async () => {
-    const ctx = makeClient([jsonResponse(500, { error: 'boom' })], {
-      maxRetries: 3,
-    });
-
-    await expect(
-      ctx.client.webhooks.subscriptions.create({
-        targetUrl: 'https://example.com/hook',
-        events: ['*'],
-      }),
-    ).rejects.toBeInstanceOf(ApiError);
-    expect(ctx.fetchMock).toHaveBeenCalledTimes(1);
-  });
-
   it('lists subscriptions as a bare array', async () => {
     const ctx = makeClient([
       jsonResponse(200, [{ id: 1, targetUrl: 'https://a.example', events: ['*'] }]),

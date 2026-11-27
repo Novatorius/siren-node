@@ -1,12 +1,14 @@
 import { SirenError } from './errors';
+import { readEnvironment } from './environment';
 import {
   DEFAULT_BASE_URL,
   DEFAULT_MAX_RETRIES,
   DEFAULT_TIMEOUT_MS,
   FetchHttpClient,
+  SANDBOX_BASE_URL,
   HttpTransport,
 } from './http';
-import { ApiKeysResource } from './resources/api-keys';
+import { AppsResource } from './resources/apps';
 import { CollaboratorGroupsResource } from './resources/collaborator-groups';
 import { CollaboratorsResource } from './resources/collaborators';
 import { CreditsResource } from './resources/credits';
@@ -14,8 +16,10 @@ import { CustomCurrenciesResource } from './resources/custom-currencies';
 import { DistributorsResource } from './resources/distributors';
 import { EngagementsResource } from './resources/engagements';
 import { EventsResource } from './resources/events';
+import { FulfillmentsResource } from './resources/fulfillments';
 import { MappingsResource } from './resources/mappings';
 import { OpportunitiesResource } from './resources/opportunities';
+import { PayoutsResource } from './resources/payouts';
 import { ProgramGroupsResource } from './resources/program-groups';
 import { ProgramsResource } from './resources/programs';
 import { ConversionsResource, RecordsResource, TransactionsResource } from './resources/records';
@@ -62,16 +66,16 @@ export class Siren {
   readonly events: EventsResource;
   /** Verify inbound webhook signatures and manage subscriptions. */
   readonly webhooks: WebhooksResource;
-  /** Manage API keys. Takes a signed-in dashboard session's token. */
-  readonly apiKeys: ApiKeysResource;
   /** Conversions: list, read, write and recover a lost create. An API key reads with `ledger:conversions:read`. */
   readonly conversions: ConversionsResource;
   /** Transactions: list, read, write and recover a lost credit. An API key reads with `ledger:transactions:read`. */
   readonly transactions: TransactionsResource;
   /** Reconciliation reader for obligations. An API key needs `ledger:obligations:read`. */
   readonly obligations: RecordsResource;
-  /** Reconciliation reader for payouts. An API key needs `ledger:payouts:read`. */
-  readonly payouts: RecordsResource;
+  /** Payouts: list and read one. An API key needs `ledger:payouts:read`. */
+  readonly payouts: PayoutsResource;
+  /** Fulfillments, the batches payouts are grouped in: list and read one. An API key needs `ledger:fulfillments:read`. */
+  readonly fulfillments: FulfillmentsResource;
   /** Collaborators, with their codes at `aliases` and program enrollments at `enrollments`. */
   readonly collaborators: CollaboratorsResource;
   /** Collaborator groups, with their members at `members`. */
@@ -94,6 +98,12 @@ export class Siren {
   readonly mappings: MappingsResource;
   /** The organization settings Siren shares with a connected site. */
   readonly settings: SettingsResource;
+  /**
+   * Siren apps: declare and manage them with a signed-in admin's session
+   * token, check each request Siren sends one, and answer it with the app's
+   * own API key.
+   */
+  readonly apps: AppsResource;
 
   /**
    * Reads only the options object's own properties: `apiKey`,
@@ -143,16 +153,16 @@ export class Siren {
    * `AccessTokenSource` is used as given. Requests go through `httpClient`,
    * or a `FetchHttpClient` when there is none.
    */
-  constructor(options: SirenOptions) {
-    const http = createHttpTransport(options);
+  constructor(options: SirenOptions = {}) {
+    const http = createHttpTransport(withEnvironmentKey(options));
 
     this.events = new EventsResource(http);
     this.webhooks = new WebhooksResource(http);
-    this.apiKeys = new ApiKeysResource(http);
     this.conversions = new ConversionsResource(http);
     this.transactions = new TransactionsResource(http);
     this.obligations = new RecordsResource(http, '/obligations');
-    this.payouts = new RecordsResource(http, '/payouts');
+    this.payouts = new PayoutsResource(http);
+    this.fulfillments = new FulfillmentsResource(http);
     this.collaborators = new CollaboratorsResource(http);
     this.collaboratorGroups = new CollaboratorGroupsResource(http);
     this.programs = new ProgramsResource(http);
@@ -164,7 +174,35 @@ export class Siren {
     this.credits = new CreditsResource(http);
     this.mappings = new MappingsResource(http);
     this.settings = new SettingsResource(http);
+    this.apps = new AppsResource(http);
   }
+}
+
+/**
+ * The options with `SIREN_API_KEY` from the environment as `apiKey`, when
+ * they name neither an `apiKey` nor an `accessToken` of their own. An
+ * explicit credential always wins. The copy holds the options' own values,
+ * read once, so the rules {@link createHttpTransport} applies still hold.
+ */
+function withEnvironmentKey(options: SirenOptions): SirenOptions {
+  const given: unknown = options ?? {};
+  // Look at each credential without reading it, so a getter is still read once, by createHttpTransport.
+  if (typeof given !== 'object' || given === null || names(given, 'apiKey') || names(given, 'accessToken')) return options;
+  const apiKey = readEnvironment('SIREN_API_KEY');
+  if (apiKey === undefined) return options;
+  const copy: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const name of ['httpClient', 'baseUrl', 'timeout', 'maxRetries'] as const) {
+    const value = ownOption(given, name);
+    if (value !== undefined) copy[name] = value;
+  }
+  copy.apiKey = apiKey;
+  return copy as SirenOptions;
+}
+
+/** True when `options` holds `name` itself, as a getter or as a value other than undefined. */
+function names(options: object, name: string): boolean {
+  const own = Object.getOwnPropertyDescriptor(options, name);
+  return own !== undefined && (own.get !== undefined || own.value !== undefined);
 }
 
 /**
@@ -179,17 +217,60 @@ export function createHttpTransport(options: SirenOptions): HttpTransport {
   const apiKey = ownOption(given, 'apiKey');
   const accessToken = ownOption(given, 'accessToken');
   const httpClient = ownOption(given, 'httpClient');
-  const baseUrl = ownOption(given, 'baseUrl');
+  // A baseUrl passed in code wins. Without one, SIREN_BASE_URL is the default, as `siren apps apply` writes it.
+  const passedBase = ownOption(given, 'baseUrl');
+  const environmentBase = passedBase === undefined ? readEnvironment('SIREN_BASE_URL') : undefined;
+  const baseUrl = passedBase !== undefined ? passedBase : environmentBase;
+  const baseName = environmentBase === undefined ? 'baseUrl' : 'SIREN_BASE_URL';
   const timeout = ownOption(given, 'timeout');
   const maxRetries = ownOption(given, 'maxRetries');
 
   return new HttpTransport({
     tokens: resolveTokens(apiKey, accessToken),
     client: resolveHttpClient(httpClient),
-    baseUrl: resolveBaseUrl(baseUrl),
+    baseUrl: baseUrlForKey(apiKey, resolveBaseUrl(baseUrl, baseName), baseUrl === undefined, baseName),
     timeout: resolveTimeout(timeout),
     maxRetries: resolveMaxRetries(maxRetries),
+    ...(typeof apiKey === 'string' ? { appKey: apiKey } : {}),
   });
+}
+
+/**
+ * Keeps a sandbox key and the live API apart. `resolved` is the base URL
+ * the options chose, and `defaulted` is true when they named none.
+ *
+ * - An `apiKey` that starts `sk_test_`, with no `baseUrl`, goes to
+ *   {@link SANDBOX_BASE_URL}, where Siren minted it.
+ * - An `sk_test_` key with a `baseUrl` on the live API's origin
+ *   (`https://api.sirenaffiliates.com`) is refused with `SirenError`.
+ * - An `sk_live_` key with a `baseUrl` on the sandbox's origin
+ *   (`https://sandbox.sirenaffiliates.com`) is refused with `SirenError`.
+ *
+ * Any other key or base passes as it is, so a local or UAT Cloud takes
+ * either kind. Origins are compared after `new URL`, so case and a trailing
+ * slash do not matter. No message quotes the key. `name` is where the base
+ * came from, `baseUrl` or `SIREN_BASE_URL`, and a refusal names it.
+ *
+ * @internal
+ */
+export function baseUrlForKey(apiKey: unknown, resolved: string, defaulted: boolean, name = 'baseUrl'): string {
+  const leaveOut = name === 'baseUrl' ? 'leave baseUrl out' : `unset ${name}`;
+  if (typeof apiKey !== 'string') return resolved;
+  const origin = new URL(resolved).origin;
+  if (apiKey.startsWith('sk_test_')) {
+    if (defaulted) return SANDBOX_BASE_URL;
+    if (origin === new URL(DEFAULT_BASE_URL).origin) {
+      throw new SirenError(
+        `Siren: a sandbox key (sk_test_) cannot reach the live API${name === 'baseUrl' ? '' : ` that ${name} names`}. ${leaveOut.charAt(0).toUpperCase()}${leaveOut.slice(1)} to reach the sandbox at ${SANDBOX_BASE_URL}, or use a live key (sk_live_) there.`,
+      );
+    }
+  }
+  if (apiKey.startsWith('sk_live_') && origin === new URL(SANDBOX_BASE_URL).origin) {
+    throw new SirenError(
+      `Siren: a live key (sk_live_) cannot reach the sandbox${name === 'baseUrl' ? '' : ` that ${name} names`}. Use a sandbox key (sk_test_) there, or ${leaveOut} to reach the live API at ${DEFAULT_BASE_URL}.`,
+    );
+  }
+  return resolved;
 }
 
 /**
@@ -212,7 +293,7 @@ function resolveTokens(apiKey: unknown, accessToken: unknown): AccessTokenSource
   }
   if (typeof apiKey === 'string' && apiKey.length > 0) return new StaticAccessToken(apiKey);
   throw new SirenError(
-    'Siren: an apiKey is required. Mint one in the Siren dashboard (Settings > API Keys), or pass an accessToken.',
+    'Siren: an apiKey is required. Pass apiKey, or set SIREN_API_KEY in the environment. Mint one in the Siren dashboard (Settings > API Keys), or pass an accessToken.',
   );
 }
 

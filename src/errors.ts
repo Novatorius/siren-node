@@ -55,8 +55,8 @@ export const ErrorCode = {
   /** 401: the organization revoked or deleted the connected site's connection. A {@link SiteDisconnectedError}. */
   SiteDisconnected: 'site_disconnected',
   /**
-   * 401: the route does not accept an API key, such as every `/api-keys`
-   * route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
+   * 401: the route does not accept an API key, such as every `/apps` and
+   * `/webhooks` route. It takes a signed-in dashboard session. An {@link ApiKeyNotAcceptedError}.
    */
   ApiKeyNotAccepted: 'api_key_not_accepted',
   /**
@@ -151,6 +151,109 @@ export const POLICY_ERROR_CODES: readonly ErrorCode[] = [
   ErrorCode.NotPermitted,
 ];
 
+/**
+ * The codes Siren's app routes send, beside {@link ErrorCode}, which mirrors
+ * Siren's shared list and holds none of these. Every app route sends its
+ * code as `error.code`, which the SDK's error carries as `code`: the answer
+ * route through lib/Apps/Core/Models/AppAnswerResult.php, and the others
+ * through the exceptions in lib/Apps/Service/Exceptions, each a
+ * `HasApiErrorCode` that saas/Strategies/RestStrategy.php writes to
+ * `error.code`. Those exceptions also send the code as
+ * `error.context.reason`, which the error carries as `data.reason`. Read it
+ * with {@link appErrorCode}, which takes `code` first, then `data.reason`.
+ */
+export const AppErrorCode = {
+  /** 403 from the answer route: the key's app is off. */
+  AppInactive: 'app_inactive',
+  /** 404 from the answer and resend routes: no such request in the org, or one sent to another app. */
+  RequestNotFound: 'app_request_not_found',
+  /** 409 from the answer route: a different answer was accepted first, and it stands. */
+  AlreadyAnswered: 'app_request_already_answered',
+  /**
+   * 409 from the answer route: a person answered an ask that does not need
+   * attention, such as one `pending` or `sent`, which the app may still
+   * answer. A person may answer only a request in `needs_attention`. The
+   * app's own key answers its own ask at any time before it is applied and
+   * before Siren stops waiting for it.
+   */
+  NotNeedingAttention: 'app_request_not_needing_attention',
+  /**
+   * 409 from the answer route: Siren stopped waiting for this ask. An
+   * incentive resolver's ask is dropped 24 hours after its sale's reward
+   * began to wait, and Siren then takes no answer to it.
+   */
+  Dropped: 'app_request_dropped',
+  /** 422 from the answer route: not a JSON object, over 16 KB, a tell, or an answer the feature's kind refuses. */
+  AnswerInvalid: 'app_answer_invalid',
+  /**
+   * 401 from the answer route: no bearer, or one Siren does not know. Siren's
+   * key check sends that 401 with no code (captures apps-answer-401-no-bearer
+   * and apps-answer-401-unknown-key), and `apps.requests.answer()` gives it
+   * this code. An org key that is no app's gets 404 `app_request_not_found`.
+   */
+  AnswerUnauthorized: 'app_answer_unauthorized',
+  /** 403 from the answer route: a signed-in person who may not change apps. */
+  AnswerForbidden: 'app_answer_forbidden',
+  /** 409 from the resend route: the request is applied, or it would be sent and its app is off. */
+  NotResendable: 'app_request_not_resendable',
+  /** 409 `data.reason` from `DELETE /apps/{key}`: a record still selects one of the app's features, or an ask is open. */
+  AppInUse: 'app_in_use',
+  /** 403 `data.reason` from declaring or turning on an app: the plan has no room for another active app. */
+  AppLimitReached: 'app_limit_reached',
+  /** 409 `data.reason`: another change to the org's apps held the lock for 5 seconds. Send again. */
+  AppChangeInProgress: 'app_change_in_progress',
+  /** 403 `data.reason`: a member limited to some stores may not change apps. */
+  OrgAccessRequired: 'org_access_required',
+  /**
+   * An app holds a key, an address or both: 422 for a new app that names
+   * neither, 409 for a change that would leave it with neither
+   * (AppPartRefusedException on Siren's int/preview-apps).
+   */
+  AppNeedsAPart: 'app_needs_a_part',
+  /**
+   * An app with an active feature holds a key and an address: 422 on a
+   * declaration, 409 on a change or a first feature, with `data.missing`
+   * naming `key`, `address` or both.
+   */
+  FeaturesNeedKeyAndAddress: 'app_features_need_key_and_address',
+  /** 409 from `POST /apps/{key}/key`: the app already holds an active key. Rotate it instead. */
+  KeyExists: 'app_key_exists',
+  /** 409: the app holds no active key to rotate or revoke, or a change sends `scopes` to an app with none. */
+  KeyMissing: 'app_key_missing',
+  /** 409: the app holds no address to rotate a secret for, test or send events to. */
+  AddressMissing: 'app_address_missing',
+  /** 400 with `data.limit`: the organization holds its cap of apps, 250, on or off. */
+  AppCapReached: 'app_cap_reached',
+  /**
+   * 409 from a deprecated `webhooks.subscriptions` call on an address an app
+   * owns (AppOwnedSubscriptionException). Use the app's own call, named in
+   * the deprecated method's doc comment.
+   */
+  AppOwnedSubscription: 'app_owned_subscription',
+} as const;
+
+/** Union of the {@link AppErrorCode} strings. */
+export type AppErrorCode = (typeof AppErrorCode)[keyof typeof AppErrorCode];
+
+/**
+ * The machine-readable code of an error from an app route: the error's
+ * `code` when Siren sent one in `error.code`, else `data.reason` from
+ * `error.context.reason`, else `undefined`. Siren's app refusals send the
+ * code, and most send the reason too, so either shape reads. Answers
+ * `undefined` for an error this SDK did not raise, and for an empty code or
+ * reason.
+ */
+export function appErrorCode(error: unknown): AppErrorCode | (string & {}) | undefined {
+  if (!(error instanceof SirenError)) return undefined;
+  if (typeof error.code === 'string' && error.code !== '') return error.code;
+  const data = error.data;
+  if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+    const reason = (data as { reason?: unknown }).reason;
+    if (typeof reason === 'string' && reason !== '') return reason;
+  }
+  return undefined;
+}
+
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<string>(Object.values(ErrorCode));
 
 /**
@@ -228,7 +331,7 @@ export class AuthenticationError extends SirenError {
 
 /**
  * 401 with `code` `api_key_not_accepted` — the key may be valid, but the route
- * takes a signed-in dashboard session instead, as every `apiKeys` route does.
+ * takes a signed-in dashboard session instead, as every `/apps` and `/webhooks` route does.
  * Retrying with the same key fails again.
  */
 export class ApiKeyNotAcceptedError extends AuthenticationError {
@@ -576,6 +679,34 @@ export class SignatureVerificationError extends SirenError {
   constructor(message: string, details: SirenErrorDetails = {}) {
     super(message, details);
     this.name = 'SignatureVerificationError';
+  }
+}
+
+/**
+ * A mistake in the app's own code that uses the request handler: a kind
+ * Siren never sends, a feature registered twice, an ask's function that
+ * returned nothing, or a bad argument to `on()`, `onEvent()`, `handle()` or
+ * `simulate()`. The PHP and Python SDKs throw the same class by the same
+ * name. It is a `SirenError`, so one `catch` still covers every SDK error.
+ */
+export class AppHandlerError extends SirenError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'AppHandlerError';
+  }
+}
+
+/**
+ * A tell's or a webhook event's function took longer than Siren waits for
+ * its reply (`TELL_TIME_LIMIT_SECONDS`, 8). The handler still replied 200,
+ * but Siren had stopped waiting, counted a timeout and sends it again, so
+ * the function ran twice. `onError` gets it, and `simulate()` returns it. The
+ * PHP and Python SDKs report the same case.
+ */
+export class AppSlowTellError extends SirenError {
+  constructor(message: string, details: SirenErrorDetails = {}) {
+    super(message, details);
+    this.name = 'AppSlowTellError';
   }
 }
 

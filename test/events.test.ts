@@ -129,7 +129,8 @@ describe('events.siteVisited', () => {
 
 describe('events.ingest', () => {
   it('POSTs the payload through unchanged to /event/{slug}', async () => {
-    const ctx = makeClient([emptyResponse(200, { 'X-Siren-OID': '9' })]);
+    // A custom event goes out with the app's short-lived token (slice C13).
+    const ctx = makeClient([jsonResponse(200, { access_token: 'jwt', token_type: 'Bearer', expires_in: 1200 }), emptyResponse(200, { 'X-Siren-OID': '9' })]);
     const payload = { userId: 42, points: 100, reason: 'review' };
     const result = await ctx.client.events.ingest('loyalty-points-earned', payload);
 

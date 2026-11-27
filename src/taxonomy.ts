@@ -190,7 +190,7 @@ export const FulfillmentStatus = {
 /** Union of the {@link FulfillmentStatus} strings. */
 export type FulfillmentStatus = (typeof FulfillmentStatus)[keyof typeof FulfillmentStatus];
 
-/** Statuses an API key can hold (`siren.apiKeys`). */
+/** Statuses an API key can hold, as Siren stores them. */
 export const ApiKeyStatus = {
   Active: 'active',
   Revoked: 'revoked',
@@ -329,3 +329,64 @@ export const CreditHoldStatus = {
 
 /** Union of the {@link CreditHoldStatus} strings. */
 export type CreditHoldStatus = (typeof CreditHoldStatus)[keyof typeof CreditHoldStatus];
+
+/**
+ * The kinds of feature an app may add, generated from Siren's registry
+ * snapshot (src/feature-kind.ts, from src/app-kinds.json). A record selects a
+ * feature by `app:{id}`. The payout kind is `payoutMethod`, and Siren refuses
+ * its old name.
+ */
+export { FeatureKind } from './feature-kind';
+
+/** Which door made an app (`App::getSource()` on Siren's int/preview-apps). It never changes. */
+export const AppSource = {
+  /** The app file, through `PUT /apps/{key}`. */
+  Code: 'code',
+  /** The dashboard's "Create it here", through `POST /apps`. */
+  Dashboard: 'dashboard',
+  /** A connected site. */
+  Site: 'site',
+} as const;
+
+/** Union of the {@link AppSource} strings. */
+export type AppSource = (typeof AppSource)[keyof typeof AppSource];
+
+
+/** Whether an app is on (`active`) or off (`inactive`). Siren sends an off app nothing. */
+export const AppStatus = {
+  Active: 'active',
+  Inactive: 'inactive',
+} as const;
+
+/** Union of the {@link AppStatus} strings. */
+export type AppStatus = (typeof AppStatus)[keyof typeof AppStatus];
+
+/**
+ * The statuses of a request Siren sent an app (lib/Apps/Core/Models/AppRequest.php).
+ * A tell ends at `delivered`. An ask ends at `applied`, once its answer has
+ * done its work, and is `applying` while one run of Siren's job applies it. `needs_attention` waits for a person or a late answer. An
+ * ask that holds a reward ends at `dropped` when the app didn't answer within
+ * 24 hours, and Siren went on without it.
+ */
+export const AppRequestStatus = {
+  Pending: 'pending',
+  Sent: 'sent',
+  Delivered: 'delivered',
+  Answered: 'answered',
+  Applying: 'applying',
+  Applied: 'applied',
+  NeedsAttention: 'needs_attention',
+  Dropped: 'dropped',
+} as const;
+
+/** Union of the {@link AppRequestStatus} strings. */
+export type AppRequestStatus = (typeof AppRequestStatus)[keyof typeof AppRequestStatus];
+
+/** A `tell` needs no answer. An `ask` waits for the app to post one. */
+export const AppRequestMode = {
+  Tell: 'tell',
+  Ask: 'ask',
+} as const;
+
+/** Union of the {@link AppRequestMode} strings. */
+export type AppRequestMode = (typeof AppRequestMode)[keyof typeof AppRequestMode];

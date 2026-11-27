@@ -202,13 +202,15 @@ describe('P10: events.ingest and a sale with no externalId are sent once', () =>
   const dropped = () => new TypeError('fetch failed');
 
   it('sends a custom event once on a 503, even with retries on, because Siren has no key to match a resent one', async () => {
-    const ctx = makeClient([unavailable(), emptyResponse(200)], { maxRetries: 2 });
+    // The first reply is the app token the custom event goes out with (slice C13).
+    const granted = jsonResponse(200, { access_token: 'jwt', token_type: 'Bearer', expires_in: 1200 });
+    const ctx = makeClient([granted, unavailable(), emptyResponse(200)], { maxRetries: 2 });
     const error = await ctx.client.events
       .ingest('loyalty-points-earned', { userId: 42, points: 100 })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).statusCode).toBe(503);
-    expect(ctx.calls()).toHaveLength(1);
+    expect(ctx.calls()).toHaveLength(2);
     expect(ctx.lastCall().url).toBe('https://api.sirenaffiliates.com/siren/v1/event/loyalty-points-earned');
   });
 

@@ -1,0 +1,348 @@
+[
+  {
+    "id": "control-break",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const apps = await run.siren().apps.list();",
+    "replace": "  const apps: App[] = [];",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key"
+    ]
+  },
+  {
+    "id": "control-harmless",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const apps = await run.siren().apps.list();",
+    "replace": "  const apps = [...(await run.siren().apps.list())];",
+    "expect": "survives",
+    "failing": []
+  },
+  {
+    "id": "control-malformed",
+    "file": "src/cli/io.ts",
+    "find": "this text is not in the file",
+    "replace": "x",
+    "expect": "refused",
+    "failing": []
+  },
+  {
+    "id": "control-wrong-reason",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  const apps = await run.siren().apps.list();",
+    "replace": "  const apps: App[] = [];",
+    "expect": "wrong-reason",
+    "failing": [
+      "apps-cli: the hidden password prompt in a terminal"
+    ]
+  },
+  {
+    "id": "e2e-1-question-before-raw-mode",
+    "file": "src/cli/io.ts",
+    "find": "      input.setRawMode(true);\n      output.write(question);",
+    "replace": "      output.write(question);\n      input.setRawMode(true);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the hidden password prompt > turns echo off before the question appears"
+    ]
+  },
+  {
+    "id": "e2e-1-mode-not-restored",
+    "file": "src/cli/io.ts",
+    "find": "      input.off('data', onData);\n      restore();",
+    "replace": "      input.off('data', onData);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the hidden password prompt > turns echo off before the question appears, and gives the mode back after Enter"
+    ]
+  },
+  {
+    "id": "e2e-2-session-edition-unchecked",
+    "file": "src/cli/targets.ts",
+    "find": "  if (session.edition !== edition) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > refuses a session stored for a sandbox when the target is now live"
+    ]
+  },
+  {
+    "id": "e2e-2-signed-in-skips-session-check",
+    "file": "src/cli/context.ts",
+    "find": "    assertSessionMatches(this.target, session, edition);\n",
+    "replace": "",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > checks every command that sends anything with a session"
+    ]
+  },
+  {
+    "id": "e2e-2-session-address-unchecked",
+    "file": "src/cli/targets.ts",
+    "find": "  if (session.baseUrl !== undefined && session.baseUrl !== target.baseUrl) {",
+    "replace": "  if (false && session.baseUrl !== target.baseUrl) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > refuses a session whose stored address is not the target"
+    ]
+  },
+  {
+    "id": "e2e-2-session-keeps-no-address",
+    "file": "src/cli/context.ts",
+    "find": "      edition,\n      baseUrl: this.target.baseUrl,\n",
+    "replace": "      edition,\n",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > keeps the edition and the address a session was made for"
+    ]
+  },
+  {
+    "id": "e2e-2-logout-sends-mismatched-tokens",
+    "file": "src/cli/commands/session.ts",
+    "find": "    assertSessionMatches(run.target, session, edition);\n  } catch (mismatch) {",
+    "replace": "    void edition;\n  } catch (mismatch) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > logs out of a session made for another edition"
+    ]
+  },
+  {
+    "id": "e2e-2-login-hint-without-live",
+    "file": "src/cli/targets.ts",
+    "find": "  const login = commandLine(target, 'login', edition === 'production');",
+    "replace": "  const login = commandLine(target, 'login');",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the edition the target reports now, on every command > refuses a session stored for a sandbox when the target is now live"
+    ]
+  },
+  {
+    "id": "e2e-3-hint-drops-live",
+    "file": "src/cli/targets.ts",
+    "find": "  return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;",
+    "replace": "  return `siren ${words}${target.addressFlag}`;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: apply of an app this machine holds no key for"
+    ]
+  },
+  {
+    "id": "e2e-3-hint-drops-address",
+    "file": "src/cli/targets.ts",
+    "find": "  return `siren ${words}${target.addressFlag}${live ? ' --live' : ''}`;",
+    "replace": "  return `siren ${words}${live ? ' --live' : ''}`;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: delete without --yes"
+    ]
+  },
+  {
+    "id": "e2e-3-rotate-hint-plain",
+    "file": "src/cli/commands/apply.ts",
+    "find": "Run ${run.command(`apps rotate ${key}`)} to make a new key and save it there.`);",
+    "replace": "Run siren apps rotate ${key} to make a new key and save it there.`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: apply of an app this machine holds no key for"
+    ]
+  },
+  {
+    "id": "e2e-3-init-hint-plain",
+    "file": "src/cli/commands/apply.ts",
+    "find": "then run ${input.command('apps apply')}.\\n`);",
+    "replace": "then run siren apps apply.\\n`);",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: apps init"
+    ]
+  },
+  {
+    "id": "e2e-3-plan-hint-plain",
+    "file": "src/cli/context.ts",
+    "find": "      return `The organization's trial has ended. Choose a plan in the Siren dashboard, then run ${login} again.`;",
+    "replace": "      return `The organization's trial has ended. Choose a plan in the Siren dashboard, then run siren login again.`;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on a live Siren: a refresh refused for the plan"
+    ]
+  },
+  {
+    "id": "e2e-3-sandbox-hint-gains-live",
+    "file": "src/cli/targets.ts",
+    "find": "export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = target.live): string {",
+    "replace": "export function commandLine(target: Pick<Target, 'addressFlag' | 'live'>, words: string, live: boolean = true): string {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: every hint names a command the person can run as printed > on the sandbox named by --sandbox or by nothing"
+    ]
+  },
+  {
+    "id": "e2e-4-uncoded-401-passes",
+    "file": "src/resources/app-requests.ts",
+    "find": "    throw unauthorizedAnswer(error);",
+    "replace": "    throw error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized"
+    ]
+  },
+  {
+    "id": "e2e-4-coded-401-recoded",
+    "file": "src/resources/app-requests.ts",
+    "find": " || (error.code !== undefined && error.code !== '')) return error;",
+    "replace": ") return error;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > gives the uncoded 401 of a missing or unknown bearer the code app_answer_unauthorized"
+    ]
+  },
+  {
+    "id": "e2e-5-answer-id-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  const id = requestIdArgument(input.args[0] ?? '');\n  const body",
+    "replace": "  const id = input.args[0] ?? '';\n  const body",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps answer apr_xyz"
+    ]
+  },
+  {
+    "id": "e2e-5-outcome-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (typeof outcome !== 'string' || outcome === '') throw",
+    "replace": "  if (typeof outcome !== 'string') throw",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read"
+    ]
+  },
+  {
+    "id": "e2e-5-resend-id-unchecked",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  const id = requestIdArgument(input.args[0] ?? '');\n  await run.signedIn();",
+    "replace": "  const id = input.args[0] ?? '';\n  await run.signedIn();",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps resend apr_xyz"
+    ]
+  },
+  {
+    "id": "e2e-5-app-key-after-list",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  const appKey = typeof values.app === 'string' ? appKeyArgument(values.app) : undefined;",
+    "replace": "  const appKey = typeof values.app === 'string' ? values.app : undefined;",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps requests --app Acme"
+    ]
+  },
+  {
+    "id": "e2e-5-key-reserved-word",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (key.length > 64 || !APP_KEY.test(key) || key === 'requests') {\n    throw new CliUsageError(\n      `An app key",
+    "replace": "  if (key.length > 64 || !APP_KEY.test(key)) {\n    throw new CliUsageError(\n      `An app key",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: arguments the tool cannot read > answers 2 in its own words, and sends nothing: siren apps on requests"
+    ]
+  },
+  {
+    "id": "e2e-9-attention-line-dropped",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (code === AppErrorCode.NotNeedingAttention) {",
+    "replace": "  if (code === 'not-a-code') {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > says a person may answer only a request that needs attention"
+    ]
+  },
+  {
+    "id": "e2e-9-unknown-code-hidden",
+    "file": "src/cli/commands/requests.ts",
+    "find": "  if (code !== undefined && !KNOWN_CODES.has(code)) return",
+    "replace": "  if (code === 'never-a-code-siren-sends') return",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps requests, answer and resend > prints Siren's message and its code for a refusal whose code the SDK does not know"
+    ]
+  },
+  {
+    "id": "e2e-9-code-unnamed",
+    "file": "src/errors.ts",
+    "find": "  NotNeedingAttention: 'app_request_not_needing_attention',",
+    "replace": "  NotNeedingAttention: 'app_request_needs_no_attention',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: apps.requests.answer > raises a person's answer to an ask that needs no attention"
+    ]
+  },
+  {
+    "id": "e2e-6-sale-line-hides-reason",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "  const why = result.reason === undefined ? '' : ` (${result.reason})`;",
+    "replace": "  const why = '';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > prints a sale that made a conversion apart from one that made none"
+    ]
+  },
+  {
+    "id": "e2e-6-sale-counts-nothing",
+    "file": "examples/apps/acme/sale.mjs",
+    "find": "    conversions: Array.isArray(body.conversions) ? body.conversions.length : 0,",
+    "replace": "    conversions: 0,",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the example app > prints a sale that made a conversion apart from one that made none"
+    ]
+  },
+  {
+    "id": "e2e-6-fake-gains-logo",
+    "file": "test/cli-fakes.ts",
+    "find": "org: { orgId: 3, orgName: 'Acme', orgSlug: 'acme', role: 'admin' }",
+    "replace": "org: membershipAcme",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the fakes carry the fields a real Siren Cloud sends > auth-register-org-201"
+    ]
+  },
+  {
+    "id": "e2e-6-subscription-without-app",
+    "file": "test/sdk-gaps-fakes.ts",
+    "find": "    appId: null,\n    dateCreated: '2026-11-01 08:00:00',\n    dateModified: '2026-11-01 08:00:00',",
+    "replace": "    dateCreated: '2026-11-01 08:00:00',\n    dateModified: '2026-11-01 08:00:00',",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the fakes carry the fields a real Siren Cloud sends > webhooks-retrieve-200-app-owned"
+    ]
+  },
+  {
+    "id": "e2e-7-no-localhost-note",
+    "file": "src/cli/commands/apply.ts",
+    "find": "  if (onThisMachine(params.url)) {",
+    "replace": "  if (false) {",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > says once, before sending, that a Siren in a container cannot reach an app on localhost"
+    ]
+  },
+  {
+    "id": "e2e-7-note-for-every-url",
+    "file": "src/cli/commands/apply.ts",
+    "find": "    return host === 'localhost' || host === '127.0.0.1';",
+    "replace": "    return host !== '';",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: siren apps init, apply and the app key > says once, before sending, that a Siren in a container cannot reach an app on localhost"
+    ]
+  },
+  {
+    "id": "e2e-8-prepare-dropped",
+    "file": "package.json",
+    "find": "\"prepare\": \"tsup\"",
+    "replace": "\"prepack\": \"tsup\"",
+    "expect": "caught",
+    "failing": [
+      "apps-cli: the siren command in the package > builds dist in prepare, which a git dependency install runs"
+    ]
+  }
+]

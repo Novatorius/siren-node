@@ -1,0 +1,25 @@
+{
+  "capturedAt": "2026-11-17T09:11:47.479Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/auth/register-org",
+  "query": null,
+  "request": {
+    "authorization": null,
+    "contentType": "application/json",
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": {
+      "orgName": "Apps E2E Three",
+      "email": "apps-e2e+1794906199@example.invalid",
+      "password": "<PASSWORD>",
+      "acceptTerms": true
+    }
+  },
+  "response": {
+    "status": 409,
+    "contentType": "application/json",
+    "body": {
+      "error": "An account with that email already exists. Try signing in instead."
+    }
+  }
+}

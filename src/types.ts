@@ -1,14 +1,17 @@
-import type { ApiKeyScope } from './api-key-scopes';
+import type { ApiKeyRecordScope, ApiKeyScope } from './api-key-scopes';
 import type { WebhookEventType } from './event-types';
-import type { RefundKind } from './taxonomy';
+import type { RefundKind, WebhookSubscriptionStatus } from './taxonomy';
 import type { AccessTokenSource } from './auth/access-token-source';
 import type { HttpClient } from './http';
 
 /** Options every `Siren` client takes, whichever credential it uses. */
 export interface SirenBaseOptions {
   /**
-   * API base URL. Defaults to `https://api.sirenaffiliates.com/siren/v1`.
-   * Point this at staging or a local dev server as needed. It must be an
+   * API base URL. Defaults to `SIREN_BASE_URL` from the environment, which
+   * `siren apps apply` writes beside the key, then to
+   * `https://api.sirenaffiliates.com/siren/v1`, or the sandbox for an
+   * `sk_test_` key. A value given here wins over the variable. Point this at
+   * staging or a local dev server as needed. It must be an
    * http or https URL with no user name or password in it, made only of
    * visible ASCII, U+0021 to U+007E, with no `?`, `#`, backslash or `@`. It
    * starts with `http://` or `https://` and a host that holds no `%`. Give
@@ -47,8 +50,11 @@ export interface SirenBaseOptions {
 
 /** A client that sends a fixed API key. */
 export interface SirenApiKeyOptions extends SirenBaseOptions {
-  /** Your Siren API key (`sk_live_...`). */
-  apiKey: string;
+  /**
+   * Your Siren API key (`sk_live_...`). Left out, `new Siren()` reads
+   * `SIREN_API_KEY` from the environment.
+   */
+  apiKey?: string;
   accessToken?: never;
 }
 
@@ -65,7 +71,9 @@ export interface SirenAccessTokenOptions extends SirenBaseOptions {
 
 /**
  * Options for `new Siren()`. Pass `apiKey` or `accessToken`, never both:
- * both, neither, or an empty one throws `SirenError` at construction.
+ * both, or an empty one, throws `SirenError` at construction. With neither,
+ * `new Siren()` reads `SIREN_API_KEY` from the environment, and throws
+ * when that is unset too.
  */
 export type SirenOptions = SirenApiKeyOptions | SirenAccessTokenOptions;
 
@@ -118,6 +126,31 @@ export interface IngestOptions {
    * a referral landing, sets a short one.
    */
   timeout?: number;
+}
+
+/**
+ * A browser token for one custom event, as `events.browserToken` answers it
+ * and `events.browserTokenHandler` sends it to a page. A page sends the
+ * event to `url` with `?access_token=` and the token, from a website on the
+ * event's allowed domains.
+ */
+export interface BrowserToken {
+  /** The token. It works only for this one event, and only from a page. */
+  token: string;
+  /** The seconds it has left. */
+  expiresIn: number;
+  /** The event's full send address, `{baseUrl}/event/{eventKey}`. */
+  url: string;
+}
+
+/** Options for `events.browserTokenHandler`. */
+export interface BrowserTokenHandlerOptions {
+  /**
+   * The event keys a page may ask for. Leave it out to let Siren decide,
+   * since Siren gives a browser token only for the app's own events that
+   * allow a domain.
+   */
+  events?: readonly string[];
 }
 
 /** A sale line item. `amount` is the per-unit price in major currency units. */
@@ -293,6 +326,12 @@ export interface WebhookSubscription {
   propertyId?: number | null;
   /** The connected site that manages the subscription, if any. */
   oauthClientId?: string | null;
+  /**
+   * The app that owns the subscription, or `null`. An app's subscription
+   * changes only when the app is declared again, and Siren refuses an update
+   * or delete of it with 409 `app_owned_subscription`.
+   */
+  appId?: number | null;
   dateCreated?: string | null;
   dateModified?: string | null;
   /** @deprecated Siren never sends this field. Read `dateCreated`. */
@@ -300,76 +339,60 @@ export interface WebhookSubscription {
 }
 
 /**
- * A freshly created subscription. `signingSecret` is returned exactly once —
- * store it; it cannot be retrieved later.
+ * Parameters for `webhooks.subscriptions.update`. Send only the fields to
+ * change. Siren leaves a field it is not sent as it is.
  */
-export interface CreatedWebhookSubscription extends WebhookSubscription {
-  signingSecret: string;
-}
-
-/** Parameters for `webhooks.subscriptions.create`. */
-export interface CreateWebhookSubscriptionParams {
-  /** The URL Siren will POST deliveries to. */
-  targetUrl: string;
-  /** Event types to subscribe to. `["*"]` subscribes to all. */
-  events: Array<WebhookEventType | (string & {})>;
+export interface UpdateWebhookSubscriptionParams {
+  /** The URL Siren will POST deliveries to. It must be a public https endpoint. */
+  targetUrl?: string;
+  /** Event types to subscribe to, replacing the current list. `["*"]` subscribes to all. */
+  events?: Array<WebhookEventType | (string & {})>;
+  /** `paused` stops deliveries and `active` starts them again. */
+  status?: WebhookSubscriptionStatus;
+  /** A note for the dashboard. Send `''` to clear it, since Siren ignores `null` here. */
   description?: string;
 }
 
-/** An API key as returned by list (never includes raw key material). */
-export interface ApiKey {
-  id: number;
-  keyPrefix?: string;
-  label: string;
-  status?: string;
-  scopes?: string[];
-  /**
-   * The store (Property) the key is bound to, or `null` for an
-   * organization-wide key. A bound key stamps its store on the events it
-   * sends and reads only that store's conversions, transactions and
-   * obligations.
-   */
-  propertyId?: number | null;
-  expiresAt?: string | null;
-  lastUsedAt?: string | null;
-  revokedAt?: string | null;
-  dateCreated?: string | null;
-  dateModified?: string | null;
-  /** @deprecated Siren never sends this field. Read `dateCreated`. */
-  createdAt?: string;
+/**
+ * What `webhooks.subscriptions.test` answers. Siren sends one signed
+ * `webhook.test` delivery at once and answers 200 whatever the endpoint did,
+ * so read `delivered` to know whether it arrived.
+ */
+export interface WebhookTestResult {
+  /** `true` when the endpoint answered 2xx. */
+  delivered: boolean;
+  /** The status the endpoint answered, or `null` when Siren could not reach it. */
+  httpStatus: number | null;
+  /** Why the delivery did not arrive, or `null`. */
+  error: string | null;
+  /** Always `webhook.test`. */
+  eventType: string;
 }
 
 /**
- * A freshly created API key. `rawKey` (`sk_live_...`) is returned exactly
- * once — store it; it cannot be retrieved later.
+ * One delivery attempt record, as `webhooks.subscriptions.deliveries` lists
+ * it. Dates are `Y-m-d H:i:s` in UTC, as Siren stores them.
  */
-export interface CreatedApiKey extends ApiKey {
-  rawKey: string;
-}
-
-/** Parameters for `apiKeys.create`. */
-export interface CreateApiKeyParams {
-  /** Human-readable label, e.g. `"Production server"`. Optional, and left out of the request when not given. */
-  label?: string;
-  /**
-   * Scopes to grant, from {@link ApiKeyScope}. At least one is required.
-   * Event scopes (`event:*` or `event:{slug}`) send events. The ledger scopes,
-   * such as `ledger:conversions:read`, read conversions, transactions,
-   * obligations and payouts. `webhook-subscriptions:read` and
-   * `webhook-subscriptions:manage` read and manage webhook subscriptions.
-   * Siren answers 400 for an older resource scope such as `programs:read` or
-   * `conversions:read`.
-   */
-  scopes: Array<ApiKeyScope | (string & {})>;
-  /** When the key stops working, as an ISO 8601 date. Omit for a key that never expires. */
-  expiresAt?: string;
-  /**
-   * Bind the key to one store (Property). Siren stamps it on the key's
-   * events, and the key reads only that store's conversions, transactions and
-   * obligations. A bound key is refused on payouts and webhook subscriptions
-   * with a `StoreKeyNotAllowedError`.
-   */
-  propertyId?: number;
+export interface WebhookDelivery {
+  id: number;
+  webhookSubscriptionId: number;
+  eventType: WebhookEventType | (string & {});
+  /** The `X-Siren-Delivery` value the endpoint received. */
+  eventId: string;
+  /** The body Siren sent, decoded. */
+  payload: Record<string, unknown>;
+  /** `pending`, `delivered` or `failed`. */
+  status: 'pending' | 'delivered' | 'failed' | (string & {});
+  attemptCount: number;
+  httpStatusCode: number | null;
+  /** The first 200 bytes of the endpoint's answer, or `null` when it gave no HTTP answer. */
+  responseBody: string | null;
+  errorMessage: string | null;
+  /** An estimate of the next try. The queue decides the real wait. */
+  nextRetryAt: string | null;
+  deliveredAt: string | null;
+  dateCreated: string | null;
+  dateModified: string | null;
 }
 
 /**
@@ -426,13 +449,12 @@ export interface WebhookCatalogEntry {
 }
 
 /**
- * One scope a new API key may be given, as `GET /api-keys/scopes` lists it,
- * such as
+ * One scope an app's key may hold, as `GET /apps/scopes` lists it, such as
  * `{ scope: 'ledger:conversions:read', resource: 'ledger', action: 'conversions:read', label: 'Read conversions' }`.
  */
 export interface ApiKeyScopeEntry {
-  /** The scope string to pass to `apiKeys.create`. */
-  scope: ApiKeyScope | (string & {});
+  /** The scope string to pass to `apps.createKey()` or name in an app's `scopes`. */
+  scope: ApiKeyScope | ApiKeyRecordScope | (string & {});
   /** The group the scope belongs to, such as `events` or `ledger`. */
   resource: string;
   /** What the scope allows within its group, such as `conversions:read`. */
@@ -442,15 +464,14 @@ export interface ApiKeyScopeEntry {
 }
 
 /**
- * The scopes a new API key may be given, grouped by resource, from
- * `GET /api-keys/scopes`. Siren lists the event scopes under `events`, the
- * ledger read scopes under `ledger`, the webhook scopes under
- * `webhook-subscriptions`, and the record scopes under one `records:*` group
- * each, such as `records:programs`. It leaves out a group with no scopes.
+ * The scopes an app's key may hold, grouped by resource, from
+ * `GET /apps/scopes` (ApiKeyScopePolicy::issuableGroups()). Siren lists the
+ * event scopes under `events`, the ledger read scopes under `ledger`, and
+ * the record scopes under one `records:*` group each, such as
+ * `records:programs`. It leaves out a group with no scopes.
  */
 export interface ApiKeyScopeGroups {
   events?: ApiKeyScopeEntry[];
   ledger?: ApiKeyScopeEntry[];
-  'webhook-subscriptions'?: ApiKeyScopeEntry[];
   [resource: string]: ApiKeyScopeEntry[] | undefined;
 }

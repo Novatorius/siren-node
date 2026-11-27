@@ -1,0 +1,12 @@
+[38;5;49m✓[0m Created [1msiren.app.json[0m
+
+  [2mApp[0m       acme-payouts
+  [2mFeature[0m   notify · Post-conversion action
+  [2mIgnored[0m   .env.sandbox, .env.live, .env.*.tmp (added to .gitignore)
+
+[1mNext[0m
+  1  Set SIREN_APP_URL to your handler's https address   [2min .env or your shell[0m
+  2  [1msiren apps apply[0m
+
+[2m› Siren sends requests only to https, so run your handler on an https address.[0m
+[2m› Add features in siren.app.json. Your editor completes them.[0m

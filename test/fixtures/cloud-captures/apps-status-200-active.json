@@ -1,0 +1,85 @@
+{
+  "capturedAt": "2026-11-17T09:09:25.112Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 1557b0030, http://localhost:33918",
+  "route": "POST /siren/v1/apps/acme-payouts/status",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": "application/json",
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": {
+      "status": "active"
+    }
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "id": 1,
+      "key": "acme-payouts",
+      "name": "Acme",
+      "description": "Siren's example app.",
+      "status": "active",
+      "webhookSubscriptionId": 1,
+      "apiKeyId": 3,
+      "dateCreated": "2026-11-17 09:05:22",
+      "dateModified": "2026-11-17 09:05:22",
+      "url": "http://host.docker.internal:33915",
+      "events": [],
+      "scopes": [
+        "event:site-visited",
+        "event:sale"
+      ],
+      "apiKeyPrefix": "sk_test_9ce509ef",
+      "items": [
+        {
+          "id": 1,
+          "ref": "app:1",
+          "appId": 1,
+          "kind": "postConversionAction",
+          "key": "notify-crm",
+          "name": "Tell the CRM",
+          "description": "",
+          "settings": {},
+          "status": "active",
+          "dateCreated": "2026-11-17 09:05:22",
+          "dateModified": "2026-11-17 09:05:22"
+        },
+        {
+          "id": 2,
+          "ref": "app:2",
+          "appId": 1,
+          "kind": "fulfillmentMethod",
+          "key": "acme-ledger",
+          "name": "Acme ledger",
+          "description": "",
+          "settings": {
+            "currencies": [
+              "USD"
+            ],
+            "answerWindowMinutes": 1
+          },
+          "status": "active",
+          "dateCreated": "2026-11-17 09:05:22",
+          "dateModified": "2026-11-17 09:05:22"
+        },
+        {
+          "id": 4,
+          "ref": "app:4",
+          "appId": 1,
+          "kind": "distributionResolver",
+          "key": "acme-split",
+          "name": "Acme split",
+          "description": "",
+          "settings": {
+            "answerWindowMinutes": 1
+          },
+          "status": "active",
+          "dateCreated": "2026-11-17 09:08:48",
+          "dateModified": "2026-11-17 09:08:48"
+        }
+      ]
+    }
+  }
+}

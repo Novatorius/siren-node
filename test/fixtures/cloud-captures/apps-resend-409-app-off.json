@@ -1,0 +1,27 @@
+{
+  "capturedAt": "2026-11-17T12:36:49.787Z",
+  "cloud": "local sandbox Cloud, Novatorius/siren feat/apps 57999d085, http://localhost:33918",
+  "route": "POST /siren/v1/apps/requests/apr_e221f712e2dd08c2daa566d3ac5ce340/resend",
+  "query": null,
+  "request": {
+    "authorization": "Bearer <JWT>",
+    "contentType": null,
+    "userAgent": "siren-sdk-typescript/0.3.0",
+    "idempotencyKey": null,
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "contentType": "application/json",
+    "body": {
+      "error": {
+        "message": "This request cannot be sent again: it is applied, or its app is off.",
+        "code": "app_request_not_resendable",
+        "context": {
+          "reason": "app_request_not_resendable",
+          "status": "needs_attention"
+        }
+      }
+    }
+  }
+}

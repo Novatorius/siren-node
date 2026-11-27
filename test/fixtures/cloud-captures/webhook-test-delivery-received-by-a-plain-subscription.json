@@ -1,0 +1,53 @@
+{
+  "capturedAt": "2026-11-17T09:08:12.601Z",
+  "what": "The POST Siren sent to a plain subscription on POST /webhooks/{id}/test, as the receiver got it. The signatures are real and checked by hand against the subscription secret, which is not kept.",
+  "method": "POST",
+  "url": "/hook",
+  "headers": [
+    [
+      "Host",
+      "host.docker.internal:33916"
+    ],
+    [
+      "Accept",
+      "*/*"
+    ],
+    [
+      "Content-Type",
+      "application/json"
+    ],
+    [
+      "X-Siren-Signature",
+      "sha256=d5abfb5402aa29f44881e48e33a53bd8e6edc6b1b98a1bb291e3a3f8ca705f34"
+    ],
+    [
+      "X-Siren-Event",
+      "webhook.test"
+    ],
+    [
+      "X-Siren-Delivery",
+      "evt_ea49781c24b207bd7645ba710c293b11"
+    ],
+    [
+      "User-Agent",
+      "Siren-Webhooks/1.0"
+    ],
+    [
+      "X-Siren-Timestamp",
+      "1794906492"
+    ],
+    [
+      "X-Siren-Signature-V2",
+      "t=1794906492,v1=a0b95645f32bc2d7cea94f54ea96b1c5a3a8ad90a6af37c97f6faf3053557640"
+    ],
+    [
+      "Content-Length",
+      "117"
+    ]
+  ],
+  "body": {
+    "test": true,
+    "webhookId": 2,
+    "message": "A test delivery from Siren. Real events carry the same headers and signature."
+  }
+}
