@@ -367,9 +367,11 @@ export class Style {
     const natural = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
     const widths = [...natural];
     const total = () => widths.reduce((sum, one) => sum + one, 0) + 2 * (widths.length - 1);
-    // Narrow the widest column first, a column at a time, down to its header or MIN_COLUMN.
+    // The longest word in each column, which wrapping can't split, so a column narrower than it would push the rest out of line.
+    const longestWord = headers.map((_, column) => Math.max(0, ...rows.flatMap((row) => (row[column] ?? '').split(' ').map(visibleLength))));
+    // Narrow the widest column first, a column at a time, down to its header, MIN_COLUMN or its longest word.
     while (total() > width) {
-      const floor = (column: number) => Math.min(natural[column]!, Math.max(visibleLength(headers[column] ?? ''), MIN_COLUMN));
+      const floor = (column: number) => Math.min(natural[column]!, Math.max(visibleLength(headers[column] ?? ''), MIN_COLUMN, longestWord[column]!));
       const candidates = widths.map((one, column) => [one - floor(column), column] as const).filter(([room]) => room > 0);
       if (candidates.length === 0) break;
       const [, widest] = candidates.reduce((best, next) => (widths[next[1]]! > widths[best[1]]! ? next : best));
