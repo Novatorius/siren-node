@@ -95,8 +95,20 @@ async function handler(answer: (received: Received) => { status: number; body: s
   return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/siren`, received };
 }
 
+/**
+ * Stops a handler. The global fetch keeps its socket to the handler open
+ * between requests. Node 19 and later close an idle socket like that on
+ * server.close(), and Node 18 waits for it to time out, so this closes the
+ * idle ones first, as Node 19 does.
+ */
+function stop(running: Server): Promise<unknown> {
+  const closing = new Promise((done) => running.close(done));
+  running.closeIdleConnections();
+  return closing;
+}
+
 afterEach(async () => {
-  if (server !== undefined) await new Promise((done) => server!.close(done));
+  if (server !== undefined) await stop(server);
   server = undefined;
 });
 
@@ -167,7 +179,7 @@ describe('siren listen', () => {
     const gone = harness([opened(), polled([delivery()]), reported('failed'), closed()], stopAtFirstWait);
     gone.signedIn();
     const port = (server!.address() as AddressInfo).port;
-    await new Promise((done) => server!.close(done));
+    await stop(server!);
     server = undefined;
     expect(await gone.run(['listen', '--app', KEY, '--forward-to', `localhost:${port}/siren`]), gone.err()).toBe(130);
     expect(gone.out()).toMatch(/ask {5}acme-ledger {9}--- /);
