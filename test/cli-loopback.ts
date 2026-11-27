@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -31,6 +31,11 @@ export function buildCli(): string {
     ['src/cli/index.ts', '--no-config', '--format', 'esm', '--out-dir', out, '--target', 'node18', '--platform', 'node', '--silent'],
     { cwd: root, stdio: 'ignore' },
   );
+  // The package's own package.json says "type": "module", which makes Node
+  // load dist/cli.js as ESM. A temporary folder has no such file, and Node
+  // before 20.19 and 22.7 does not detect ESM syntax on its own, so it would
+  // load index.js as CommonJS and stop at the first import.
+  writeFileSync(join(out, 'package.json'), '{ "type": "module" }\n');
   return join(out, 'index.js');
 }
 

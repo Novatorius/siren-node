@@ -500,29 +500,45 @@ export interface SignInMethod {
   signIn(auth: SessionAuthClient, io: CliIo, request: { email?: string; passwordFromStdin: boolean; orgId?: number }): Promise<LoginResult>;
 }
 
+/** Where the password login asks its questions: the terminal's prompts, or the logo screen's. */
+export interface LinePrompts {
+  prompt(question: string): Promise<string>;
+  promptSecret(question: string): Promise<string>;
+}
+
+/** What the password login shows while it asks and while Siren checks the password. */
+export interface PasswordSignInView extends LinePrompts {
+  /** Shows that the login is on its way while `work` runs, and answers what it answers. */
+  during<T>(work: Promise<T>): Promise<T>;
+}
+
 /**
  * Email and password. The password comes from a hidden prompt, or from
  * standard input with `--password-stdin`, and is never a flag, because a
  * flag lands in the shell's history and the process list. It is sent once
  * to `POST /auth/login` and kept nowhere.
  *
- * Asks for the email at a prompt when `request.email` is absent. Throws
+ * Asks for the email at a prompt when `request.email` is absent, at the
+ * view's prompts when there is a view, else at the terminal's. Throws
  * `CliUsageError` when it would need a prompt and `io.interactive` is false,
  * and `CliRefusal` for an empty email or password, before sending.
  */
 export class PasswordSignIn implements SignInMethod {
+  constructor(private readonly view?: PasswordSignInView) {}
+
   async signIn(auth: SessionAuthClient, io: CliIo, request: { email?: string; passwordFromStdin: boolean; orgId?: number }): Promise<LoginResult> {
-    const email = request.email ?? (await askLine(io, 'Email: ', '--email'));
-    const password = await readPassword(io, request.passwordFromStdin);
+    const email = request.email ?? (await askLine(io, 'Email: ', '--email', this.view));
+    const password = await readPassword(io, request.passwordFromStdin, this.view);
     if (email.trim() === '') throw new CliRefusal('No email given.', { why: 'Siren needs an email address to log you in.', fix: 'siren login --password --email you@example.com' });
-    return auth.login(email.trim(), password, request.orgId);
+    const login = auth.login(email.trim(), password, request.orgId);
+    return this.view === undefined ? login : this.view.during(login);
   }
 }
 
 /** A line typed at a prompt, or `CliUsageError` naming `flag` when no person can answer one. */
-export async function askLine(io: CliIo, question: string, flag: string): Promise<string> {
+export async function askLine(io: CliIo, question: string, flag: string, prompts: LinePrompts = io): Promise<string> {
   if (!io.interactive) throw new CliUsageError(`Pass ${flag}, since there is no terminal to ask in.`);
-  return (await io.prompt(question)).trim();
+  return (await prompts.prompt(question)).trim();
 }
 
 /**
@@ -530,10 +546,10 @@ export async function askLine(io: CliIo, question: string, flag: string): Promis
  * off for `--password-stdin`, else typed at a hidden prompt. Refuses an
  * empty one. The value is never printed.
  */
-export async function readPassword(io: CliIo, fromStdin: boolean): Promise<string> {
+export async function readPassword(io: CliIo, fromStdin: boolean, prompts: LinePrompts = io): Promise<string> {
   let password: string;
   if (fromStdin) password = (await io.readStdin()).replace(/\r?\n$/, '');
-  else if (io.interactive) password = await io.promptSecret('Password: ');
+  else if (io.interactive) password = await prompts.promptSecret('Password: ');
   else throw new CliUsageError('Pass --password-stdin and send the password on standard input, since there is no terminal to ask in.');
   if (password === '') {
     throw new CliRefusal('No password given.', {

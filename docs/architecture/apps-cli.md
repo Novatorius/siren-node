@@ -258,6 +258,22 @@ instant it appeared got in while echo was still on. The checkpoint saw that in 3
 test/cli-hidden-prompt.test.ts saw it in 45 of 60 runs before the fix and in none of 180 after.
 `PasswordSignIn` is one `SignInMethod`, which `--password` or `--password-stdin` chooses.
 
+Where the hook may play, `--password` asks beside the logo (src/cli/hook.ts, `startPasswordStage`).
+Alex, 2026-11-27: "Animate while also showing the login at the same time." The first prompt draws
+the whole screen at once: the logo on the left with its halves floating apart, and on the right the
+wordmark, the Siren's host, `Email: ` and `Password: `, with the cursor at the first prompt. Standard
+input goes into raw mode before anything is drawn and stays there until the screen closes, so the
+terminal never echoes and the password is never drawn. A timer moves the halves every 50
+milliseconds. It saves the cursor, redraws only the logo's columns and the status line, and puts
+the cursor back, so a key is echoed where it was typed and never waits for a frame. Keys typed ahead
+of a prompt, Enter included, wait for it. Backspace and Ctrl-U edit the line, and arrow keys are
+ignored. While Siren checks the password a spinner turns beside "Logging in". The halves grip and
+"✓ Logged in as …" takes the spinner's place when Siren accepts it, and they drift away before the ✗
+line when it refuses. Ctrl-C stops the login at a prompt or during the check, and nothing is kept.
+The screen gives way to the plain prompts under every skip rule of the hook, when standard input or
+standard error is not a terminal, and when the logo and the prompts with room to type do not fit
+side by side or stacked.
+
 `DeviceSignIn` is the other, and `siren login` uses it by default in a terminal (Alex's ruling
 M105, contract/cli-signin.md in the run folder). It follows RFC 8628:
 
@@ -410,11 +426,20 @@ why and fix in one sentence. `--json` output is never styled. Exit codes do not 
 
 ## The hook on first run
 
-The first time a person runs the tool in a terminal, it plays Siren's hook (src/cli/hook.ts). The
-two halves of the logo slide in and grip, 39 frames 50 milliseconds apart, about 1.9 seconds. Then
-the logo floats: it lifts up to one row, in half-row steps, into a blank row above it and settles,
-over a dim shadow that narrows as it rises, 20 frames more. The shadow goes when the logo
-settles, so no stray line sits above the next output. The whole run takes 2.95 seconds.
+The first time a person runs the tool in a terminal, it shows Siren's hook (src/cli/hook.ts) beside
+the command, never before it (Alex, 2026-11-27: "the animation should not block"). The block is
+drawn at once and the command starts straight away. A timer moves the logo while the command works,
+and the command's first line, prompt or screen write stills it to the last frame first, so its output
+never lands inside the animation. A quick command such as `apps init` shows the still logo, and one
+that waits on Siren shows it moving meanwhile. The first-run hook never reads standard input, so keys
+typed ahead reach the command and Ctrl-C stops the command as it always does. `siren login` shows
+the logo itself, beside the code or beside the password prompts, so it plays no first-run hook.
+
+`siren` with nothing after it plays the whole hook, since the card is its whole job. The two halves
+of the logo slide in and grip, 39 frames 50 milliseconds apart, about 1.9 seconds. Then the logo
+floats: it lifts up to one row, in half-row steps, into a blank row above it and settles, over a dim
+shadow that narrows as it rises, 20 frames more. The shadow goes when the logo settles, so no stray
+line sits above the next output. The whole run takes 2.95 seconds.
 
 The text never waits for the logo. Every line is printed with the first frame, and each later frame
 redraws only the logo's columns in place. In a terminal wide enough for the logo and the longest
@@ -447,10 +472,10 @@ truecolor when `COLORTERM` is `truecolor` or `24bit`, else as color 49 of 256.
 It never plays when standard output is not a terminal, under `CI` (any value but `false` or `0`),
 under `NO_COLOR` (any value but empty), when `TERM` is `dumb`, with `--quiet` or `--json`, in a
 terminal smaller than 28 by 20, or in a Windows console other than Windows Terminal. Each of those
-skips costs no time and leaves first run for later. Any key jumps to the still logo. Ctrl-C stops
-the command with exit code 130. The cursor comes back and standard input leaves raw mode however
-it ends, also when the process exits mid-way. When standard input is not a terminal, as with
-`--password-stdin`, the hook never reads it. `state.json` in the config folder records that it
+skips costs no time and leaves first run for later. On `siren` alone any key jumps to the still
+logo, and Ctrl-C stops it with exit code 130. The cursor comes back and standard input leaves raw
+mode however it ends, also when the process exits mid-way. When standard input is not a terminal,
+as with `--password-stdin`, the hook never reads it. `state.json` in the config folder records that it
 played.
 
 ## Sandbox and live
