@@ -94,7 +94,8 @@ export async function appsInit(input: CommandInput): Promise<number> {
   }
   const missing = await keepEnvFilesOutOfGit(io.cwd);
   const style = styleFor(io, 'stdout', {});
-  const live = values.live === true;
+  // Live when --live was typed, or when the Siren a hint reaches is live, as after a live login: the hints then carry --live (review round 1, C10).
+  const live = values.live === true || /(?:^| )--live(?: |$)/.test(input.command('apps apply'));
   io.stdout(
     style.report({
       headline: `Created ${style.bold(APP_FILE_NAME)}`,
@@ -106,14 +107,14 @@ export async function appsInit(input: CommandInput): Promise<number> {
       ],
       // A live Siren refuses siren listen, so its first app needs SIREN_APP_URL.
       next: live
-        ? [{ text: style.command(input.command('apps apply')) }]
+        ? [{ text: 'Set SIREN_APP_URL to your https address', aside: 'in .env' }, { text: style.command(input.command('apps apply')) }]
         : [{ text: style.command(input.command('apps apply')) }, { text: style.command(input.command('listen --forward-to localhost:3000/siren')) }],
       tips: [
         // Review round 1, C2: a sandbox older than siren listen needs the address too, and apply says so if it does.
         ...(live
           ? []
           : ['On a sandbox, you may leave SIREN_APP_URL unset, and siren listen sends its requests to your machine. A sandbox without siren listen yet needs the address, and apply says so.']),
-        'A live organization needs SIREN_APP_URL set to an https address.',
+        ...(live ? ['A live app needs SIREN_APP_URL set to an https address Siren can reach, since forwarding with listen works on a sandbox only.'] : ['A live organization needs SIREN_APP_URL set to an https address.']),
         `Add features in ${APP_FILE_NAME}. Your editor completes them.`,
       ],
     }),
