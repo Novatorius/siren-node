@@ -8,7 +8,7 @@ import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { fieldProblems } from '../validation';
 import type { CommandContext, CommandInput } from '../context';
-import { REPORT_WIDTH, clean, hanging, styleFor, visibleLength, wrapWords } from '../style';
+import { clean, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError, hostName } from '../targets';
 
@@ -277,7 +277,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
       ? { header: 'WHY', cap: Number.POSITIVE_INFINITY, cell: (row) => (row.lastError ? out.red(clean(row.lastError)) : out.amber('No answer')) }
       : { header: 'STATE', cap: 17, cell: (row) => stateCell(out, row) },
   ];
-  const width = out.rich ? (io.screen?.size?.columns ?? REPORT_WIDTH) : Number.POSITIVE_INFINITY;
+  const width = out.rich ? out.width : Number.POSITIVE_INFINITY;
 
   if (values.follow !== true) {
     const rows = await read();
@@ -305,7 +305,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
     // A terminal shows the newest TERMINAL_ROWS. Piped and --json, the list is whole.
     const listed = out.rich ? rows.slice(-TERMINAL_ROWS) : rows;
     const shown = fitting(columns, listed, width, false);
-    for (const line of out.table(shown.map((column) => column.header), listed.map((row) => shown.map((column) => cut(column.cell(row), column.cap))), width)) run.print(line);
+    for (const line of out.table(shown.map((column) => column.header), listed.map((row) => shown.map((column) => column.cell(row))), width)) run.print(line);
     const newest = label(rows.at(-1)!.id);
     run.print('');
     const hidden = rows.length - listed.length;
@@ -326,7 +326,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
     // Pass 3 re-check, must-fix 2: wrapped at a word in a terminal, with Ctrl-C on a line of its own.
     const err = styleFor(io, 'stderr', values);
     const watching = `Watching ${appKey === undefined ? '' : `${appKey} in `}${org}.`;
-    io.stderr(err.rich ? `${err.dim(hanging('', watching))}\n${err.dim('› Ctrl-C stops.')}\n` : `${watching} Ctrl-C stops.\n`);
+    io.stderr(err.rich ? `${err.dim(err.wrap('', watching))}\n${err.dim('› Ctrl-C stops.')}\n` : `${watching} Ctrl-C stops.\n`);
   }
   let shown: Column[] = [];
   try {
@@ -347,7 +347,7 @@ export async function appsRequests(input: CommandInput): Promise<number> {
           run.print(out.dim(padded(shown.map((column) => column.header), shown)));
           header = true;
         }
-        run.print(padded(shown.map((column) => cut(column.cell(row), column.cap)), shown));
+        run.print(padded(shown.map((column) => column.cell(row)), shown));
       }
       if (io.signal?.aborted) return 130;
       await io.sleep(FOLLOW_EVERY_MS);
@@ -361,9 +361,9 @@ export async function appsRequests(input: CommandInput): Promise<number> {
 /**
  * The columns that fit `width`: it leaves out the sends, then the app,
  * then what a request is about, until the widest row fits. A last column
- * of free text, the WHY, keeps 16 characters and is cut after that.
- * `fixed` measures each column at its cap, for a table printed a row at a
- * time.
+ * of free text, the WHY, counts as 16 characters, since the table wraps it
+ * under itself. No cell is cut. `fixed` measures each column at its cap,
+ * for a table printed a row at a time.
  */
 function fitting(columns: readonly Column[], rows: readonly AppRequestRecord[], width: number, fixed: boolean): Column[] {
   let shown = [...columns];
@@ -371,7 +371,7 @@ function fitting(columns: readonly Column[], rows: readonly AppRequestRecord[], 
     const last = column === shown.at(-1);
     if (last && column.cap === Number.POSITIVE_INFINITY) return 16;
     if (fixed) return Math.max(column.header.length, column.cap);
-    return Math.max(column.header.length, ...rows.map((row) => Math.min(visibleLength(column.cell(row)), column.cap)));
+    return Math.max(column.header.length, ...rows.map((row) => visibleLength(column.cell(row))));
   };
   const total = () => shown.reduce((sum, column) => sum + measure(column), 0) + 2 * (shown.length - 1);
   // ABOUT goes before APP, which says whose each request is (CLI pass 3, should-fix 7).
@@ -385,13 +385,6 @@ function fitting(columns: readonly Column[], rows: readonly AppRequestRecord[], 
 /** `cells` padded to each column's cap, for `--follow`, which prints one row at a time. */
 function padded(cells: readonly string[], columns: readonly Column[]): string {
   return cells.map((cell, at) => (at === cells.length - 1 ? cell : `${cell}${' '.repeat(Math.max(Math.max(columns[at]!.cap, columns[at]!.header.length) - visibleLength(cell), 0))}`)).join('  ');
-}
-
-/** `text` cut to `cap` visible characters with a `…`. Styled text that fits is kept as it is. */
-function cut(text: string, cap: number): string {
-  if (visibleLength(text) <= cap) return text;
-  const plain = [...text.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '')];
-  return `${plain.slice(0, cap - 1).join('')}…`;
 }
 
 /** A request's state: its mark, its word, and the color it takes in a terminal. */
@@ -522,7 +515,7 @@ async function showRequest(input: CommandInput, typed: string): Promise<number> 
       .sort((a, b) => sendNumber(a.eventId) - sendNumber(b.eventId));
     if (sends.length === 0) run.print("Siren holds no send of it among the app's latest 50 deliveries.");
     else {
-      const width = out.rich ? (input.io.screen?.size?.columns ?? REPORT_WIDTH) : Number.POSITIVE_INFINITY;
+      const width = out.rich ? out.width : Number.POSITIVE_INFINITY;
       const table = sends.map((send) => [
         String(sendNumber(send.eventId)),
         clean(send.status),
@@ -662,7 +655,7 @@ function dataLines(out: Style, entries: ReadonlyArray<readonly [string, unknown]
     }
     const at = indent + widest + 2;
     const shown = clean(scalarText(value));
-    const [first = '', ...rest] = out.rich ? wrapWords(shown, Math.max(20, REPORT_WIDTH - at)) : [shown];
+    const [first = '', ...rest] = out.rich ? wrapWords(shown, Math.max(20, out.width - at)) : [shown];
     lines.push(`${pad}${out.dim(label)}${' '.repeat(widest - [...label].length + 2)}${first}`);
     for (const more of rest) lines.push(`${' '.repeat(at)}${more}`);
   }

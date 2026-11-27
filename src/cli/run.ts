@@ -1009,22 +1009,28 @@ export const COMMAND_SPECS: Readonly<Record<Command, Readonly<CommandSpec>>> = S
 /** Every option any command takes, for the first read of the line, which finds the command. */
 const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, records.OPTIONS, ...Object.values(SPECS).map((spec) => spec.options));
 
-/** The widest a help line may be, so nothing wraps in an 80-column terminal. */
-const HELP_WIDTH = 80;
-
 /** `text` broken into lines of at most `width` characters, at spaces. */
 const wrap = wrapWords;
+
+/** The widest a flag or command name may be and keep its words beside it. A longer one gets a line of its own. */
+const NAME_ROOM = 30;
 
 /**
  * Two aligned columns under a heading, as gh prints them: the left one
  * padded to `column`, styled by `name`, and the right one wrapped beneath
- * itself so no line passes {@link HELP_WIDTH}.
+ * itself to `width`, the terminal's width. A left side too long for the
+ * column, such as a flag with a long list of values, takes a line of its
+ * own with its words under it, so one long flag never squeezes the rest
+ * (CLI review round 1, C20).
  */
-function columns(rows: ReadonlyArray<readonly [string, string]>, column: number, name: (text: string) => string): string[] {
-  const at = Math.max(column, ...rows.map(([left]) => left.length + 4));
+function columns(rows: ReadonlyArray<readonly [string, string]>, column: number, name: (text: string) => string, width: number): string[] {
+  const fits = rows.filter(([left]) => left.length + 4 <= NAME_ROOM);
+  const at = Math.max(column, ...fits.map(([left]) => left.length + 4));
   return rows.flatMap(([left, right]) => {
-    const [first = '', ...rest] = wrap(right, HELP_WIDTH - at);
-    return [`  ${name(left)}${' '.repeat(at - 2 - left.length)}${first}`, ...rest.map((line) => `${' '.repeat(at)}${line}`)];
+    const [first = '', ...rest] = wrap(right, Math.max(width - at, 20));
+    const under = rest.map((line) => `${' '.repeat(at)}${line}`);
+    if (left.length + 4 > at) return [`  ${name(left)}`, `${' '.repeat(at)}${first}`, ...under];
+    return [`  ${name(left)}${' '.repeat(at - 2 - left.length)}${first}`, ...under];
   });
 }
 
@@ -1039,6 +1045,7 @@ function commandRows(style: Style, commands: readonly Command[]): string[] {
     commands.map((command) => [command, SPECS[command].short] as const),
     22,
     (text) => style.bold(text),
+    style.width,
   );
 }
 
@@ -1053,6 +1060,7 @@ function recordRows(style: Style): string[] {
     ],
     22,
     (text) => style.bold(text),
+    style.width,
   );
 }
 
@@ -1075,7 +1083,7 @@ function helpText(style: Style): string {
         ? section(style, group, recordRows(style))
         : section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))),
     ),
-    ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text)),
+    ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text, style.width)),
     ...section(
       style,
       'Environment',
@@ -1089,6 +1097,7 @@ function helpText(style: Style): string {
         ],
         22,
         (text) => text,
+        style.width,
       ),
     ),
     ...section(style, 'Examples', ['  $ siren login', '  $ siren apps init', '  $ siren apps apply']),
@@ -1103,7 +1112,7 @@ const GROUP_WORDS = ['apps', 'logs', 'sandbox', 'recipes', 'condition-sets', 'en
 /** The text `siren recipes` prints: what recipes are for, and the commands. */
 function recipesHelpText(style: Style): string {
   return [
-    ...wrap("Preview and apply a recipe, a file that sets up programs, groups and people at once, follow its import, and export this organization's setup as one. Needs siren login: an API key can't use recipes yet.", HELP_WIDTH),
+    ...wrap("Preview and apply a recipe, a file that sets up programs, groups and people at once, follow its import, and export this organization's setup as one. Needs siren login: an API key can't use recipes yet.", style.width),
     '',
     ...section(style, 'Usage', ['  siren recipes <command> [flags]']),
     ...section(style, 'Recipes', commandRows(style, COMMANDS.filter((command) => command.startsWith('recipes ')))),
@@ -1119,7 +1128,7 @@ const GROUP_SUMMARIES = {
 
 function groupHelpText(style: Style, group: keyof typeof GROUP_SUMMARIES): string {
   return [
-    ...wrap(GROUP_SUMMARIES[group], HELP_WIDTH),
+    ...wrap(GROUP_SUMMARIES[group], style.width),
     '',
     ...section(style, 'Usage', [`  siren ${group} <command> [flags]`]),
     ...section(style, group === 'enrollers' ? 'Enrollers' : 'Condition sets', commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
@@ -1144,12 +1153,12 @@ function appsHelpText(style: Style): string {
 function commandHelp(style: Style, spec: CommandSpec): string {
   const own = Object.values(spec.flags);
   return [
-    ...wrap(spec.summary, HELP_WIDTH),
+    ...wrap(spec.summary, style.width),
     '',
     ...section(style, 'Usage', [`  siren ${spec.usage}`]),
-    ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text)) : []),
+    ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text, style.width)) : []),
     // CLI pass 3: the global flags once by name, since siren --help explains each.
-    ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, HELP_WIDTH - 2).map((line) => `  ${line}`)),
+    ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, style.width - 2).map((line) => `  ${line}`)),
     ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
     ...section(style, 'Learn more', learnMore(style, false)),
   ].join('\n');
@@ -1351,9 +1360,9 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       // CLI pass 3, should-fix 15: a command typo and a flag typo share one shape, the three parts of every error.
       const lines = [style.failure(`${error.group} has no command ${style.bold(`"${error.word}"`)}.`)];
       if (error.guesses.length > 0) {
-        lines.push(hanging('  ', help), hanging(`${style.green('›')} `, `Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`));
+        lines.push(style.wrap('  ', help), style.wrap(`${style.green('›')} `, `Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`));
       } else {
-        lines.push(hanging('  ', 'The tool knows no command by that name.'), hanging(`${style.green('›')} `, `Run ${style.command(help.split(' lists')[0]!)} to list them.`));
+        lines.push(style.wrap('  ', 'The tool knows no command by that name.'), style.wrap(`${style.green('›')} `, `Run ${style.command(help.split(' lists')[0]!)} to list them.`));
       }
       io.stderr(`${lines.join('\n')}\n`);
       return 2;
@@ -1366,7 +1375,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
           : `Run ${style.command(spec === undefined || name === undefined ? 'siren --help' : `siren ${name} --help`)} to see ${spec === undefined ? 'the commands' : 'its options'}.`;
       io.stderr(
         style.rich
-          ? `${[style.failure(error.headline), hanging('  ', usage), hanging(`${style.green('›')} `, fix)].join('\n')}\n`
+          ? `${[style.failure(error.headline), style.wrap('  ', usage), style.wrap(`${style.green('›')} `, fix)].join('\n')}\n`
           : `siren: ${error.message}\n${usage}\n`,
       );
       return 2;

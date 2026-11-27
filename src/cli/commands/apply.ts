@@ -11,7 +11,7 @@ import { appChanges, droppedLine, storedScopes } from '../app-changes';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
 import { askOrg, findOrg, membershipsOf, orgList } from '../org';
-import { REPORT_WIDTH, clean, hanging, styleFor, unbroken, visibleLength, wrapWords } from '../style';
+import { clean, styleFor, unbroken, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
 import type { CommandContext, CommandInput } from '../context';
 import type { StoredSession } from '../credentials';
@@ -604,7 +604,7 @@ function printPlan(run: CommandContext, out: Style, plan: Plan): void {
   run.print('');
   for (const line of plan.lines) {
     // A terminal gets lines that fit it. A pipe gets each change on one line, for a script to read.
-    const [first = '', ...rest] = out.rich ? wrapWords(line, REPORT_WIDTH - 4) : [line];
+    const [first = '', ...rest] = out.rich ? wrapWords(line, out.width - 4) : [line];
     run.print(`  ${planMarker(out, line)} ${first}`);
     for (const more of rest) run.print(`    ${more}`);
   }
@@ -894,9 +894,8 @@ function addressCell(style: Style, app: App): string {
 }
 
 /** The widest a table may be: the terminal's columns, 80 in a terminal of unknown size, and no limit in a pipe. */
-function widthOf(input: CommandInput, style: Style): number {
-  if (!style.rich) return Number.POSITIVE_INFINITY;
-  return input.io.screen?.size?.columns ?? 80;
+function widthOf(_input: CommandInput, style: Style): number {
+  return style.rich ? style.width : Number.POSITIVE_INFINITY;
 }
 
 /** The tip under an app with requests that need a person: how many, and the command that lists them. */
@@ -1105,7 +1104,7 @@ export async function appsDelete(input: CommandInput): Promise<number> {
       // so a long key and organization never push the typed answer past 80 columns.
       const out = styleFor(io, 'stdout', values);
       run.print(out.warning(`Deleting ${out.bold(key)} from ${orgNamed(session)} can't be undone.`));
-      run.print(out.rich ? hanging('  ', `It revokes the key. Type ${out.bold(key)} to delete it.`) : `It revokes the key. Type ${key} to delete it.`);
+      run.print(out.rich ? out.wrap('  ', `It revokes the key. Type ${out.bold(key)} to delete it.`) : `It revokes the key. Type ${key} to delete it.`);
       typed = (await io.prompt('Key: ')).trim();
     }
     if (typed !== key) {
