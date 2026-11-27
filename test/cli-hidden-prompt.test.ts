@@ -1,6 +1,6 @@
 import { execFile, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { askHidden, askVisible } from '../src/cli/io';
@@ -33,6 +33,9 @@ interface Typed {
   afterPrompt: string;
   passwordShown: boolean;
   earlyShown: boolean;
+  earlyAt?: number;
+  typedAt?: number;
+  emailPromptAt?: number;
   exit: number | null;
   echoAfter: boolean;
 }
@@ -136,17 +139,19 @@ describe.skipIf(python === undefined)('apps-cli: the hidden password prompt in a
    * Coordinator, 2026-11-27, after 1 in 30 of the runs above echoed under
    * load: a key typed before echo is off must never be shown or sent. The
    * fake Cloud holds its answer to the edition read, the first thing the
-   * command sends, and the driver types "early-" and the password with Enter
-   * while it waits. The command has echo off by then, drops those keys, and
+   * command sends, until the driver has typed "early-" and the password with
+   * Enter, so the keys always come before the first prompt. The command has echo off by then, drops those keys, and
    * asks for the email as if nothing was typed.
    */
   it(`shows and sends nothing typed while the command starts, in ${STARTUP_RUNS} runs`, async () => {
     const runs: Typed[] = [];
     for (let run = 0; run < STARTUP_RUNS; run += 1) {
       const go = join(configFolder(), 'go');
+      // The answer waits until the driver has typed, so the keys always come before any prompt.
       cloud.beforeEdition = async () => {
         writeFileSync(go, '');
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        for (let waited = 0; !existsSync(`${go}.typed`) && waited < 15_000; waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 200));
       };
       try {
         runs.push(await typeAtPrompt(cli, cloud, 'startup', go));
