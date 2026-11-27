@@ -44,6 +44,9 @@ describe('siren condition-sets list and get', () => {
         '  used by (1)',
         '    enroller 2  Example: add people who match  active',
         '',
+        // The set's page in Siren's app ends the view.
+        'https://sandbox.sirenaffiliates.com/condition-sets/1/view?org=3',
+        '',
       ].join('\n'),
     );
     expect(h.err()).toContain('siren condition-sets matches 1');
@@ -62,10 +65,10 @@ describe('siren condition-sets list and get', () => {
     expect(bare.out()).toContain('    last_engagement_days  comparison more_than, days 30\n');
   });
 
-  it("prints Siren's answer alone with --json", async () => {
+  it("prints Siren's answer alone with --json, with the set's page in Siren's app as url", async () => {
     const h = signedIn([reply(200, recorded.set1)]);
     expect(await h.run(['condition-sets', 'get', '1', '--json'])).toBe(0);
-    expect(JSON.parse(h.out())).toEqual(recorded.set1);
+    expect(JSON.parse(h.out())).toEqual({ ...recorded.set1, url: 'https://sandbox.sirenaffiliates.com/condition-sets/1/view?org=3' });
     expect(h.paths()).toEqual(['GET /condition-sets/1']);
   });
 });

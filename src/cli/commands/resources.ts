@@ -15,6 +15,7 @@ import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
 import { cell, recordRows, table } from './resource-output';
 import { recordView } from '../record-view';
+import { recordLink, resourceTypeOf } from '../links';
 import { nearest } from '../suggest';
 import { READ_STATUSES, WRITE_NOTES, WRITE_VALUES } from '../record-values';
 import { FORMATTED_SUFFIX, currenciesFor, holdsMoney, withMoney, withMoneyText } from '../money';
@@ -818,7 +819,12 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     // Amounts beside a currency print as money, read with the organization's currencies. --json keeps Siren's integers and adds the text beside each (review round 1, C4). --ids prints ids alone.
     const definitions = () => currenciesFor(input.io.configDir, `${run.target.baseUrl} ${run.current().orgId}`, input.io.now(), async () => parseJsonBody(await transport.request({ method: 'GET', path: '/registries/currencies', retriable: true }))).catch(() => undefined);
     const shown = plan.ids || !holdsMoney(body) ? body : plan.json ? withMoneyText(body, await definitions()) : withMoney(body, await definitions());
-    print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run));
+    // A record read names its page in Siren's app: the last line of the view, and `url` in --json.
+    const linkType = plan.resource !== undefined && plan.words === `${plan.resource.name} get` ? resourceTypeOf(plan.resource.name) : undefined;
+    const current = run.current();
+    // Only a plain id goes into an address, so nothing Siren sends can make the link say something else.
+    const link = linkType !== undefined && isObject(body) && /^\d+$/.test(String(body.id ?? '')) ? recordLink(run.target.baseUrl, input.io.env, current.orgSlug || String(current.orgId), linkType, String(body.id), { fulfillmentId: body.fulfillmentId }) : undefined;
+    print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run), link);
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
@@ -911,8 +917,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Prints Siren's answer: JSON, a table, a record, or one line. */
-function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string): void {
+/** Prints Siren's answer: JSON, a table, a record, or one line. A record read ends with its page in Siren's app. */
+function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string, link?: string): void {
   const out = (text: string) => input.io.stdout(text.endsWith('\n') ? text : `${text}\n`);
   const listed = isEnvelope(body) ? body.items : Array.isArray(body) ? body : undefined;
   const listedRecords = (listed ?? []).filter(isObject);
@@ -936,7 +942,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const pick = (record: unknown) => (plan.fields !== undefined && isObject(record) ? Object.fromEntries(plan.fields.flatMap((field) => [field, `${field}${FORMATTED_SUFFIX}`]).filter((field) => field in record).map((field) => [field, record[field]])) : record);
     const items = isEnvelope(body) ? body.items.map(pick) : Array.isArray(body) ? body.map(pick) : undefined;
     const shaped = items === undefined ? body : isEnvelope(body) ? { ...body, items } : items;
-    out(JSON.stringify(shaped ?? null, null, 2));
+    out(JSON.stringify(link !== undefined && isObject(shaped) && !('url' in shaped) ? { ...shaped, url: link } : (shaped ?? null), null, 2));
     return;
   }
 
@@ -982,7 +988,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     // A record read prints as a record view (lean-output.md, section 1).
     const view = recordView(style, record, { what: singular(name), words: name, zone: input.io.env.TZ, resources: RESOURCE_COMMANDS.filter((resource) => resource.ops.get !== undefined).map((resource) => resource.name) });
     const next = view.next;
-    out(view.lines.join('\n'));
+    out([...view.lines, ...(link === undefined ? [] : ['', link])].join('\n'));
     if (next.length > 0) {
       const steps = ['', style.bold('Next'), ...next.map((words, at) => `  ${next.length === 1 ? '' : `${at + 1}  `}${style.command(input.command(words))}`)].join('\n');
       // Through a pipe, Next goes to standard error, so standard output carries the record alone.

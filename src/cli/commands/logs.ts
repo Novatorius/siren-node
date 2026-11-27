@@ -304,13 +304,13 @@ function listFlag(value: string | boolean | undefined, known: readonly string[],
   return [...new Set(words)].join(',');
 }
 
-/** `--since` as an ISO time: `10m`, `2h` or `1d` back from now, or a time Date can read. At most 7 days back. */
-export function sinceOf(value: string, now: number): string {
+/** `--since` as an ISO time: `10m`, `2h` or `1d` back from now, or a time Date can read. At most 7 days back, the log's reach, unless `longest` gives another in milliseconds. */
+export function sinceOf(value: string, now: number, options: { longest?: number } = {}): string {
   const ago = /^(\d+)([smhd])$/.exec(value.trim());
   const unit = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
   const at = ago ? now - Number(ago[1]) * unit[ago[2] as keyof typeof unit] : Date.parse(value);
   if (Number.isNaN(at)) throw new CliUsageError(`--since takes a time back from now, such as 10m, 2h or 1d, or a time such as 2026-11-24T19:00:00Z, and ${JSON.stringify(value)} is neither.`);
-  if (now - at > MAX_SINCE_MS) throw new CliUsageError('Siren keeps the log 7 days, so --since can reach back 7 days at most.');
+  if (now - at > (options.longest ?? MAX_SINCE_MS)) throw new CliUsageError('Siren keeps the log 7 days, so --since can reach back 7 days at most.');
   return new Date(at).toISOString();
 }
 

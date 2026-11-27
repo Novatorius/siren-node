@@ -57,9 +57,12 @@ describe('help: siren --help', () => {
       const end = lines.indexOf('', start);
       return lines.slice(start + 1, end).map((line) => line.trim().split(/ {2,}/)[0]!);
     };
-    expect(under('DEVELOPER TOOLS')).toEqual(['listen', 'trigger', 'trigger ask', 'logs tail', 'simulate', 'fixtures', 'apps test']);
+    expect(under('DEVELOPER TOOLS')).toEqual(['listen', 'trigger', 'trigger ask', 'logs tail', 'simulate', 'fixtures', 'apps test', 'explain']);
     expect(under('SANDBOX')).toEqual(['sandbox create', 'sandbox list', 'sandbox reset', 'sandbox inbox', 'seed']);
-    expect(under('RECORDS')).toEqual(['<resource> <op>', 'get <path>', 'post <path>', 'resources']);
+    expect(under('RECORDS')).toEqual(['<resource> <op>', 'get <path>', 'post <path>', 'resources', 'open']);
+    // Review round 1: activity and notes are an operator's, which the connector covers, so the CLI has neither.
+    expect(text).not.toContain('ACTIVITY');
+    expect(text).not.toContain('NOTES');
   });
 
   it('lists every command once, on one line, with its name and a short summary aligned', async () => {

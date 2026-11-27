@@ -2263,6 +2263,28 @@ tool takes `$schema` out before it sends the recipe, since Siren takes no other 
 top. In code, `siren.recipes` makes the same calls: `preview`, `apply`, `import`, `imports`,
 `export`, `exportSizes`, `catalog` and `fetch`.
 
+### Explanations and links
+
+These two read and change nothing, so a live organization needs no `--live`.
+
+| Command | What it does |
+| --- | --- |
+| `siren explain <type> <id>` | Says why a sale, conversion or reward paid what it did: who won it, the rule or rate behind each reward, such as "EU Partner Program (program 16) pays 18% of each sale, and 18% of €109.00 EUR is €19.62 EUR", each conversion and reward and where it stands, from a draft to paid, Siren's notes on the sale, such as a distributor that left it out for its currency, and the app requests the sale caused, each with the id `siren apps requests` takes. A reward is paid only once it sits in a payout marked paid. `--chain` shows every engagement that competed for the sale and the payouts. `--json` gives each amount as `{ amount, currency, formatted }`, such as `{ "amount": 1962, "currency": "EUR", "formatted": "€19.62 EUR" }`, with `rules`, `noted` and `requests`. A part whose read fails is left out, and `requests` is null then. |
+| `siren open <type> <id>` | Reads the record, then prints its page in Siren's app. A record Siren doesn't hold stops with one line, exit 1, and the list command to run. `--browser` opens the page too. A payout prints the fulfillment that holds it, since the app has no payout page, and an application prints the applications list. |
+
+`siren explain` reads `GET /notes/chain`, the read behind the record flow graph
+in Siren's app, and a Siren without that route gets a refusal that says so. It also reads each
+winning program, the sale's notes, the organization's latest 100 app requests and its apps, so a
+request older than those hundred is left out.
+
+Every page address comes from one map of record type to page, checked against the routes of Siren's
+Cloud app, and ends with `?org=<slug>`, so the app opens in the organization the command used. A
+record view, such as `siren collaborators get 1`, ends with the same address, and its `--json` holds
+it as `url`. The app's address is the API's own host, with `api.` read as `app.`, so
+`api.sirenaffiliates.com` links to `app.sirenaffiliates.com`. Set `SIREN_DASHBOARD_URL` when Siren's
+app lives elsewhere. `SIREN_APP_URL` is your own app's address in siren.app.json, so links never read
+it.
+
 ### Condition sets and enrollers
 
 A condition set is a saved list of conditions Siren checks each day, such as "joined in the last 30
@@ -2289,10 +2311,10 @@ without it, gets a refusal that says which. Making a set or an enroller, and run
 
 A record read, such as `siren collaborators get 1`, puts the record's name in the headline and
 prints its fields as aligned rows. Each list in it, such as a collaborator's programs, is its own
-section with one line for each, the first 10 shown and the rest counted. Next names the commands
-that open what it points to.
-Through a pipe the record goes to standard output and Next to standard error, and `--json` prints
-Siren's answer whole.
+section with one line for each, the first 10 shown and the rest counted. The view's last line is the record's page in Siren's
+app. Next names the commands that open what it points to. Through a pipe the record goes to
+standard output and Next to standard error, and `--json` prints Siren's answer whole, with the
+page as `url` beside it.
 
 Money prints as money, such as `€19.62 EUR`, in a table, a record and `--json`. Siren stores an
 amount in its currency's smallest unit, so `--json` keeps that integer and adds the text beside it:

@@ -1,5 +1,6 @@
 import type { HttpTransport } from '../../http';
 import type { CommandInput } from '../context';
+import { recordLink } from '../links';
 import { day, minute } from '../record-view';
 import { clean, styleFor } from '../style';
 import { CliUsageError } from '../targets';
@@ -105,8 +106,10 @@ export async function enrollersGet(input: CommandInput): Promise<number> {
   } catch (error) {
     throw gated(error, ENROLLERS);
   }
+  const current = run.current();
+  const url = recordLink(run.target.baseUrl, input.io.env, current.orgSlug || String(current.orgId), 'enroller', id);
   if (input.values.json === true) {
-    run.print(JSON.stringify(enroller, null, 2));
+    run.print(JSON.stringify('url' in enroller ? enroller : { ...enroller, url }, null, 2));
     return 0;
   }
   const triggers = await triggersOf(http);
@@ -156,7 +159,7 @@ export async function enrollersGet(input: CommandInput): Promise<number> {
     view.push('', `  ${out.bold(`log (${total})`)}`, ...lines.map((line) => fit(`    ${logLine(line, zone)}`)));
     if (total > lines.length) view.push(`    and ${total - lines.length} more`);
   }
-  run.print(view.join('\n'));
+  run.print([...view, '', url].join('\n'));
 
   const next = [`enrollers log ${id}`];
   const firstProgram = [enroller.addProgramIds, enroller.removeProgramIds].find((ids) => Array.isArray(ids) && ids.length > 0) as unknown[] | undefined;

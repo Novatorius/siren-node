@@ -1,0 +1,891 @@
+{
+  "recorded": "Recorded from Siren PR 1254's preview (siren-pr-1254-cloud.tunnel.novatori.us) on 2026-11-27, organization uat-org, signed in as the UAT admin. Each key holds what that route answered, cut to a few items.",
+  "collaboratorNotes": {
+    "query": "GET /notes?sourceType=collaborator&sourceId=208&order=desc&fields=id,content,renderedContent,creationSource,dateCreated",
+    "items": [
+      {
+        "id": 14334,
+        "content": "conversion_approved?memberEmail=a%20member",
+        "renderedContent": "Conversion for sale (€109.00 EUR) in EU Partner Program approved by admin@siren-uat.local",
+        "creationSource": "conversion",
+        "dateCreated": "2026-11-27T17:39:18+00:00"
+      },
+      {
+        "id": 14333,
+        "content": "obligation_status_changed?previousStatus=draft&newStatus=approved&memberEmail=a%20member",
+        "renderedContent": "Obligation #5888 status changed from draft to approved by admin@siren-uat.local",
+        "creationSource": "obligation",
+        "dateCreated": "2026-11-27T17:39:18+00:00"
+      },
+      {
+        "id": 14304,
+        "content": "conversion_awarded",
+        "renderedContent": "Conversion for sale (€109.00 EUR) in EU Partner Program awarded (sale)",
+        "creationSource": "conversion",
+        "dateCreated": "2026-11-26T15:23:47+00:00"
+      },
+      {
+        "id": 14303,
+        "content": "obligation_issued",
+        "renderedContent": "Obligation #5888 issued for Paolo Ricci",
+        "creationSource": "obligation",
+        "dateCreated": "2026-11-26T15:23:47+00:00"
+      },
+      {
+        "id": 14299,
+        "content": "engagement_triggered",
+        "renderedContent": "Engagement #41287 recorded for Paolo Ricci in EU Partner Program",
+        "creationSource": "engagement",
+        "dateCreated": "2026-11-26T15:23:47+00:00"
+      },
+      {
+        "id": 14297,
+        "content": "engagement_triggered",
+        "renderedContent": "Engagement #41286 recorded for Paolo Ricci in EU Partner Program",
+        "creationSource": "engagement",
+        "dateCreated": "2026-11-26T15:11:21+00:00"
+      }
+    ],
+    "total": 200,
+    "page": 1,
+    "perPage": 6,
+    "totalPages": 34
+  },
+  "collaboratorConversions": {
+    "query": "GET /conversions?collaboratorId=208&orderBy=id&order=desc",
+    "items": [
+      {
+        "id": 5640,
+        "engagementId": 41287,
+        "transactionId": 7517,
+        "obligationId": 5888,
+        "collaboratorName": "Paolo Ricci",
+        "amount": 1962,
+        "obligationAwardType": "EUR",
+        "isTest": false,
+        "status": "complete",
+        "type": "sale",
+        "dateCreated": "2026-11-26T15:23:47+00:00",
+        "dateModified": "2026-11-26T15:23:47+00:00"
+      },
+      {
+        "id": 5514,
+        "engagementId": 40455,
+        "transactionId": 7343,
+        "obligationId": null,
+        "collaboratorName": "Paolo Ricci",
+        "amount": 3366,
+        "obligationAwardType": "EUR",
+        "isTest": false,
+        "status": "pending",
+        "type": "sale",
+        "dateCreated": "2026-11-19T23:12:51+00:00",
+        "dateModified": "2026-11-19T23:12:51+00:00"
+      },
+      {
+        "id": 5493,
+        "engagementId": 40186,
+        "transactionId": 7296,
+        "obligationId": 5739,
+        "collaboratorName": "Paolo Ricci",
+        "amount": 1962,
+        "obligationAwardType": "EUR",
+        "isTest": false,
+        "status": "complete",
+        "type": "sale",
+        "dateCreated": "2026-11-17T22:03:55+00:00",
+        "dateModified": "2026-11-17T22:03:55+00:00"
+      },
+      {
+        "id": 5484,
+        "engagementId": 40020,
+        "transactionId": 7269,
+        "obligationId": 5730,
+        "collaboratorName": "Paolo Ricci",
+        "amount": 522,
+        "obligationAwardType": "EUR",
+        "isTest": false,
+        "status": "complete",
+        "type": "sale",
+        "dateCreated": "2026-11-16T19:51:27+00:00",
+        "dateModified": "2026-11-16T19:51:27+00:00"
+      }
+    ],
+    "total": 77,
+    "page": 1,
+    "perPage": 4,
+    "totalPages": 20
+  },
+  "collaboratorPayouts": {
+    "query": "GET /payouts?collaboratorId=208&orderBy=id&order=desc",
+    "items": [
+      {
+        "id": 613,
+        "status": "unpaid",
+        "value": 21870,
+        "currency": "EUR",
+        "collaboratorId": 208,
+        "fulfillmentId": 39,
+        "datePaid": null,
+        "dateCreated": "2026-11-01T13:00:00+00:00",
+        "dateModified": "2026-11-01T13:00:00+00:00",
+        "failureReason": null,
+        "dateFailed": null,
+        "waitingReason": "paypal_email_missing",
+        "dateWaiting": "2026-11-01T13:00:00+00:00"
+      },
+      {
+        "id": 565,
+        "status": "paid",
+        "value": 14238,
+        "currency": "EUR",
+        "collaboratorId": 208,
+        "fulfillmentId": 36,
+        "datePaid": "2026-10-01T12:00:00+00:00",
+        "dateCreated": "2026-10-01T12:00:00+00:00",
+        "dateModified": "2026-10-01T12:00:00+00:00",
+        "failureReason": null,
+        "dateFailed": null,
+        "waitingReason": null,
+        "dateWaiting": null
+      },
+      {
+        "id": 523,
+        "status": "paid",
+        "value": 22951,
+        "currency": "EUR",
+        "collaboratorId": 208,
+        "fulfillmentId": 34,
+        "datePaid": "2026-09-01T12:00:00+00:00",
+        "dateCreated": "2026-09-01T12:00:00+00:00",
+        "dateModified": "2026-09-01T12:00:00+00:00",
+        "failureReason": null,
+        "dateFailed": null,
+        "waitingReason": null,
+        "dateWaiting": null
+      }
+    ],
+    "total": 7,
+    "page": 1,
+    "perPage": 4,
+    "totalPages": 2
+  },
+  "chainApprovedConversion5640": {
+    "record": {
+      "type": "conversion",
+      "id": 5640
+    },
+    "scopeTransactionId": 7517,
+    "replacedObligation": null,
+    "capped": false,
+    "caps": {
+      "engagements": 25,
+      "transactions": 25,
+      "conversions": 200,
+      "opportunities": 5
+    },
+    "chains": [
+      {
+        "opportunity": {
+          "id": 39430,
+          "status": "active",
+          "dateCreated": "2026-11-26 15:23:47",
+          "lastTriggered": "2026-11-26 15:23:47"
+        },
+        "outcome": "won",
+        "ending": null,
+        "winningEngagementIds": [
+          41287
+        ],
+        "reversedEngagementIds": [],
+        "engagementTotal": 1,
+        "capped": false,
+        "rewardsShown": true,
+        "salesLeftOut": 0,
+        "paths": [
+          {
+            "engagement": {
+              "id": 41287,
+              "status": "complete",
+              "dateCreated": "2026-11-26 15:23:47",
+              "dateModified": "2026-11-26 15:23:47",
+              "collaborator": {
+                "id": 208,
+                "name": "Paolo Ricci"
+              },
+              "program": {
+                "id": 16,
+                "name": "EU Partner Program"
+              },
+              "couponCode": null,
+              "couponCodeSale": null,
+              "via": null
+            },
+            "state": "won",
+            "ending": null,
+            "conversions": [
+              {
+                "id": 5640,
+                "type": "sale",
+                "status": "complete",
+                "dateCreated": "2026-11-26 15:23:47",
+                "transactionId": 7517,
+                "obligationId": 5888,
+                "won": true,
+                "reversed": false,
+                "ending": null,
+                "orderEnd": null,
+                "wonNothing": false,
+                "decidedBy": {
+                  "kind": "member",
+                  "name": "admin@siren-uat.local"
+                },
+                "manualReason": null,
+                "reason": null
+              }
+            ],
+            "obligations": [
+              {
+                "id": 5888,
+                "status": "approved",
+                "conversionId": 5640,
+                "dateCreated": "2026-11-26 15:23:47",
+                "value": 1962,
+                "currency": "EUR",
+                "payoutId": null
+              }
+            ],
+            "reason": null,
+            "notCredited": null
+          }
+        ],
+        "transactions": [
+          {
+            "id": 7517,
+            "status": "complete",
+            "isTest": false,
+            "dateCreated": "2026-11-26 15:23:47",
+            "opportunityId": 39430,
+            "renewalOf": null,
+            "name": "Steinzeug Set",
+            "moreLines": 0,
+            "amount": 10900,
+            "currency": "EUR",
+            "refunded": null,
+            "orderEnd": null,
+            "refunds": [],
+            "notCredited": null
+          }
+        ],
+        "payouts": [],
+        "otherReasons": []
+      }
+    ],
+    "emptySale": null
+  },
+  "chainPendingConversion5514": {
+    "record": {
+      "type": "conversion",
+      "id": 5514
+    },
+    "scopeTransactionId": 7343,
+    "replacedObligation": null,
+    "capped": false,
+    "caps": {
+      "engagements": 25,
+      "transactions": 25,
+      "conversions": 200,
+      "opportunities": 5
+    },
+    "chains": [
+      {
+        "opportunity": {
+          "id": 38648,
+          "status": "active",
+          "dateCreated": "2026-11-19 23:12:51",
+          "lastTriggered": "2026-11-19 23:12:51"
+        },
+        "outcome": "won",
+        "ending": null,
+        "winningEngagementIds": [
+          40455
+        ],
+        "reversedEngagementIds": [],
+        "engagementTotal": 1,
+        "capped": false,
+        "rewardsShown": true,
+        "salesLeftOut": 0,
+        "paths": [
+          {
+            "engagement": {
+              "id": 40455,
+              "status": "complete",
+              "dateCreated": "2026-11-19 23:12:51",
+              "dateModified": "2026-11-19 23:12:51",
+              "collaborator": {
+                "id": 208,
+                "name": "Paolo Ricci"
+              },
+              "program": {
+                "id": 16,
+                "name": "EU Partner Program"
+              },
+              "couponCode": null,
+              "couponCodeSale": null,
+              "via": null
+            },
+            "state": "won",
+            "ending": null,
+            "conversions": [
+              {
+                "id": 5514,
+                "type": "sale",
+                "status": "pending",
+                "dateCreated": "2026-11-19 23:12:51",
+                "transactionId": 7343,
+                "obligationId": 5760,
+                "won": true,
+                "reversed": false,
+                "ending": null,
+                "orderEnd": null,
+                "wonNothing": false,
+                "decidedBy": null,
+                "manualReason": null,
+                "reason": null
+              }
+            ],
+            "obligations": [
+              {
+                "id": 5760,
+                "status": "draft",
+                "conversionId": 5514,
+                "dateCreated": "2026-11-19 23:12:51",
+                "value": 3366,
+                "currency": "EUR",
+                "payoutId": null
+              }
+            ],
+            "reason": null,
+            "notCredited": null
+          }
+        ],
+        "transactions": [
+          {
+            "id": 7343,
+            "status": "complete",
+            "isTest": false,
+            "dateCreated": "2026-11-19 23:12:51",
+            "opportunityId": 38648,
+            "renewalOf": null,
+            "name": "Kerze Zeder",
+            "moreLines": 1,
+            "amount": 18700,
+            "currency": "EUR",
+            "refunded": null,
+            "orderEnd": null,
+            "refunds": [],
+            "notCredited": null
+          }
+        ],
+        "payouts": [],
+        "otherReasons": []
+      }
+    ],
+    "emptySale": null
+  },
+  "chainRewardInUnpaidPayout5362": {
+    "record": {
+      "type": "obligation",
+      "id": 5362
+    },
+    "scopeTransactionId": 6629,
+    "replacedObligation": null,
+    "capped": false,
+    "caps": {
+      "engagements": 25,
+      "transactions": 25,
+      "conversions": 200,
+      "opportunities": 5
+    },
+    "chains": [
+      {
+        "opportunity": {
+          "id": 35109,
+          "status": "active",
+          "dateCreated": "2026-10-18 22:09:00",
+          "lastTriggered": "2026-10-18 22:09:00"
+        },
+        "outcome": "won",
+        "ending": null,
+        "winningEngagementIds": [
+          36825
+        ],
+        "reversedEngagementIds": [],
+        "engagementTotal": 1,
+        "capped": false,
+        "rewardsShown": true,
+        "salesLeftOut": 0,
+        "paths": [
+          {
+            "engagement": {
+              "id": 36825,
+              "status": "complete",
+              "dateCreated": "2026-10-18 22:09:00",
+              "dateModified": "2026-10-18 22:09:00",
+              "collaborator": {
+                "id": 208,
+                "name": "Paolo Ricci"
+              },
+              "program": {
+                "id": 16,
+                "name": "EU Partner Program"
+              },
+              "couponCode": null,
+              "couponCodeSale": null,
+              "via": null
+            },
+            "state": "won",
+            "ending": null,
+            "conversions": [
+              {
+                "id": 5133,
+                "type": "sale",
+                "status": "complete",
+                "dateCreated": "2026-10-18 22:09:00",
+                "transactionId": 6629,
+                "obligationId": 5362,
+                "won": true,
+                "reversed": false,
+                "ending": null,
+                "orderEnd": null,
+                "wonNothing": false,
+                "decidedBy": null,
+                "manualReason": null,
+                "reason": null
+              }
+            ],
+            "obligations": [
+              {
+                "id": 5362,
+                "status": "complete",
+                "conversionId": 5133,
+                "dateCreated": "2026-10-18 22:09:00",
+                "value": 522,
+                "currency": "EUR",
+                "payoutId": 613
+              }
+            ],
+            "reason": null,
+            "notCredited": null
+          }
+        ],
+        "transactions": [
+          {
+            "id": 6629,
+            "status": "complete",
+            "isTest": false,
+            "dateCreated": "2026-10-18 22:09:00",
+            "opportunityId": 35109,
+            "renewalOf": null,
+            "name": "Kerze Zeder",
+            "moreLines": 0,
+            "amount": 2900,
+            "currency": "EUR",
+            "refunded": null,
+            "orderEnd": null,
+            "refunds": [],
+            "notCredited": null
+          }
+        ],
+        "payouts": [
+          {
+            "id": 613,
+            "fulfillmentId": 39,
+            "status": "unpaid",
+            "value": 21870,
+            "currency": "EUR",
+            "failureReason": null,
+            "failureNote": null,
+            "waitingReason": "paypal_email_missing",
+            "datePaid": null
+          }
+        ],
+        "otherReasons": []
+      }
+    ],
+    "emptySale": null
+  },
+  "chainPaidReward3904": {
+    "record": {
+      "type": "obligation",
+      "id": 3904
+    },
+    "scopeTransactionId": 4646,
+    "replacedObligation": null,
+    "capped": false,
+    "caps": {
+      "engagements": 25,
+      "transactions": 25,
+      "conversions": 200,
+      "opportunities": 5
+    },
+    "chains": [
+      {
+        "opportunity": {
+          "id": 25624,
+          "status": "active",
+          "dateCreated": "2026-07-07 15:17:49",
+          "lastTriggered": "2026-07-07 15:17:49"
+        },
+        "outcome": "won",
+        "ending": null,
+        "winningEngagementIds": [
+          27143
+        ],
+        "reversedEngagementIds": [],
+        "engagementTotal": 1,
+        "capped": false,
+        "rewardsShown": true,
+        "salesLeftOut": 0,
+        "paths": [
+          {
+            "engagement": {
+              "id": 27143,
+              "status": "complete",
+              "dateCreated": "2026-07-07 15:17:49",
+              "dateModified": "2026-07-07 15:17:49",
+              "collaborator": {
+                "id": 208,
+                "name": "Paolo Ricci"
+              },
+              "program": {
+                "id": 16,
+                "name": "EU Partner Program"
+              },
+              "couponCode": null,
+              "couponCodeSale": null,
+              "via": null
+            },
+            "state": "won",
+            "ending": null,
+            "conversions": [
+              {
+                "id": 3740,
+                "type": "sale",
+                "status": "complete",
+                "dateCreated": "2026-07-07 15:17:49",
+                "transactionId": 4646,
+                "obligationId": 3904,
+                "won": true,
+                "reversed": false,
+                "ending": null,
+                "orderEnd": null,
+                "wonNothing": false,
+                "decidedBy": null,
+                "manualReason": null,
+                "reason": null
+              }
+            ],
+            "obligations": [
+              {
+                "id": 3904,
+                "status": "complete",
+                "conversionId": 3740,
+                "dateCreated": "2026-07-07 15:17:49",
+                "value": 522,
+                "currency": "EUR",
+                "payoutId": 464
+              }
+            ],
+            "reason": null,
+            "notCredited": null
+          }
+        ],
+        "transactions": [
+          {
+            "id": 4646,
+            "status": "complete",
+            "isTest": false,
+            "dateCreated": "2026-07-07 15:17:49",
+            "opportunityId": 25624,
+            "renewalOf": null,
+            "name": "Kerze Zeder",
+            "moreLines": 0,
+            "amount": 2900,
+            "currency": "EUR",
+            "refunded": null,
+            "orderEnd": null,
+            "refunds": [],
+            "notCredited": null
+          }
+        ],
+        "payouts": [
+          {
+            "id": 464,
+            "fulfillmentId": 30,
+            "status": "paid",
+            "value": 8334,
+            "currency": "EUR",
+            "failureReason": null,
+            "failureNote": null,
+            "waitingReason": null,
+            "datePaid": "2026-08-01 12:00:00"
+          }
+        ],
+        "otherReasons": []
+      }
+    ],
+    "emptySale": null
+  },
+  "chainEmptySale7514": {
+    "record": {
+      "type": "transaction",
+      "id": 7514
+    },
+    "scopeTransactionId": 7514,
+    "replacedObligation": null,
+    "capped": false,
+    "caps": {
+      "engagements": 25,
+      "transactions": 25,
+      "conversions": 200,
+      "opportunities": 5
+    },
+    "chains": [],
+    "emptySale": {
+      "reason": "no_opportunity",
+      "transaction": {
+        "id": 7514,
+        "status": "complete",
+        "isTest": false,
+        "dateCreated": "2026-11-26 12:17:11",
+        "opportunityId": null,
+        "renewalOf": null,
+        "name": "Leinendecke",
+        "moreLines": 0,
+        "amount": 7900,
+        "currency": "EUR",
+        "refunded": null,
+        "orderEnd": null,
+        "refunds": []
+      },
+      "opportunity": null
+    }
+  },
+  "chainThreeProgramsSale7516": {
+    "record": {
+      "type": "transaction",
+      "id": 7516
+    },
+    "scopeTransactionId": 7516,
+    "replacedObligation": null,
+    "capped": false,
+    "caps": {
+      "engagements": 25,
+      "transactions": 25,
+      "conversions": 200,
+      "opportunities": 5
+    },
+    "chains": [
+      {
+        "opportunity": {
+          "id": 39424,
+          "status": "active",
+          "dateCreated": "2026-11-26 14:51:14",
+          "lastTriggered": "2026-11-26 14:51:14"
+        },
+        "outcome": "won",
+        "ending": null,
+        "winningEngagementIds": [
+          41277,
+          41278,
+          41279
+        ],
+        "reversedEngagementIds": [],
+        "engagementTotal": 3,
+        "capped": false,
+        "rewardsShown": true,
+        "salesLeftOut": 0,
+        "paths": [
+          {
+            "engagement": {
+              "id": 41277,
+              "status": "complete",
+              "dateCreated": "2026-11-26 14:51:14",
+              "dateModified": "2026-11-26 14:51:14",
+              "collaborator": {
+                "id": 25,
+                "name": "Rosa Delgado"
+              },
+              "program": {
+                "id": 5,
+                "name": "Spring Promo"
+              },
+              "couponCode": null,
+              "couponCodeSale": null,
+              "via": null
+            },
+            "state": "won",
+            "ending": null,
+            "conversions": [
+              {
+                "id": 5638,
+                "type": "sale",
+                "status": "pending",
+                "dateCreated": "2026-11-26 14:51:14",
+                "transactionId": 7516,
+                "obligationId": 5886,
+                "won": true,
+                "reversed": false,
+                "ending": null,
+                "orderEnd": null,
+                "wonNothing": false,
+                "decidedBy": null,
+                "manualReason": null,
+                "reason": null
+              }
+            ],
+            "obligations": [
+              {
+                "id": 5886,
+                "status": "draft",
+                "conversionId": 5638,
+                "dateCreated": "2026-11-26 14:51:14",
+                "value": 2670,
+                "currency": "USD",
+                "payoutId": null
+              }
+            ],
+            "reason": null,
+            "notCredited": null
+          },
+          {
+            "engagement": {
+              "id": 41278,
+              "status": "complete",
+              "dateCreated": "2026-11-26 14:51:14",
+              "dateModified": "2026-11-26 14:51:14",
+              "collaborator": {
+                "id": 25,
+                "name": "Rosa Delgado"
+              },
+              "program": {
+                "id": 14,
+                "name": "Evergreen Friends"
+              },
+              "couponCode": null,
+              "couponCodeSale": null,
+              "via": null
+            },
+            "state": "won",
+            "ending": null,
+            "conversions": [
+              {
+                "id": 5639,
+                "type": "sale",
+                "status": "pending",
+                "dateCreated": "2026-11-26 14:51:14",
+                "transactionId": 7516,
+                "obligationId": 5887,
+                "won": true,
+                "reversed": false,
+                "ending": null,
+                "orderEnd": null,
+                "wonNothing": false,
+                "decidedBy": null,
+                "manualReason": null,
+                "reason": null
+              }
+            ],
+            "obligations": [
+              {
+                "id": 5887,
+                "status": "draft",
+                "conversionId": 5639,
+                "dateCreated": "2026-11-26 14:51:14",
+                "value": 800,
+                "currency": "USD",
+                "payoutId": null
+              }
+            ],
+            "reason": null,
+            "notCredited": null
+          },
+          {
+            "engagement": {
+              "id": 41279,
+              "status": "complete",
+              "dateCreated": "2026-11-26 14:51:14",
+              "dateModified": "2026-11-26 14:51:14",
+              "collaborator": {
+                "id": 25,
+                "name": "Rosa Delgado"
+              },
+              "program": {
+                "id": 17,
+                "name": "Customer Referral Points"
+              },
+              "couponCode": null,
+              "couponCodeSale": null,
+              "via": null
+            },
+            "state": "won",
+            "ending": null,
+            "conversions": [
+              {
+                "id": 5637,
+                "type": "sale",
+                "status": "pending",
+                "dateCreated": "2026-11-26 14:51:14",
+                "transactionId": 7516,
+                "obligationId": 5885,
+                "won": true,
+                "reversed": false,
+                "ending": null,
+                "orderEnd": null,
+                "wonNothing": false,
+                "decidedBy": null,
+                "manualReason": null,
+                "reason": null
+              }
+            ],
+            "obligations": [
+              {
+                "id": 5885,
+                "status": "draft",
+                "conversionId": 5637,
+                "dateCreated": "2026-11-26 14:51:14",
+                "value": 150,
+                "currency": "PTS",
+                "payoutId": null
+              }
+            ],
+            "reason": null,
+            "notCredited": null
+          }
+        ],
+        "transactions": [
+          {
+            "id": 7516,
+            "status": "complete",
+            "isTest": false,
+            "dateCreated": "2026-11-26 14:51:14",
+            "opportunityId": 39424,
+            "renewalOf": null,
+            "name": "Linen Throw",
+            "moreLines": 1,
+            "amount": 17800,
+            "currency": "USD",
+            "refunded": null,
+            "orderEnd": null,
+            "refunds": [],
+            "notCredited": null
+          }
+        ],
+        "payouts": [],
+        "otherReasons": []
+      }
+    ],
+    "emptySale": null
+  }
+}

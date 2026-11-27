@@ -11,6 +11,8 @@ import * as fixtures from './commands/fixtures';
 import * as simulate from './commands/simulate';
 import * as conditionSets from './commands/condition-sets';
 import * as enrollers from './commands/enrollers';
+import * as explain from './commands/explain';
+import * as open from './commands/open';
 import * as recipes from './commands/recipes';
 import { fieldProblems, fieldsLine } from './validation';
 import * as trigger from './commands/trigger';
@@ -87,6 +89,7 @@ export const COMMANDS = [
   'recipes catalog',
   'recipes show',
   'recipes fetch',
+  'explain',
   'condition-sets list',
   'condition-sets get',
   'condition-sets matches',
@@ -97,6 +100,7 @@ export const COMMANDS = [
   'enrollers log',
   'enrollers run',
   'enrollers create',
+  'open',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -828,6 +832,21 @@ const SPECS: Record<Command, CommandSpec> = {
     sessionOnly: true,
     run: recipes.recipesFetch,
   },
+  explain: {
+    usage: 'explain <type> <id> [--chain]',
+    summary: "Say why a sale, conversion or reward paid what it did: who won it, the rule or rate behind each reward, each conversion and reward and where it stands, from a draft to paid, Siren's notes on the sale, and the app requests it caused, with their ids. --chain shows the whole chain, from the sale and every engagement that competed for it to the payout. Name a sale, conversion, reward or engagement and its id. A sale is a transaction and a reward an obligation, so those words work too.",
+    group: 'Developer tools',
+    short: 'Say why a sale paid what it did',
+    options: { chain: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: {
+      chain: ['--chain', 'Show every step, from the sale and each engagement to the payout'],
+      json: JSON_FLAG,
+    },
+    examples: ['siren explain conversion 5640', 'siren explain sale 7517 --chain'],
+    positionals: [1, 2],
+    readsOnly: true,
+    run: explain.explainRecord,
+  },
   'condition-sets list': {
     usage: 'condition-sets list [--json]',
     summary: 'List the condition sets, the saved lists of conditions Siren checks each day, such as joined in the last 30 days, with when Siren last checked each.',
@@ -934,6 +953,18 @@ const SPECS: Record<Command, CommandSpec> = {
     positionals: [1, 1],
     run: enrollers.enrollersRun,
   },
+  open: {
+    usage: 'open <type> <id> [--browser]',
+    summary: "Print a record's page in Siren's app, after checking that Siren holds the record. A payout prints its fulfillment's page, and an application the applications list.",
+    group: 'Records',
+    short: "Print a record's page in Siren's app",
+    options: { browser: { type: 'boolean' } },
+    flags: { browser: ['--browser', 'Open the page in your browser too'] },
+    examples: ['siren open collaborator 1', 'siren open conversion 5640 --browser'],
+    positionals: [1, 2],
+    readsOnly: true,
+    run: open.openRecord,
+  },
   'enrollers create': {
     usage: 'enrollers create (<file> | -) [--json]',
     summary: 'Make an enroller from JSON: name, triggerId and triggerArgs, and the programs, distributors or groups it adds people to or takes them out of. siren enrollers get <id> --json shows the fields.',
@@ -1024,7 +1055,7 @@ function helpText(style: Style): string {
     ...section(style, 'Usage', ['  siren <command> [flags]']),
     ...GROUPS.flatMap((group) =>
       group === 'Records'
-        ? section(style, group, recordRows(style))
+        ? section(style, group, [...recordRows(style), ...commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))])
         : section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))),
     ),
     ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text, style.width)),
@@ -1036,6 +1067,7 @@ function helpText(style: Style): string {
           ['SIREN_BASE_URL', 'The Siren to use when no flag names one'],
           ['SIREN_ORG', 'The organization to act in, when no flag names one'],
           ['SIREN_TOKEN', 'A personal access token, for scripts and CI'],
+          ['SIREN_DASHBOARD_URL', "Siren's app, for links, when it isn't beside the API"],
           ['SIREN_DEBUG=1', 'The same as --verbose'],
           ['NO_COLOR, CI', 'Plain output, and no logo animation'],
         ],

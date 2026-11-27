@@ -36,6 +36,7 @@ DEVELOPER TOOLS
   simulate            Show what a scenario would make, writing nothing
   fixtures            Run a file of trigger steps
   apps test           Send the app's address a test delivery
+  explain             Say why a sale paid what it did
 
 SANDBOX
   sandbox create      Copy a live setup into a sandbox
@@ -73,6 +74,7 @@ RECORDS
   get <path>          Read any route, such as get /programs
   post <path>         Write to any route, and put, patch and delete
   resources           List the resources and their operations
+  open                Print a record's page in Siren's app
 
 ACCOUNT
   logout              Log out, and forget the session here
@@ -90,11 +92,12 @@ FLAGS
   -v, --version       Show the version
 
 ENVIRONMENT
-  SIREN_BASE_URL      The Siren to use when no flag names one
-  SIREN_ORG           The organization to act in, when no flag names one
-  SIREN_TOKEN         A personal access token, for scripts and CI
-  SIREN_DEBUG=1       The same as --verbose
-  NO_COLOR, CI        Plain output, and no logo animation
+  SIREN_BASE_URL       The Siren to use when no flag names one
+  SIREN_ORG            The organization to act in, when no flag names one
+  SIREN_TOKEN          A personal access token, for scripts and CI
+  SIREN_DASHBOARD_URL  Siren's app, for links, when it isn't beside the API
+  SIREN_DEBUG=1        The same as --verbose
+  NO_COLOR, CI         Plain output, and no logo animation
 
 EXAMPLES
   $ siren login

@@ -82,6 +82,9 @@ describe('siren enrollers list and get', () => {
         '    Nov 24 16:10  collaborator 39  Added Marcus Bell to Creator Program.',
         '    and 3 more',
         '',
+        // The enroller's page in Siren's app ends the view.
+        'https://sandbox.sirenaffiliates.com/enrollers/1?org=3',
+        '',
       ].join('\n'),
     );
     expect(h.err()).toContain('siren enrollers log 1');
