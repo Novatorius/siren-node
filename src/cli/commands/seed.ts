@@ -2,7 +2,7 @@ import { readObject, writeRecord } from '../../resources/record-requests';
 import { contextOf } from '../context';
 import type { CommandInput } from '../context';
 import { orgScope } from '../org';
-import { onSandbox } from '../sandboxes';
+import { onSandbox, orNotYet } from '../sandboxes';
 import { clean, styleFor } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
 
@@ -72,7 +72,7 @@ export async function seed(input: CommandInput): Promise<number> {
   const slug = clean(org.orgSlug);
   const http = org.http;
 
-  const queued = await writeRecord<{ jobId: string; status: string; sales: number; collaborators: number; months: number }>(http, 'POST', '/sandbox/seed', body);
+  const queued = await orNotYet(run, 'seed', () => writeRecord<{ jobId: string; status: string; sales: number; collaborators: number; months: number }>(http, 'POST', '/sandbox/seed', body));
   const style = styleFor(input.io, 'stdout', { json });
   if (input.values['no-wait'] === true) {
     if (json) input.io.stdout(`${JSON.stringify(queued, null, 2)}\n`);

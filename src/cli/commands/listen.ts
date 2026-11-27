@@ -13,6 +13,7 @@ import { saveSecrets } from './apply';
 import { idLabeller, whole } from './requests';
 import type { IdLabel } from './requests';
 import { assertSandbox } from './trigger-client';
+import { orNotYet } from '../sandboxes';
 
 /*
  * `siren listen`: while it runs, Siren sends one app's asks, tells and
@@ -308,7 +309,8 @@ export async function listen(input: CommandInput): Promise<number> {
   const open = async (): Promise<OpenedSession> =>
     writeRecord<OpenedSession>(http, 'POST', '/listen-sessions', { app: appKey, ...(events === undefined ? {} : { events }), forwardTo: target });
 
-  let opened = await open();
+  // A Siren without the listen routes answers a bare 404, so the first open says what it lacks (review round 1, C2).
+  let opened = await orNotYet(run, 'listen', open);
   const envPath = join(file === undefined ? io.cwd : dirname(file.path), run.envFileName());
   if (opened.signingSecret !== undefined) {
     // In --json, the saved line goes to standard error, so standard output stays JSON.

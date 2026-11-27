@@ -6,7 +6,7 @@ import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { clean, styleFor } from '../style';
 import type { NextStep, Style } from '../style';
-import { CliRefusal, CliUsageError } from '../targets';
+import { CliRefusal, CliUsageError, hostName } from '../targets';
 import { idLabelFor, whole } from './requests';
 import type { IdLabel } from './requests';
 
@@ -281,7 +281,7 @@ export function waitSeconds(value: unknown, fallback: number): number {
 export async function assertSandbox(run: CommandContext, words: string): Promise<void> {
   if ((await run.targetEdition()) !== 'production') return;
   throw new CliRefusal(`siren ${words} runs on a sandbox only.`, {
-    why: `${run.target.baseUrl} is a live Siren, and test activity there would be real sales.`,
+    why: `${hostName(run.target.baseUrl)} is a live Siren, and test activity there would be real sales.`,
     fix: 'siren login --sandbox',
     fixWords: 'and try it there',
   });

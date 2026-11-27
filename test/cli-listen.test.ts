@@ -116,6 +116,15 @@ afterEach(async () => {
 const stopAtFirstWait = { onSleep: (count: number, abort: () => void) => (count === 1 ? abort() : undefined) };
 
 describe('siren listen', () => {
+  // Review round 1, C2.
+  it("says this Siren doesn't have app listening yet when it answers a bare 404, and prints no Listening line", async () => {
+    const h = harness([reply(404, { error: { message: 'Not found.' } })]);
+    h.signedIn();
+    expect(await h.run(['listen', '--app', KEY, '--forward-to', 'http://localhost:3000/siren'])).toBe(1);
+    expect(h.err().replace(/\s+/g, ' ')).toContain("This Siren doesn't have app listening yet.");
+    expect(h.out()).not.toContain('Listening');
+  });
+
   it("forwards Siren's exact bytes and headers, which the SDK's verifyRequest accepts, and reports the handler's reply", async () => {
     const local = await handler(({ headers, body }) => {
       const checked = verifyAppRequest(body, headers as Record<string, string>, fixture.secret, { now: NOW_S }, 300);

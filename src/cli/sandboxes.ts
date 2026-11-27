@@ -3,6 +3,7 @@ import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path';
 import { CallbackAccessTokenSource } from '../auth/callback-access-token-source';
 import { createHttpTransport } from '../client';
+import { SirenError } from '../errors';
 import type { HttpTransport } from '../http';
 import type { CommandContext } from './context';
 import type { StoredSession } from './credentials';
@@ -93,11 +94,13 @@ export class SandboxRecords {
 
 /**
  * The session for a command that runs only on a sandbox Siren. `--live` and
- * a target that reports itself live (or names no edition) are refused before
- * anything but the edition read is sent. `words` is the command, such as
- * `sandbox reset`, for the fix line.
+ * a target that reports itself live are refused before anything but the
+ * edition read is sent. `words` is the command, such as `sandbox reset`,
+ * for the fix line. `reads` is true for a command that only reads, such as
+ * `sandbox list`, whose refusal never says it changes data (review round 1,
+ * C19). The refusal names the host, as every other refusal does.
  */
-export async function onSandbox(run: CommandContext, words: string): Promise<StoredSession> {
+export async function onSandbox(run: CommandContext, words: string, reads = false): Promise<StoredSession> {
   if (run.target.live) {
     throw new CliRefusal(`siren ${words} runs only on a sandbox Siren, and --live names a live one.`, {
       why: 'Nothing was sent.',
@@ -106,8 +109,8 @@ export async function onSandbox(run: CommandContext, words: string): Promise<Sto
     });
   }
   if ((await run.targetEdition()) !== 'sandbox') {
-    throw new CliRefusal(`${run.target.baseUrl} is a live Siren, and siren ${words} runs only on a sandbox.`, {
-      why: 'It changes test data, so it never touches a live organization. Nothing was sent.',
+    throw new CliRefusal(`siren ${words} runs only on a sandbox Siren, and ${hostOf(run.target.baseUrl)} is live.`, {
+      why: reads ? 'Sandbox organizations live on a sandbox Siren, so there is nothing of them here. Nothing was sent.' : 'It changes test data, so it never touches a live organization. Nothing was sent.',
       fix: `siren ${words} --sandbox`,
       fixWords: 'or pass --base-url with a sandbox Siren',
     });
@@ -143,4 +146,47 @@ export function hostOf(baseUrl: string): string {
 /** A count and its noun: `1 program`, `3 programs`. */
 export function counted(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
+ * True for Siren's answer to a route it doesn't have: 404 with no code and
+ * the bare message "Not found.". A record a route can't find answers 404
+ * with its own words, so this never mistakes a missing record for a
+ * missing route.
+ */
+export function isMissingRoute(error: unknown): boolean {
+  return error instanceof SirenError && error.statusCode === 404 && error.code === undefined && /^(?:siren: )?not found\.?$/i.test(error.message.trim());
+}
+
+/** The developer tools a Siren may not have yet, as a refusal names each one. */
+export const DEV_TOOLS = {
+  listen: { what: 'app listening', route: 'POST /listen-sessions' },
+  trigger: { what: 'test activity', route: 'POST /test-activity' },
+  ask: { what: 'sample asks', route: 'POST /apps/{key}/features/{key}/test' },
+  seed: { what: 'sandbox seeding', route: 'POST /sandbox/seed' },
+  sandbox: { what: 'the sandbox tools', route: 'its /sandbox routes' },
+  logs: { what: 'a log feed', route: 'GET /logs' },
+} as const;
+
+/**
+ * The refusal for a Siren that lacks the route behind a developer tool
+ * (review round 1, C2): what it lacks, in one line, and that the tool comes
+ * with a later Siren release, never a bare "Not found.".
+ */
+export function notYetRefusal(run: Pick<CommandContext, 'target'>, tool: keyof typeof DEV_TOOLS): CliRefusal {
+  const { what, route } = DEV_TOOLS[tool];
+  return new CliRefusal(`This Siren doesn't have ${what} yet.`, {
+    why: `${hostOf(run.target.baseUrl)} answered 404 for ${route}, so it is older than this tool. It comes with a later Siren release.`,
+    fixText: 'Update that Siren, or point the tool at one that has it with --base-url.',
+  });
+}
+
+/** Runs `call`, and answers a missing route with {@link notYetRefusal} in place of Siren's bare 404. */
+export async function orNotYet<T>(run: Pick<CommandContext, 'target'>, tool: keyof typeof DEV_TOOLS, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (isMissingRoute(error)) throw notYetRefusal(run, tool);
+    throw error;
+  }
 }

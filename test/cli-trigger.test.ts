@@ -484,3 +484,24 @@ describe('what Siren sends, printed', () => {
     expect(failed.err()).toContain('HTTP 500: Internal Server Error');
   });
 });
+
+// Review round 1, C2: an older Siren answers a bare 404 for the test activity route.
+describe('siren trigger on a Siren without test activity', () => {
+  it("says this Siren doesn't have test activity yet, with no success line", async () => {
+    const h = harness([reply(404, { error: { message: 'Not found.' } })]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale', '--collaborator', '42', '--program', '3', '--amount', '49.99'])).toBe(1);
+    const flat = h.err().replace(/\s+/g, ' ');
+    expect(flat).toContain("This Siren doesn't have test activity yet.");
+    expect(flat).toContain('answered 404 for POST /test-activity');
+    expect(h.out()).not.toContain('recorded');
+  });
+
+  it('keeps a 404 that names a missing record in Siren\'s own words', async () => {
+    const h = harness([reply(404, { error: { message: 'No collaborator 42 in this organization.', code: 'collaborator_unknown' } })]);
+    h.signedIn();
+    expect(await h.run(['trigger', 'sale', '--collaborator', '42', '--program', '3', '--amount', '49.99'])).toBe(1);
+    expect(h.err()).toContain('No collaborator 42');
+    expect(h.err()).not.toContain("doesn't have test activity");
+  });
+});

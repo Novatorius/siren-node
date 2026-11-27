@@ -374,6 +374,42 @@ describe('sandbox: every command runs only on a sandbox', () => {
       expect(h.err()).toContain('without --live');
     }
   });
+
+  // Review round 1, C19: a read never claims to change data, and the refusal names the host, not the whole URL.
+  it('says a read like sandbox list has nothing to show on a live Siren, naming its host', async () => {
+    const h = harness([], { edition: 'production' });
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ edition: 'production' }) });
+    expect(await h.run(['sandbox', 'list'])).toBe(1);
+    const flat = h.err().replace(/\s+/g, ' ');
+    expect(flat).toContain(`siren sandbox list runs only on a sandbox Siren, and ${new URL(SANDBOX_BASE_URL).host} is live.`);
+    expect(flat).not.toContain('changes test data');
+    expect(flat).not.toContain(SANDBOX_BASE_URL);
+    const reset = harness([], { edition: 'production' });
+    reset.signedIn({ [SANDBOX_BASE_URL]: session({ edition: 'production' }) });
+    expect(await reset.run(['sandbox', 'reset', '--confirm', 'acme'])).toBe(1);
+    expect(reset.err()).toContain('It changes test data');
+  });
+});
+
+// Review round 1, C2: a Siren older than the tool answers a bare 404, and each command says what that Siren lacks.
+describe('sandbox: a Siren without the sandbox routes', () => {
+  const missing = () => reply(404, { error: { message: 'Not found.' } });
+  for (const [argv, what] of [
+    [['seed'], 'sandbox seeding'],
+    [['sandbox', 'reset', '--confirm', 'acme-sandbox'], 'the sandbox tools'],
+    [['sandbox', 'inbox'], 'the sandbox tools'],
+  ] as const) {
+    it(`siren ${argv.join(' ')} says this Siren doesn't have ${what} yet`, async () => {
+      const h = harness([missing()]);
+      h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme-sandbox' }) });
+      expect(await h.run([...argv])).toBe(1);
+      const flat = h.err().replace(/\s+/g, ' ');
+      expect(flat).toContain(`This Siren doesn't have ${what} yet.`);
+      expect(flat).toContain('comes with a later Siren release');
+      expect(flat).not.toMatch(/(^|\s)Not found\./);
+      expect(h.out()).toBe('');
+    });
+  }
 });
 
 describe('sandbox: what a copy takes', () => {

@@ -1,5 +1,6 @@
 import { contextOf } from '../context';
 import type { CommandInput } from '../context';
+import { orNotYet } from '../sandboxes';
 import { styleFor } from '../style';
 import { CliUsageError } from '../targets';
 import { appKeyArgument } from './apply';
@@ -46,7 +47,7 @@ export async function trigger(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   await assertSandbox(run, `trigger ${event}`);
   await run.signedIn();
-  const result = await triggerAndWait(new TestActivityClient(run), io, body, seconds, json);
+  const result = await orNotYet(run, 'trigger', () => triggerAndWait(new TestActivityClient(run), io, body, seconds, json));
 
   if (json) io.stdout(`${JSON.stringify(result, null, 2)}\n`);
   else io.stdout(activityReport(styleFor(io, 'stdout', {}), input, run, result, await requestLabel(run, openWaits(result)[0]?.requestKey)));
@@ -71,7 +72,7 @@ export async function triggerAsk(input: CommandInput): Promise<number> {
   await run.signedIn();
   const client = new TestActivityClient(run);
   await confirmLiveAsk(run, io, client, app, feature, values.yes === true, `trigger ask ${app} ${feature} --live --yes`);
-  const request = await askAndWait(client, io, app, feature, seconds, json);
+  const request = await orNotYet(run, 'ask', () => askAndWait(client, io, app, feature, seconds, json));
 
   if (json) io.stdout(`${JSON.stringify({ request }, null, 2)}\n`);
   else io.stdout(askReport(styleFor(io, 'stdout', {}), input, run, app, feature, request, await requestLabel(run, request.id)));

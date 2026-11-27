@@ -171,6 +171,15 @@ describe('siren logs tail', () => {
     }
   });
 
+  // Review round 1, C2: the Tailing headline waits for Siren's first answer.
+  it("says this Siren doesn't have a log feed yet, with no Tailing line above it", async () => {
+    const h = harness([reply(404, { error: { message: 'Not found.' } })]);
+    h.signedIn();
+    expect(await h.run(['logs', 'tail'])).toBe(1);
+    expect(h.err().replace(/\s+/g, ' ')).toContain("This Siren doesn't have a log feed yet.");
+    expect(h.out() + h.err()).not.toContain('Tailing');
+  });
+
   it('says when the app is not in the organization, with the command that lists them', async () => {
     const h = harness([reply(404, { error: { message: 'This organization has no app acme-ledger.', code: 'app_not_found' } })]);
     h.signedIn();

@@ -10,6 +10,7 @@ import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { clean, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
+import { notYetRefusal } from '../sandboxes';
 import { CliRefusal, CliUsageError } from '../targets';
 import { idLabeller, whole } from './requests';
 import type { IdLabel } from './requests';
@@ -108,6 +109,8 @@ export interface FollowOptions {
   /** Stop after this many entries, with exit code 0. */
   limit?: number;
   onEntry(entry: LogEntry): void | Promise<void>;
+  /** Called once, after the first read Siren answers and before its entries, so a headline never shows above a refusal. */
+  onFirstPage?(): void;
 }
 
 /**
@@ -129,7 +132,9 @@ export async function logsTail(input: CommandInput): Promise<number> {
   // Short request ids in hints when Siren finds requests by their start (CLI pass 3), from one idPrefix call at the first.
   const labelFor = idLabeller(org);
 
-  if (!json) {
+  // The headline waits for Siren's first answer, so a Siren with no log feed never shows a green Tailing line first (review round 1, C2).
+  const headline = () => {
+    if (json) return;
     run.print(
       style.report({
         headline: `Tailing ${style.bold(clean(org.orgName))}, ${scopeWords(query)}`,
@@ -140,12 +145,13 @@ export async function logsTail(input: CommandInput): Promise<number> {
         tips: ['Ctrl-C stops. --json prints one JSON object a line.'],
       }),
     );
-  }
+  };
 
   return followFeed(run, io, {
     http: org.http,
     query,
     limit,
+    onFirstPage: headline,
     onEntry: async (entry) => {
       if (json) return io.stdout(`${JSON.stringify(entry)}\n`);
       // Only a failed entry names a request, in its hint, so only one of those asks Siren how to print ids.
@@ -182,6 +188,7 @@ export async function followFeed(run: CommandContext, io: CliIo, options: Follow
   let printed = 0;
   let downSince: number | undefined;
   let misses = 0;
+  let answered = false;
 
   try {
     for (let read = 1; ; read += 1) {
@@ -207,6 +214,8 @@ export async function followFeed(run: CommandContext, io: CliIo, options: Follow
       }
       downSince = undefined;
       misses = 0;
+      if (!answered) options.onFirstPage?.();
+      answered = true;
 
       cursor = page.nextCursor;
       for (const entry of page.entries) {
@@ -253,9 +262,7 @@ function logsRefusal(run: CommandContext, query: LogQuery, error: unknown): unkn
   if (code === 'logs_since_too_old') {
     return new CliRefusal('--since reaches back too far.', { why: 'Siren keeps the log 7 days, so --since can reach back 7 days at most.', fixText: 'Pass --since 7d or less.' });
   }
-  if (error instanceof SirenError && error.statusCode === 404 && code === undefined) {
-    return new CliRefusal('This Siren has no log feed yet.', { why: 'It answered 404 for GET /logs, so it is older than this tool.', fixText: 'Update that Siren, or point the tool at one that has the log feed.' });
-  }
+  if (error instanceof SirenError && error.statusCode === 404 && code === undefined) return notYetRefusal(run, 'logs');
   return error;
 }
 
