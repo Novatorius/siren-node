@@ -122,6 +122,8 @@ interface CommandSpec {
   flags: Readonly<Record<string, readonly [string, string]>>;
   /** One or two command lines that do something real. */
   examples: readonly string[];
+  /** A write's body fields, each with the values or type it takes, which `--help` lists under Fields. */
+  fields?: ReadonlyArray<readonly [string, string]>;
   /** The fewest and the most arguments after the command words. */
   positionals: readonly [number, number];
   /** True for a command that sends nothing and so needs no Siren address. */
@@ -1055,18 +1057,24 @@ function recipesHelpText(style: Style): string {
   ].join('\n');
 }
 
-/** What `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
+/** What `siren sandbox`, `siren logs`, `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
 const GROUP_SUMMARIES = {
+  // Review round 1, C16: siren sandbox and siren logs were unknown commands alone and with --help.
+  sandbox: 'Copy a live setup into a sandbox organization, list your sandboxes, clear their activity, and read the emails a sandbox caught.',
+  logs: 'Watch what happens in the organization as it happens: app requests, deliveries, webhooks, events and API calls.',
   'condition-sets': "Condition sets are saved lists of conditions Siren checks each day, such as joined in the last 30 days. See who matches one now, and make one from JSON. Siren's plan must include them.",
   enrollers: 'Enrollers add people to programs, distributors and groups, or take them out, when something happens to them. See what each does and did, and run one now. A Siren without enrollers says so.',
 } as const;
+
+/** The heading each group's help lists its commands under. */
+const GROUP_TITLES: Readonly<Record<keyof typeof GROUP_SUMMARIES, string>> = { sandbox: 'Sandbox', logs: 'Logs', 'condition-sets': 'Condition sets', enrollers: 'Enrollers' };
 
 function groupHelpText(style: Style, group: keyof typeof GROUP_SUMMARIES): string {
   return [
     ...wrap(GROUP_SUMMARIES[group], style.width),
     '',
     ...section(style, 'Usage', [`  siren ${group} <command> [flags]`]),
-    ...section(style, group === 'enrollers' ? 'Enrollers' : 'Condition sets', commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
+    ...section(style, GROUP_TITLES[group], commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
     ...section(style, 'Learn more', learnMore(style, true)),
   ].join('\n');
 }
@@ -1092,6 +1100,8 @@ function commandHelp(style: Style, spec: CommandSpec): string {
     '',
     ...section(style, 'Usage', [`  siren ${spec.usage}`]),
     ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text, style.width)) : []),
+    // Review round 1, C20: a write lists the fields -d takes, with their values.
+    ...(spec.fields !== undefined && spec.fields.length > 0 ? section(style, 'Fields', columns(spec.fields.map(([name, text]) => [`${name}=`, text] as const), 22, (text) => text, style.width)) : []),
     // CLI pass 3: the global flags once by name, since siren --help explains each.
     ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, style.width - 2).map((line) => `  ${line}`)),
     ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
@@ -1211,7 +1221,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       io.stdout(recipesHelpText(styleFor(io, 'stdout', {})));
       return 0;
     }
-    if ((words[0] === 'condition-sets' || words[0] === 'enrollers') && words.length === 1) {
+    if ((words[0] === 'condition-sets' || words[0] === 'enrollers' || words[0] === 'sandbox' || words[0] === 'logs') && words.length === 1) {
       io.stdout(groupHelpText(styleFor(io, 'stdout', {}), words[0]));
       return 0;
     }

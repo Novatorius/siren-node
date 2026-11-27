@@ -15,6 +15,7 @@ import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
 import { cell, recordRows, table } from './resource-output';
 import { recordView } from '../record-view';
+import { READ_STATUSES, WRITE_NOTES, WRITE_VALUES } from '../record-values';
 import { currenciesFor, holdsMoney, withMoney } from '../money';
 
 /*
@@ -70,6 +71,8 @@ export interface ResourceSpec {
   options: Options;
   flags: Readonly<Record<string, readonly [string, string]>>;
   examples: readonly string[];
+  /** A write's body fields as help lists them: the name, and its type, allowed values and need. */
+  fields?: ReadonlyArray<readonly [string, string]>;
   positionals: readonly [number, number];
   offline?: boolean;
   readsOnly?: boolean;
@@ -111,18 +114,29 @@ function shownValues(filter: Filter): string[] {
   return values.filter((value) => !(value !== value.toLowerCase() && values.includes(value.toLowerCase())));
 }
 
-/** The list's filter flags, each with its query parameter, leaving out any whose flag another option has. */
-function filtersOf(route: ResourceRoute): Array<{ filter: Filter; flag: string }> {
-  return (route.filters ?? []).map((filter) => ({ filter, flag: filterFlag(filter, route) })).filter(({ flag }) => !RESERVED_FLAGS.has(flag));
+/**
+ * The list's filter flags, each with its query parameter, leaving out any
+ * whose flag another option has. A `status` filter openapi leaves as plain
+ * text takes the words Siren stores for that resource ({@link READ_STATUSES}),
+ * so a wrong word is refused before anything is sent (review round 1, C11).
+ */
+function filtersOf(route: ResourceRoute, resource?: ResourceCommand): Array<{ filter: Filter; flag: string; aliases?: Readonly<Record<string, string>>; note?: string }> {
+  return (route.filters ?? [])
+    .map((given) => {
+      const words = given.name === 'status' && given.values === undefined && resource !== undefined ? READ_STATUSES[resource.name] : undefined;
+      const filter: Filter = words === undefined ? given : { ...given, values: [...words.values, ...Object.keys(words.aliases ?? {})] };
+      return { filter, flag: filterFlag(filter, route), ...(words?.aliases === undefined ? {} : { aliases: words.aliases }), ...(words?.note === undefined ? {} : { note: words.note }) };
+    })
+    .filter(({ flag }) => !RESERVED_FLAGS.has(flag));
 }
 
-/** A filter's help line: `--status <text>`, `--program-id <n>`, `--order <asc|desc>`. */
-function filterHelp(filter: Filter, flag: string): readonly [string, string] {
+/** A filter's help line: `--status <pending|complete|…>`, `--program-id <n>`, `--order <asc|desc>`. */
+function filterHelp(filter: Filter, flag: string, note?: string): readonly [string, string] {
   const values = shownValues(filter);
   const listed = values.join('|');
   const placeholder = values.length > 0 ? (listed.length <= 50 ? listed : 'value') : filter.type === 'integer' ? 'n' : filter.type === 'number' ? 'number' : filter.type === 'boolean' ? 'true|false' : 'text';
   const also = values.length > 0 && listed.length > 50 ? `: ${values.join(', ')}` : '';
-  return [`--${flag} <${placeholder}>`, `Sent as ${filter.name}${also}`];
+  return [`--${flag} <${placeholder}>`, `Sent as ${filter.name}${also}${note === undefined ? '' : `. ${note}`}`];
 }
 
 /** "a, b or c". */
@@ -131,12 +145,13 @@ function orList(values: readonly string[]): string {
 }
 
 /** The query parameters the filter flags send, each value checked against its type, or `CliUsageError`. */
-function filterQuery(input: CommandInput, route: ResourceRoute): Record<string, string> {
+function filterQuery(input: CommandInput, route: ResourceRoute, resource?: ResourceCommand): Record<string, string> {
   const query: Record<string, string> = {};
-  for (const { filter, flag } of filtersOf(route)) {
-    const given = (input.values as Record<string, unknown>)[flag];
-    if (typeof given !== 'string') continue;
-    if (filter.values !== undefined && !filter.values.includes(given)) throw new CliUsageError(`--${flag} takes ${orList(shownValues(filter))}, and ${JSON.stringify(given)} isn't one.`);
+  for (const { filter, flag, aliases } of filtersOf(route, resource)) {
+    const typed = (input.values as Record<string, unknown>)[flag];
+    if (typeof typed !== 'string') continue;
+    if (filter.values !== undefined && !filter.values.includes(typed)) throw new CliUsageError(`--${flag} takes ${orList(shownValues(filter))}, and ${JSON.stringify(typed)} isn't one.`);
+    const given = aliases?.[typed] ?? typed;
     if (filter.type === 'integer' && !/^-?\d+$/.test(given)) throw new CliUsageError(`--${flag} takes a whole number, and ${JSON.stringify(given)} isn't one.`);
     if (filter.type === 'number' && !Number.isFinite(Number(given))) throw new CliUsageError(`--${flag} takes a number, and ${JSON.stringify(given)} isn't one.`);
     if (filter.type === 'boolean' && given !== 'true' && given !== 'false') throw new CliUsageError(`--${flag} takes true or false, and ${JSON.stringify(given)} isn't either.`);
@@ -244,10 +259,11 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
   const takesId = route.param !== undefined;
   const shaped = optionsFor(route.method, op === 'list' && route.paginated === true);
   // A list's query parameters are flags of their own (lean output, section 5).
-  const filters = op === 'list' ? filtersOf(route) : [];
+  const filters = op === 'list' ? filtersOf(route, resource) : [];
   const options: Options = { ...shaped.options, ...Object.fromEntries(filters.map(({ flag }) => [flag, { type: 'string' as const }])) };
-  const flags: Record<string, readonly [string, string]> = { ...shaped.flags, ...Object.fromEntries(filters.map(({ filter, flag }) => [flag, filterHelp(filter, flag)])) };
-  const example = `siren ${resource.name} ${op}${takesId ? ' 12' : ''}${op === 'create' || op === 'update' ? ` -d ${route.required?.[0] ?? route.fields?.[0] ?? 'name'}=value` : ''}`;
+  const flags: Record<string, readonly [string, string]> = { ...shaped.flags, ...Object.fromEntries(filters.map(({ filter, flag, note }) => [flag, filterHelp(filter, flag, note)])) };
+  const writes = op === 'create' || op === 'update';
+  const example = `siren ${resource.name} ${op}${takesId ? ' 12' : ''}${writes ? ` -d ${exampleField(resource, route)}` : ''}`;
   return {
     name: `${resource.name} ${op}`,
     spec: {
@@ -258,11 +274,54 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
       options,
       flags,
       examples: [example],
+      ...(writes ? { fields: fieldRows(resource, route) } : {}),
       positionals: takesId ? [1, 1] : [0, 0],
       readsOnly: route.method === 'GET',
       run: (input) => sendResource(input, resource, op, route),
     },
   };
+}
+
+/** The values a body field takes: openapi's enum, else the words {@link WRITE_VALUES} names, else none. */
+function fieldValues(resource: ResourceCommand | undefined, route: ResourceRoute, field: string): readonly string[] | undefined {
+  return route.enums?.[field] ?? (resource === undefined ? undefined : WRITE_VALUES[`${resource.name} ${route.method}`]?.[field]);
+}
+
+/** A field's type in words, as help names it. */
+function typeWords(type: string | undefined): string | undefined {
+  const base = type?.replace(/\|null$/, '');
+  const words = base === 'integer' ? 'a whole number' : base === 'number' ? 'a number' : base === 'boolean' ? 'true or false' : base === 'string' ? 'text' : undefined;
+  return words === undefined ? undefined : `${words}${type?.endsWith('|null') ? ', or null to clear it' : ''}`;
+}
+
+/**
+ * A write's body fields as help lists them, from openapi.json: each name,
+ * then the values it takes or its type, and whether Siren requires it
+ * (review round 1, C20). Nested fields, such as incentiveTypeArgs.x, keep
+ * their dotted name, which -d takes as incentiveTypeArgs[x].
+ */
+function fieldRows(resource: ResourceCommand, route: ResourceRoute): Array<readonly [string, string]> {
+  return (route.fields ?? []).map((field) => {
+    const values = fieldValues(resource, route, field);
+    const parts = [values !== undefined ? `One of ${orList(values)}` : typeWords(route.types?.[field]), route.required?.includes(field) ? 'required' : undefined, WRITE_NOTES[resource.name]?.[field]];
+    const said = parts.filter((part): part is string => part !== undefined && part !== '');
+    const text = said.length === 0 ? 'Any value Siren takes' : said.map((part, at) => (at === 0 ? `${part[0]!.toUpperCase()}${part.slice(1)}` : part)).join('. ');
+    return [field.includes('.') ? field.replace(/\.(.+)$/, '[$1]') : field, `${text}.`.replace(/\.\.$/, '.')] as const;
+  });
+}
+
+/** A real `-d key=value` for a write's example: a field with values, such as status=approved, else a required field with a value of its type. */
+function exampleField(resource: ResourceCommand, route: ResourceRoute): string {
+  const fields = route.fields ?? [];
+  const valued = fields.find((field) => fieldValues(resource, route, field) !== undefined);
+  if (valued !== undefined) {
+    const values = fieldValues(resource, route, valued)!;
+    return `${valued}=${values.includes('approved') ? 'approved' : values.includes('active') ? 'active' : values[0]}`;
+  }
+  const field = route.required?.[0] ?? fields.find((candidate) => !candidate.includes('.')) ?? 'name';
+  const type = route.types?.[field]?.replace(/\|null$/, '');
+  const sample = type === 'integer' || type === 'number' ? '1' : type === 'boolean' ? 'true' : field === 'name' ? '"Referral program"' : field === 'email' ? 'ana@example.com' : 'value';
+  return `${field}=${sample}`;
 }
 
 /** `siren resources`: every generated resource and its operations. */
@@ -341,6 +400,8 @@ interface Plan {
 async function sendRaw(input: CommandInput, method: HttpMethod): Promise<number> {
   const { path, query } = apiPath(input.args[0]!);
   const deleteId = method === 'DELETE' ? recordIdOf(path) : undefined;
+  const matched = routeOf(method, path);
+  if (matched !== undefined && method !== 'GET' && method !== 'DELETE') checkFieldValues(input, matched.resource, matched.route, `${method.toLowerCase()} ${path}`.replace(/^(\S+) .*$/, '$1'));
   const outgoing = await outgoingOf(input, method, path, query, typesOf(method, path));
   const fields = method === 'GET' ? fieldsOf(input.values.fields) : undefined;
   return send(input, {
@@ -391,12 +452,13 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
   const fields = op === 'list' ? fieldsOf(input.values.fields) : undefined;
   const base: Record<string, string> = {};
   if (op === 'list') {
-    Object.assign(base, filterQuery(input, route));
+    Object.assign(base, filterQuery(input, route, resource));
     // Newest first where the route takes an order, unless the line names one (lean output, section 5).
     const named = [...pairs(input).map(([key]) => key), ...Object.keys(base)];
     if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(base, { orderBy: 'id', order: 'desc' });
     if (fields !== undefined && route.query?.includes('fields')) base.fields = fields.join(',');
   }
+  if (route.method !== 'GET' && route.method !== 'DELETE') checkFieldValues(input, resource, route, `${resource.name} ${op}`);
   const outgoing = await outgoingOf(input, route.method, path, base, route.types);
   return send(input, {
     outgoing,
@@ -492,17 +554,45 @@ export function fieldValue(text: string, type?: string, key = 'The field'): unkn
   return text;
 }
 
+/** The generated route a raw call reaches, such as POST /programs, with its resource, or undefined. */
+function routeOf(method: HttpMethod, path: string): { resource: ResourceCommand; route: ResourceRoute; op: ResourceOp } | undefined {
+  const bare = path.split('?')[0]!.replace(/\/+$/, '');
+  for (const resource of RESOURCE_COMMANDS) {
+    for (const [op, route] of Object.entries(resource.ops) as Array<[ResourceOp, ResourceRoute | undefined]>) {
+      if (route === undefined || route.method !== method) continue;
+      const pattern = new RegExp(`^${route.path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{[^}]+\\?\}/g, '[^/]+')}$`);
+      if (pattern.test(bare)) return { resource, route, op };
+    }
+  }
+  return undefined;
+}
+
 /** The body field types of the generated route a raw call reaches, such as POST /programs, or none. */
 function typesOf(method: HttpMethod, path: string): Readonly<Record<string, string>> {
-  const bare = path.split('?')[0]!.replace(/\/+$/, '');
   for (const resource of RESOURCE_COMMANDS) {
     for (const route of Object.values(resource.ops)) {
       if (route === undefined || route.method !== method || route.types === undefined) continue;
       const pattern = new RegExp(`^${route.path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{[^}]+\\?\}/g, '[^/]+')}$`);
-      if (pattern.test(bare)) return route.types;
+      if (pattern.test(path.split('?')[0]!.replace(/\/+$/, ''))) return route.types;
     }
   }
   return {};
+}
+
+/**
+ * Refuses, before anything is sent, a `-d` value a field doesn't take, such
+ * as status=complete on a conversion, naming the values it does and the
+ * help that lists every field (review round 1, C11).
+ */
+function checkFieldValues(input: CommandInput, resource: ResourceCommand | undefined, route: ResourceRoute, words: string): void {
+  for (const [key, value] of pairs(input)) {
+    const field = key.replace(/\[([^\]]*)\]/g, '.$1').replace(/^\./, '');
+    const values = fieldValues(resource, route, field);
+    if (values === undefined || values.includes(value) || value === 'null') continue;
+    const note = resource === undefined ? undefined : WRITE_NOTES[resource.name]?.[field];
+    const hint = note !== undefined && value === 'complete' && values.includes('approved') ? ` ${note} Send ${field}=approved to approve one.` : '';
+    throw new CliUsageError(`${field} takes ${orList(values)}, and ${JSON.stringify(value)} isn't one.${hint} siren ${words} --help lists every field.`);
+  }
 }
 
 /** `-d` pairs as written, each split at its first `=`. */

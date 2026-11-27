@@ -26,7 +26,7 @@ const FAILED = {
   },
 };
 const strip = (text: string) => text.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '');
-const CREATE = ['collaborators', 'create', '-d', 'email=not-an-email', '-d', 'status=bogus'];
+const CREATE = ['collaborators', 'create', '-d', 'email=not-an-email', '-d', 'nickname=x'];
 
 describe('fieldProblems', () => {
   it('gives one row a field, drops the repeated name, lets REQUIRED stand alone, and lists the valid values', () => {
@@ -83,11 +83,11 @@ describe('a validation failure on a generated command', () => {
     const one = { error: { ...FAILED.error, context: { ...FAILED.error.context, failedValidations: [FAILED.error.context.failedValidations[3]] } } };
     const change = harness([reply(400, one)]);
     change.signedIn();
-    expect(await change.run(['collaborators', 'update', '4', '-d', 'status=bogus'])).toBe(1);
+    expect(await change.run(['collaborators', 'update', '4', '-d', 'nickname=x'])).toBe(1);
     expect(change.err()).toContain('siren: Siren refused the change to collaborator 4. 1 field needs fixing. Fix it and run again.');
     const raw = harness([reply(400, one)]);
     raw.signedIn();
-    expect(await raw.run(['post', '/collaborators', '-d', 'status=bogus'])).toBe(1);
+    expect(await raw.run(['post', '/collaborators', '-d', 'nickname=x'])).toBe(1);
     expect(raw.err()).toContain('siren: Siren refused POST /collaborators. 1 field needs fixing.');
   });
 
