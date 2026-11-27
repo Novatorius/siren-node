@@ -2294,6 +2294,12 @@ that open what it points to.
 Through a pipe the record goes to standard output and Next to standard error, and `--json` prints
 Siren's answer whole.
 
+Money prints as money, such as `€19.62 EUR`, in a table, a record and `--json`. Siren stores an
+amount in its currency's smallest unit, so `--json` keeps that integer and adds the text beside it:
+`"value": 1962, "currency": "EUR", "valueFormatted": "€19.62 EUR"`. The tool draws a currency from
+the organization's currency registry, or from the runtime's own currency data for an ISO code the
+registry doesn't list. A ledger unit the registry doesn't list, such as points, keeps its integer.
+
 A list, such as `siren programs list`, comes newest first where Siren's route takes an order, and
 dates read as `Today 13:58`, `Nov 24 19:58` or `Mar 2, 2025`. Through a pipe, standard output holds
 the table alone, and the count, Next and tips go to standard error. `--ids` prints one id a line,

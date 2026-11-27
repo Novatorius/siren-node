@@ -17,7 +17,7 @@ import { cell, recordRows, table } from './resource-output';
 import { recordView } from '../record-view';
 import { nearest } from '../suggest';
 import { READ_STATUSES, WRITE_NOTES, WRITE_VALUES } from '../record-values';
-import { currenciesFor, holdsMoney, withMoney } from '../money';
+import { FORMATTED_SUFFIX, currenciesFor, holdsMoney, withMoney, withMoneyText } from '../money';
 
 /*
  * `siren <resource> <op>`, generated from Siren's openapi.json into
@@ -815,8 +815,9 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
       const paged = plan.resource === undefined ? undefined : PAGED_BY_PAGE[plan.resource.name];
       body = await allPages(body, outgoing.query, async (query) => (await request(paged === undefined ? query : byPage(query, paged.most))).body);
     }
-    // Amounts beside a currency print as money, read with the organization's currencies. --json and --ids keep Siren's integers.
-    const shown = !plan.json && !plan.ids && holdsMoney(body) ? withMoney(body, await currenciesFor(input.io.configDir, `${run.target.baseUrl} ${run.current().orgId}`, input.io.now(), async () => parseJsonBody(await transport.request({ method: 'GET', path: '/registries/currencies', retriable: true })))) : body;
+    // Amounts beside a currency print as money, read with the organization's currencies. --json keeps Siren's integers and adds the text beside each (review round 1, C4). --ids prints ids alone.
+    const definitions = () => currenciesFor(input.io.configDir, `${run.target.baseUrl} ${run.current().orgId}`, input.io.now(), async () => parseJsonBody(await transport.request({ method: 'GET', path: '/registries/currencies', retriable: true }))).catch(() => undefined);
+    const shown = plan.ids || !holdsMoney(body) ? body : plan.json ? withMoneyText(body, await definitions()) : withMoney(body, await definitions());
     print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run));
     return 0;
   } catch (error) {
@@ -931,7 +932,8 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
   }
   if (plan.json) {
     // --fields cuts each record to the fields named, and keeps the answer's shape.
-    const pick = (record: unknown) => (plan.fields !== undefined && isObject(record) ? Object.fromEntries(plan.fields.filter((field) => field in record).map((field) => [field, record[field]])) : record);
+    // A money field named keeps its text beside it.
+    const pick = (record: unknown) => (plan.fields !== undefined && isObject(record) ? Object.fromEntries(plan.fields.flatMap((field) => [field, `${field}${FORMATTED_SUFFIX}`]).filter((field) => field in record).map((field) => [field, record[field]])) : record);
     const items = isEnvelope(body) ? body.items.map(pick) : Array.isArray(body) ? body.map(pick) : undefined;
     const shaped = items === undefined ? body : isEnvelope(body) ? { ...body, items } : items;
     out(JSON.stringify(shaped ?? null, null, 2));

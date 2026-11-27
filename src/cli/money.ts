@@ -192,6 +192,30 @@ export function withMoney<T>(value: T, definitions: CurrencyDefinitions): T {
   return out as T;
 }
 
+/** The suffix of the field --json adds beside each amount: `value` 1962 gets `valueFormatted` "€19.62 EUR". */
+export const FORMATTED_SUFFIX = 'Formatted';
+
+/**
+ * The answer as --json gives it: Siren's integers kept, and beside each
+ * amount whose currency the tool can draw a `<key>Formatted` field with the
+ * text the terminal shows, so a script never has to guess the scale
+ * (review round 1, C4).
+ */
+export function withMoneyText<T>(value: T, definitions: CurrencyDefinitions): T {
+  if (Array.isArray(value)) return value.map((member) => withMoneyText(member, definitions)) as T;
+  if (!isObject(value)) return value;
+  const out: Record<string, unknown> = {};
+  const fields = new Map(moneyFields(value).map(({ key, currencyKey }) => [key, currencyKey]));
+  for (const [key, member] of Object.entries(value)) {
+    out[key] = withMoneyText(member, definitions);
+    const currencyKey = fields.get(key);
+    if (currencyKey === undefined || `${key}${FORMATTED_SUFFIX}` in value) continue;
+    const text = moneyText(member, value[currencyKey] as string | null, definitions);
+    if (text !== undefined) out[`${key}${FORMATTED_SUFFIX}`] = text;
+  }
+  return out as T;
+}
+
 /** How long the tool keeps an organization's currencies before reading them again. */
 const CURRENCIES_KEPT_MS = 60 * 60 * 1000;
 
