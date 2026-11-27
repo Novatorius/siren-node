@@ -600,7 +600,7 @@ const SPECS: Record<Command, CommandSpec> = {
       'referred-by': ['--referred-by <id|email>', 'Who referred the sale: an id, an export key, or an email or name'],
       direct: ['--direct', 'A sale nobody referred'],
       coupon: ['--coupon <code>', 'A coupon used on the sale'],
-      line: ['--line <pairs>', 'A line item, such as "sku=TEE qty=2 price=25.00", repeatable. It also takes name, type, category and value'],
+      line: ['--line <pairs>', 'A line item, such as "sku=TEE qty=2 price=25.00", repeatable. It also takes name, type, category, value and currency, the organization\'s own if left out'],
       close: ['--close <distributor>', "Close a distributor's period and show each share of the pot"],
       'print-scenario': ['--print-scenario', 'Print the scenario the flags write, and run nothing'],
       json: ['--json', "Print Siren's whole result"],

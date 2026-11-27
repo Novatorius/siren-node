@@ -45,8 +45,8 @@ describe('siren simulate, from flags', () => {
             opportunity: '@visit',
             source: 'simulation',
             lineItems: [
-              { name: 'Tee shirt', description: 'Tee shirt', type: 'product', quantity: 2, value: 5000, attributes: { sku: 'TEE' } },
-              { name: 'Shipping', description: 'Shipping', type: 'shipping', quantity: 1, value: 2500 },
+              { name: 'Tee shirt', description: 'Tee shirt', type: 'product', quantity: 2, value: 5000, units: 'USD', attributes: { sku: 'TEE' } },
+              { name: 'Shipping', description: 'Shipping', type: 'shipping', quantity: 1, value: 2500, units: 'USD' },
             ],
           },
         },
@@ -69,13 +69,14 @@ describe('siren simulate, from flags', () => {
 
   it('prints the scenario with --print-scenario and sends nothing', async () => {
     const h = live();
-    expect(await h.run(['simulate', '--referred-by', 'collaborator_39', '--coupon', 'SAVE10', '--line', 'name=Mug value=1500', '--print-scenario'])).toBe(0);
+    // A line that names its currency needs no registry read, so --print-scenario sends nothing.
+    expect(await h.run(['simulate', '--referred-by', 'collaborator_39', '--coupon', 'SAVE10', '--line', 'name=Mug value=1500 currency=usd', '--print-scenario'])).toBe(0);
     expect(h.http.requests).toHaveLength(0);
     expect(JSON.parse(h.out())).toEqual({
       actions: [
         { type: 'site_visited', as: 'visit', payload: { collaborator: 'collaborator_39' } },
         { type: 'coupon_used', as: 'coupon', payload: { code: 'SAVE10', opportunity: '@visit' } },
-        { type: 'sale_triggered', as: 'sale', payload: { opportunity: '@visit', source: 'simulation', lineItems: [{ name: 'Mug', description: 'Mug', type: 'product', quantity: 1, value: 1500 }] } },
+        { type: 'sale_triggered', as: 'sale', payload: { opportunity: '@visit', source: 'simulation', lineItems: [{ name: 'Mug', description: 'Mug', type: 'product', quantity: 1, value: 1500, units: 'USD' }] } },
       ],
     });
   });
@@ -91,16 +92,16 @@ describe('siren simulate, from flags', () => {
 
   it('writes a visit nobody referred with --direct, and a coupon alone credits whoever owns it', async () => {
     const h = live();
-    expect(await h.run(['simulate', '--direct', '--line', 'name=Mug value=1500', '--print-scenario'])).toBe(0);
+    expect(await h.run(['simulate', '--direct', '--line', 'name=Mug value=1500 currency=USD', '--print-scenario'])).toBe(0);
     expect((JSON.parse(h.out()) as { actions: unknown[] }).actions[0]).toEqual({ type: 'site_visited', as: 'visit', payload: {} });
     const coupon = live();
-    expect(await coupon.run(['simulate', '--coupon', 'SAVE10', '--line', 'name=Mug value=1500', '--print-scenario'])).toBe(0);
+    expect(await coupon.run(['simulate', '--coupon', 'SAVE10', '--line', 'name=Mug value=1500 currency=USD', '--print-scenario'])).toBe(0);
     expect((JSON.parse(coupon.out()) as { actions: Array<{ type: string }> }).actions.map((action) => action.type)).toEqual(['site_visited', 'coupon_used', 'sale_triggered']);
   });
 
   it('turns an email given to --referred-by into the export key, and refuses one that names nobody', async () => {
     const h = signedIn([reply(200, { items: [{ id: 39, email: 'sam@example.com', fullName: 'Sam Referrer' }], total: 1 })]);
-    expect(await h.run(['simulate', '--referred-by', 'sam@example.com', '--line', 'name=Mug value=1500', '--print-scenario']), h.err()).toBe(0);
+    expect(await h.run(['simulate', '--referred-by', 'sam@example.com', '--line', 'name=Mug value=1500 currency=USD', '--print-scenario']), h.err()).toBe(0);
     expect(new URL(h.http.requests[0]!.url).searchParams.get('s')).toBe('sam@example.com');
     expect((JSON.parse(h.out()) as { actions: Array<{ payload: unknown }> }).actions[0]!.payload).toEqual({ collaborator: 'collaborator_39' });
 
@@ -209,30 +210,31 @@ describe('siren simulate, when Siren refuses the recipe or the tool cannot read 
     const h = signedIn([reply(404, { error: { message: 'Not found.' } })]);
     expect(await h.run(['simulate', '--referred-by', '39', '--line', 'name=Mug price=25.00'])).toBe(1);
     expect(h.err()).toContain("can't read this organization's currencies");
-    expect(h.err()).toContain('value=');
+    expect(h.err()).toContain('currency=USD value=2500');
     expect(posts(h)).toHaveLength(0);
   });
 
   it("sends value= as stored units on the older sale route, read in the organization's own currency", async () => {
     const PTS = { code: 'PTS', symbol: 'pts', symbolPosition: 'after', scale: 0, decimalPlaces: 0, type: 'internal', isDefault: true };
     const sale = { event: 'sale', simulated: true, status: 'created', message: null, opportunityId: null, transactionId: null, total: '500', currency: 'PTS', collaborator: { id: 39, name: 'Sam Referrer' }, conversions: [], obligations: [], waits: [] };
-    const h = signedIn([reply(404, { error: { message: 'Not found.' } }), reply(200, [PTS]), reply(200, sale)]);
+    const h = signedIn([reply(200, [PTS]), reply(404, { error: { message: 'Not found.' } }), reply(200, sale)]);
     expect(await h.run(['simulate', '--referred-by', '39', '--line', 'name=Mug value=500']), h.err()).toBe(0);
     expect(bodyAt(h, 2)).toEqual({ collaboratorId: 39, amount: '500' });
 
     const blind = signedIn([reply(404, { error: { message: 'Not found.' } }), reply(404, { error: { message: 'Not found.' } })]);
     expect(await blind.run(['simulate', '--referred-by', '39', '--line', 'name=Mug value=500'])).toBe(1);
     expect(blind.err()).toContain("can't read this organization's currencies");
-    expect(posts(blind)).toHaveLength(1);
+    // Without the currency, Siren would store the line with no amount it can read, so nothing is sent (review round 1, C6).
+    expect(posts(blind)).toHaveLength(0);
   });
 
   it('refuses a name that matches more than one person, or a full page of search results, and asks for an email or id', async () => {
     const people = (count: number, name: string) => Array.from({ length: count }, (_, at) => ({ id: at + 1, email: `p${at}@example.com`, fullName: at === 0 ? name : `Person ${at}` }));
     const full = signedIn([reply(200, { items: people(25, 'Sam Lee'), total: 40 })]);
-    expect(await full.run(['simulate', '--referred-by', 'Sam Lee', '--line', 'name=Mug value=1500', '--print-scenario'])).toBe(1);
+    expect(await full.run(['simulate', '--referred-by', 'Sam Lee', '--line', 'name=Mug value=1500 currency=USD', '--print-scenario'])).toBe(1);
     expect(full.err()).toContain('email or id');
     const two = signedIn([reply(200, { items: [{ id: 1, fullName: 'Sam Lee' }, { id: 2, fullName: 'Sam Lee' }], total: 2 })]);
-    expect(await two.run(['simulate', '--referred-by', 'Sam Lee', '--line', 'name=Mug value=1500', '--print-scenario'])).toBe(1);
+    expect(await two.run(['simulate', '--referred-by', 'Sam Lee', '--line', 'name=Mug value=1500 currency=USD', '--print-scenario'])).toBe(1);
     expect(two.err()).toContain('email or id');
   });
 });
@@ -260,5 +262,42 @@ describe('siren simulate on a Siren without scenario simulation', () => {
     h.write('flow.json', JSON.stringify({ actions: [] }));
     expect(await h.run(['simulate', 'flow.json'])).toBe(1);
     expect(h.err()).toContain("Siren can't undo writes on this platform, so it can't simulate here.");
+  });
+});
+
+// Review round 1, C6: a line sent without its currency came back as value {} and units "", and the report printed NaN and [object Object].
+describe('siren simulate, the amounts', () => {
+  const noUnits = JSON.parse(readFileSync(new URL('./fixtures/simulations/scenario-sale-no-units.json', import.meta.url), 'utf8')) as Record<string, unknown>;
+  const EUR = { code: 'EUR', symbol: '€', symbolPosition: 'before', scale: 2, decimalPlaces: 2, type: 'monetary', isDefault: true };
+
+  it("sends each line in the organization's currency, and prints Siren's own line totals with no NaN", async () => {
+    const h = signedIn([reply(200, [EUR]), reply(200, noUnits)]);
+    expect(await h.run(['simulate', '--referred-by', '208', '--line', 'sku=STEIN qty=1 price=109.00']), h.err()).toBe(0);
+    const sent = (bodyAt(h, 1).actions as Array<{ payload: { lineItems?: unknown[] } }>)[1]!.payload.lineItems;
+    expect(sent).toEqual([{ name: 'STEIN', description: 'STEIN', type: 'product', quantity: 1, value: 10900, units: 'EUR', attributes: { sku: 'STEIN' } }]);
+    const out = h.out();
+    expect(out).not.toMatch(/NaN|\[object Object\]|undefined/);
+    expect(out.replace(/\s+/g, ' ')).toContain('A €109.00 EUR sale in Acme (3), live, would make 1 transaction, 1 conversion and 1 obligation.');
+    expect(out).toMatch(/STEIN +1 x €109\.00 EUR +€109\.00 EUR/);
+    expect(out).toContain('Transaction 7520 (simulated, not kept)');
+    expect(out).toMatch(/€19\.62 EUR +owed to Paolo Ricci/);
+  });
+
+  it('takes currency= on a line, and keeps its decimal places for price=', async () => {
+    const JPY = { code: 'JPY', symbol: '¥', symbolPosition: 'before', scale: 0, decimalPlaces: 0, type: 'monetary', isDefault: false };
+    const h = signedIn([reply(200, [EUR, JPY])]);
+    expect(await h.run(['simulate', '--direct', '--line', 'name=Bowl price=1200 currency=jpy', '--print-scenario']), h.err()).toBe(0);
+    const doc = JSON.parse(h.out()) as { actions: Array<{ payload: { lineItems?: Array<Record<string, unknown>> } }> };
+    expect(doc.actions[1]!.payload.lineItems![0]).toMatchObject({ value: 1200, units: 'JPY' });
+  });
+
+  it('says an amount Siren left out, rather than print NaN, when no program counted the line either', async () => {
+    const bare = JSON.parse(JSON.stringify(noUnits)) as { ledgers: { transactions: Array<{ programs: unknown[] }> } };
+    bare.ledgers.transactions[0]!.programs = [];
+    const h = signedIn([reply(200, [EUR]), reply(200, bare)]);
+    expect(await h.run(['simulate', '--referred-by', '208', '--line', 'sku=STEIN qty=1 price=109.00']), h.err()).toBe(0);
+    expect(h.out()).not.toMatch(/NaN|\[object Object\]/);
+    expect(h.out()).toContain('an amount Siren left out');
+    expect(h.out().replace(/\s+/g, ' ')).toContain('A sale in Acme (3), live');
   });
 });

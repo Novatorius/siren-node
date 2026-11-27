@@ -34,6 +34,8 @@ interface LineItem {
   type: string;
   quantity: number;
   value: number;
+  /** The currency code Siren stores the value in. Without it Siren stores a line with no amount it can read (review round 1, C6). */
+  units: string;
   attributes?: Record<string, unknown>;
 }
 
@@ -46,15 +48,21 @@ interface Action {
 /** How many people a --referred-by search reads. */
 const SEARCH_PAGE = 25;
 
-/** The refusal when the registry can't be read, so a stored amount can't be worked out. */
+/** The refusal when the registry can't be read, so a stored amount or the currency can't be worked out. */
 function unreadCurrencies(what: string): CliRefusal {
   return new CliRefusal("The tool can't read this organization's currencies.", {
-    why: `Siren answered no currency registry, so the tool can't tell how many decimal places ${what} has, and won't guess.`,
-    fixText: 'Give each --line its amount as value= in stored units, such as value=2500 for $25.00, or try again in a moment.',
+    why: `Siren answered no currency registry, so the tool can't tell ${what}, and won't guess.`,
+    fixText: 'Give each --line its currency and its amount in stored units, such as currency=USD value=2500 for $25.00, or try again in a moment.',
   });
 }
 
-const LINE_KEYS = ['name', 'sku', 'type', 'qty', 'price', 'value', 'category'];
+const LINE_KEYS = ['name', 'sku', 'type', 'qty', 'price', 'value', 'category', 'currency'];
+
+/** The currency a --line names with currency=, upper-cased, or undefined. */
+function lineCurrency(text: string): string | undefined {
+  const given = linePairs(text).find(([key]) => key === 'currency')?.[1];
+  return given === undefined || given.trim() === '' ? undefined : given.trim().toUpperCase();
+}
 
 /** `sku=TEE name="Tee shirt" qty=2 price=25.00` as its key and value pairs. */
 function linePairs(text: string): Array<[string, string]> {
@@ -67,7 +75,7 @@ function linePairs(text: string): Array<[string, string]> {
   return pairs;
 }
 
-/** A --line as a line item. `price` is in the currency's units, `value` in Siren's stored units. */
+/** A --line as a line item. `price` is in the currency's units, `value` in Siren's stored units, and both in `definition`'s currency. */
 function lineOf(text: string, definition: CurrencyDefinition | undefined): LineItem {
   const fields = new Map<string, string>();
   for (const [key, value] of linePairs(text)) {
@@ -92,6 +100,7 @@ function lineOf(text: string, definition: CurrencyDefinition | undefined): LineI
     type: fields.get('type') ?? 'product',
     quantity: Number(quantity),
     value: price !== undefined ? toStoredAmount(price, definition) : Number(stored),
+    units: lineCurrency(text) ?? definition?.code ?? '',
     ...(Object.keys(attributes).length > 0 ? { attributes } : {}),
   };
 }
@@ -147,7 +156,7 @@ interface Written {
 }
 
 /** The scenario the flags describe, or `CliRefusal` when they name nobody. */
-async function writeScenario(input: CommandInput, signIn: () => Promise<Transport>, currencyOf: () => Promise<CurrencyDefinition | undefined>): Promise<Written> {
+async function writeScenario(input: CommandInput, signIn: () => Promise<Transport>, currencyOf: (code: string | undefined) => Promise<CurrencyDefinition | undefined>): Promise<Written> {
   const { values } = input;
   const referredBy = typeof values['referred-by'] === 'string' ? values['referred-by'] : undefined;
   const coupon = typeof values.coupon === 'string' ? values.coupon : undefined;
@@ -174,12 +183,20 @@ async function writeScenario(input: CommandInput, signIn: () => Promise<Transpor
   let items: LineItem[] = [];
   let definition: CurrencyDefinition | undefined;
   if (lines.length > 0) {
-    if (lines.some((line) => /(^|\s)price=/.test(line))) {
-      definition = await currencyOf();
-      if (definition === undefined) throw unreadCurrencies('price=');
-    }
-    items = lines.map((line) => lineOf(line, definition));
     collaborator = referredBy === undefined ? undefined : await collaboratorKey(referredBy, signIn);
+    // Each line carries its currency. A line that names none takes the organization's, and price= needs the currency's decimal places.
+    const definitions = new Map<string, CurrencyDefinition>();
+    for (const line of lines) {
+      const code = lineCurrency(line);
+      if (code !== undefined && !/(^|\s)price=/.test(line)) continue;
+      const key = code ?? '';
+      if (definitions.has(key)) continue;
+      const found = await currencyOf(code);
+      if (found === undefined) throw unreadCurrencies(code === undefined ? "the organization's currency" : `how many decimal places ${code} has`);
+      definitions.set(key, found);
+    }
+    items = lines.map((line) => lineOf(line, definitions.get(lineCurrency(line) ?? '') ?? definitions.get('')));
+    definition = definitions.get('') ?? [...definitions.values()][0];
     actions.push({ type: 'site_visited', as: 'visit', payload: collaborator === undefined ? {} : { collaborator } });
     if (coupon !== undefined) actions.push({ type: 'coupon_used', as: 'coupon', payload: { code: coupon, opportunity: '@visit' } });
     actions.push({ type: 'sale_triggered', as: 'sale', payload: { opportunity: '@visit', source: 'simulation', lineItems: items } });
@@ -226,7 +243,7 @@ export async function simulate(input: CommandInput): Promise<number> {
     return definitions;
   };
 
-  const written = given === undefined ? await writeScenario(input, signIn, async () => resolveCurrencyDefinition(null, await registry())) : undefined;
+  const written = given === undefined ? await writeScenario(input, signIn, async (code) => resolveCurrencyDefinition(code ?? null, await registry())) : undefined;
   const document = written?.document ?? (await readJsonObject(input, given!, 'a scenario', 'actions, a list, and a recipe if you want one'));
   if (values['print-scenario'] === true) {
     io.stdout(`${JSON.stringify(document, null, 2)}\n`);
@@ -329,11 +346,29 @@ export function scenarioReport(org: string, result: Record<string, unknown>, def
   const money = (amount: unknown, units: unknown) => moneyText(amount, typeof units === 'string' ? units : null, definitions) ?? clean(String(amount ?? ''));
   const lines: string[] = [];
 
+  // Siren stores a line with no currency as an amount it can't read, `{}`. Its programs still count each line, so their line totals stand in (review round 1, C6).
+  const counted = new Map<string, number>();
+  for (const transaction of transactions) {
+    for (const program of list(transaction.programs)) {
+      for (const line of list(program.lines)) if (typeof line.lineTotal === 'number' && !counted.has(String(line.lineItemId))) counted.set(String(line.lineItemId), line.lineTotal);
+    }
+  }
+  const lineTotal = (item: Record<string, unknown>): number | undefined => {
+    const quantity = Number(item.quantity ?? 1);
+    if (typeof item.value === 'number' && Number.isFinite(item.value) && Number.isFinite(quantity)) return item.value * quantity;
+    return counted.get(String(item.id));
+  };
+  const unitsOf = (items: Array<Record<string, unknown>>) => items.find((item) => typeof item.units === 'string' && item.units !== '')?.units;
+  const shown = (amount: number | undefined, units: unknown) => (amount === undefined ? 'an amount Siren left out' : money(amount, units));
+
   if (transactions.length > 0) {
     const items = transactions.flatMap((transaction) => list(transaction.lineItems));
-    const units = items.find((item) => typeof item.units === 'string')?.units;
-    const total = items.reduce((sum, item) => sum + Number(item.value ?? 0) * Number(item.quantity ?? 1), 0);
-    const sale = transactions.length === 1 ? `A ${money(total, units)} sale` : `${transactions.length} sales of ${money(total, units)} in all`;
+    const units = unitsOf(items);
+    const totals = items.map(lineTotal);
+    const known = totals.every((total) => total !== undefined);
+    const total = totals.reduce<number>((sum, one) => sum + (one ?? 0), 0);
+    const amount = known ? money(total, units) : 'sale';
+    const sale = transactions.length === 1 ? (known ? `A ${amount} sale` : 'A sale') : `${transactions.length} sales${known ? ` of ${amount} in all` : ''}`;
     const made = and([plural(transactions.length, 'transaction'), plural(conversions.length, 'conversion'), plural(obligations.length, 'obligation')]);
     lines.push(...wrapped(`${sale} in ${org}, would make ${made}.`, ''));
   } else if (distributions.length === 0) {
@@ -341,19 +376,24 @@ export function scenarioReport(org: string, result: Record<string, unknown>, def
   }
 
   for (const transaction of transactions) {
-    lines.push('', `Transaction ${clean(String(transaction.id ?? ''))}`);
+    // Siren undoes the run, so this id names a transaction that no longer exists.
+    lines.push('', `Transaction ${clean(String(transaction.id ?? ''))} (simulated, not kept)`);
+    const units = unitsOf(list(transaction.lineItems));
     lines.push(
       ...aligned(
         list(transaction.lineItems).map((item) => {
           const quantity = Number(item.quantity ?? 1);
-          return [clean(String(item.name ?? 'Item')), `${quantity} x ${money(item.value, item.units)}`, money(Number(item.value ?? 0) * quantity, item.units)];
+          const whole = lineTotal(item);
+          const each = whole === undefined || !Number.isFinite(quantity) || quantity === 0 ? undefined : whole / quantity;
+          const itemUnits = typeof item.units === 'string' && item.units !== '' ? item.units : units;
+          return [clean(String(item.name ?? 'Item')), `${Number.isFinite(quantity) ? quantity : 1} x ${shown(each, itemUnits)}`, shown(whole, itemUnits)];
         }),
       ),
     );
-    const units = list(transaction.lineItems).find((item) => typeof item.units === 'string')?.units;
     for (const program of list(transaction.programs)) {
       const rate = program.percent === null || program.percent === undefined ? '' : `, at ${clean(String(program.percent))}%`;
-      lines.push(...wrapped(`${clean(String(program.programName ?? 'A program'))} counted ${money(program.baseAmount, units)} of it${rate}.`));
+      const base = typeof program.baseAmount === 'number' ? program.baseAmount : Number(program.baseAmount);
+      lines.push(...wrapped(`${clean(String(program.programName ?? 'A program'))} counted ${shown(Number.isFinite(base) ? base : undefined, units)} of it${rate}.`));
       for (const line of list(program.lines)) {
         if (line.counted === true) continue;
         lines.push(...wrapped(`${clean(String(line.name ?? 'A line'))}: ${clean(String(line.message ?? words(line.reason)))}`, '    '));
