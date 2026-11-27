@@ -1,6 +1,6 @@
 import type { StoredMembership } from './credentials';
 import type { CliIo } from './io';
-import { clean, hanging, styleFor } from './style';
+import { clean, styleFor } from './style';
 import type { Style } from './style';
 import { CliRefusal } from './targets';
 
@@ -145,7 +145,7 @@ async function askByLine(io: CliIo, style: Style, memberships: readonly StoredMe
     if (found.length === 1) return found[0]!;
     last = typed;
     const miss = typed === '' ? 'Type a number or a slug.' : found.length > 1 ? `${clean(typed)} starts more than one. Type more of it.` : `${clean(typed)} is none of them. Type a number or a slug.`;
-    io.stderr(`${style.rich ? hanging(`${style.amber('!')} `, miss) : miss}\n`);
+    io.stderr(`${style.rich ? style.wrap(`${style.amber('!')} `, miss) : miss}\n`);
   }
   throw new CliRefusal('No organization picked.', {
     why: last === '' ? `Nothing was typed ${TRIES} times, so nothing was sent.` : `${clean(last)} named none of them, so nothing was sent.`,

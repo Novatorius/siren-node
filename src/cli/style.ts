@@ -53,7 +53,11 @@ export interface Report {
   tips?: readonly string[];
 }
 
-/** The widest a line of a report may be, so nothing wraps in an 80-column terminal. */
+/**
+ * The width the tool wraps to when it can't measure the terminal, as
+ * through a pipe: 80 columns. In a terminal every view wraps to the
+ * terminal's own width ({@link Style.width}).
+ */
 export const REPORT_WIDTH = 80;
 
 /**
@@ -110,8 +114,8 @@ export function hanging(lead: string, text: string, indent = '  ', width = REPOR
 }
 
 /** A command kept on one line when it fits one, its spaces made no-break. */
-function keptWhole(command: string): string {
-  return visibleLength(command) <= REPORT_WIDTH - 10 ? command.replace(/ /g, '\u00a0') : command;
+function keptWhole(command: string, width: number): string {
+  return visibleLength(command) <= width - 10 ? command.replace(/ /g, '\u00a0') : command;
 }
 
 /** How many columns `text` takes, without its escape codes. */
@@ -126,6 +130,8 @@ export interface StyleOptions {
   env: Readonly<Record<string, string | undefined>>;
   /** True with --json, which is never styled. */
   json?: boolean;
+  /** The terminal's width in columns, when the stream is a terminal the tool can measure. */
+  columns?: number;
 }
 
 /** A spinner on a line of its own, until {@link Spinner.stop} turns it into one ✓ or ✗ line. */
@@ -146,6 +152,12 @@ function inCi(env: Readonly<Record<string, string | undefined>>): boolean {
 export class Style {
   /** True when this stream gets color and symbols. */
   readonly rich: boolean;
+  /**
+   * The columns this stream's text wraps to: the terminal's width when the
+   * tool can measure it, else {@link REPORT_WIDTH}. Text wraps at word
+   * boundaries and is never cut (CLI review round 1, C8 and C23).
+   */
+  readonly width: number;
   private readonly greenCode: string;
 
   constructor(options: StyleOptions) {
@@ -154,6 +166,12 @@ export class Style {
       options.tty && options.json !== true && !(env.NO_COLOR !== undefined && env.NO_COLOR !== '') && env.TERM !== 'dumb' && !inCi(env);
     const depth = (env.COLORTERM ?? '').toLowerCase();
     this.greenCode = depth === 'truecolor' || depth === '24bit' ? SIREN_GREEN.truecolor : SIREN_GREEN.ansi256;
+    this.width = options.tty && options.columns !== undefined && options.columns >= 20 ? options.columns : REPORT_WIDTH;
+  }
+
+  /** `text` wrapped at word boundaries to this stream's width, as {@link hanging} does. */
+  wrap(lead: string, text: string, indent = '  '): string {
+    return hanging(lead, text, indent, this.width);
   }
 
   private paint(code: string, text: string): string {
@@ -189,24 +207,24 @@ export class Style {
     return this.bold(text);
   }
 
-  /** "✓ Applied acme-payouts.", wrapped within 80 columns in a terminal. */
+  /** "✓ Applied acme-payouts.", wrapped to the terminal's width. */
   success(line: string): string {
-    return this.rich ? hanging(`${this.green('✓')} `, line) : line;
+    return this.rich ? this.wrap(`${this.green('✓')} `, line) : line;
   }
 
-  /** "✗ Not logged in.", the words in bold, wrapped within 80 columns in a terminal. */
+  /** "✗ Not logged in.", the words in bold, wrapped to the terminal's width. */
   failure(line: string): string {
-    return this.rich ? `${RED}${BOLD}${hanging('✗ ', line)}${RESET}` : line;
+    return this.rich ? `${RED}${BOLD}${this.wrap('✗ ', line)}${RESET}` : line;
   }
 
-  /** "! The key is not saved.", wrapped within 80 columns in a terminal. */
+  /** "! The key is not saved.", wrapped to the terminal's width. */
   warning(line: string): string {
-    return this.rich ? hanging(`${this.amber('!')} `, line) : line;
+    return this.rich ? this.wrap(`${this.amber('!')} `, line) : line;
   }
 
-  /** "› siren apps apply", wrapped within 80 columns in a terminal. */
+  /** "› siren apps apply", wrapped to the terminal's width at word boundaries. */
   next(line: string): string {
-    return this.rich ? hanging(`${this.dim('›')} `, line) : line;
+    return this.rich ? this.wrap(`${this.dim('›')} `, line) : line;
   }
 
   /**
@@ -223,14 +241,14 @@ export class Style {
     if (!this.rich) {
       return `siren: ${refusal.message}\n${[...problems.map((problem) => `${problem.at}: ${problem.message}`), ...extra].map((line) => `${line}\n`).join('')}`;
     }
-    const lines = [this.failure(refusal.headline), hanging('  ', parts.why)];
-    for (const problem of problems) lines.push(`  ${this.dim(problem.at)}`, hanging('    ', problem.message, '    '));
+    const lines = [this.failure(refusal.headline), this.wrap('  ', parts.why)];
+    for (const problem of problems) lines.push(`  ${this.dim(problem.at)}`, this.wrap('    ', problem.message, '    '));
     const fix =
       parts.fix === undefined
         ? parts.fixText
-        : `${parts.fixLead ?? 'Run'} ${this.command(keptWhole(parts.fix))}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`;
-    lines.push(hanging(`${this.green('›')} `, fix));
-    for (const line of extra) lines.push(this.dim(hanging('', line)));
+        : `${parts.fixLead ?? 'Run'} ${this.command(keptWhole(parts.fix, this.width))}${parts.fixWords === undefined ? '' : ` ${parts.fixWords}`}.`;
+    lines.push(this.wrap(`${this.green('›')} `, fix));
+    for (const line of extra) lines.push(this.dim(this.wrap('', line)));
     return `${lines.join('\n')}\n`;
   }
 
@@ -245,7 +263,7 @@ export class Style {
       const width = Math.max(...rows.map(([label]) => label.length)) + 3;
       lines.push('');
       for (const [label, value] of rows) {
-        const [first = '', ...rest] = wrapWords(value, REPORT_WIDTH - 2 - width);
+        const [first = '', ...rest] = wrapWords(value, Math.max(20, this.width - 2 - width));
         lines.push(`  ${this.dim(label)}${' '.repeat(width - label.length)}${first}`, ...rest.map((line) => `${' '.repeat(2 + width)}${line}`));
       }
     }
@@ -258,14 +276,14 @@ export class Style {
         if (step.aside === undefined) return lines.push(lead);
         const gap = ' '.repeat(width - visibleLength(step.text) + 3);
         const beside = `${lead}${gap}${this.dim(step.aside)}`;
-        return lines.push(visibleLength(beside) <= REPORT_WIDTH ? beside : lead, ...(visibleLength(beside) <= REPORT_WIDTH ? [] : [`     ${this.dim(step.aside)}`]));
+        return lines.push(visibleLength(beside) <= this.width ? beside : lead, ...(visibleLength(beside) <= this.width ? [] : [`     ${this.dim(step.aside)}`]));
       });
     }
     const tips = report.tips ?? [];
     if (tips.length > 0) {
       lines.push('');
       for (const tip of tips) {
-        const [first = '', ...rest] = wrapWords(tip, REPORT_WIDTH - 2);
+        const [first = '', ...rest] = wrapWords(tip, this.width - 2);
         lines.push(this.rich ? this.dim(`› ${first}`) : first, ...rest.map((line) => (this.rich ? this.dim(`  ${line}`) : `  ${line}`)));
       }
     }
@@ -273,25 +291,25 @@ export class Style {
   }
 
   /**
-   * Rows aligned under a header, two spaces apart, the header dim. The last
-   * column is shortened with an ellipsis so each line fits `width`.
+   * Rows aligned under a header, two spaces apart, the header dim. Nothing
+   * is ever cut: a row wider than `width` wraps its last column at word
+   * boundaries, each line under that column's start (CLI review round 1,
+   * C8). Pass `Infinity` for a pipe, where a row stays on one line.
    */
   table(headers: readonly string[], rows: ReadonlyArray<readonly string[]>, width: number): string[] {
     const all = [headers, ...rows];
     const widths = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
-    const line = (row: readonly string[]) => {
+    const lines = (row: readonly string[]): string[] => {
       const cells = row.map((cell, column) => (column === row.length - 1 ? cell : `${cell}${' '.repeat(widths[column]! - visibleLength(cell))}`));
       const text = cells.join('  ');
-      if (visibleLength(text) <= width) return text;
-      // Only the last column is shortened, and it is cut as plain text.
-      const before = cells.slice(0, -1).join('  ');
-      const room = Math.max(width - visibleLength(before) - 3, 0);
-      const last = [...(row.at(-1) ?? '').replace(/\u001b\[[\d;?]*[A-Za-z]/g, '')];
-      return `${before}  ${last.slice(0, room).join('')}…`;
+      if (visibleLength(text) <= width || row.length === 0) return [text];
+      const before = row.length === 1 ? '' : `${cells.slice(0, -1).join('  ')}  `;
+      const indent = visibleLength(before);
+      const [first = '', ...rest] = wrapWords(row.at(-1) ?? '', Math.max(width - indent, 20));
+      return [`${before}${first}`, ...rest.map((line) => `${' '.repeat(indent)}${line}`)];
     };
-    return [this.dim(line(headers)), ...rows.map(line)];
+    return [lines(headers).map((line) => this.dim(line)).join('\n'), ...rows.flatMap(lines)];
   }
-
 
   /**
    * A spinner beside `text`, written with `write`. In a terminal it turns
@@ -339,5 +357,5 @@ export class Style {
 /** The style for one of the command's streams. */
 export function styleFor(io: CliIo, stream: 'stdout' | 'stderr', flags: { json?: boolean }): Style {
   const tty = stream === 'stdout' ? io.stdoutTty === true : io.stderrTty === true;
-  return new Style({ tty, env: io.env, json: flags.json });
+  return new Style({ tty, env: io.env, json: flags.json, columns: io.screen?.size?.columns });
 }
