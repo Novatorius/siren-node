@@ -150,7 +150,7 @@ describe('siren listen', () => {
     expect(out).toMatch(new RegExp(`\\d\\d:\\d\\d:\\d\\d {2}ask {5}acme-ledger {9}200 +\\d+ms {2}${REQUEST}\\n`));
     expect(out).toContain(`Stopped listening for ${KEY}`);
     expect(out).toContain('Forwarded   1 delivery, 1 answered 2xx');
-    expect(out).toMatch(new RegExp(`Next\\n  1  siren apps requests --app ${KEY} +what Siren did next\\n`));
+    expect(out).toMatch(new RegExp(`Next\\n  siren apps requests --app ${KEY} +what Siren did next\\n`));
     // Only the delivery line carries Siren's whole id, which a pipe never cuts. The rest stays within 80.
     for (const line of out.split('\n').filter((one) => !one.includes(REQUEST))) expect(line.length, line).toBeLessThanOrEqual(80);
   });

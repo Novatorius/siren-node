@@ -375,7 +375,7 @@ describe('siren recipes preview of a recipe whose records this organization alre
     h.write('setup.json', JSON.stringify(recorded.exported));
     expect(await h.run(['recipes', 'preview', 'setup.json']), h.err()).toBe(0);
     expect(h.out()).not.toContain('copies');
-    expect(h.out()).toMatch(/Next\n {2}1 {2}siren recipes apply setup\.json/);
+    expect(h.out()).toMatch(/Next\n {2}siren recipes apply setup\.json/);
   });
 
   it('warns on apply too, before it asks', async () => {

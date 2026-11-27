@@ -61,7 +61,7 @@ describe('the generated resource commands', () => {
     // The default columns leave units out, so the tip says how to pick others.
     // Review round 1, C12: split by tabs, with no padding, as every piped list is.
     expect(out).toBe(['ID\tNAME\tSTATUS', '1\tReferral program\tactive', '2\tPartner program\tdraft', ''].join('\n'));
-    expect(h.err()).toBe(['2 programs', '', 'Next', '  1  siren programs get 1', '', '--json prints the answer as JSON. --ids prints the ids alone. --fields picks the columns.', ''].join('\n'));
+    expect(h.err()).toBe(['2 programs', '', 'Next', '  siren programs get 1', '', '--json prints the answer as JSON. --ids prints the ids alone. --fields picks the columns.', ''].join('\n'));
     for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
   });
 

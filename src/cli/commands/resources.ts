@@ -428,7 +428,7 @@ async function listResources(input: CommandInput): Promise<number> {
     ...RESOURCE_COMMANDS.map((resource) => style.fold(`  ${style.bold(resource.name.padEnd(width))}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`)),
     '',
     style.bold('Next'),
-    `  1  ${style.command(`siren ${RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')?.name ?? RESOURCE_COMMANDS[0]?.name ?? 'programs'} list`)}`,
+    `  ${style.command(`siren ${RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')?.name ?? RESOURCE_COMMANDS[0]?.name ?? 'programs'} list`)}`,
     '',
     style.next(style.dim('siren get <path> reaches any other route.')),
   ];
@@ -953,7 +953,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const hints: string[] = [];
     if (firstId !== undefined && firstId !== null) {
       const next = plan.resource?.ops.get ? `${name} get ${cell(firstId)}` : `get ${plan.outgoing.path}/${cell(firstId)}`;
-      hints.push('', style.bold('Next'), `  1  ${style.command(input.command(next))}`);
+      hints.push('', style.bold('Next'), `  ${style.command(input.command(next))}`);
     }
     const tip = `--json prints the answer as JSON.${paged ? ' --all reads every page.' : ''} --ids prints the ids alone. --fields picks the columns.`;
     if (!style.rich) {
@@ -984,7 +984,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const next = view.next;
     out(view.lines.join('\n'));
     if (next.length > 0) {
-      const steps = ['', style.bold('Next'), ...next.map((words, at) => `  ${at + 1}  ${style.command(input.command(words))}`)].join('\n');
+      const steps = ['', style.bold('Next'), ...next.map((words, at) => `  ${next.length === 1 ? '' : `${at + 1}  `}${style.command(input.command(words))}`)].join('\n');
       // Through a pipe, Next goes to standard error, so standard output carries the record alone.
       if (style.rich) out(steps);
       else input.io.stderr(`${steps}\n`);
