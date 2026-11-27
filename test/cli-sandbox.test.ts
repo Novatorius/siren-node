@@ -326,7 +326,8 @@ describe('sandbox: siren sandbox create', () => {
     expect(await h.run(['sandbox', 'create', '--from', 'acme', '--live-url', 'siren.acme.example'])).toBe(1);
     expect(h.paths()).toEqual([]);
     expect(h.err()).toContain('login');
-    expect(h.err()).toContain('--live');
+    // Review round 1, C1: logging in needs no --live, so the hint names none.
+    expect(h.err()).not.toContain('login --live');
   });
 
   it('refuses a --from Siren that is a sandbox', async () => {
@@ -374,6 +375,55 @@ describe('sandbox: every command runs only on a sandbox', () => {
       expect(h.err()).toContain('without --live');
     }
   });
+
+  // Review round 1, C19: a read never claims to change data, and the refusal names the host, not the whole URL.
+  it('says a read like sandbox list has nothing to show on a live Siren, naming its host', async () => {
+    const h = harness([], { edition: 'production' });
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ edition: 'production' }) });
+    expect(await h.run(['sandbox', 'list'])).toBe(1);
+    const flat = h.err().replace(/\s+/g, ' ');
+    expect(flat).toContain(`siren sandbox list runs only on a sandbox Siren, and ${new URL(SANDBOX_BASE_URL).host} is live.`);
+    expect(flat).not.toContain('changes test data');
+    expect(flat).not.toContain(SANDBOX_BASE_URL);
+    const reset = harness([], { edition: 'production' });
+    reset.signedIn({ [SANDBOX_BASE_URL]: session({ edition: 'production' }) });
+    expect(await reset.run(['sandbox', 'reset', '--confirm', 'acme'])).toBe(1);
+    expect(reset.err()).toContain('It changes test data');
+  });
+});
+
+// Review round 1, C18.
+describe('sandbox: siren seed with no program', () => {
+  it('names a starter recipe to apply, piped from recipes show', async () => {
+    const h = harness([reply(409, { error: { message: 'This organization has no active program, so no sale could earn anything. Copy a setup in with siren sandbox create, or make a program first.', context: { type: 'sandbox_seed_no_programs' } } })]);
+    h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
+    expect(await h.run(['seed'])).toBe(1);
+    const flat = h.err().replace(/\s+/g, ' ');
+    expect(flat).toContain('has no active program, so no sale could earn anything.');
+    expect(flat).toContain('Make a starter program with siren recipes show basic-affiliate-program | siren recipes apply - --yes and run this again.');
+    expect(flat).toContain('siren recipes catalog lists other setups');
+  });
+});
+
+// Review round 1, C2: a Siren older than the tool answers a bare 404, and each command says what that Siren lacks.
+describe('sandbox: a Siren without the sandbox routes', () => {
+  const missing = () => reply(404, { error: { message: 'Not found.' } });
+  for (const [argv, what] of [
+    [['seed'], 'sandbox seeding'],
+    [['sandbox', 'reset', '--confirm', 'acme-sandbox'], 'the sandbox tools'],
+    [['sandbox', 'inbox'], 'the sandbox tools'],
+  ] as const) {
+    it(`siren ${argv.join(' ')} says this Siren doesn't have ${what} yet`, async () => {
+      const h = harness([missing()]);
+      h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme-sandbox' }) });
+      expect(await h.run([...argv])).toBe(1);
+      const flat = h.err().replace(/\s+/g, ' ');
+      expect(flat).toContain(`This Siren doesn't have ${what} yet.`);
+      expect(flat).toContain('comes with a later Siren release');
+      expect(flat).not.toMatch(/(^|\s)Not found\./);
+      expect(h.out()).toBe('');
+    });
+  }
 });
 
 describe('sandbox: what a copy takes', () => {
@@ -412,8 +462,8 @@ describe('sandbox: siren sandbox list', () => {
     expect(await plain.run(['sandbox', 'list'])).toBe(0);
     // Through a pipe, standard output holds the table alone, and the headline and tip go to standard error (review of PR 94).
     expect(plain.err()).toContain('2 sandbox organizations on sandbox.sirenaffiliates.com');
-    expect(plain.out()).toMatch(/^acme-sandbox +Acme \(sandbox\) +acme on siren\.acme\.example/m);
-    expect(plain.out().split('\n')[0]).toMatch(/^ORG +NAME/);
+    expect(plain.out()).toMatch(/^acme-sandbox\tAcme \(sandbox\)\tacme on siren\.acme\.example/m);
+    expect(plain.out().split('\n')[0]).toMatch(/^ORG\tNAME/);
     expect(plain.out()).not.toContain('*');
     expect(plain.out()).not.toContain('siren use');
     expect(plain.out()).not.toContain('Pass --org');
@@ -527,7 +577,7 @@ describe('sandbox: siren sandbox inbox', () => {
     expect(h.paths()).toEqual(['GET /sandbox/inbox']);
     expect(new URL(h.http.requests[0]!.url).searchParams.get('number')).toBe('5');
     expect(h.err()).toContain("1 email in acme's sandbox inbox");
-    expect(h.out()).toMatch(/#31 +2026-11-24 17:40 +ana@example\.com +Your commission was approved/);
+    expect(h.out()).toMatch(/#31\t2026-11-24 17:40\tana@example\.com\tYour commission was approved/);
     expect(h.err()).toContain('siren sandbox inbox --org acme 31');
 
     const one = harness([reply(200, { ...email, text: 'Your commission of $12.00 was approved.', html: '<p>…</p>', headers: {} })], { env: { SIREN_ORG: '3' } });
@@ -611,7 +661,8 @@ describe('sandbox: what Siren sends, printed', () => {
   const sly = (text: string) => `${text}\u001b[2J\u001b]8;;https://evil.example\u0007\u009b1A`;
   /** Nothing but line breaks among the control characters, and no line past 80 columns. */
   const clear = (text: string, width = true) => {
-    expect(text).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    // A tab splits the columns of a piped list (review round 1, C12), so only it is let through.
+    expect(text).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
     if (width) for (const line of text.split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
   };
 
@@ -620,14 +671,14 @@ describe('sandbox: what Siren sends, printed', () => {
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await h.run(['sandbox', 'list']), h.err()).toBe(0);
     clear(h.out());
-    expect(h.out()).toMatch(/^acme +Acme/m);
+    expect(h.out()).toMatch(/^acme\tAcme/m);
 
     const email = { id: 31, recipients: [sly('ana@example.com')], subject: sly('Your commission'), fromName: sly('Acme'), template: sly('conversion-approved'), createdAt: sly('2026-11-24T17:40:00+00:00') };
     const list = harness([reply(200, { emails: [email], total: 1 })]);
     list.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await list.run(['sandbox', 'inbox', '--org', 'acme']), list.err()).toBe(0);
     clear(list.out());
-    expect(list.out()).toMatch(/#31 +2026-11-24 17:40 +ana@example\.com +Your commission/);
+    expect(list.out()).toMatch(/#31\t2026-11-24 17:40\tana@example\.com\tYour commission/);
 
     const one = harness([reply(200, { ...email, text: `Hello,\r\n${sly('Your commission was approved.')}\n\tThanks` })], { env: { SIREN_ORG: '3' } });
     one.signedIn();

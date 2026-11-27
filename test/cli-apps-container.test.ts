@@ -250,8 +250,8 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     const h = harness([reply(200, onPlus)]);
     h.signedIn();
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
-    expect(h.out()).toMatch(/\napp:11 +notify-crm +Post-conversion action \(postConversionAction\) +Tell the CRM · requires Pro\n/);
-    expect(h.out()).toMatch(/\napp:12 +acme-split +Distribution resolver \(distributionResolver\) +Acme split\n/);
+    expect(h.out()).toMatch(/\napp:11\tnotify-crm\tPost-conversion action \(postConversionAction\)\tTell the CRM · requires Pro\n/);
+    expect(h.out()).toMatch(/\napp:12\tacme-split\tDistribution resolver \(distributionResolver\)\tAcme split\n/);
     expect(h.out()).toMatch(/\n  Events +obligation\.approved  requires Pro, so Siren does not send them\n/);
   });
 
@@ -266,12 +266,12 @@ describe('apps-sdk-container item 6: plans in the output', () => {
     const h = harness([reply(200, app), reply(200, older)]);
     h.signedIn();
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
-    expect(h.out()).toMatch(/\napp:11 .* Tell the CRM · requires Enterprise\n/);
-    expect(h.out()).toMatch(/\napp:12 .* Acme ledger · your plan cannot use it\n/);
+    expect(h.out()).toMatch(/\napp:11\t.*\tTell the CRM · requires Enterprise\n/);
+    expect(h.out()).toMatch(/\napp:12\t.*\tAcme ledger · your plan cannot use it\n/);
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
     expect(h.out().split('\n').slice(-3, -1)).toEqual([
-      'app:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM',
-      'app:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger',
+      'app:11\tnotify-crm\tPost-conversion action (postConversionAction)\tTell the CRM',
+      'app:12\tacme-ledger\tPayout method (payoutMethod)\tAcme ledger',
     ]);
     expect(h.out()).not.toMatch(/requires Pro/);
   });

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { importKeyOf, handoffToken, progressLine } from '../src/cli/commands/recipes';
+import { firstSentence, importKeyOf, handoffToken, madeRows, namesEntry, progressLine } from '../src/cli/commands/recipes';
 import { runCli } from '../src/cli/run';
 import type { RecipePreview } from '../src/resources/recipes';
 import { harness } from './cli-fakes';
@@ -122,10 +122,42 @@ describe('siren recipes apply', () => {
     expect(createHash('sha256').update('x').digest('hex')).toHaveLength(64);
   });
 
-  it('sends no import key with --again, so Siren applies it again as an update', async () => {
+  it('sends no import key with --again when nothing here shares a name, so Siren applies it again', async () => {
     const h = withFile([previewed, noPrograms, reply(202, { success: true, ...importDetail() })]);
     expect(await h.run(['recipes', 'apply', FILE, '--yes', '--again']), h.err()).toBe(0);
     expect(bodyAt(h, 1)).not.toHaveProperty('importKey');
+  });
+
+  // Review round 1, C9: Siren makes a recipe's programs anew on each apply, so --again would copy them.
+  it('stops --again before it copies a program here, naming its id and the command that changes it', async () => {
+    const gold = reply(200, { items: [{ id: 41, name: 'Gold partners' }], total: 1, page: 1, perPage: 200, totalPages: 1 });
+    const h = withFile([previewed, gold]);
+    expect(await h.run(['recipes', 'apply', FILE, '--yes', '--again'])).toBe(1);
+    expect(recipeRequests(h).map((request) => new URL(request.url).pathname)).toEqual([expect.stringMatching(/\/recipes\/preview$/)]);
+    const flat = h.err().replace(/\s+/g, ' ');
+    expect(flat).toContain(`Applying ${FILE} again would copy 1 program (41) this organization has.`);
+    expect(flat).toContain('Nothing was sent.');
+    expect(flat).toContain('siren programs update 41 -d <field>=<value>');
+    expect(flat).toContain(`siren recipes apply ${FILE} --again --copy --yes to make the copies anyway`);
+  });
+
+  it('makes the copies with --again --copy, and lists each record the import made by id', async () => {
+    const gold = reply(200, { items: [{ id: 41, name: 'Gold partners' }], total: 1, page: 1, perPage: 200, totalPages: 1 });
+    const made = importDetail({ created: { programs: [{ key: 'gold', id: 52, name: 'Gold partners' }], collaborators: [{ key: 'ana', id: 9, name: 'ana@example.com' }] } });
+    const h = withFile([previewed, gold, reply(202, { success: true, ...made })]);
+    expect(await h.run(['recipes', 'apply', FILE, '--yes', '--again', '--copy']), h.err()).toBe(0);
+    expect(bodyAt(h, 1)).not.toHaveProperty('importKey');
+    expect(h.out()).toMatch(/Made +program 52 · Gold partners/);
+    expect(h.out()).toMatch(/person 9 · ana@example\.com/);
+  });
+
+  it('madeRows reads a list or a map of ids, and counts people past the first five', () => {
+    expect(madeRows({ created: { programs: { gold: 41 } } })).toEqual([['Made', 'program 41 · gold']]);
+    const people = Array.from({ length: 7 }, (_, at) => ({ key: `p${at}`, id: at + 1, name: `p${at}@example.com` }));
+    const rows = madeRows({ created: { collaborators: people } });
+    expect(rows).toHaveLength(6);
+    expect(rows.at(-1)).toEqual(['', 'and 2 more people']);
+    expect(madeRows({ created: {} })).toEqual([]);
   });
 
   it('names the earlier import and --again when Siren applied this recipe already', async () => {
@@ -187,7 +219,7 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
     expect(h.out()).toContain('job7f3a');
     expect(h.out()).toContain(FILE);
     // Through a pipe, standard output holds the table alone, and the hint goes to standard error (review of PR 94).
-    expect(h.out().split('\n')[0]).toMatch(/^ID +STARTED/);
+    expect(h.out().split('\n')[0]).toMatch(/^ID\tSTARTED/);
     expect(h.out()).not.toContain('shows one');
     expect(h.err()).toContain('siren recipes status job7f3a shows one.');
   });
@@ -201,14 +233,52 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
     expect(h.err()).toContain('Left out: 1 programs');
   });
 
+  // Review round 1, C5: today's catalog names a recipe by `title`, with a number for its id and a slug.
+  it("catalog reads Beacon's title, slug and description, and leaves FITS out when every recipe fits", async () => {
+    const catalog = {
+      success: true,
+      recipes: [
+        { id: 542, title: 'Introduce and close', slug: 'introduce-and-close', description: 'Pays a partner for an introduction. It also pays the closer.', fits: true, payload: JSON.stringify(RECIPE) },
+        { id: 543, title: 'Store credit', slug: 'store-credit', description: 'Rewards in store credit', fits: true, payload: JSON.stringify(RECIPE) },
+      ],
+      store: { integrations: [], capabilities: [] },
+    };
+    const h = harness([reply(200, catalog), reply(200, catalog), reply(200, catalog)]);
+    h.signedIn();
+    expect(await h.run(['recipes', 'catalog']), h.err()).toBe(0);
+    expect(h.out()).toContain('Introduce and close');
+    expect(h.out()).toContain('Pays a partner for an introduction.');
+    expect(h.out()).not.toContain('It also pays the closer.');
+    expect(h.out()).toContain('introduce-and-close');
+    expect(h.out()).not.toContain('FITS');
+    expect(h.out()).not.toContain('undefined');
+    expect(h.err()).toContain('siren recipes show introduce-and-close > recipe.json');
+    let before = h.out().length;
+    expect(await h.run(['recipes', 'show', '542']), h.err()).toBe(0);
+    expect(JSON.parse(h.out().slice(before))).toEqual(RECIPE);
+    before = h.out().length;
+    expect(await h.run(['recipes', 'show', 'store-credit']), h.err()).toBe(0);
+    expect(JSON.parse(h.out().slice(before))).toEqual(RECIPE);
+  });
+
+  it('namesEntry matches an id as text or a number, or a slug, and firstSentence keeps one sentence', () => {
+    expect(namesEntry({ id: 542, fits: true }, '542')).toBe(true);
+    expect(namesEntry({ id: 'gold', fits: true }, 'GOLD')).toBe(true);
+    expect(namesEntry({ id: 1, slug: 'store-credit', fits: true }, 'store-credit')).toBe(true);
+    expect(namesEntry({ id: 1, fits: true }, '2')).toBe(false);
+    expect(firstSentence('One thing.  Two  things.')).toBe('One thing.');
+    expect(firstSentence('Version 1.5 works')).toBe('Version 1.5 works');
+    expect(firstSentence(undefined)).toBe('');
+  });
+
   it("catalog lists the recipes with whether each fits, and show prints one's recipe", async () => {
     const catalog = { success: true, recipes: [{ id: 'gold-partners', name: 'Gold partners', fits: true, payload: JSON.stringify(RECIPE) }, { id: 'tiers', name: 'Tiers', fits: false, requiredPlan: 'plus', payload: '{}' }], store: { integrations: [], capabilities: [] } };
     const h = harness([reply(200, catalog), reply(200, catalog)]);
     h.signedIn();
     expect(await h.run(['recipes', 'catalog', '--search', 'gold']), h.err()).toBe(0);
     expect(new URL(recipeRequests(h)[0]!.url).searchParams.get('q')).toBe('gold');
-    expect(h.out()).toMatch(/gold-partners +Gold partners +yes/);
-    expect(h.out()).toMatch(/tiers +Tiers +needs plus/);
+    expect(h.out()).toMatch(/gold-partners\tGold partners\t[^\n]*yes/);
+    expect(h.out()).toMatch(/tiers\tTiers\t[^\n]*needs plus/);
     expect(h.out()).not.toContain('saves one to edit');
     expect(h.err()).toContain('saves one to edit and apply.');
     const before = h.out().length;

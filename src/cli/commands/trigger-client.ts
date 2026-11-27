@@ -6,7 +6,7 @@ import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
 import { clean, styleFor } from '../style';
 import type { NextStep, Style } from '../style';
-import { CliRefusal, CliUsageError } from '../targets';
+import { CliRefusal, CliUsageError, hostName } from '../targets';
 import { idLabelFor, whole } from './requests';
 import type { IdLabel } from './requests';
 
@@ -20,8 +20,6 @@ import type { IdLabel } from './requests';
 /** How long the tool waits between reads while an app's answer is open, in milliseconds. */
 export const POLL_EVERY_MS = 2000;
 
-/** The widest a line may be, so nothing wraps in an 80-column terminal. */
-const WIDTH = 80;
 
 /** An amount in minor units, and its currency code or award type. */
 export interface Amount {
@@ -124,6 +122,18 @@ export class TestActivityClient {
 
   sale(transactionId: number): Promise<ActivityResult> {
     return this.http.requestData<ActivityResult>({ method: 'GET', path: `/test-activity/sales/${transactionId}`, retriable: true });
+  }
+
+  /** The post-conversion action types a program picks, such as `app:12`, from `GET /programs/{id}?fields=postConversionActions`. */
+  async programActions(programId: number): Promise<string[]> {
+    const body = await this.http.requestData<{ postConversionActions?: unknown }>({ method: 'GET', path: `/programs/${programId}`, query: { fields: 'postConversionActions' }, retriable: true });
+    const list = Array.isArray(body.postConversionActions) ? body.postConversionActions : [];
+    return list.map((entry: unknown) => (typeof entry === 'string' ? entry : typeof entry === 'object' && entry !== null ? (entry as { type?: unknown }).type : undefined)).filter((type): type is string => typeof type === 'string');
+  }
+
+  /** Approves a conversion, as `siren conversions update <id> -d status=approved` does. Siren runs its post-conversion actions as it approves. */
+  approve(conversionId: number): Promise<unknown> {
+    return this.http.requestData({ method: 'PUT', path: `/conversions/${conversionId}`, body: { status: 'approved' }, retriable: false });
   }
 
   simulate(body: ActivityBody): Promise<ActivityResult> {
@@ -283,7 +293,7 @@ export function waitSeconds(value: unknown, fallback: number): number {
 export async function assertSandbox(run: CommandContext, words: string): Promise<void> {
   if ((await run.targetEdition()) !== 'production') return;
   throw new CliRefusal(`siren ${words} runs on a sandbox only.`, {
-    why: `${run.target.baseUrl} is a live Siren, and test activity there would be real sales.`,
+    why: `${hostName(run.target.baseUrl)} is a live Siren, and test activity there would be real sales.`,
     fix: 'siren login --sandbox',
     fixWords: 'and try it there',
   });
@@ -324,10 +334,9 @@ export function openWaits(result: ActivityResult): ActivityWait[] {
   return result.waits.filter((wait) => isOpen(wait.status));
 }
 
-/** Rows cut so each line fits 80 columns beside the widest label in a terminal. Through a pipe each value stays whole. */
-function fitted(style: Style, rows: Array<readonly [string, string]>): Array<readonly [string, string]> {
-  const label = Math.max(0, ...rows.map(([name]) => name.length)) + 3;
-  return rows.map(([name, value]) => [name, style.fit(value, WIDTH - 2 - label)] as const);
+/** Rows as the report prints them: it wraps each value under itself, and nothing is cut. */
+function fitted(_style: Style, rows: Array<readonly [string, string]>): Array<readonly [string, string]> {
+  return rows;
 }
 
 /** The name of each program the conversions name, by id. */
@@ -393,27 +402,28 @@ export function orgLabel(run: CommandContext): string {
   return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
 }
 
-/** What to run after a result: the ask a reward waits on, a refund of a sale, or a sale on a visit. */
-export function activityNext(style: Style, input: Pick<CommandInput, 'command'>, raw: ActivityResult, label: IdLabel = whole): NextStep[] {
+/** What to run after a result: the ask a reward waits on, what an app needs, a refund of a sale, or a sale on a visit. */
+export function activityNext(style: Style, input: Pick<CommandInput, 'command'>, raw: ActivityResult, label: IdLabel = whole, apps: NextStep[] = []): NextStep[] {
   const result = cleaned(raw);
   const next: NextStep[] = [];
   const open = openWaits(result);
   if (open.length > 0) next.push({ text: style.command(input.command(`apps requests ${label(open[0]!.requestKey)}`)), aside: 'the ask a reward waits on' });
+  next.push(...apps);
   if (result.event === 'sale' && result.transactionId !== null) next.push({ text: style.command(input.command(`trigger refund --transaction ${result.transactionId}`)) });
   if (result.event === 'visit' && result.opportunityId !== null) next.push({ text: style.command(input.command(`trigger sale --opportunity ${result.opportunityId}`)) });
   return next;
 }
 
 /** The report `siren trigger` prints for a result. Every value from Siren is cleaned first. */
-export function activityReport(style: Style, input: CommandInput, run: CommandContext, raw: ActivityResult, label: IdLabel = whole): string {
+export function activityReport(style: Style, input: CommandInput, run: CommandContext, raw: ActivityResult, label: IdLabel = whole, apps: { rows: Array<readonly [string, string]>; next: NextStep[] } = { rows: [], next: [] }): string {
   const result = cleaned(raw);
-  const next = activityNext(style, input, result, label);
+  const next = activityNext(style, input, result, label, apps.next);
   const open = openWaits(result);
   const tips = [
     ...(open.length > 0 ? ['A reward that waits is settled once the app answers.'] : []),
-    ...(result.message !== null && result.message !== '' ? [style.fit(result.message, WIDTH - 2)] : []),
+    ...(result.message !== null && result.message !== '' ? [result.message] : []),
   ];
-  return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: activityRows(style, result), next, tips });
+  return style.report({ headline: `${eventName(result.event)} recorded in ${orgLabel(run)}`, rows: [...activityRows(style, result), ...apps.rows], next, tips });
 }
 
 /** The report `siren simulate` prints on a Siren with only the older sale route: who would earn what, and no ids, since none of them exist. Every value from Siren is cleaned first. */
@@ -433,7 +443,7 @@ export function simulationReport(style: Style, run: CommandContext, raw: Activit
     tips: [
       'Nothing was written.',
       ...(result.waits.length > 0 ? ["A simulation sends no ask, so an app's answer can't be shown here."] : []),
-      ...(result.message !== null && result.message !== '' && count === 0 ? [style.fit(result.message, WIDTH - 2)] : []),
+      ...(result.message !== null && result.message !== '' && count === 0 ? [result.message] : []),
     ],
   });
 }

@@ -110,32 +110,32 @@ const LIVE_CASES: Case[] = [
     setup: (h) => h.signedIn(signedInLive),
     command: `siren apps requests --app ${KEY}${READ}`,
   },
-  { name: 'a command with no session', argv: ['apps', 'list'], command: `siren login${LIVE}` },
+  { name: 'a command with no session', argv: ['apps', 'list'], command: `siren login${READ}` },
   {
     name: 'a refresh Siren refused',
     argv: ['apps', 'list'],
     replies: [AuthAnswers.refreshRefused()],
     setup: (h) => h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE, accessExpiresAt: NOW_S - 10 }) }),
-    command: `siren login${LIVE}`,
+    command: `siren login${READ}`,
   },
   {
     name: 'a refresh refused for the plan',
     argv: ['apps', 'list'],
     replies: [ConfirmationAnswers.loginNoPlan('trial_ended')],
     setup: (h) => h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE, accessExpiresAt: NOW_S - 10 }) }),
-    command: `siren login${LIVE}`,
+    command: `siren login${READ}`,
   },
-  { name: 'a login refused for the plan', argv: ['login', '--email', EMAIL, '--password-stdin'], replies: [ConfirmationAnswers.loginNoPlan('no_entitlement')], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
-  { name: 'a login with the address unconfirmed', argv: ['login', '--email', EMAIL, '--password-stdin'], replies: [ConfirmationAnswers.loginUnconfirmed(EMAIL)], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
-  { name: 'a login with --org for another organization', argv: ['login', '--email', EMAIL, '--password-stdin', '--org', 'nope'], replies: [AuthAnswers.oneOrg()], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
+  { name: 'a login refused for the plan', argv: ['login', '--email', EMAIL, '--password-stdin'], replies: [ConfirmationAnswers.loginNoPlan('no_entitlement')], options: { stdin: PASSWORD }, command: `siren login${READ}` },
+  { name: 'a login with the address unconfirmed', argv: ['login', '--email', EMAIL, '--password-stdin'], replies: [ConfirmationAnswers.loginUnconfirmed(EMAIL)], options: { stdin: PASSWORD }, command: `siren login${READ}` },
+  { name: 'a login with --org for another organization', argv: ['login', '--email', EMAIL, '--password-stdin', '--org', 'nope'], replies: [AuthAnswers.oneOrg()], options: { stdin: PASSWORD }, command: `siren login${READ}` },
   { name: 'a sign-up without the terms', argv: ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin'], options: { stdin: PASSWORD }, command: `siren signup --accept-terms${LIVE}` },
-  { name: 'a sign-up turned off', argv: ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'], replies: [ConfirmationAnswers.signupOff()], options: { stdin: PASSWORD }, command: `siren login${LIVE}` },
+  { name: 'a sign-up turned off', argv: ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'], replies: [ConfirmationAnswers.signupOff()], options: { stdin: PASSWORD }, command: `siren login${READ}` },
   {
     name: 'a sign-up that waits for the address to be confirmed',
     argv: ['signup', '--org-name', 'Acme', '--email', EMAIL, '--password-stdin', '--accept-terms'],
     replies: [ConfirmationAnswers.registeredUnconfirmed(membershipAcme, user)],
     options: { stdin: PASSWORD },
-    command: `siren login${LIVE}`,
+    command: `siren login${READ}`,
   },
   { name: 'one request the organization does not have', argv: ['apps', 'requests', 'apr_0123456789abcdef0123456789abcdef'], replies: [AppAnswers.requestNotFound()], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests${READ}` },
   { name: 'list with an app whose requests need attention', argv: ['apps', 'list'], replies: [reply(200, [appRecord({ needsAttention: 2 })])], setup: (h) => h.signedIn(signedInLive), command: `siren apps requests --app ${KEY} --attention${READ}` },
@@ -157,6 +157,30 @@ const LIVE_CASES: Case[] = [
   { name: 'apps init', argv: ['apps', 'init', '--key', KEY], command: `siren apps apply${LIVE}` },
 ];
 
+/**
+ * A hint as the words a shell passes, or undefined for one with a
+ * placeholder such as `<path to siren.app.json>`, which the person fills in.
+ */
+function argvOf(hint: string): string[] | undefined {
+  if (/[<>]/.test(hint)) return undefined;
+  const words = hint.replace(/^siren /, '').split(/\s+/).filter((word) => word !== '');
+  // The sentence goes on after the command: "siren login to log in", "siren apps off <key> --live to stop Siren calling it".
+  const prose = words.findIndex((word) => PROSE.has(word) || word.endsWith(','));
+  if (prose === -1) return words;
+  return words[prose]!.endsWith(',') ? [...words.slice(0, prose), words[prose]!.slice(0, -1)] : words.slice(0, prose);
+}
+
+/** Words that start the sentence after a command in a hint. No command, argument or flag of the tool is one of them. */
+const PROSE = new Set(['to', 'again', 'without', 'lists', 'shows', 'sends', 'would', 'watches', 'and', 'or', 'for', 'so', 'then', 'which', 'first', 'once', 'when', 'here', 'there', 'now']);
+
+/**
+ * What a printed command must never meet when it is run as printed (review
+ * round 1, C10): a command line the tool can't read, or the live guard
+ * refusing it for a missing or extra --live. Siren's own answers may still
+ * refuse it, which a fake can't stand for.
+ */
+const UNRUNNABLE = /has no command|isn't a flag|Unknown option|Usage: siren|is a live Siren\.|doesn't apply/;
+
 describe('apps-cli: every hint names a command the person can run as printed', () => {
   for (const hintCase of LIVE_CASES) {
     it(`on a live Siren: ${hintCase.name}`, async () => {
@@ -173,6 +197,17 @@ describe('apps-cli: every hint names a command the person can run as printed', (
           expect(hint, printed).toContain(READ);
           expect(hint, printed).not.toContain('--live');
         }
+      }
+      // Each hint, run as printed against the same Siren and session, gets past the command line and the live guard.
+      for (const hint of found) {
+        const argv = argvOf(hint);
+        if (argv === undefined) continue;
+        // A person runs it at a terminal, as the one that printed it may not be.
+        const again = harness([reply(500, {})], { edition: 'production', ...hintCase.options, interactive: true, typed: [EMAIL], secrets: [PASSWORD] });
+        hintCase.setup?.(again);
+        const code = await again.run(argv);
+        expect(code, `${hint}\n${again.err()}`).not.toBe(2);
+        expect(again.err(), hint).not.toMatch(UNRUNNABLE);
       }
     });
   }

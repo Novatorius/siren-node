@@ -1,0 +1,143 @@
+{
+  "_source": "siren simulate --json on the UAT Siren, review round 1 (C6): a line sent without units comes back as value {} and units \"\"",
+  "validation": {
+    "valid": true,
+    "errors": []
+  },
+  "actions": [
+    {
+      "type": "site_visited",
+      "label": "visit",
+      "event": "site_visited",
+      "created": {
+        "opportunity": 39447
+      },
+      "error": null
+    },
+    {
+      "type": "sale_triggered",
+      "label": "sale",
+      "event": "sale_triggered",
+      "created": {
+        "transaction": 7520
+      },
+      "error": null
+    }
+  ],
+  "ledgers": {
+    "transactions": [
+      {
+        "id": 7520,
+        "opportunityId": 39447,
+        "status": "complete",
+        "lineItems": [
+          {
+            "id": 10173,
+            "name": "STEIN",
+            "description": "STEIN",
+            "type": "product",
+            "quantity": 1,
+            "value": {},
+            "units": ""
+          }
+        ],
+        "programs": [
+          {
+            "conversionId": 5644,
+            "programId": 16,
+            "programName": "EU Partner Program",
+            "collaboratorId": 208,
+            "compilers": [
+              "includeLineItems"
+            ],
+            "percent": "18",
+            "baseAmount": 10900,
+            "lines": [
+              {
+                "lineItemId": 10173,
+                "name": "STEIN",
+                "type": "product",
+                "quantity": 1,
+                "lineTotal": 10900,
+                "counted": true,
+                "countedBy": "includeLineItems",
+                "reason": null,
+                "message": null
+              }
+            ]
+          }
+        ],
+        "producedBy": {
+          "index": 1,
+          "type": "sale_triggered",
+          "label": "sale"
+        }
+      }
+    ],
+    "conversions": [
+      {
+        "id": 5644,
+        "opportunityId": 39447,
+        "engagementId": 41312,
+        "transactionId": 7520,
+        "obligationId": 5892,
+        "status": "pending",
+        "type": "sale",
+        "programId": 16,
+        "programName": "EU Partner Program",
+        "collaboratorId": 208,
+        "collaboratorName": "Paolo Ricci",
+        "producedBy": {
+          "index": 1,
+          "type": "sale_triggered",
+          "label": "sale"
+        }
+      }
+    ],
+    "obligations": [
+      {
+        "id": 5892,
+        "collaboratorId": 208,
+        "collaboratorName": "Paolo Ricci",
+        "programId": 16,
+        "programName": "EU Partner Program",
+        "units": "EUR",
+        "status": "draft",
+        "holdReason": null,
+        "awardType": "EUR",
+        "value": 1962,
+        "opportunityId": 39447,
+        "engagementId": 41312,
+        "conversionId": 5644,
+        "transactionId": 7520,
+        "distributionId": null,
+        "producedBy": {
+          "index": 1,
+          "type": "sale_triggered",
+          "label": "sale"
+        }
+      }
+    ]
+  },
+  "why": [
+    {
+      "transactionId": 7520,
+      "conversionId": 5644,
+      "obligationId": 5892,
+      "collaboratorId": 208,
+      "collaboratorName": "Paolo Ricci",
+      "programId": 16,
+      "programName": "EU Partner Program",
+      "action": {
+        "index": 0,
+        "type": "site_visited",
+        "label": "visit"
+      },
+      "reason": "site_visited",
+      "message": "Paolo Ricci earned in EU Partner Program on this sale because the scenario credits their referral link (action \"visit\")."
+    }
+  ],
+  "skipped": [],
+  "distributions": [],
+  "simulated": true
+}

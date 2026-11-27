@@ -5,7 +5,7 @@ import { CommandContext, contextOf } from '../context';
 import type { CommandInput } from '../context';
 import type { Membership } from '../session-auth';
 import { borrowOrg, orgScope } from '../org';
-import { SandboxRecords, counted, hostOf, onSandbox, transportOf } from '../sandboxes';
+import { SandboxRecords, counted, hostOf, onSandbox, orNotYet, transportOf } from '../sandboxes';
 import type { SandboxCopy } from '../sandboxes';
 import { clean, styleFor } from '../style';
 import type { Report } from '../style';
@@ -218,13 +218,13 @@ export async function create(input: CommandInput): Promise<number> {
 
   const live = await liveContext(run, input);
   if (live.target.baseUrl === run.target.baseUrl) {
-    throw new CliRefusal(`${run.target.baseUrl} is the sandbox, so it cannot be the live Siren too.`, {
+    throw new CliRefusal(`${hostOf(run.target.baseUrl)} is the sandbox, so it cannot be the live Siren too.`, {
       why: 'Name the live Siren the setup comes from.',
       fix: `siren sandbox create --from ${from} --live-url <live address>`,
     });
   }
   if ((await live.targetEdition()) !== 'production') {
-    throw new CliRefusal(`${live.target.baseUrl} is a sandbox Siren, and --from copies from a live one.`, {
+    throw new CliRefusal(`${hostOf(live.target.baseUrl)} is a sandbox Siren, and --from copies from a live one.`, {
       why: 'Nothing was made.',
       fix: `siren sandbox create --from ${from} --live-url <live address>`,
     });
@@ -267,7 +267,7 @@ export async function create(input: CommandInput): Promise<number> {
   let org: Membership;
   let scope: Awaited<ReturnType<typeof borrowOrg>>;
   try {
-    const made = await writeRecord<{ org?: Membership }>(transportOf(run), 'POST', '/sandbox/orgs', { name });
+    const made = await orNotYet(run, 'sandbox', () => writeRecord<{ org?: Membership }>(transportOf(run), 'POST', '/sandbox/orgs', { name }));
     if (!isJsonObject(made.org) || typeof made.org.orgId !== 'number') throw new CliRefusal("Siren made the organization but didn't say which it is.", { why: 'Its answer named no organization id, so the copy stopped there.', fix: input.command('sandbox list'), fixWords: 'to find it' });
     org = made.org;
     // A token for the new organization, for this run only.
@@ -413,7 +413,7 @@ export async function create(input: CommandInput): Promise<number> {
   ];
   // A copied app has no address, so its asks wait for siren listen or a url the person sets.
   if (apps.length === 0) rows.push(['Apps', `none on ${clean(copy.from.orgSlug)}`]);
-  copiedApps.forEach((app, index) => rows.push([index === 0 ? 'Apps' : '', style.fit(`${clean(app.key)} (no address, run siren listen or set one)`, 62)]));
+  copiedApps.forEach((app, index) => rows.push([index === 0 ? 'Apps' : '', `${clean(app.key)} (no address, run siren listen or set one)`]));
   const groups: string[] = [];
   for (const [stanza, label, one, many] of RECORD_STANZAS) {
     const count = stanzas[stanza];
@@ -425,7 +425,7 @@ export async function create(input: CommandInput): Promise<number> {
   if (settings.length > 0) rows.push(['Settings', settings.join(', ')]);
   // The two that always stay behind share a line. Their reasons are the tips.
   rows.push(['Not copied', 'collaborators, API keys, signing secrets']);
-  for (const item of notCopied.slice(2)) rows.push(['', style.fit(clean(`${item.what}, ${item.why}`), 62)]);
+  for (const item of notCopied.slice(2)) rows.push(['', clean(`${item.what}, ${item.why}`)]);
 
   const report: Report = {
     headline: '',
@@ -453,7 +453,7 @@ export async function create(input: CommandInput): Promise<number> {
 export async function list(input: CommandInput): Promise<number> {
   const run = contextOf(input);
   const json = input.values.json === true;
-  await onSandbox(run, 'sandbox list');
+  await onSandbox(run, 'sandbox list', true);
   const memberships = await run.withAccessToken((token) => run.auth.memberships(token));
   const copies = await new SandboxRecords(input.io.configDir).all();
   const fromOf = (orgId: number) => copies.find((copy) => copy.baseUrl === run.target.baseUrl && copy.orgId === orgId)?.from ?? null;
@@ -471,7 +471,7 @@ export async function list(input: CommandInput): Promise<number> {
       const source = fromOf(org.orgId);
       return [org.orgSlug, org.orgName, source === null ? '' : `${source.orgSlug} on ${hostOf(source.baseUrl)}`];
     }),
-    76,
+    style.rich ? style.width - 2 : Number.POSITIVE_INFINITY,
   );
   const headline = style.success(`${counted(memberships.length, 'sandbox organization', 'sandbox organizations')} on ${hostOf(run.target.baseUrl)}`);
   // Through a pipe, standard output holds the table alone, and the headline and tip go to standard error (review of PR 94).
@@ -528,7 +528,7 @@ export async function reset(input: CommandInput): Promise<number> {
     throw new CliRefusal(`${typed === '' ? 'Nothing' : typed} is not ${slug}, so nothing was cleared.`, { why: 'A reset needs the organization typed, so a slip clears nothing.', fix: input.command(`sandbox reset${org.flag} --confirm ${slug}`) });
   }
 
-  const answer = await writeRecord<ResetAnswer>(org.http, 'POST', '/sandbox/reset', { confirm: typed });
+  const answer = await orNotYet(run, 'sandbox', () => writeRecord<ResetAnswer>(org.http, 'POST', '/sandbox/reset', { confirm: typed }));
   if (json) {
     printJson(input, answer);
     return 0;
@@ -597,7 +597,7 @@ export async function inbox(input: CommandInput): Promise<number> {
   const limit = raw === undefined ? INBOX_DEFAULT : Number(raw);
   if (!Number.isInteger(limit) || limit < 1 || limit > INBOX_MAX) throw new CliUsageError(`--limit takes a whole number from 1 to ${INBOX_MAX}.`);
 
-  const org = await orgScope(run, input, await onSandbox(run, 'sandbox inbox'), 'sandbox inbox');
+  const org = await orgScope(run, input, await onSandbox(run, 'sandbox inbox', true), 'sandbox inbox');
   const http = org.http;
   const style = styleFor(input.io, 'stdout', { json });
   const slug = org.orgSlug;
@@ -622,7 +622,7 @@ export async function inbox(input: CommandInput): Promise<number> {
     return 0;
   }
 
-  const page = await readObject<{ emails?: InboxEmail[]; total?: number }>(http, '/sandbox/inbox', { number: limit, offset: 0 });
+  const page = await orNotYet(run, 'sandbox', () => readObject<{ emails?: InboxEmail[]; total?: number }>(http, '/sandbox/inbox', { number: limit, offset: 0 }));
   const emails = Array.isArray(page.emails) ? page.emails : [];
   if (json) {
     printJson(input, { emails, total: page.total ?? emails.length });

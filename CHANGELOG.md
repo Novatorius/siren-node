@@ -138,14 +138,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saved. `siren enrollers` lists and shows enrollers, prints their log, makes one from JSON, and
   runs one now after saying how many people would move. A Siren or a plan without them gets a
   refusal that says which.
-- `siren notes --on <type:id>` lists a record's notes, newest first. `siren <resource> note <id>
-  <text>` adds one, and `siren notes edit` and `siren notes delete` change and remove one. A live
-  organization takes a note without `--live`, since a note changes no program, reward or payout.
-  The generated `siren notes list`, `create`, `update` and `delete` are gone.
+- The generated `siren notes list`, `create`, `update` and `delete` are gone. Notes on records are
+  an operator's job, which Siren's MCP connector covers, so the CLI has no notes commands.
 - A generated `get`, such as `siren collaborators get 1`, prints a record view: the record's name
   in the headline, aligned rows, a nested object as dotted rows, and each list of objects as its
-  own section, one line an item, never cut mid-value. `collaborators get` and `programs get` end
-  with the record's latest notes. Through a pipe, Next goes to standard error.
+  own section, one line an item, never cut mid-value. Through a pipe, Next goes to standard error.
 - A validation failure prints one row a field on every command, with each field's needs, in
   place of one paragraph. `--json` on a generated command now carries Siren's `context`, which held
   `failedValidations` and was dropped before.

@@ -26,22 +26,19 @@ const found = (...rows: unknown[]) => reply(200, { requests: rows, total: rows.l
 const apps = () => reply(200, [appRecord()]);
 
 describe('siren apps requests: the list', () => {
-  it('prints a count line, a table oldest first, and a tip that names the newest by its short id', async () => {
+  it('prints a count line, a table newest first, and a tip that names the newest by its short id, the table alone on stdout through a pipe (review round 1, C12 and C26)', async () => {
     const h = harness([apps(), list(waiting, older), list(), found(waiting)], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
     expect(h.out()).toBe(
       [
-        '2 requests in Acme (3), sandbox',
-        '',
-        'ID        WHEN          APP           FEATURE          ABOUT          SENDS  STATE',
-        '01234567  Nov 16 08:00  acme-payouts  Post-conversion  conversion 29  1      delivered',
-        'b79943ff  Nov 17 09:14  acme-payouts  Payout method    payout 88      1      waiting',
-        '',
-        'siren apps requests b79943ff shows one.',
+        'ID\tWHEN\tAPP\tFEATURE\tABOUT\tSENDS\tSTATE',
+        'b79943ff\tNov 17 09:14 UTC\tacme-payouts\tPayout method\tpayout 88\t1\twaiting',
+        '01234567\tNov 16 08:00 UTC\tacme-payouts\tPost-conversion\tconversion 29\t1\tdelivered',
         '',
       ].join('\n'),
     );
+    expect(h.err()).toBe(['2 requests in Acme (3), sandbox', 'siren apps requests b79943ff shows one.', ''].join('\n'));
     // The latest, then every request that needs attention, then one idPrefix lookup that shows the short id finds the newest.
     expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps/requests']);
     expect(Object.fromEntries(new URL(h.http.requests[3]!.url).searchParams)).toEqual({ idPrefix: 'apr_b79943ff' });
@@ -51,27 +48,18 @@ describe('siren apps requests: the list', () => {
     const h = harness([apps(), list(stuck), found(stuck)], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.out()).toBe(
-      [
-        '1 request needs you in Acme (3), sandbox',
-        '',
-        'ID        WHEN          APP           FEATURE        ABOUT      SENDS  WHY',
-        'b79943ff  Nov 17 09:14  acme-payouts  Payout method  payout 88  3      Host not found',
-        '',
-        'siren apps requests b79943ff shows it, and siren apps resend b79943ff sends it again.',
-        '',
-      ].join('\n'),
-    );
+    expect(h.out()).toBe(['ID\tWHEN\tAPP\tFEATURE\tABOUT\tSENDS\tWHY', 'b79943ff\tNov 17 09:14 UTC\tacme-payouts\tPayout method\tpayout 88\t3\tHost not found', ''].join('\n'));
+    expect(h.err()).toBe(['1 request needs you in Acme (3), sandbox', 'siren apps requests b79943ff shows it, and siren apps resend b79943ff sends it again.', ''].join('\n'));
   });
 
   it('with --app: only that app, and a short line with the command to watch when it has none', async () => {
     const h = harness([apps(), list(waiting), list(), found(waiting), apps(), list(), list()], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(`1 request for ${APP_KEY} in Acme (3), sandbox`);
-    const before = h.out().length;
+    expect(h.err()).toContain(`1 request for ${APP_KEY} in Acme (3), sandbox`);
+    const before = h.err().length;
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
-    expect(h.out().slice(before)).toBe(['No requests for acme-payouts yet.', 'siren apps requests --app acme-payouts --follow watches for them.', ''].join('\n'));
+    expect(h.err().slice(before)).toBe(['No requests for acme-payouts yet.', 'siren apps requests --app acme-payouts --follow watches for them.', ''].join('\n'));
   });
 
   it('in a terminal: a bold count, a dim id, colored states, and nothing past 80 columns', async () => {
@@ -89,11 +77,11 @@ describe('siren apps requests: the list', () => {
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-styled-requests.txt');
   });
 
-  it('with --json: the rows Siren sent, oldest first, as one JSON array with full ids', async () => {
+  it('with --json: the rows Siren sent, newest first, as one JSON array with full ids', async () => {
     const h = harness([apps(), list(waiting, older), list()], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--json']), h.err()).toBe(0);
-    expect(JSON.parse(h.out())).toEqual([older, waiting]);
+    expect(JSON.parse(h.out())).toEqual([waiting, older]);
   });
 
   it('with --follow: says it is watching, prints the header once and each change as a row, and exits 130 on Ctrl-C', async () => {
@@ -201,9 +189,9 @@ describe('short request ids', () => {
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps/requests']);
     expect(queryOf(h, 3)).toEqual({ idPrefix: 'apr_b79943ff' });
-    expect(h.out()).toContain(`${OTHER_ID}  Nov 16 08:00`);
-    expect(h.out()).toContain(`siren apps requests ${APP_REQUEST_ID} shows one.`);
-    expect(h.out()).not.toMatch(/^b79943ff /m);
+    expect(h.out()).toContain(`${OTHER_ID}\tNov 16 08:00 UTC`);
+    expect(h.err()).toContain(`siren apps requests ${APP_REQUEST_ID} shows one.`);
+    expect(h.out()).not.toMatch(/^b79943ff\t/m);
   });
 
   it('prints whole ids in a request and its tip when Siren refuses idPrefix', async () => {
@@ -252,13 +240,13 @@ describe('siren apps requests <id>: one request', () => {
         '  Kind      ask · Payout method (payoutMethod)',
         '  App       acme-payouts · acme-ledger (app:12)',
         '  About     payout 88',
-        '  Created   Nov 17 09:14',
-        '  Answer    none yet, due Nov 18 09:14',
+        '  Created   Nov 17 09:14 UTC',
+        '  Answer    none yet, due Nov 18 09:14 UTC',
         '',
         'SENDS',
-        '#  STATUS     HTTP  THE APP SAID',
-        '1  failed     500   upstream timeout',
-        '2  delivered  200   {"received":true}',
+        '#\tSTATUS\tHTTP\tTHE APP SAID',
+        '1\tfailed\t500\tupstream timeout',
+        '2\tdelivered\t200\t{"received":true}',
         '',
         'DATA',
         '  payoutId  88',
@@ -277,7 +265,7 @@ describe('siren apps requests <id>: one request', () => {
     answered.signedIn();
     expect(await answered.run(['apps', 'requests', APP_REQUEST_ID]), answered.err()).toBe(0);
     expect(answered.out()).toContain('  Answer    {"outcome":"paid","reference":"TX-1"}');
-    expect(answered.out()).toContain('  From      dev@acme.example at Nov 17 10:00');
+    expect(answered.out()).toContain('  From      dev@acme.example at Nov 17 10:00 UTC');
     expect(answered.out()).toContain('Siren sent no data.');
 
     const stuck = harness([detail({ status: 'needs_attention', lastError: 'Host not found' }), apps(), reply(200, []), found(waiting)], { env: UTC });
@@ -343,11 +331,11 @@ describe("CLI pass 3, should-fix 7: in an app's folder, the list is that app's",
     h.write('siren.app.json', appFile);
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
     expect(new URL(h.http.requests[1]!.url).searchParams.get('appId')).toBe('4');
-    expect(h.out()).toContain(`1 request for ${APP_KEY} in Acme (3), sandbox`);
+    expect(h.err()).toContain(`1 request for ${APP_KEY} in Acme (3), sandbox`);
     expect(h.out()).not.toContain('aaaa0000');
-    expect(h.out()).toContain("siren apps requests --all lists every app's.");
+    expect(h.err()).toContain("siren apps requests --all lists every app's.");
     // One app's list has no APP column, since every row is that app's.
-    expect(h.out()).not.toMatch(/^ID .* APP /m);
+    expect(h.out()).not.toMatch(/^ID\t.*\tAPP\t/m);
   });
 
   it('lists every app with --all, and refuses --all beside --app', async () => {
@@ -355,7 +343,7 @@ describe("CLI pass 3, should-fix 7: in an app's folder, the list is that app's",
     h.signedIn();
     h.write('siren.app.json', appFile);
     expect(await h.run(['apps', 'requests', '--all']), h.err()).toBe(0);
-    expect(h.out()).toContain('2 requests in Acme (3), sandbox');
+    expect(h.err()).toContain('2 requests in Acme (3), sandbox');
     expect(h.out()).toContain('aaaa0000');
     expect(await h.run(['apps', 'requests', '--all', '--app', APP_KEY])).toBe(2);
   });
@@ -395,7 +383,9 @@ describe("CLI pass 3, should-fix 7: in an app's folder, the list is that app's",
     expect(header).not.toContain('ABOUT');
     const rows = lines.filter((line) => /^\d{8} /.test(line));
     expect(rows).toHaveLength(20);
-    expect(rows[0]).toMatch(/^05000000 /);
+    // Newest first, so the 20 shown are the newest, 24 down to 05.
+    expect(rows[0]).toMatch(/^24000000 /);
+    expect(rows[19]).toMatch(/^05000000 /);
     expect(h.out()).toContain('5 older requests are not shown. --json prints them all.');
     for (const line of lines) expect([...line].length, line).toBeLessThanOrEqual(80);
   });
@@ -422,7 +412,7 @@ describe('pass 3 re-check, must-fix 1: an app list never misses what apps list c
     const h = harness([reply(200, [busy, crm]), list(), list(crmRow), found(crmRow)], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', 'acme-crm']), h.err()).toBe(0);
-    expect(h.out()).toContain('1 request for acme-crm in Acme (3), sandbox');
+    expect(h.err()).toContain('1 request for acme-crm in Acme (3), sandbox');
     expect(h.out()).toContain('09000000');
     expect(queries(h).slice(0, 2)).toEqual([{ appId: '9' }, { status: 'needs_attention', limit: '100', appId: '9' }]);
   });
@@ -432,25 +422,25 @@ describe('pass 3 re-check, must-fix 1: an app list never misses what apps list c
     const h = harness([reply(200, [appRecord({ id: 4, key: 'packet-tour', needsAttention: 103 })]), list(...many.slice(0, 100)), list(...many.slice(100)), found(many[0])], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.out()).toContain('103 requests need you in Acme (3), sandbox');
+    expect(h.err()).toContain('103 requests need you in Acme (3), sandbox');
     expect(queries(h).slice(0, 2)).toEqual([{ status: 'needs_attention', limit: '100' }, { status: 'needs_attention', limit: '100', before: many[99]!.id }]);
-    expect(h.err()).toBe('');
+    expect(h.err()).not.toContain('Siren counts');
   });
 
   it('says how many Siren counts and did not list, when an older Siren answers the newest 50 alone', async () => {
     const h = harness([reply(200, [busy, crm]), list(...busyRows.slice(0, 50)), found(busyRows[0])], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.out()).toContain('50 requests need you in Acme (3), sandbox');
-    expect(h.out()).toContain('\nSiren counts 53 that need you, and this list holds 50.\n');
-    expect(h.out()).toContain('siren apps requests --app acme-crm --attention lists one app');
+    expect(h.err()).toContain('50 requests need you in Acme (3), sandbox');
+    expect(h.err()).toContain('\nSiren counts 53 that need you, and this list holds 50.\n');
+    expect(h.err()).toContain('siren apps requests --app acme-crm --attention lists one app');
   });
 
   it('never says an app has none while apps list counts one', async () => {
     const h = harness([reply(200, [appRecord({ id: 9, key: 'acme-crm', needsAttention: 1 })]), list(), list()], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', 'acme-crm']), h.err()).toBe(0);
-    expect(h.out()).not.toContain('No requests for acme-crm yet.');
-    expect(h.out()).toContain('Siren counts 1 that needs you, and this list holds none.');
+    expect(h.err()).not.toContain('No requests for acme-crm yet.');
+    expect(h.err()).toContain('Siren counts 1 that needs you, and this list holds none.');
   });
 });

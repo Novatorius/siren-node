@@ -8,8 +8,9 @@ import { contextOf } from '../context';
 import { orgScope } from '../org';
 import type { CommandContext, CommandInput } from '../context';
 import type { CliIo } from '../io';
-import { clean, styleFor, visibleLength } from '../style';
+import { clean, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
+import { notYetRefusal } from '../sandboxes';
 import { CliRefusal, CliUsageError } from '../targets';
 import { idLabeller, whole } from './requests';
 import type { IdLabel } from './requests';
@@ -108,6 +109,8 @@ export interface FollowOptions {
   /** Stop after this many entries, with exit code 0. */
   limit?: number;
   onEntry(entry: LogEntry): void | Promise<void>;
+  /** Called once, after the first read Siren answers and before its entries, so a headline never shows above a refusal. */
+  onFirstPage?(): void;
 }
 
 /**
@@ -129,7 +132,9 @@ export async function logsTail(input: CommandInput): Promise<number> {
   // Short request ids in hints when Siren finds requests by their start (CLI pass 3), from one idPrefix call at the first.
   const labelFor = idLabeller(org);
 
-  if (!json) {
+  // The headline waits for Siren's first answer, so a Siren with no log feed never shows a green Tailing line first (review round 1, C2).
+  const headline = () => {
+    if (json) return;
     run.print(
       style.report({
         headline: `Tailing ${style.bold(clean(org.orgName))}, ${scopeWords(query)}`,
@@ -140,12 +145,13 @@ export async function logsTail(input: CommandInput): Promise<number> {
         tips: ['Ctrl-C stops. --json prints one JSON object a line.'],
       }),
     );
-  }
+  };
 
   return followFeed(run, io, {
     http: org.http,
     query,
     limit,
+    onFirstPage: headline,
     onEntry: async (entry) => {
       if (json) return io.stdout(`${JSON.stringify(entry)}\n`);
       // Only a failed entry names a request, in its hint, so only one of those asks Siren how to print ids.
@@ -182,6 +188,7 @@ export async function followFeed(run: CommandContext, io: CliIo, options: Follow
   let printed = 0;
   let downSince: number | undefined;
   let misses = 0;
+  let answered = false;
 
   try {
     for (let read = 1; ; read += 1) {
@@ -207,6 +214,8 @@ export async function followFeed(run: CommandContext, io: CliIo, options: Follow
       }
       downSince = undefined;
       misses = 0;
+      if (!answered) options.onFirstPage?.();
+      answered = true;
 
       cursor = page.nextCursor;
       for (const entry of page.entries) {
@@ -253,9 +262,7 @@ function logsRefusal(run: CommandContext, query: LogQuery, error: unknown): unkn
   if (code === 'logs_since_too_old') {
     return new CliRefusal('--since reaches back too far.', { why: 'Siren keeps the log 7 days, so --since can reach back 7 days at most.', fixText: 'Pass --since 7d or less.' });
   }
-  if (error instanceof SirenError && error.statusCode === 404 && code === undefined) {
-    return new CliRefusal('This Siren has no log feed yet.', { why: 'It answered 404 for GET /logs, so it is older than this tool.', fixText: 'Update that Siren, or point the tool at one that has the log feed.' });
-  }
+  if (error instanceof SirenError && error.statusCode === 404 && code === undefined) return notYetRefusal(run, 'logs');
   return error;
 }
 
@@ -343,21 +350,24 @@ export function entryLines(style: Style, entry: LogEntry, command: (words: strin
   const bad = entry.status === 'failed' || entry.status === 'refused';
   const time = clock(entry.at);
   const type = cut(style, String(entry.type), TYPE_WIDTH).padEnd(TYPE_WIDTH);
-  const summary = cut(style, summaryOf(entry), SUMMARY_WIDTH).padEnd(SUMMARY_WIDTH);
+  // A long summary wraps inside its own column in a terminal, so it is never cut and the status stays in line.
+  const [summaryFirst = '', ...summaryMore] = style.rich ? wrapWords(cut(style, summaryOf(entry), 0), SUMMARY_WIDTH) : [cut(style, summaryOf(entry), 0)];
+  const summary = summaryFirst.padEnd(SUMMARY_WIDTH);
   const word = cut(style, String(entry.status), bad && style.rich ? STATUS_WIDTH - 2 : STATUS_WIDTH);
   const shown = bad ? style.failure(word) : word;
   const status = `${shown}${' '.repeat(Math.max(0, STATUS_WIDTH - visibleLength(shown)))}`;
   const duration = formatDuration(entry.durationMs).padStart(DURATION_WIDTH);
-  const lines = [`${style.dim(time)}  ${type}  ${summary}  ${status}${duration}`.trimEnd()];
+  const lines = [style.fold(`${style.dim(time)}  ${type}  ${summary}  ${status}${duration}`.trimEnd())];
+  for (const more of summaryMore) lines.push(`${' '.repeat(time.length + 2 + TYPE_WIDTH + 2)}${more}`);
 
-  if (bad && entry.reason) lines.push(`${INDENT}${style.red(cut(style, entry.reason, LINE_WIDTH - INDENT.length))}`);
+  if (bad && entry.reason) lines.push(style.red(style.rich ? style.wrap(INDENT, cut(style, entry.reason, 0), INDENT) : `${INDENT}${cut(style, entry.reason, 0)}`));
   const look = lookCloser(entry, label);
   if (bad && look !== undefined) {
     // A command is never cut, since a cut one cannot be run. When it would pass 80 columns under the type, it moves left.
     const hint = style.next(style.dim(command(look)));
     lines.push(`${INDENT.length + visibleLength(hint) <= LINE_WIDTH ? INDENT : '  '}${hint}`);
   }
-  if (bad && look === undefined && typeof entry.requestId === 'string') lines.push(`${INDENT}${style.dim(cut(style, `Request id ${entry.requestId}`, LINE_WIDTH - INDENT.length))}`);
+  if (bad && look === undefined && typeof entry.requestId === 'string') lines.push(`${INDENT}${style.dim(`Request id ${clean(entry.requestId)}`)}`);
   if (entry.body !== undefined) {
     // JSON escapes the C0 controls but not the C1 ones, so each line is cleaned too.
     for (const line of JSON.stringify(entry.body, null, 2).split('\n')) lines.push(`${INDENT}${style.dim(clean(line))}`);
@@ -400,7 +410,7 @@ function formatDuration(ms: number | null): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** `text` from Siren on one line, cleaned, and in a terminal cut to `width` columns with an ellipsis. Through a pipe it stays whole. */
-function cut(style: Style, text: string, width: number): string {
-  return style.fit(clean(text.replace(/[\r\n\t]+/g, ' ')), width);
+/** `text` from Siren on one line, cleaned, and padded to `width` columns when shorter. It is never cut: a longer value pushes the line, which wraps in a terminal. */
+function cut(_style: Style, text: string, _width: number): string {
+  return clean(text.replace(/[\r\n\t]+/g, ' '));
 }

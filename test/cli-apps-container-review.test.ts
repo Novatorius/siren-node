@@ -190,8 +190,8 @@ describe('apps-sdk-container review fix 4: a kind shows its readable name beside
     expect(await h.run(['apps', 'list']), h.err()).toBe(0);
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     const out = h.out();
-    expect(out).toContain('\napp:11  notify-crm   Post-conversion action (postConversionAction)  Tell the CRM\n');
-    expect(out).toContain('\napp:12  acme-ledger  Payout method (payoutMethod)                   Acme ledger\n');
+    expect(out).toContain('\napp:11\tnotify-crm\tPost-conversion action (postConversionAction)\tTell the CRM\n');
+    expect(out).toContain('\napp:12\tacme-ledger\tPayout method (payoutMethod)\tAcme ledger\n');
     expect(out).toContain('  + adds feature acme-ledger, Payout method (payoutMethod), named Acme ledger\n');
   });
 

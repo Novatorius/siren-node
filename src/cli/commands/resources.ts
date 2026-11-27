@@ -13,11 +13,12 @@ import type { DeleteRoute, ResourceCommand, ResourceOp, ResourceRoute } from '..
 import { fieldProblems, fieldsLine } from '../validation';
 import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
-import { cell, clip, recordRows, table, WIDTH } from './resource-output';
-import { minute, recordView } from '../record-view';
+import { cell, recordRows, table } from './resource-output';
+import { recordView } from '../record-view';
 import { recordLink, resourceTypeOf } from '../links';
+import { nearest } from '../suggest';
+import { READ_STATUSES, WRITE_NOTES, WRITE_VALUES } from '../record-values';
 import { currenciesFor, holdsMoney, withMoney } from '../money';
-import type { ViewSection } from '../record-view';
 
 /*
  * `siren <resource> <op>`, generated from Siren's openapi.json into
@@ -72,6 +73,8 @@ export interface ResourceSpec {
   options: Options;
   flags: Readonly<Record<string, readonly [string, string]>>;
   examples: readonly string[];
+  /** A write's body fields as help lists them: the name, and its type, allowed values and need. */
+  fields?: ReadonlyArray<readonly [string, string]>;
   positionals: readonly [number, number];
   offline?: boolean;
   readsOnly?: boolean;
@@ -113,18 +116,30 @@ function shownValues(filter: Filter): string[] {
   return values.filter((value) => !(value !== value.toLowerCase() && values.includes(value.toLowerCase())));
 }
 
-/** The list's filter flags, each with its query parameter, leaving out any whose flag another option has. */
-function filtersOf(route: ResourceRoute): Array<{ filter: Filter; flag: string }> {
-  return (route.filters ?? []).map((filter) => ({ filter, flag: filterFlag(filter, route) })).filter(({ flag }) => !RESERVED_FLAGS.has(flag));
+/**
+ * The list's filter flags, each with its query parameter, leaving out any
+ * whose flag another option has. A `status` filter openapi leaves as plain
+ * text takes the words Siren stores for that resource ({@link READ_STATUSES}),
+ * so a wrong word is refused before anything is sent (review round 1, C11).
+ */
+function filtersOf(route: ResourceRoute, resource?: ResourceCommand): Array<{ filter: Filter; flag: string; aliases?: Readonly<Record<string, string>>; note?: string }> {
+  const extra = resource !== undefined && resource.ops.list === route ? (PAGED_BY_PAGE[resource.name]?.filters ?? []) : [];
+  return [...(route.filters ?? []), ...extra]
+    .map((given) => {
+      const words = given.name === 'status' && given.values === undefined && resource !== undefined ? READ_STATUSES[resource.name] : undefined;
+      const filter: Filter = words === undefined ? given : { ...given, values: [...words.values, ...Object.keys(words.aliases ?? {})] };
+      return { filter, flag: filterFlag(filter, route), ...(words?.aliases === undefined ? {} : { aliases: words.aliases }), ...(words?.note === undefined ? {} : { note: words.note }) };
+    })
+    .filter(({ flag }) => !RESERVED_FLAGS.has(flag));
 }
 
-/** A filter's help line: `--status <text>`, `--program-id <n>`, `--order <asc|desc>`. */
-function filterHelp(filter: Filter, flag: string): readonly [string, string] {
+/** A filter's help line: `--status <pending|complete|…>`, `--program-id <n>`, `--order <asc|desc>`. */
+function filterHelp(filter: Filter, flag: string, note?: string): readonly [string, string] {
   const values = shownValues(filter);
   const listed = values.join('|');
   const placeholder = values.length > 0 ? (listed.length <= 50 ? listed : 'value') : filter.type === 'integer' ? 'n' : filter.type === 'number' ? 'number' : filter.type === 'boolean' ? 'true|false' : 'text';
   const also = values.length > 0 && listed.length > 50 ? `: ${values.join(', ')}` : '';
-  return [`--${flag} <${placeholder}>`, `Sent as ${filter.name}${also}`];
+  return [`--${flag} <${placeholder}>`, `Sent as ${filter.name}${also}${note === undefined ? '' : `. ${note}`}`];
 }
 
 /** "a, b or c". */
@@ -132,13 +147,45 @@ function orList(values: readonly string[]): string {
   return values.length < 2 ? values.join('') : `${values.slice(0, -1).join(', ')} or ${values.at(-1)}`;
 }
 
+/**
+ * The lists Siren pages by `page` and `perPage` in place of `offset` and
+ * `number`, with the filters openapi.json leaves out, from the route's
+ * controller. GET /applications (ListApplications) takes status, formId,
+ * page and perPage, at most 100 a page, so --limit sends perPage
+ * (review round 1, C28).
+ */
+const PAGED_BY_PAGE: Readonly<Record<string, { most: number; filters: readonly Filter[] }>> = {
+  applications: {
+    most: 100,
+    filters: [
+      { name: 'status', type: 'string', values: ['waiting', 'approved', 'declined', 'all'] },
+      { name: 'formId', type: 'integer' },
+    ],
+  },
+};
+
+/**
+ * A query that pages by `page` and `perPage`, from the `number` and
+ * `offset` --limit and --offset set, or `CliUsageError` for an offset that
+ * starts no page.
+ */
+function byPage(query: Record<string, string>, most: number): Record<string, string> {
+  const { number, offset, ...rest } = query;
+  const perPage = number === undefined ? undefined : Number(number);
+  if (perPage !== undefined && perPage > most) throw new CliUsageError(`--limit takes ${most} or fewer here, since Siren sends at most ${most} a page, and got ${perPage}.`);
+  const size = perPage ?? 25;
+  if (offset !== undefined && Number(offset) % size !== 0) throw new CliUsageError(`--offset takes a multiple of --limit here (${size}), since Siren pages this list by page, and got ${offset}.`);
+  return { ...rest, ...(perPage === undefined ? {} : { perPage: String(perPage) }), ...(offset === undefined || Number(offset) === 0 ? {} : { page: String(Number(offset) / size + 1) }) };
+}
+
 /** The query parameters the filter flags send, each value checked against its type, or `CliUsageError`. */
-function filterQuery(input: CommandInput, route: ResourceRoute): Record<string, string> {
+function filterQuery(input: CommandInput, route: ResourceRoute, resource?: ResourceCommand): Record<string, string> {
   const query: Record<string, string> = {};
-  for (const { filter, flag } of filtersOf(route)) {
-    const given = (input.values as Record<string, unknown>)[flag];
-    if (typeof given !== 'string') continue;
-    if (filter.values !== undefined && !filter.values.includes(given)) throw new CliUsageError(`--${flag} takes ${orList(shownValues(filter))}, and ${JSON.stringify(given)} isn't one.`);
+  for (const { filter, flag, aliases } of filtersOf(route, resource)) {
+    const typed = (input.values as Record<string, unknown>)[flag];
+    if (typeof typed !== 'string') continue;
+    if (filter.values !== undefined && !filter.values.includes(typed)) throw new CliUsageError(`--${flag} takes ${orList(shownValues(filter))}, and ${JSON.stringify(typed)} isn't one.`);
+    const given = aliases?.[typed] ?? typed;
     if (filter.type === 'integer' && !/^-?\d+$/.test(given)) throw new CliUsageError(`--${flag} takes a whole number, and ${JSON.stringify(given)} isn't one.`);
     if (filter.type === 'number' && !Number.isFinite(Number(given))) throw new CliUsageError(`--${flag} takes a number, and ${JSON.stringify(given)} isn't one.`);
     if (filter.type === 'boolean' && given !== 'true' && given !== 'false') throw new CliUsageError(`--${flag} takes true or false, and ${JSON.stringify(given)} isn't either.`);
@@ -150,6 +197,38 @@ function filterQuery(input: CommandInput, route: ResourceRoute): Record<string, 
 /** True when a list route takes both orderBy and order, so the tool can ask for newest first. */
 function ordersNewestFirst(route: ResourceRoute): boolean {
   return route.query?.includes('orderBy') === true && route.query.includes('order');
+}
+
+/**
+ * The fields a list asks Siren for, where Siren's own default leaves out
+ * what the table needs (review round 1, C13): a transaction's total and
+ * currency, a conversion's program, an obligation's collaborator. The rest
+ * are Siren's defaults, from each route's DEFAULT_FIELDS, so --fields can
+ * name any of them and an unknown one is caught against a real record.
+ */
+const LIST_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  transactions: ['id', 'status', 'totalValue', 'currency', 'dateCreated'],
+  conversions: ['id', 'engagementId', 'transactionId', 'obligationId', 'collaboratorName', 'amount', 'obligationAwardType', 'isTest', 'status', 'type', 'programId', 'programName', 'dateCreated', 'dateModified'],
+  obligations: ['id', 'collaboratorId', 'collaboratorName', 'status', 'awardType', 'value', 'payoutId', 'dateCreated', 'dateModified'],
+  collaborators: ['id', 'status', 'fullName', 'nickname', 'email', 'createdDate', 'modifiedDate'],
+  programs: ['id', 'name', 'description', 'status', 'units', 'incentiveType', 'incentiveResolverType', 'createdDate', 'modifiedDate'],
+};
+
+/**
+ * What a list adds to the query it sends, the same for `siren programs
+ * list` and `siren get /programs` (review round 1, C26): newest first where
+ * the route takes an order, and the fields {@link LIST_FIELDS} names with
+ * any --fields beside them. A query parameter the line names itself wins.
+ */
+function listDefaults(input: CommandInput, resource: ResourceCommand, route: ResourceRoute, query: Readonly<Record<string, string>>, fields: readonly string[] | undefined): Record<string, string> {
+  const named = [...pairs(input).map(([key]) => key), ...Object.keys(query)];
+  const added: Record<string, string> = {};
+  if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(added, { orderBy: 'id', order: 'desc' });
+  if (named.includes('fields')) return added;
+  const wanted = LIST_FIELDS[resource.name];
+  if (wanted !== undefined) added.fields = [...new Set([...wanted, ...(fields ?? [])])].join(',');
+  else if (fields !== undefined && route.query?.includes('fields')) added.fields = fields.join(',');
+  return added;
 }
 
 /** What a generated command does, in a sentence: "List programs, newest first.", "Show one program.", "Create a program." */
@@ -244,12 +323,13 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
   }
 
   const takesId = route.param !== undefined;
-  const shaped = optionsFor(route.method, op === 'list' && route.paginated === true);
+  const shaped = optionsFor(route.method, op === 'list' && (route.paginated === true || PAGED_BY_PAGE[resource.name] !== undefined));
   // A list's query parameters are flags of their own (lean output, section 5).
-  const filters = op === 'list' ? filtersOf(route) : [];
+  const filters = op === 'list' ? filtersOf(route, resource) : [];
   const options: Options = { ...shaped.options, ...Object.fromEntries(filters.map(({ flag }) => [flag, { type: 'string' as const }])) };
-  const flags: Record<string, readonly [string, string]> = { ...shaped.flags, ...Object.fromEntries(filters.map(({ filter, flag }) => [flag, filterHelp(filter, flag)])) };
-  const example = `siren ${resource.name} ${op}${takesId ? ' 12' : ''}${op === 'create' || op === 'update' ? ` -d ${route.required?.[0] ?? route.fields?.[0] ?? 'name'}=value` : ''}`;
+  const flags: Record<string, readonly [string, string]> = { ...shaped.flags, ...Object.fromEntries(filters.map(({ filter, flag, note }) => [flag, filterHelp(filter, flag, note)])) };
+  const writes = op === 'create' || op === 'update';
+  const example = `siren ${resource.name} ${op}${takesId ? ' 12' : ''}${writes ? ` -d ${exampleField(resource, route)}` : ''}`;
   return {
     name: `${resource.name} ${op}`,
     spec: {
@@ -260,6 +340,7 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
       options,
       flags,
       examples: [example],
+      ...(writes ? { fields: fieldRows(resource, route) } : {}),
       positionals: takesId ? [1, 1] : [0, 0],
       readsOnly: route.method === 'GET',
       run: (input) => sendResource(input, resource, op, route),
@@ -267,14 +348,85 @@ export function commandFor(words: readonly string[]): { name: string; spec: Reso
   };
 }
 
+/** The values a body field takes: openapi's enum, else the words {@link WRITE_VALUES} names, else none. */
+function fieldValues(resource: ResourceCommand | undefined, route: ResourceRoute, field: string): readonly string[] | undefined {
+  return route.enums?.[field] ?? (resource === undefined ? undefined : WRITE_VALUES[`${resource.name} ${route.method}`]?.[field]);
+}
+
+/** A field's type in words, as help names it. */
+function typeWords(type: string | undefined): string | undefined {
+  const base = type?.replace(/\|null$/, '');
+  const words = base === 'integer' ? 'a whole number' : base === 'number' ? 'a number' : base === 'boolean' ? 'true or false' : base === 'string' ? 'text' : undefined;
+  return words === undefined ? undefined : `${words}${type?.endsWith('|null') ? ', or null to clear it' : ''}`;
+}
+
+/**
+ * A write's body fields as help lists them, from openapi.json: each name,
+ * then the values it takes or its type, and whether Siren requires it
+ * (review round 1, C20). Nested fields, such as incentiveTypeArgs.x, keep
+ * their dotted name, which -d takes as incentiveTypeArgs[x].
+ */
+function fieldRows(resource: ResourceCommand, route: ResourceRoute): Array<readonly [string, string]> {
+  return (route.fields ?? []).map((field) => {
+    const values = fieldValues(resource, route, field);
+    const parts = [values !== undefined ? `One of ${orList(values)}` : typeWords(route.types?.[field]), route.required?.includes(field) ? 'required' : undefined, WRITE_NOTES[resource.name]?.[field]];
+    const said = parts.filter((part): part is string => part !== undefined && part !== '');
+    const text = said.length === 0 ? 'Any value Siren takes' : said.map((part, at) => (at === 0 ? `${part[0]!.toUpperCase()}${part.slice(1)}` : part)).join('. ');
+    return [field.includes('.') ? field.replace(/\.(.+)$/, '[$1]') : field, `${text}.`.replace(/\.\.$/, '.')] as const;
+  });
+}
+
+/** A real `-d key=value` for a write's example: a field with values, such as status=approved, else a required field with a value of its type. */
+function exampleField(resource: ResourceCommand, route: ResourceRoute): string {
+  const fields = route.fields ?? [];
+  const valued = fields.find((field) => fieldValues(resource, route, field) !== undefined);
+  if (valued !== undefined) {
+    const values = fieldValues(resource, route, valued)!;
+    return `${valued}=${values.includes('approved') ? 'approved' : values.includes('active') ? 'active' : values[0]}`;
+  }
+  const field = route.required?.[0] ?? fields.find((candidate) => !candidate.includes('.')) ?? 'name';
+  const type = route.types?.[field]?.replace(/\|null$/, '');
+  const sample = type === 'integer' || type === 'number' ? '1' : type === 'boolean' ? 'true' : field === 'name' ? '"Referral program"' : field === 'email' ? 'ana@example.com' : 'value';
+  return `${field}=${sample}`;
+}
+
+/** The global flags {@link commandLine} adds again, or that a hint leaves off. */
+const HINT_DROPS = new Set(['sandbox', 'live', 'base-url', 'quiet', 'verbose', 'help', 'dry-run', 'json']);
+
+/** One word of a command line, quoted for a shell when it holds anything but plain characters. */
+export function shellWord(word: string): string {
+  return /^[\w@%+=:,./[\]-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The command as typed: `words`, its arguments, and each flag but the
+ * global ones, such as `collaborators update 99999 -d nickname=x`, so a
+ * hint offers the same line again (review round 1, C10).
+ */
+export function typedLine(input: Partial<Pick<CommandInput, 'args' | 'values'>>, words: string): string {
+  const parts = [words, ...(input.args ?? []).map(shellWord)];
+  for (const [key, value] of Object.entries(input.values ?? {})) {
+    if (HINT_DROPS.has(key) || value === undefined || value === false) continue;
+    const flag = key.length === 1 ? `-${key}` : `--${key}`;
+    for (const one of Array.isArray(value) ? (value as unknown[]) : [value]) parts.push(one === true ? flag : `${flag} ${shellWord(String(one))}`);
+  }
+  return parts.join(' ');
+}
+
 /** `siren resources`: every generated resource and its operations. */
 async function listResources(input: CommandInput): Promise<number> {
   const style = styleFor(input.io, 'stdout', {});
   const width = Math.max(...RESOURCE_COMMANDS.map((resource) => resource.name.length));
+  if (!style.rich) {
+    // Through a pipe, standard output holds one resource a line with its operations, and the rest goes to standard error (review round 1, C12).
+    input.io.stdout(`${RESOURCE_COMMANDS.map((resource) => `${resource.name.padEnd(width)}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`).join('\n')}\n`);
+    input.io.stderr(`${RESOURCE_COMMANDS.length} resources, generated from Siren's API\n\nNext\n  1  siren programs list\n\nsiren get <path> reaches any other route.\n`);
+    return 0;
+  }
   const lines = [
     style.success(`${style.bold(String(RESOURCE_COMMANDS.length))} resources, generated from Siren's API`),
     '',
-    ...RESOURCE_COMMANDS.map((resource) => clip(`  ${style.bold(resource.name.padEnd(width))}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`, WIDTH + (style.rich ? 8 : 0))),
+    ...RESOURCE_COMMANDS.map((resource) => style.fold(`  ${style.bold(resource.name.padEnd(width))}  ${RESOURCE_OPS.filter((op) => resource.ops[op]).join(' ')}`)),
     '',
     style.bold('Next'),
     `  1  ${style.command(`siren ${RESOURCE_COMMANDS.find((resource) => resource.name === 'programs')?.name ?? RESOURCE_COMMANDS[0]?.name ?? 'programs'} list`)}`,
@@ -303,7 +455,7 @@ async function resourceHelp(input: CommandInput, resource: ResourceCommand): Pro
       `  siren ${resource.name} <${ops.join('|')}> [flags]`,
       '',
       style.bold('COMMANDS'),
-      ...rows.map(([left, right]) => clip(`  ${style.bold(left)}${' '.repeat(width - left.length)}${right}`, WIDTH + (style.rich ? 8 : 0))),
+      ...rows.map(([left, right]) => style.fold(`  ${style.bold(left)}${' '.repeat(width - left.length)}${right}`)),
       '',
       style.bold('LEARN MORE'),
       `  Run ${style.command(`siren ${resource.name} <command> --help`)} for its flags and an example.`,
@@ -343,8 +495,11 @@ interface Plan {
 async function sendRaw(input: CommandInput, method: HttpMethod): Promise<number> {
   const { path, query } = apiPath(input.args[0]!);
   const deleteId = method === 'DELETE' ? recordIdOf(path) : undefined;
-  const outgoing = await outgoingOf(input, method, path, query, typesOf(method, path));
+  const matched = routeOf(method, path);
+  if (matched !== undefined && method !== 'GET' && method !== 'DELETE') checkFieldValues(input, matched.resource, matched.route, `${method.toLowerCase()} ${path}`.replace(/^(\S+) .*$/, '$1'));
   const fields = method === 'GET' ? fieldsOf(input.values.fields) : undefined;
+  const listing = method === 'GET' && matched?.op === 'list' ? listDefaults(input, matched.resource, matched.route, query, fields) : {};
+  const outgoing = await outgoingOf(input, method, path, { ...query, ...listing }, typesOf(method, path));
   return send(input, {
     outgoing,
     ...(method === 'GET' && input.values.ids === true ? { ids: true } : {}),
@@ -393,13 +548,13 @@ async function sendResource(input: CommandInput, resource: ResourceCommand, op: 
   const fields = op === 'list' ? fieldsOf(input.values.fields) : undefined;
   const base: Record<string, string> = {};
   if (op === 'list') {
-    Object.assign(base, filterQuery(input, route));
-    // Newest first where the route takes an order, unless the line names one (lean output, section 5).
-    const named = [...pairs(input).map(([key]) => key), ...Object.keys(base)];
-    if (ordersNewestFirst(route) && !named.includes('orderBy') && !named.includes('order')) Object.assign(base, { orderBy: 'id', order: 'desc' });
-    if (fields !== undefined && route.query?.includes('fields')) base.fields = fields.join(',');
+    Object.assign(base, filterQuery(input, route, resource));
+    Object.assign(base, listDefaults(input, resource, route, base, fields));
   }
-  const outgoing = await outgoingOf(input, route.method, path, base, route.types);
+  if (route.method !== 'GET' && route.method !== 'DELETE') checkFieldValues(input, resource, route, `${resource.name} ${op}`);
+  const sent = await outgoingOf(input, route.method, path, base, route.types);
+  const paged = op === 'list' ? PAGED_BY_PAGE[resource.name] : undefined;
+  const outgoing = paged === undefined ? sent : { ...sent, query: byPage(sent.query, paged.most) };
   return send(input, {
     outgoing,
     ...(op === 'list' && input.values.ids === true ? { ids: true } : {}),
@@ -494,17 +649,45 @@ export function fieldValue(text: string, type?: string, key = 'The field'): unkn
   return text;
 }
 
+/** The generated route a raw call reaches, such as POST /programs, with its resource, or undefined. */
+function routeOf(method: HttpMethod, path: string): { resource: ResourceCommand; route: ResourceRoute; op: ResourceOp } | undefined {
+  const bare = path.split('?')[0]!.replace(/\/+$/, '');
+  for (const resource of RESOURCE_COMMANDS) {
+    for (const [op, route] of Object.entries(resource.ops) as Array<[ResourceOp, ResourceRoute | undefined]>) {
+      if (route === undefined || route.method !== method) continue;
+      const pattern = new RegExp(`^${route.path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{[^}]+\\?\}/g, '[^/]+')}$`);
+      if (pattern.test(bare)) return { resource, route, op };
+    }
+  }
+  return undefined;
+}
+
 /** The body field types of the generated route a raw call reaches, such as POST /programs, or none. */
 function typesOf(method: HttpMethod, path: string): Readonly<Record<string, string>> {
-  const bare = path.split('?')[0]!.replace(/\/+$/, '');
   for (const resource of RESOURCE_COMMANDS) {
     for (const route of Object.values(resource.ops)) {
       if (route === undefined || route.method !== method || route.types === undefined) continue;
       const pattern = new RegExp(`^${route.path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{[^}]+\\?\}/g, '[^/]+')}$`);
-      if (pattern.test(bare)) return route.types;
+      if (pattern.test(path.split('?')[0]!.replace(/\/+$/, ''))) return route.types;
     }
   }
   return {};
+}
+
+/**
+ * Refuses, before anything is sent, a `-d` value a field doesn't take, such
+ * as status=complete on a conversion, naming the values it does and the
+ * help that lists every field (review round 1, C11).
+ */
+function checkFieldValues(input: CommandInput, resource: ResourceCommand | undefined, route: ResourceRoute, words: string): void {
+  for (const [key, value] of pairs(input)) {
+    const field = key.replace(/\[([^\]]*)\]/g, '.$1').replace(/^\./, '');
+    const values = fieldValues(resource, route, field);
+    if (values === undefined || values.includes(value) || value === 'null') continue;
+    const note = resource === undefined ? undefined : WRITE_NOTES[resource.name]?.[field];
+    const hint = note !== undefined && value === 'complete' && values.includes('approved') ? ` ${note} Send ${field}=approved to approve one.` : '';
+    throw new CliUsageError(`${field} takes ${orList(values)}, and ${JSON.stringify(value)} isn't one.${hint} siren ${words} --help lists every field.`);
+  }
 }
 
 /** `-d` pairs as written, each split at its first `=`. */
@@ -595,10 +778,12 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     input.io.stdout(
       style.report({
         headline: `Would send ${style.bold(`${outgoing.method} ${url}`)}`,
-        ...(outgoing.body !== undefined ? { rows: [['body', style.fit(JSON.stringify(outgoing.body), WIDTH - 9)]] } : {}),
-        tips: ['Nothing was sent.'],
+        ...(outgoing.body !== undefined ? { rows: [['body', JSON.stringify(outgoing.body)]] } : {}),
+        // Through a pipe the note goes to standard error, as every list's does (review round 1, C12).
+        ...(style.rich ? { tips: ['Nothing was sent.'] } : {}),
       }),
     );
+    if (!style.rich) input.io.stderr('Nothing was sent.\n');
     return 0;
   }
 
@@ -628,11 +813,9 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
   try {
     let { status, body } = await request(outgoing.query);
     if (plan.all && outgoing.method === 'GET' && isEnvelope(body)) {
-      body = await allPages(body, outgoing.query, async (query) => (await request(query)).body);
+      const paged = plan.resource === undefined ? undefined : PAGED_BY_PAGE[plan.resource.name];
+      body = await allPages(body, outgoing.query, async (query) => (await request(paged === undefined ? query : byPage(query, paged.most))).body);
     }
-    // A record view of a record that keeps notes ends with its latest few, read in one more request.
-    const noted = !plan.json && plan.resource !== undefined && plan.words === `${plan.resource.name} get` ? NOTED[plan.resource.name] : undefined;
-    const notes = noted !== undefined && isObject(body) && body.id !== undefined && body.id !== null ? await latestNotes(transport, noted, String(body.id), input.io.env.TZ) : undefined;
     // Amounts beside a currency print as money, read with the organization's currencies. --json and --ids keep Siren's integers.
     const shown = !plan.json && !plan.ids && holdsMoney(body) ? withMoney(body, await currenciesFor(input.io.configDir, `${run.target.baseUrl} ${run.current().orgId}`, input.io.now(), async () => parseJsonBody(await transport.request({ method: 'GET', path: '/registries/currencies', retriable: true })))) : body;
     // A record read names its page in Siren's app: the last line of the view, and `url` in --json.
@@ -640,11 +823,11 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     const current = run.current();
     // Only a plain id goes into an address, so nothing Siren sends can make the link say something else.
     const link = linkType !== undefined && isObject(body) && /^\d+$/.test(String(body.id ?? '')) ? recordLink(run.target.baseUrl, input.io.env, current.orgSlug || String(current.orgId), linkType, String(body.id), { fulfillmentId: body.fulfillmentId }) : undefined;
-    print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run), notes, link);
+    print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run), link);
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
-    const refusal = refusalOf(error, plan, input);
+    const refusal = refusalOf(error, plan, input, orgSlug(run));
     if (!plan.json) throw refusal;
     const fix = refusal.parts.fix === undefined ? null : `${refusal.parts.fix}${refusal.parts.fixWords === undefined ? '' : ` ${refusal.parts.fixWords}`}`;
     // Siren's context goes through untouched, so a script sees each failed field (failedValidations) and any other detail.
@@ -672,6 +855,16 @@ async function confirmLiveDelete(input: CommandInput, run: CommandContext, plan:
 }
 
 /** The organization this run acts in, as apply names it: `Acme (acme), live`. */
+/** The organization's slug, or its id, as a refusal names it, or undefined with no session to read it from. */
+function orgSlug(run: CommandContext): string | undefined {
+  try {
+    const session = run.current();
+    return session.orgSlug === undefined ? `organization ${clean(String(session.orgId))}` : clean(session.orgSlug);
+  } catch {
+    return undefined;
+  }
+}
+
 function orgLabel(run: CommandContext): string {
   const session = run.current();
   return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
@@ -719,50 +912,24 @@ async function allPages(first: Envelope, query: Record<string, string>, read: (q
   return { items, total: first.total ?? items.length, page: 1, perPage: items.length, totalPages: 1 };
 }
 
-/** Prints Siren's answer: JSON, a table, a record, or one line. */
-/** The resources whose record view ends with its notes, with Siren's sourceType for each. */
-const NOTED: Readonly<Record<string, string>> = { collaborators: 'collaborator', programs: 'program' };
-
-/** How many notes a record view shows. */
-const VIEW_NOTES = 3;
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/**
- * A record's latest notes as a view section, newest first, or undefined
- * when the read fails, so a notes fault never hides the record.
- */
-async function latestNotes(transport: ReturnType<typeof createHttpTransport>, sourceType: string, sourceId: string, zone: string | undefined): Promise<ViewSection | undefined> {
-  try {
-    const response = await transport.request({
-      method: 'GET',
-      path: '/notes',
-      query: { sourceType, sourceId, number: String(VIEW_NOTES), order: 'desc', fields: 'id,renderedContent,creationSource,dateCreated' },
-      retriable: true,
-    });
-    const body = await parseJsonBody(response);
-    const items = (Array.isArray(body) ? body : isEnvelope(body) ? body.items : []).filter(isObject);
-    const counted = isEnvelope(body) && typeof body.total === 'number' ? body.total : Number(response.headers.get('x-siren-estimated-count') ?? items.length);
-    const total = Number.isFinite(counted) ? Math.max(counted, items.length) : items.length;
-    if (total === 0) return undefined;
-    const lines = items.map((note) => `${typeof note.dateCreated === 'string' ? minute(note.dateCreated, zone) : ''}  ${clean(String(note.renderedContent ?? note.content ?? ''))}`.trim());
-    if (total > items.length) lines.push(`and ${total - items.length} more`);
-    return { title: `notes (${total})`, lines };
-  } catch {
-    return undefined;
-  }
-}
-
-function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string, notes?: ViewSection, link?: string): void {
+/** Prints Siren's answer: JSON, a table, a record, or one line. A record read ends with its page in Siren's app. */
+function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string, link?: string): void {
   const out = (text: string) => input.io.stdout(text.endsWith('\n') ? text : `${text}\n`);
   const listed = isEnvelope(body) ? body.items : Array.isArray(body) ? body : undefined;
   const listedRecords = (listed ?? []).filter(isObject);
   if (plan.fields !== undefined && listedRecords.length > 0) {
     const known = [...new Set(listedRecords.flatMap((record) => Object.keys(record)))];
     const unknown = plan.fields.filter((field) => !known.includes(field));
-    if (unknown.length > 0) throw new CliUsageError(`${unknown.map((field) => clean(field)).join(', ')} ${unknown.length === 1 ? "isn't a field" : "aren't fields"} of these records. They have ${known.map((field) => clean(field)).join(', ')}.`);
+    if (unknown.length > 0) {
+      // A typo names the field it was near, such as email for emial (review round 1, C10).
+      const meant = unknown.map((field) => nearest(field, known)).filter((field): field is string => field !== undefined);
+      const fixed = meant.length === unknown.length ? ` Did you mean --fields ${plan.fields.map((field) => (unknown.includes(field) ? nearest(field, known)! : field)).map(clean).join(',')}?` : '';
+      throw new CliUsageError(`${unknown.map((field) => clean(field)).join(', ')} ${unknown.length === 1 ? "isn't a field" : "aren't fields"} of these records. They have ${known.map((field) => clean(field)).join(', ')}.${fixed}`);
+    }
   }
   if (plan.ids && listed !== undefined) {
     for (const record of listedRecords) out(cell(record.id ?? record.key));
@@ -801,7 +968,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
       return;
     }
     const lines = [headline];
-    const shown = records.length === rows.length ? table(style, records, dated) : rows.map((row) => style.fit(`  ${cell(row)}`, WIDTH));
+    const shown = records.length === rows.length ? table(style, records, dated) : rows.map((row) => style.fold(`  ${cell(row)}`));
     if (shown.length > 0) lines.push('', ...shown);
     lines.push(...hints, '', style.next(style.dim(tip)));
     out(lines.join('\n'));
@@ -817,8 +984,8 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
       return;
     }
     // A record read prints as a record view (lean-output.md, section 1).
-    const view = recordView(style, record, { what: singular(name), words: name, zone: input.io.env.TZ, resources: RESOURCE_COMMANDS.filter((resource) => resource.ops.get !== undefined).map((resource) => resource.name) }, notes === undefined ? [] : [notes]);
-    const next = [...view.next, ...(notes !== undefined && plan.resource !== undefined ? [`notes --on ${NOTED[plan.resource.name]}:${cell(id)}`, `${plan.resource.name} note ${cell(id)} "<text>"`] : [])];
+    const view = recordView(style, record, { what: singular(name), words: name, zone: input.io.env.TZ, resources: RESOURCE_COMMANDS.filter((resource) => resource.ops.get !== undefined).map((resource) => resource.name) });
+    const next = view.next;
     out([...view.lines, ...(link === undefined ? [] : ['', link])].join('\n'));
     if (next.length > 0) {
       const steps = ['', style.bold('Next'), ...next.map((words, at) => `  ${at + 1}  ${style.command(input.command(words))}`)].join('\n');
@@ -829,7 +996,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     return;
   }
 
-  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}${org === undefined ? '' : ` in ${org}`}.`, ...(body !== undefined && body !== null ? { rows: [['answer', clip(cell(body), WIDTH - 11)]] } : {}) }));
+  out(style.report({ headline: `${plan.outgoing.method} ${plan.outgoing.path} answered ${status}${org === undefined ? '' : ` in ${org}`}.`, ...(body !== undefined && body !== null ? { rows: [['answer', cell(body)]] } : {}) }));
 }
 
 function pastTense(method: HttpMethod): string {
@@ -841,8 +1008,10 @@ function pastTense(method: HttpMethod): string {
  * said, and the command that helps. Its status and code are the detail
  * --verbose shows.
  */
-export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'words'>, input: Pick<CommandInput, 'command'>): CliRefusal {
+export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'words'>, input: Pick<CommandInput, 'command'> & Partial<Pick<CommandInput, 'args' | 'values'>>, org?: string): CliRefusal {
   const { method, path } = plan.outgoing;
+  // The line as typed, -d and all, so a hint that offers it again runs as printed (review round 1, C10).
+  const again = typedLine(input, plan.words);
   const problems = fieldProblems(error);
   if (problems.length > 0) {
     // A validation failure: what was refused, how many fields, then one row a field (lean output, "Validation failures").
@@ -863,8 +1032,28 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
   const said = clean(error.message.replace(/^Siren: /, '')).replace(/\.?$/, '.');
   const fields = error instanceof BadRequestError && error.fieldErrors.length > 0 ? ` ${error.fieldErrors.map((field) => `${clean(field.field)}: ${clean(field.message)}`).join(' ')}` : '';
   const why = `Siren answered ${status}${error.code ? ` ${clean(error.code)}` : ''}: ${said}${fields}`;
-  const list = plan.resource?.ops.list ? `${plan.resource.name} list` : `get /${path.split('/').filter(Boolean)[0] ?? ''}`;
+  // A raw call on a route no generated list reaches, such as get /nope, points to siren resources, never to the same failing call.
+  const listed = plan.resource ?? routeOf('GET', `/${path.split('/').filter(Boolean)[0] ?? ''}`)?.resource;
+  const list = listed?.ops.list !== undefined ? `${listed.name} list` : 'resources';
   const help = `${plan.words} --help`;
+  const typedId = plan.resource !== undefined && input.args?.[0] !== undefined ? input.args[0] : undefined;
+  if (status === 404 && typedId !== undefined && plan.resource !== undefined) {
+    // A record that isn't there is named the way siren explain names it (review round 1, C16).
+    return new CliRefusal(`Siren has no ${singular(plan.resource.name)} ${clean(typedId)}${org === undefined ? '' : ` in ${org}`}.`, {
+      why,
+      fix: input.command(list),
+      fixWords: `to list the ${plan.resource.name.replace(/-/g, ' ')} there`,
+      detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
+    });
+  }
+  if (status === 404 && plan.resource === undefined && listed === undefined) {
+    return new CliRefusal(`Siren has no route at ${method} ${path}.`, {
+      why,
+      fix: input.command('resources'),
+      fixWords: 'to see the records this tool reads and writes',
+      detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
+    });
+  }
   const fix: { fix: string; fixWords: string } =
     status === 401
       ? { fix: input.command('login'), fixWords: 'to log in again' }
@@ -877,8 +1066,8 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
             : status === 405
               ? { fix: `siren ${help}`, fixWords: `to see the methods, since Siren serves no ${method} on ${path}` }
               : status >= 500
-                ? { fix: input.command(`${plan.words} --dry-run`), fixWords: 'to see what was sent, and try again in a minute' }
-                : { fix: input.command(`${plan.words} --dry-run`), fixWords: 'to see what was sent' };
+                ? { fix: input.command(`${again} --dry-run`), fixWords: 'to see what was sent, and try again in a minute' }
+                : { fix: input.command(`${again} --dry-run`), fixWords: 'to see what was sent' };
   return new CliRefusal(`Siren refused ${method} ${path}.`, {
     why,
     ...fix,
@@ -974,7 +1163,7 @@ function extraFields(input: CommandInput): Record<string, unknown> {
 /** The line to run again with --yes. */
 function againLine(input: CommandInput, words: string, lead: readonly string[], typedIds: readonly string[]): string {
   const ids = input.values.stdin === true ? ' --stdin' : typedIds.length > 0 ? ` ${typedIds.join(' ')}` : '';
-  const extra = pairs(input).map(([key, value]) => ` -d ${key}=${value}`).join('');
+  const extra = pairs(input).map(([key, value]) => ` -d ${shellWord(`${key}=${value}`)}`).join('');
   return `${words}${lead.length > 0 ? ` ${lead.join(' ')}` : ''}${ids}${extra} --yes`;
 }
 
@@ -986,7 +1175,8 @@ function printDryRun(input: CommandInput, run: CommandContext, bodies: ReadonlyA
   }
   const style = styleFor(input.io, 'stdout', {});
   for (const { path, body } of bodies) input.io.stdout(`Would send ${style.bold(`POST ${urlOf(run.target.baseUrl, { method: 'POST', path, query: {}, body })}`)}\n  ${JSON.stringify(body)}\n`);
-  input.io.stdout('Nothing was sent.\n');
+  // What would go out is the answer, on standard output, and the note beside it is chatter, on standard error (review round 1, C12).
+  input.io.stderr('Nothing was sent.\n');
 }
 
 function transportOf(input: CommandInput, run: CommandContext) {

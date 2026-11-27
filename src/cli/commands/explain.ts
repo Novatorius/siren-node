@@ -7,7 +7,7 @@ import { currenciesFor, moneyText } from '../money';
 import type { CurrencyDefinitions } from '../money';
 import { orgScope } from '../org';
 import { day } from '../record-view';
-import { clean, styleFor, wrapWords } from '../style';
+import { clean, hanging, styleFor, wrapWords } from '../style';
 import { CliRefusal } from '../targets';
 import { gated } from './condition-sets';
 import { recordArgs } from './open';
@@ -307,8 +307,8 @@ export async function explainRecord(input: CommandInput): Promise<number> {
   const s = explained.sale;
   const saleWords = s === null ? '' : `${s.name === null ? 'a sale' : clean(s.name)}, ${s.amount === null ? 'no amount' : money(s.amount, s.currency, definitions)}`;
   const headline = s === null ? `${type} ${id}` : type === 'transaction' && String(s.id) === id ? `${type} ${id} · ${saleWords}` : `${type} ${id} · transaction ${s.id}, ${saleWords}`;
-  const width = 80;
-  const lines = [out.bold(out.rich ? out.fit(headline, width) : headline), '', ...(out.rich ? wrapWords(explained.summary, width - 2).map((line) => `  ${line}`) : [`  ${explained.summary}`])];
+  const width = out.width;
+  const lines = [out.bold(out.rich ? hanging('', headline, '  ', width) : headline), '', ...(out.rich ? wrapWords(explained.summary, width - 2).map((line) => `  ${line}`) : [`  ${explained.summary}`])];
   if (steps.length > 0) {
     const labels = steps.map((one) => (one.type === null ? 'note' : `${one.type} ${one.id ?? ''}`.trim()));
     const labelWidth = Math.max(...labels.map((label) => label.length));

@@ -171,6 +171,15 @@ describe('siren logs tail', () => {
     }
   });
 
+  // Review round 1, C2: the Tailing headline waits for Siren's first answer.
+  it("says this Siren doesn't have a log feed yet, with no Tailing line above it", async () => {
+    const h = harness([reply(404, { error: { message: 'Not found.' } })]);
+    h.signedIn();
+    expect(await h.run(['logs', 'tail'])).toBe(1);
+    expect(h.err().replace(/\s+/g, ' ')).toContain("This Siren doesn't have a log feed yet.");
+    expect(h.out() + h.err()).not.toContain('Tailing');
+  });
+
   it('says when the app is not in the organization, with the command that lists them', async () => {
     const h = harness([reply(404, { error: { message: 'This organization has no app acme-ledger.', code: 'app_not_found' } })]);
     h.signedIn();
@@ -199,18 +208,20 @@ describe('siren logs tail', () => {
 });
 
 describe('a log line', () => {
-  it('is time, type, summary, status and duration, aligned, within 80 columns in a terminal and whole through a pipe', () => {
-    const long = entry({ summary: `POST /apps/${'a'.repeat(80)}` });
+  it('is time, type, summary, status and duration, aligned, within 80 columns in a terminal and whole through a pipe, never cut (review round 1, C8)', () => {
+    const long = entry({ summary: `POST /apps/acme-payouts/key with ${'a long summary '.repeat(4).trim()}` });
     const [piped] = entryLines(plain, long, command);
-    expect(piped).toContain(`POST /apps/${'a'.repeat(80)}`);
+    expect(piped).toContain(`POST /apps/acme-payouts/key with ${'a long summary '.repeat(4).trim()}`);
     expect(piped).not.toContain('…');
-    const [line] = entryLines(rich, long, command).map((one) => one.replace(/\u001b\[[\d;]*m/g, ''));
+    const [line, more] = entryLines(rich, long, command).map((one) => one.replace(/\u001b\[[\d;]*m/g, ''));
     const at = new Date('2026-11-24T19:02:11.000Z');
     const clock = [at.getHours(), at.getMinutes(), at.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':');
 
     expect(line!.startsWith(`${clock}  api       POST /apps/`)).toBe(true);
-    expect(line).toMatch(/…  ok         38ms$/);
+    expect(line).toMatch(/with a long +ok {9}38ms$/);
     expect([...line!].length).toBe(80);
+    expect(more).toMatch(/^ {20}summary a long summary/);
+    expect(entryLines(rich, long, command).join(' ')).not.toContain('…');
   });
 
   it('shows a failure in red with ✗, its reason under it, and the command to look closer', () => {
@@ -230,8 +241,10 @@ describe('a log line', () => {
 
     // The style module's failure: one red bold run, ✗ and the word together.
     expect(lines[0]).toContain('\u001b[31m\u001b[1m✗ failed\u001b[0m');
-    expect(lines[1]).toContain('The address answered 500.');
-    expect(lines[2]!.replace(/\u001b\[[\d;]*m/g, '')).toContain(`› siren apps requests ${APP_REQUEST_ID}`);
+    // A summary longer than its column wraps under it first, whole.
+    expect(lines[1]).toBe(`${' '.repeat(20)}acme-ledger`);
+    expect(lines[2]).toContain('The address answered 500.');
+    expect(lines[3]!.replace(/\u001b\[[\d;]*m/g, '')).toContain(`› siren apps requests ${APP_REQUEST_ID}`);
     const flat = entryLines(plain, failed, command);
     expect(flat.join('\n')).not.toContain('\u001b[');
     expect(flat[0]).toContain('failed');

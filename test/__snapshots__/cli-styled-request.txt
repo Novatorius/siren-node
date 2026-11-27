@@ -4,8 +4,8 @@
   [2mKind[0m      ask · Payout method (payoutMethod)
   [2mApp[0m       acme-payouts · acme-ledger (app:12)
   [2mAbout[0m     payout 88
-  [2mCreated[0m   Nov 17 09:14
-  [2mAnswer[0m    none yet, due Nov 18 09:14
+  [2mCreated[0m   Nov 17 09:14 UTC
+  [2mAnswer[0m    none yet, due Nov 18 09:14 UTC
 
 [1mSENDS[0m
 [2m#  STATUS  HTTP  THE APP SAID[0m

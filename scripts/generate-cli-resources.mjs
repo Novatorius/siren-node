@@ -109,6 +109,12 @@ function route(method, path, operation) {
       if (listed.length === 1 && ['string', 'integer', 'number', 'boolean'].includes(listed[0])) types[name] = nullable ? `${listed[0]}|null` : listed[0];
     }
     if (Object.keys(types).length > 0) entry.types = types;
+    // The values openapi allows for a body field, so help lists them and the tool refuses another before sending (review round 1, C11 and C20).
+    const enums = {};
+    for (const [name, property] of Object.entries(body.properties)) {
+      if (Array.isArray(property?.enum) && property.enum.length > 0) enums[name] = [...new Set(property.enum.filter((value) => value !== null).map(String))];
+    }
+    if (Object.keys(enums).length > 0) entry.enums = enums;
   }
   if (body?.required?.length) entry.required = [...body.required];
   return entry;
@@ -164,6 +170,8 @@ export function generate(specText) {
     '  readonly fields?: readonly string[];',
     '  /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. `|null` marks one Siren takes null for. */',
     '  readonly types?: Readonly<Record<string, string>>;',
+    '  /** The values openapi allows for a body field, by name, dotted for a nested field. */',
+    '  readonly enums?: Readonly<Record<string, readonly string[]>>;',
     '  /** The body fields Siren requires. */',
     '  readonly required?: readonly string[];',
     '}',

@@ -50,7 +50,7 @@ describe('siren enrollers list and get', () => {
     expect(await h.run(['enrollers', 'list']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['GET /enrollers', 'GET /enroller-triggers']);
     expect(h.out()).toBe(
-      ['1  Example: big following         active  when Approved', '2  Example: add people who match  active  when Starts matching a condition set', ''].join('\n'),
+      ['ID\tNAME\tSTATUS\tSTARTS', '1\tExample: big following\tactive\tApproved', '2\tExample: add people who match\tactive\tStarts matching a condition set', ''].join('\n'),
     );
     expect(h.err()).toContain('siren enrollers get 1');
   });
@@ -59,7 +59,7 @@ describe('siren enrollers list and get', () => {
     const h = signedIn([list(recorded.enrollers.slice(0, 1), 1), reply(500, { error: { message: 'down' } })]);
     expect(await h.run(['enrollers', 'list', '--status', 'paused']), h.err()).toBe(0);
     expect(queryOf(h, 0)).toMatchObject({ status: 'paused' });
-    expect(h.out()).toContain('active  when approved\n');
+    expect(h.out()).toContain('active\tapproved\n');
   });
 
   it('shows one enroller: what starts it, what it does, and its latest log lines', async () => {

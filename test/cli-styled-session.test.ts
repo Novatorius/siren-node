@@ -76,7 +76,7 @@ describe('siren orgs', () => {
     const h = harness([reply(200, { memberships: [membershipAcme, membershipTwo] })]);
     h.signedIn({ [SANDBOX_BASE_URL]: session({ memberships: both }) });
     expect(await h.run(['orgs', '--org', 'acme-two']), h.err()).toBe(0);
-    expect(h.out()).toBe(['   ORG       NAME      ROLE', '   acme      Acme      admin', '*  acme-two  Acme Two  admin', ''].join('\n'));
+    expect(h.out()).toBe(['\tORG\tNAME\tROLE', ' \tacme\tAcme\tadmin', '*\tacme-two\tAcme Two\tadmin', ''].join('\n'));
   });
 
   it('with several and none named: no mark, and a tip that says how a command picks one', async () => {
@@ -84,8 +84,9 @@ describe('siren orgs', () => {
     h.signedIn({ [SANDBOX_BASE_URL]: session({ memberships: both }) });
     expect(await h.run(['orgs']), h.err()).toBe(0);
     expect(h.out()).toBe(
-      ['   ORG       NAME      ROLE', '   acme      Acme      admin', '   acme-two  Acme Two  admin', '', 'Each command picks one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.', ''].join('\n'),
+      ['\tORG\tNAME\tROLE', ' \tacme\tAcme\tadmin', ' \tacme-two\tAcme Two\tadmin', ''].join('\n'),
     );
+    expect(h.err()).toBe('Each command picks one with --org <slug>, SIREN_ORG, or "org" in siren.app.json.\n');
   });
 
   it('in a terminal: a green ● and a bold row for the one in use', async () => {

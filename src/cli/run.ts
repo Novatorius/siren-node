@@ -1,5 +1,8 @@
 import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { APP_FILE_NAME } from './app-file';
 import * as apply from './commands/apply';
 import * as listen from './commands/listen';
 import * as logs from './commands/logs';
@@ -8,8 +11,6 @@ import * as fixtures from './commands/fixtures';
 import * as simulate from './commands/simulate';
 import * as conditionSets from './commands/condition-sets';
 import * as enrollers from './commands/enrollers';
-import * as notes from './commands/notes';
-import * as activity from './commands/activity';
 import * as explain from './commands/explain';
 import * as open from './commands/open';
 import * as recipes from './commands/recipes';
@@ -17,6 +18,7 @@ import { fieldProblems, fieldsLine } from './validation';
 import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
+import { RESOURCE_COMMANDS } from './resources.generated';
 import * as sandbox from './commands/sandbox';
 import * as seed from './commands/seed';
 import * as session from './commands/session';
@@ -87,12 +89,7 @@ export const COMMANDS = [
   'recipes catalog',
   'recipes show',
   'recipes fetch',
-  'activity',
   'explain',
-  'notes',
-  'notes add',
-  'notes edit',
-  'notes delete',
   'condition-sets list',
   'condition-sets get',
   'condition-sets matches',
@@ -117,7 +114,7 @@ type Options = NonNullable<ParseArgsConfig['options']>;
  * commands that test an app against Siren. Records holds the commands
  * generated from Siren's API, which {@link recordRows} lists.
  */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Activity', 'Notes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -133,18 +130,14 @@ interface CommandSpec {
   flags: Readonly<Record<string, readonly [string, string]>>;
   /** One or two command lines that do something real. */
   examples: readonly string[];
+  /** A write's body fields, each with the values or type it takes, which `--help` lists under Fields. */
+  fields?: ReadonlyArray<readonly [string, string]>;
   /** The fewest and the most arguments after the command words. */
   positionals: readonly [number, number];
   /** True for a command that sends nothing and so needs no Siren address. */
   offline?: boolean;
   /** True for a command that changes nothing, which a live organization serves without `--live`. */
   readsOnly?: boolean;
-  /**
-   * True for a write a live organization takes without `--live`, since it
-   * changes no program, reward or payout, such as a note. LIVE_WRITES names
-   * every other write.
-   */
-  liveSafe?: boolean;
   /** True for a command whose route takes no personal access token, so it needs a signed-in session even with SIREN_TOKEN set. */
   sessionOnly?: boolean;
   run: CommandHandler;
@@ -549,18 +542,19 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   trigger: {
     usage: 'trigger <sale|refund|visit|event> [flags]',
-    summary: 'Make a sale, refund, visit or custom event in a sandbox, and print who earns what.',
+    summary: 'Make a sale, refund, visit or custom event in a sandbox, and print who earns what and what each app was sent, or why it was sent nothing.',
     group: 'Developer tools',
     short: 'Make test activity in a sandbox',
-    options: { ...ACTIVITY_OPTIONS, opportunity: { type: 'string' }, transaction: { type: 'string' }, wait: { type: 'string' }, json: { type: 'boolean' } },
+    options: { ...ACTIVITY_OPTIONS, opportunity: { type: 'string' }, transaction: { type: 'string' }, approve: { type: 'boolean' }, wait: { type: 'string' }, json: { type: 'boolean' } },
     flags: {
       ...ACTIVITY_FLAGS,
+      approve: ['--approve', 'Approve the sale\'s conversions too, so Siren tells the apps a program picks'],
       opportunity: ['--opportunity <id>', "A visit's opportunity to sell on, a new visit if left out"],
       transaction: ['--transaction <id>', 'The sale a refund undoes, the newest if left out'],
       wait: ['--wait <seconds>', "How long to wait on an app's answer, 30 by default"],
       json: JSON_FLAG,
     },
-    examples: ['siren trigger sale --amount 49.99', 'siren trigger refund --transaction 3307'],
+    examples: ['siren trigger sale --amount 49.99 --approve', 'siren trigger refund --transaction 3307'],
     positionals: [1, 1],
     run: trigger.trigger,
   },
@@ -605,7 +599,7 @@ const SPECS: Record<Command, CommandSpec> = {
       'referred-by': ['--referred-by <id|email>', 'Who referred the sale: an id, an export key, or an email or name'],
       direct: ['--direct', 'A sale nobody referred'],
       coupon: ['--coupon <code>', 'A coupon used on the sale'],
-      line: ['--line <pairs>', 'A line item, such as "sku=TEE qty=2 price=25.00", repeatable. It also takes name, type, category and value'],
+      line: ['--line <pairs>', 'A line item, such as "sku=TEE qty=2 price=25.00", repeatable. It also takes name, type, category, value and currency, the organization\'s own if left out'],
       close: ['--close <distributor>', "Close a distributor's period and show each share of the pot"],
       'print-scenario': ['--print-scenario', 'Print the scenario the flags write, and run nothing'],
       json: ['--json', "Print Siren's whole result"],
@@ -710,13 +704,14 @@ const SPECS: Record<Command, CommandSpec> = {
   },
   'recipes apply': {
     usage: 'recipes apply <file|-> [flags]',
-    summary: "Preview a recipe, ask, apply it, and follow the import to its end. Siren applies the same recipe once, so a retry never imports it twice, and --again applies it again as an update. Needs siren login: an API key can't apply recipes yet.",
+    summary: "Preview a recipe, ask, apply it, and follow the import to its end, then list each record it made by id. Siren applies the same recipe once, so a retry never imports it twice. Siren makes a recipe's programs, groups and distributors anew on each apply, so --again stops before it would copy one this organization has, unless --copy. Needs siren login: an API key can't apply recipes yet.",
     group: 'Recipes',
     short: 'Preview, ask, then apply a recipe',
     options: {
       yes: { type: 'boolean' },
       var: { type: 'string' },
       again: { type: 'boolean' },
+      copy: { type: 'boolean' },
       'configuration-only': { type: 'boolean' },
       paused: { type: 'boolean' },
       'no-wait': { type: 'boolean' },
@@ -725,7 +720,8 @@ const SPECS: Record<Command, CommandSpec> = {
     flags: {
       yes: YES_FLAG,
       var: ['--var <key=id,…>', 'The record each of its variables uses, by id'],
-      again: ['--again', 'Apply it again, as an update, though it was applied before'],
+      again: ['--again', 'Apply it again though it was applied before. Stops when that would copy a record here'],
+      copy: ['--copy', 'With --again, make the copies anyway'],
       'configuration-only': ['--configuration-only', 'Leave out the people, mappings and group members'],
       paused: ['--paused', 'Make every program and distributor inactive'],
       'no-wait': ['--no-wait', 'Print the import id and stop, without following it'],
@@ -836,29 +832,10 @@ const SPECS: Record<Command, CommandSpec> = {
     sessionOnly: true,
     run: recipes.recipesFetch,
   },
-  activity: {
-    usage: 'activity --on <type:id> [--kind <kinds>] [--since <time>] [--limit <n>]',
-    summary: "List what happened to a record, newest first: its notes, the status changes Siren noted, and for a collaborator, program or sale its conversions, and for a collaborator its payouts. Each line names the record's type and id and ends with its page in Siren's app.",
-    group: 'Activity',
-    short: "List what happened to a record",
-    options: { on: { type: 'string', multiple: true }, kind: { type: 'string' }, since: { type: 'string' }, limit: { type: 'string' }, cursor: { type: 'string' }, json: { type: 'boolean' } },
-    flags: {
-      on: ['--on <type:id>', 'The record, such as collaborator:1, or org'],
-      kind: ['--kind <kinds>', 'Only note, status, conversion or payout, joined by commas'],
-      since: ['--since <time>', 'Only from then on: 2h, 30d, or a date'],
-      limit: ['--limit <n>', 'How many, 1 to 100 (20)'],
-      cursor: ['--cursor <c>', 'The next page, from the cursor the last page printed'],
-      json: JSON_FLAG,
-    },
-    examples: ['siren activity --on collaborator:1', 'siren activity --on collaborator:1 --kind conversion,payout --since 30d'],
-    positionals: [0, 0],
-    readsOnly: true,
-    run: activity.activity,
-  },
   explain: {
     usage: 'explain <type> <id> [--chain]',
     summary: "Say why a sale, conversion or reward paid what it did, in order: who won it, each conversion and each reward and where it stands, from a draft to paid. --chain shows the whole chain, from the sale and every engagement that competed for it to the payout. The types are transaction (or sale), conversion, obligation (or reward) and engagement.",
-    group: 'Activity',
+    group: 'Developer tools',
     short: 'Say why a sale paid what it did',
     options: { chain: { type: 'boolean' }, json: { type: 'boolean' } },
     flags: {
@@ -869,60 +846,6 @@ const SPECS: Record<Command, CommandSpec> = {
     positionals: [1, 2],
     readsOnly: true,
     run: explain.explainRecord,
-  },
-  notes: {
-    usage: 'notes --on <type:id> [--search <words>] [--since <time>] [--limit <n>]',
-    summary: "List a record's notes, newest first: the ones people wrote and the ones Siren writes as things happen. --on collaborator:1 names one record, and --on program reads every program's.",
-    group: 'Notes',
-    short: "List a record's notes",
-    options: { on: { type: 'string', multiple: true }, search: { type: 'string' }, since: { type: 'string' }, limit: { type: 'string' }, json: { type: 'boolean' } },
-    flags: {
-      on: ['--on <type:id>', 'The record, such as collaborator:1, or a type alone'],
-      search: ['--search <words>', 'Only notes that hold these words'],
-      since: ['--since <time>', 'Only notes from then on: 2h, 7d, or a date'],
-      limit: ['--limit <n>', 'How many, 1 to 100 (20)'],
-      json: JSON_FLAG,
-    },
-    examples: ['siren notes --on collaborator:1', 'siren notes --on program:4 --since 7d --search payout'],
-    positionals: [0, 0],
-    readsOnly: true,
-    run: notes.notesList,
-  },
-  'notes add': {
-    usage: 'notes add <type:id> (<text> | --stdin)',
-    summary: 'Add a note to a record. siren collaborators note 1 "Called about the March payout" is the same. A note changes no program, reward or payout, so a live organization takes it without --live.',
-    group: 'Notes',
-    short: 'Add a note to a record',
-    options: { stdin: { type: 'boolean' }, json: { type: 'boolean' } },
-    flags: { stdin: ['--stdin', 'Read the text from standard input'], json: JSON_FLAG },
-    examples: ['siren collaborators note 1 "Called about the March payout"', 'siren notes add program:4 --stdin < call.txt'],
-    positionals: [1, 2],
-    liveSafe: true,
-    run: notes.notesAdd,
-  },
-  'notes edit': {
-    usage: 'notes edit <id> (<text> | --stdin) [--revision <key>]',
-    summary: "Change the text of a note you wrote. --revision sends the key siren notes --json shows, so Siren refuses the change when the note changed since.",
-    group: 'Notes',
-    short: 'Change a note you wrote',
-    options: { stdin: { type: 'boolean' }, revision: { type: 'string' }, json: { type: 'boolean' } },
-    flags: { stdin: ['--stdin', 'Read the text from standard input'], revision: ['--revision <key>', 'The revision you read, to refuse a stale change'], json: JSON_FLAG },
-    examples: ['siren notes edit 42 "Called twice about the March payout"'],
-    positionals: [1, 2],
-    liveSafe: true,
-    run: notes.notesEdit,
-  },
-  'notes delete': {
-    usage: 'notes delete <id> [--yes]',
-    summary: "Delete a note you wrote, or any note as an admin. The record's notes keep a line saying a note was deleted.",
-    group: 'Notes',
-    short: 'Delete a note',
-    options: { yes: { type: 'boolean' } },
-    flags: { yes: YES_FLAG },
-    examples: ['siren notes delete 42 --yes'],
-    positionals: [1, 1],
-    liveSafe: true,
-    run: notes.notesDelete,
   },
   'condition-sets list': {
     usage: 'condition-sets list [--json]',
@@ -1061,22 +984,28 @@ export const COMMAND_SPECS: Readonly<Record<Command, Readonly<CommandSpec>>> = S
 /** Every option any command takes, for the first read of the line, which finds the command. */
 const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, records.OPTIONS, ...Object.values(SPECS).map((spec) => spec.options));
 
-/** The widest a help line may be, so nothing wraps in an 80-column terminal. */
-const HELP_WIDTH = 80;
-
 /** `text` broken into lines of at most `width` characters, at spaces. */
 const wrap = wrapWords;
+
+/** The widest a flag or command name may be and keep its words beside it. A longer one gets a line of its own. */
+const NAME_ROOM = 30;
 
 /**
  * Two aligned columns under a heading, as gh prints them: the left one
  * padded to `column`, styled by `name`, and the right one wrapped beneath
- * itself so no line passes {@link HELP_WIDTH}.
+ * itself to `width`, the terminal's width. A left side too long for the
+ * column, such as a flag with a long list of values, takes a line of its
+ * own with its words under it, so one long flag never squeezes the rest
+ * (CLI review round 1, C20).
  */
-function columns(rows: ReadonlyArray<readonly [string, string]>, column: number, name: (text: string) => string): string[] {
-  const at = Math.max(column, ...rows.map(([left]) => left.length + 4));
+function columns(rows: ReadonlyArray<readonly [string, string]>, column: number, name: (text: string) => string, width: number): string[] {
+  const fits = rows.filter(([left]) => left.length + 4 <= NAME_ROOM);
+  const at = Math.max(column, ...fits.map(([left]) => left.length + 4));
   return rows.flatMap(([left, right]) => {
-    const [first = '', ...rest] = wrap(right, HELP_WIDTH - at);
-    return [`  ${name(left)}${' '.repeat(at - 2 - left.length)}${first}`, ...rest.map((line) => `${' '.repeat(at)}${line}`)];
+    const [first = '', ...rest] = wrap(right, Math.max(width - at, 20));
+    const under = rest.map((line) => `${' '.repeat(at)}${line}`);
+    if (left.length + 4 > at) return [`  ${name(left)}`, `${' '.repeat(at)}${first}`, ...under];
+    return [`  ${name(left)}${' '.repeat(at - 2 - left.length)}${first}`, ...under];
   });
 }
 
@@ -1091,6 +1020,7 @@ function commandRows(style: Style, commands: readonly Command[]): string[] {
     commands.map((command) => [command, SPECS[command].short] as const),
     22,
     (text) => style.bold(text),
+    style.width,
   );
 }
 
@@ -1105,6 +1035,7 @@ function recordRows(style: Style): string[] {
     ],
     22,
     (text) => style.bold(text),
+    style.width,
   );
 }
 
@@ -1127,7 +1058,7 @@ function helpText(style: Style): string {
         ? section(style, group, [...recordRows(style), ...commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))])
         : section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))),
     ),
-    ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text)),
+    ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text, style.width)),
     ...section(
       style,
       'Environment',
@@ -1142,6 +1073,7 @@ function helpText(style: Style): string {
         ],
         22,
         (text) => text,
+        style.width,
       ),
     ),
     ...section(style, 'Examples', ['  $ siren login', '  $ siren apps init', '  $ siren apps apply']),
@@ -1156,7 +1088,7 @@ const GROUP_WORDS = ['apps', 'logs', 'sandbox', 'recipes', 'condition-sets', 'en
 /** The text `siren recipes` prints: what recipes are for, and the commands. */
 function recipesHelpText(style: Style): string {
   return [
-    ...wrap("Preview and apply a recipe, a file that sets up programs, groups and people at once, follow its import, and export this organization's setup as one. Needs siren login: an API key can't use recipes yet.", HELP_WIDTH),
+    ...wrap("Preview and apply a recipe, a file that sets up programs, groups and people at once, follow its import, and export this organization's setup as one. Needs siren login: an API key can't use recipes yet.", style.width),
     '',
     ...section(style, 'Usage', ['  siren recipes <command> [flags]']),
     ...section(style, 'Recipes', commandRows(style, COMMANDS.filter((command) => command.startsWith('recipes ')))),
@@ -1164,18 +1096,24 @@ function recipesHelpText(style: Style): string {
   ].join('\n');
 }
 
-/** What `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
+/** What `siren sandbox`, `siren logs`, `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
 const GROUP_SUMMARIES = {
+  // Review round 1, C16: siren sandbox and siren logs were unknown commands alone and with --help.
+  sandbox: 'Copy a live setup into a sandbox organization, list your sandboxes, clear their activity, and read the emails a sandbox caught.',
+  logs: 'Watch what happens in the organization as it happens: app requests, deliveries, webhooks, events and API calls.',
   'condition-sets': "Condition sets are saved lists of conditions Siren checks each day, such as joined in the last 30 days. See who matches one now, and make one from JSON. Siren's plan must include them.",
   enrollers: 'Enrollers add people to programs, distributors and groups, or take them out, when something happens to them. See what each does and did, and run one now. A Siren without enrollers says so.',
 } as const;
 
+/** The heading each group's help lists its commands under. */
+const GROUP_TITLES: Readonly<Record<keyof typeof GROUP_SUMMARIES, string>> = { sandbox: 'Sandbox', logs: 'Logs', 'condition-sets': 'Condition sets', enrollers: 'Enrollers' };
+
 function groupHelpText(style: Style, group: keyof typeof GROUP_SUMMARIES): string {
   return [
-    ...wrap(GROUP_SUMMARIES[group], HELP_WIDTH),
+    ...wrap(GROUP_SUMMARIES[group], style.width),
     '',
     ...section(style, 'Usage', [`  siren ${group} <command> [flags]`]),
-    ...section(style, group === 'enrollers' ? 'Enrollers' : 'Condition sets', commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
+    ...section(style, GROUP_TITLES[group], commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
     ...section(style, 'Learn more', learnMore(style, true)),
   ].join('\n');
 }
@@ -1197,12 +1135,14 @@ function appsHelpText(style: Style): string {
 function commandHelp(style: Style, spec: CommandSpec): string {
   const own = Object.values(spec.flags);
   return [
-    ...wrap(spec.summary, HELP_WIDTH),
+    ...wrap(spec.summary, style.width),
     '',
     ...section(style, 'Usage', [`  siren ${spec.usage}`]),
-    ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text)) : []),
+    ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text, style.width)) : []),
+    // Review round 1, C20: a write lists the fields -d takes, with their values.
+    ...(spec.fields !== undefined && spec.fields.length > 0 ? section(style, 'Fields', columns(spec.fields.map(([name, text]) => [`${name}=`, text] as const), 22, (text) => text, style.width)) : []),
     // CLI pass 3: the global flags once by name, since siren --help explains each.
-    ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, HELP_WIDTH - 2).map((line) => `  ${line}`)),
+    ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, style.width - 2).map((line) => `  ${line}`)),
     ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
     ...section(style, 'Learn more', learnMore(style, false)),
   ].join('\n');
@@ -1213,12 +1153,20 @@ async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
   const store = new CredentialStore(io.configDir);
   const token = io.env.SIREN_TOKEN !== undefined && io.env.SIREN_TOKEN !== '';
   const kept = token ? null : await store.get(target.baseUrl).catch(() => null);
+  // Review round 1, C24: in a folder that already holds siren.app.json, init has nothing to do.
+  const hasFile = (await readFile(join(io.cwd, APP_FILE_NAME), 'utf8').catch(() => undefined)) !== undefined;
   const next: Array<readonly [string, string]> = kept || token
-    ? [
-        ['siren apps init', 'write siren.app.json in this folder'],
-        ['siren apps apply', 'declare the app on Siren and save its key'],
-        ['siren apps requests --follow', 'watch what Siren sends it'],
-      ]
+    ? hasFile
+      ? [
+          ['siren apps diff', `show what ${APP_FILE_NAME} would change on Siren`],
+          ['siren apps apply', 'send the changes'],
+          ['siren apps requests --follow', 'watch what Siren sends it'],
+        ]
+      : [
+          ['siren apps init', 'write siren.app.json in this folder'],
+          ['siren apps apply', 'declare the app on Siren and save its key'],
+          ['siren apps requests --follow', 'watch what Siren sends it'],
+        ]
     : [
         ['siren login', 'log in, or siren signup to make an organization'],
         ['siren apps init', 'write siren.app.json in this folder'],
@@ -1250,6 +1198,13 @@ function commandNamed(words: readonly string[]): Command {
     const asApps = `apps ${words[1]}`;
     const guess = (COMMANDS as readonly string[]).includes(asApps) ? asApps : nearest(asApps, COMMANDS);
     throw new CommandUnknown('siren', words[0] ?? '', guess === undefined ? [] : [guess]);
+  }
+  // A record word cut by a typo, such as colaborators, names the resource it was near, with its operation (review round 1, C16).
+  const firstWords = [...new Set(COMMANDS.map((command) => command.split(' ')[0]!))];
+  const record = words[0] === undefined || nearest(words[0], firstWords) !== undefined ? undefined : nearest(words[0], RESOURCE_COMMANDS.map((resource) => resource.name));
+  if (record !== undefined && record !== words[0]) {
+    const op = words[1];
+    throw new CommandUnknown('siren', words[0] ?? '', [op !== undefined && records.commandFor([record, op]) !== undefined ? `${record} ${op}` : record]);
   }
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
   const guesses = started.length > 0 && started.length <= 4 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
@@ -1290,13 +1245,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   // Stills the first-run welcome when the command ends, if no output stilled it first.
   let settle = async () => undefined as void;
   try {
-    let loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
-    // siren collaborators note 1 "…" is siren notes add collaborator:1 "…".
-    const rewritten = notes.noteShorthand(argv, loose.positionals);
-    if (rewritten !== argv) {
-      argv = rewritten;
-      loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
-    }
+    const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
     let words = loose.positionals;
     let wantsHelp = loose.values.help === true;
     if (words[0] === 'help') {
@@ -1326,7 +1275,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       io.stdout(recipesHelpText(styleFor(io, 'stdout', {})));
       return 0;
     }
-    if ((words[0] === 'condition-sets' || words[0] === 'enrollers') && words.length === 1) {
+    if ((words[0] === 'condition-sets' || words[0] === 'enrollers' || words[0] === 'sandbox' || words[0] === 'logs') && words.length === 1) {
       io.stdout(groupHelpText(styleFor(io, 'stdout', {}), words[0]));
       return 0;
     }
@@ -1365,7 +1314,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const flags = targetFlags(values);
     const context = spec.offline
       ? null
-      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true || spec.liveSafe === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
+      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, typedLine(argv, name));
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     targetUrl = context?.target.baseUrl;
     // A command that sends nothing names the Siren the next command would reach, the one logged in to included,
@@ -1404,9 +1353,9 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       // CLI pass 3, should-fix 15: a command typo and a flag typo share one shape, the three parts of every error.
       const lines = [style.failure(`${error.group} has no command ${style.bold(`"${error.word}"`)}.`)];
       if (error.guesses.length > 0) {
-        lines.push(hanging('  ', help), hanging(`${style.green('›')} `, `Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`));
+        lines.push(style.wrap('  ', help), style.wrap(`${style.green('›')} `, `Did you mean ${error.guesses.map((one) => style.command(`siren ${one}`)).join(' or ')}?`));
       } else {
-        lines.push(hanging('  ', 'The tool knows no command by that name.'), hanging(`${style.green('›')} `, `Run ${style.command(help.split(' lists')[0]!)} to list them.`));
+        lines.push(style.wrap('  ', 'The tool knows no command by that name.'), style.wrap(`${style.green('›')} `, `Run ${style.command(help.split(' lists')[0]!)} to list them.`));
       }
       io.stderr(`${lines.join('\n')}\n`);
       return 2;
@@ -1419,7 +1368,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
           : `Run ${style.command(spec === undefined || name === undefined ? 'siren --help' : `siren ${name} --help`)} to see ${spec === undefined ? 'the commands' : 'its options'}.`;
       io.stderr(
         style.rich
-          ? `${[style.failure(error.headline), hanging('  ', usage), hanging(`${style.green('›')} `, fix)].join('\n')}\n`
+          ? `${[style.failure(error.headline), style.wrap('  ', usage), style.wrap(`${style.green('›')} `, fix)].join('\n')}\n`
           : `siren: ${error.message}\n${usage}\n`,
       );
       return 2;
@@ -1430,6 +1379,33 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   } finally {
     await settle();
   }
+}
+
+/**
+ * The command line as typed, for a refusal that offers it again, such as
+ * `collaborators update 99999 -d nickname=x`: every argument and flag but
+ * the ones {@link commandLine} adds back, --sandbox, --live and --base-url,
+ * each quoted for a shell. It used to keep the arguments alone, so the
+ * --live hint dropped every -d (review round 1, C10).
+ */
+function typedLine(argv: readonly string[], name: string): string {
+  const words = name.split(' ');
+  const rest: string[] = [];
+  let matched = 0;
+  for (let at = 0; at < argv.length; at++) {
+    const arg = argv[at]!;
+    if (arg === '--sandbox' || arg === '--live' || arg.startsWith('--base-url=')) continue;
+    if (arg === '--base-url') {
+      at++;
+      continue;
+    }
+    if (matched < words.length && arg === words[matched]) {
+      matched++;
+      continue;
+    }
+    rest.push(records.shellWord(arg));
+  }
+  return [name, ...rest].join(' ');
 }
 
 /**

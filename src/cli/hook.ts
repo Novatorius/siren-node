@@ -328,6 +328,8 @@ async function rememberPlayed(io: CliIo): Promise<void> {
  */
 async function playCard(io: CliIo, flags: HookFlags, card: HookCard): Promise<HookEnd | null> {
   if (hookSkip(io.screen, io.env, flags) !== null || io.screen?.size == null) return null;
+  // Review round 1, C14: once per machine, so bare siren after the first run answers at once.
+  if (await hasPlayed(io)) return null;
   const layout = hookLayout(io.screen.size, card);
   if (layout === null) return null;
   const end = await playHook(io.screen, io.env, card, layout);
@@ -337,8 +339,9 @@ async function playCard(io: CliIo, flags: HookFlags, card: HookCard): Promise<Ho
 
 /**
  * What `siren` with nothing after it does: plays the hook with the card
- * when it may, else prints the plain card: the wordmark, where you stand
- * and what comes next. Answers the exit code, 0, or 130 after Ctrl-C.
+ * the first time on this machine, when it may, else prints the plain card:
+ * the wordmark, where you stand and what comes next. Answers the exit
+ * code, 0, or 130 after Ctrl-C.
  */
 export async function welcome(io: CliIo, flags: HookFlags, card: HookCard): Promise<number> {
   const end = await playCard(io, flags, card);

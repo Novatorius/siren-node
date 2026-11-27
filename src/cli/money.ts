@@ -147,7 +147,7 @@ export function moneyText(amount: unknown, code: string | null | undefined, defi
 const MONEY_FIELDS: Readonly<Record<string, readonly string[]>> = {
   orderTotal: ['orderCurrency'],
 };
-const AMOUNT_KEYS = new Set(['amount', 'value', 'total', 'subtotal', 'commission', 'balance', 'onHold', 'share']);
+const AMOUNT_KEYS = new Set(['amount', 'value', 'total', 'totalValue', 'subtotal', 'commission', 'balance', 'onHold', 'share']);
 const CURRENCY_KEYS = ['currency', 'units', 'awardType', 'obligationAwardType'];
 
 /** The fields that name a currency, which a table can leave out once the amount carries its code. */

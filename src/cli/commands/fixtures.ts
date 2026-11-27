@@ -170,7 +170,7 @@ export async function fixtures(input: CommandInput): Promise<number> {
       }
       results.set(step.name, result);
       done.push({ name: step.name, trigger: step.trigger, result });
-      if (!json) io.stdout(`${style.success(style.fit(line, 78))}\n`);
+      if (!json) io.stdout(`${style.success(line)}\n`);
     }
   } catch (error) {
     if (json && done.length > 0) io.stdout(`${JSON.stringify({ steps: done }, null, 2)}\n`);

@@ -36,6 +36,7 @@ DEVELOPER TOOLS
   simulate            Show what a scenario would make, writing nothing
   fixtures            Run a file of trigger steps
   apps test           Send the app's address a test delivery
+  explain             Say why a sale paid what it did
 
 SANDBOX
   sandbox create      Copy a live setup into a sandbox
@@ -53,16 +54,6 @@ RECIPES
   recipes catalog     List ready-made recipes
   recipes show        Print one ready-made recipe
   recipes fetch       Print the recipe a Beacon handoff carries
-
-ACTIVITY
-  activity            List what happened to a record
-  explain             Say why a sale paid what it did
-
-NOTES
-  notes               List a record's notes
-  notes add           Add a note to a record
-  notes edit          Change a note you wrote
-  notes delete        Delete a note
 
 CONDITION SETS
   condition-sets list        List the condition sets

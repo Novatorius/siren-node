@@ -15,8 +15,6 @@ import type { Answer, ArgDefinition, Feature } from './condition-sets';
  * a refusal that says which.
  */
 
-/** The widest line in a terminal. */
-const WIDTH = 80;
 
 /** How many log lines `enrollers get` shows. */
 const VIEW_LOG = 3;
@@ -90,8 +88,8 @@ export async function enrollersList(input: CommandInput): Promise<number> {
   }
   const triggers = await triggersOf(http);
   const out = styleFor(input.io, 'stdout', input.values);
-  const rows = enrollers.map((enroller) => [clean(String(enroller.id ?? '')), clean(String(enroller.name ?? '')), clean(String(enroller.status ?? '')), `when ${triggerName(triggers, enroller.triggerId)}`]);
-  for (const line of columns(rows)) run.print(out.rich ? out.fit(line, WIDTH) : line);
+  const rows = enrollers.map((enroller) => [clean(String(enroller.id ?? '')), clean(String(enroller.name ?? '')), clean(String(enroller.status ?? '')), triggerName(triggers, enroller.triggerId)]);
+  for (const line of out.table(['ID', 'NAME', 'STATUS', 'STARTS'], rows, out.rich ? out.width : Number.POSITIVE_INFINITY)) run.print(line);
   const total = answer.total ?? enrollers.length;
   if (total > enrollers.length) input.io.stderr(`${enrollers.length} of ${total} enrollers.\n`);
   printNext(input, out, [`enrollers get ${clean(String(enrollers[0]!.id))}`]);
@@ -124,7 +122,7 @@ export async function enrollersGet(input: CommandInput): Promise<number> {
 
   const zone = input.io.env.TZ;
   const out = styleFor(input.io, 'stdout', input.values);
-  const fit = (text: string) => (out.rich ? out.fit(text, WIDTH) : text);
+  const fit = (text: string) => out.fold(text);
   const trigger = triggers.get(String(enroller.triggerId));
   const definitions = Array.isArray(trigger?.args) ? (trigger!.args as ArgDefinition[]) : [];
   const rows: Array<[string, string]> = [
@@ -195,7 +193,7 @@ export async function enrollersLog(input: CommandInput): Promise<number> {
     return 0;
   }
   const out = styleFor(input.io, 'stdout', input.values);
-  for (const line of lines) run.print(out.rich ? out.fit(logLine(line, input.io.env.TZ), WIDTH) : logLine(line, input.io.env.TZ));
+  for (const line of lines) run.print(out.fold(logLine(line, input.io.env.TZ)));
   const total = answer.total ?? lines.length;
   if (total > lines.length) input.io.stderr(`${lines.length} of ${total} lines.${limit < 100 ? ' --limit 100 reads more.' : ''}\n`);
   return 0;

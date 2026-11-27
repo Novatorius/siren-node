@@ -7,7 +7,7 @@ import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { orgScope } from '../org';
 import { recordLink } from '../links';
-import { day } from '../record-view';
+import { day, zoneName } from '../record-view';
 import { clean, styleFor } from '../style';
 import type { Style } from '../style';
 import { CliRefusal, CliUsageError } from '../targets';
@@ -19,8 +19,6 @@ import { CliRefusal, CliUsageError } from '../targets';
  * the audience-conditions capability serves. Enrollers start from them.
  */
 
-/** The widest line in a terminal. */
-const WIDTH = 80;
 
 /** How many matching people `matches` names unless --limit says, and the most Siren's people page gives. */
 const MATCH_ROWS = 5;
@@ -200,11 +198,12 @@ export async function conditionSetsList(input: CommandInput): Promise<number> {
   } catch (error) {
     throw gated(error, SETS);
   }
+  const sets = itemsOf(answer.body);
   if (input.values.json === true) {
-    run.print(JSON.stringify(answer.body, null, 2));
+    // Siren answers a bare array here. --json prints the page envelope every other list prints, so siblings read alike (review round 1, C12).
+    run.print(JSON.stringify(Array.isArray(answer.body) ? { items: answer.body, total: answer.body.length, page: 1, perPage: answer.body.length, totalPages: 1 } : answer.body, null, 2));
     return 0;
   }
-  const sets = itemsOf(answer.body);
   const out = styleFor(input.io, 'stdout', input.values);
   if (sets.length === 0) {
     input.io.stderr('This organization has no condition sets.\n');
@@ -217,10 +216,11 @@ export async function conditionSetsList(input: CommandInput): Promise<number> {
       clean(String(set.id ?? '')),
       clean(String(set.name ?? '')),
       `${count} ${count === 1 ? 'condition' : 'conditions'}`,
-      [typeof set.lastCheckedAt === 'string' ? `checked ${day(set.lastCheckedAt, zone)}` : 'not checked yet', ...(set.archivedAt ? ['archived'] : [])].join('  '),
+      [typeof set.lastCheckedAt === 'string' ? day(set.lastCheckedAt, zone) : 'not yet', ...(set.archivedAt ? ['archived'] : [])].join('  '),
     ];
   });
-  for (const line of columns(rows)) run.print(out.rich ? out.fit(line, WIDTH) : line);
+  // A header row names each column, as every other list's does (review round 1, C28).
+  for (const line of out.table(['ID', 'NAME', 'CONDITIONS', `LAST CHECKED (${zoneName(zone)})`], rows, out.rich ? out.width : Number.POSITIVE_INFINITY)) run.print(line);
   printNext(input, out, [`condition-sets matches ${clean(String(sets[0]!.id))}`]);
   return 0;
 }
@@ -260,7 +260,7 @@ export async function conditionSetsGet(input: CommandInput): Promise<number> {
   }
   const out = styleFor(input.io, 'stdout', input.values);
   const zone = input.io.env.TZ;
-  const fit = (text: string) => (out.rich ? out.fit(text, WIDTH) : text);
+  const fit = (text: string) => out.fold(text);
   const conditions = itemsOf(set.conditions);
   const rows: Array<[string, string]> = [
     ['checked', typeof set.lastCheckedAt === 'string' ? day(set.lastCheckedAt, zone) : 'not yet'],
@@ -350,7 +350,7 @@ export async function conditionSetsMatches(input: CommandInput): Promise<number>
     return 0;
   }
   const out = styleFor(input.io, 'stdout', input.values);
-  const fit = (text: string) => (out.rich ? out.fit(text, WIDTH) : text);
+  const fit = (text: string) => out.fold(text);
   const lines = [`${peopleCount(count, more)} ${count === 1 && !more ? 'matches' : 'match'} condition set ${given} now.`];
   if (people.length > 0) {
     lines.push('', ...columns(people.map((person) => [clean(String(person.id ?? '')), clean(String(person.fullName ?? person.name ?? '')), clean(String(person.email ?? ''))])).map((line) => fit(`  ${line}`)));
