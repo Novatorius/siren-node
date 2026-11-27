@@ -1041,8 +1041,10 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
   const typedId = plan.resource !== undefined && input.args?.[0] !== undefined ? input.args[0] : undefined;
   if (status === 404 && typedId !== undefined && plan.resource !== undefined) {
     // A record that isn't there is named the way siren explain names it (review round 1, C16).
+    // The transport's own "Request failed with status 404" repeats the headline, so only Siren's own words go under it.
+    const generic = /^Request failed with status \d+\.$/.test(said) && fields === '';
     return new CliRefusal(`Siren has no ${singular(plan.resource.name)} ${clean(typedId)}${org === undefined ? '' : ` in ${org}`}.`, {
-      why,
+      why: generic ? (method === 'GET' ? 'So there is nothing to show.' : 'So nothing was changed.') : why,
       fix: input.command(list),
       fixWords: `to list the ${plan.resource.name.replace(/-/g, ' ')} there`,
       detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],

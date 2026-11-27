@@ -78,6 +78,13 @@ describe('hints run as printed (C10)', () => {
     expect(await again.run(argvOf(hint)), again.err()).toBe(0);
   });
 
+  it("leaves out the transport's generic 404 words, which only repeat the headline", async () => {
+    const h = signedIn([reply(404, {})]);
+    expect(await h.run(['collaborators', 'get', '99999'])).toBe(1);
+    expect(h.err()).toContain('Siren has no collaborator 99999 in uat-org. So there is nothing to show.');
+    expect(h.err()).not.toContain('Request failed');
+  });
+
   it('offers a failed write again with its -d flags and --dry-run', async () => {
     const h = signedIn([reply(500, { error: { message: 'Something went wrong.', code: 'internal' } })]);
     expect(await h.run(['collaborators', 'update', '7', '-d', 'nickname=x'])).toBe(1);
