@@ -8,7 +8,8 @@ password goes in the instant `Password: ` arrives, the way a fast typist or a
 password manager does it. With `ctrl-c`, the first four characters go in and
 then Ctrl-C. With `startup`, it waits until the go file exists, which the fake
 Cloud makes while it holds its answer to the edition read, types `early-` and
-the password with Enter while the command is still starting, then answers the
+the password with Enter while the command is still starting, makes the go file
+with `.typed` after its name so the fake Cloud answers, then answers the
 prompts as with `enter`.
 
 Prints one JSON line: what came back on the terminal between `Password: ` and
@@ -48,6 +49,7 @@ def main():
         os.execv("/bin/sh", ["/bin/sh", "-c", script, node, cli, base])
 
     seen = bytearray()
+    typed_at = -1
     if mode == "startup":
         waited = 0.0
         while not os.path.exists(go):
@@ -58,6 +60,9 @@ def main():
             if waited > 15:
                 raise SystemExit("the go file never came, saw %r" % bytes(seen))
         os.write(fd, b"early-" + password.encode() + b"\r")
+        typed_at = len(seen)
+        # The fake Cloud answers only after this file exists, so the keys are typed before any prompt.
+        open(go + ".typed", "w").close()
     read_until(fd, b"Email: ", seen)
     os.write(fd, email.encode() + b"\r")
     read_until(fd, b"Password: ", seen)
@@ -88,6 +93,9 @@ def main():
         "afterPrompt": line,
         "passwordShown": password[:4] in after,
         "earlyShown": "early-" in text,
+        "earlyAt": text.find("early-"),
+        "typedAt": typed_at,
+        "emailPromptAt": text.find("Email: "),
         "exit": int(exit_code.group(1)) if exit_code else None,
         "echoAfter": re.search(r"(?<![-\w])echo(?![\w])", stty) is not None,
     }))
