@@ -1,5 +1,8 @@
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { harness } from './cli-fakes';
+import { harness, session } from './cli-fakes';
+import { BASE } from './record-fakes';
 import { APP_KEY } from './apps-siren-answers';
 import { reply } from './http-fakes';
 
@@ -37,5 +40,28 @@ describe('review round 1, C2: a sandbox without siren listen', () => {
     h.write('siren.app.json', file);
     expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
     expect(h.err()).not.toContain('needs an address for an app with features');
+  });
+});
+
+describe('review round 1, C10: init on a live Siren', () => {
+  it('names no siren listen step, which a live Siren refuses, and says to set the address first', async () => {
+    const h = harness([], { edition: 'production' });
+    h.signedIn({ [BASE]: session({ edition: 'production', baseUrl: BASE }) });
+    // A live login names its Siren as the current one, so init's hints reach it with no flags typed.
+    writeFileSync(join(h.io.configDir, 'credentials.json'), JSON.stringify({ ...h.credentials(), current: BASE }), { mode: 0o600 });
+    expect(await h.run(['apps', 'init']), h.err()).toBe(0);
+    const out = h.out();
+    expect(out).not.toContain('siren listen');
+    expect(out).not.toContain('On a sandbox');
+    expect(out).toMatch(/1 {2}Set SIREN_APP_URL to your https address +in \.env/);
+    expect(out).toMatch(/2 {2}siren apps apply\b.*--live/);
+  });
+
+  it('keeps the listen step on a sandbox', async () => {
+    const h = harness([]);
+    h.signedIn();
+    expect(await h.run(['apps', 'init']), h.err()).toBe(0);
+    expect(h.out()).toContain('siren listen --forward-to localhost:3000/siren');
+    expect(h.out()).toContain('On a sandbox, you may leave SIREN_APP_URL unset');
   });
 });
