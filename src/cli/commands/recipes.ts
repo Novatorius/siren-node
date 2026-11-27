@@ -6,7 +6,7 @@ import { RecipesResource, recipeProblems } from '../../resources/recipes';
 import type { Recipe, RecipeCatalogEntry, RecipeCatalogFilters, RecipeImport, RecipePreview, RecipeProblem } from '../../resources/recipes';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
-import { REPORT_WIDTH, clean, styleFor } from '../style';
+import { REPORT_WIDTH, clean, hanging, styleFor } from '../style';
 import { CliRefusal, CliUsageError, hostName } from '../targets';
 import { orgNamed } from './apply';
 
@@ -594,7 +594,19 @@ export async function recipesCatalog(input: CommandInput): Promise<number> {
     ...(someDontFit ? [entry.fits ? 'yes' : entry.requiredPlan ? `needs ${say(entry.requiredPlan)}` : 'no'] : []),
   ]);
   const width = out.rich ? out.width : Number.POSITIVE_INFINITY;
-  for (const line of out.table(['RECIPE', 'NAME', 'WHAT IT DOES', ...(someDontFit ? ['FITS'] : [])], rows, width)) run.print(line);
+  // A terminal too narrow to give the description a readable column prints each recipe as its key over its
+  // name and description, so no column wraps a word to a line (review round 1, C8).
+  const room = width - Math.max(6, ...rows.map((row) => row[0]!.length)) - Math.max(4, ...rows.map((row) => row[1]!.length)) - 4 - (someDontFit ? 12 : 0);
+  if (out.rich && room < 36) {
+    rows.forEach((row, at) => {
+      if (at > 0) run.print('');
+      run.print(out.bold(row[0]!));
+      const fits = someDontFit ? ` Fits this organization: ${row[3]}.` : '';
+      run.print(hanging('  ', `${row[1]}${/[.!?]$/.test(row[1]!) ? '' : '.'} ${row[2]}${fits}`, '  ', width));
+    });
+  } else {
+    for (const line of out.table(['RECIPE', 'NAME', 'WHAT IT DOES', ...(someDontFit ? ['FITS'] : [])], rows, width)) run.print(line);
+  }
   const first = catalog.recipes.find((entry) => entry.slug !== undefined || entry.id !== undefined);
   if (first !== undefined) hint(input, out, out.next(`${out.command(run.command(`recipes show ${say(String(first.slug ?? first.id))} > recipe.json`))} saves one to edit and apply.`));
   return 0;
