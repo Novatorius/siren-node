@@ -116,6 +116,27 @@ describe('siren apps scopes and siren apps events', () => {
     expect(JSON.parse(json.out())).toEqual(EVENTS);
   });
 
+  it('says which list in siren.app.json takes each name, since one event has two (review round 1)', async () => {
+    const events = harness([reply(200, EVENTS)]);
+    events.signedIn();
+    expect(await events.run(['apps', 'events']), events.err()).toBe(0);
+    // Through a pipe the tip goes to standard error, so standard output stays the table.
+    expect(events.out()).not.toContain('siren.app.json');
+    expect(events.err().replace(/\s+/g, ' ')).toContain('siren.app.json lists these under "events"');
+    expect(events.err()).toContain('event:sale');
+    expect(events.err()).toContain('siren apps scopes');
+    const scopes = harness([reply(200, SCOPES)]);
+    scopes.signedIn();
+    expect(await scopes.run(['apps', 'scopes']), scopes.err()).toBe(0);
+    expect(scopes.err().replace(/\s+/g, ' ')).toContain('siren.app.json lists these under "scopes"');
+    expect(scopes.err()).toContain('sale.created');
+    expect(scopes.err()).toContain('siren apps events');
+    const tty = harness([reply(200, EVENTS)]);
+    tty.signedIn();
+    expect(await runCli(['apps', 'events'], { ...tty.io, stdoutTty: true, env: { ...tty.io.env, TERM: 'xterm-256color' } })).toBe(0);
+    expect(tty.out().replace(/\u001b\[[\d;]*m/g, '').replace(/\s+/g, ' ')).toContain('siren.app.json lists these under "events"');
+  });
+
   it('suggests apps scopes for apps scope', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'scope'])).toBe(2);

@@ -276,7 +276,8 @@ export class Style {
 
   /** "› siren apps apply", wrapped to the terminal's width at word boundaries. */
   next(line: string): string {
-    return this.rich ? this.wrap(`${this.dim('›')} `, line) : line;
+    // A command kept whole with unbroken() prints with plain spaces, so it pastes as typed.
+    return (this.rich ? this.wrap(`${this.dim('›')} `, line) : line).replace(/\u00a0/g, ' ');
   }
 
   /**
