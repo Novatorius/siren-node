@@ -99,10 +99,10 @@ describe('apps-sdk-followups-1: siren apps requests <id> reads the one request',
     h.signedIn();
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
     expect(h.out()).toContain('  Answer    {"outcome":"paid","reference":"TX-1"}\n');
-    expect(h.out()).toMatch(/ {2}From {6}jane@store\.invalid at Nov 17 \d\d:40\n/);
+    expect(h.out()).toMatch(/ {2}From {6}jane@store\.invalid at Nov 17 \d\d:40 \S+\n/);
     const before = h.out().length;
     expect(await h.run(['apps', 'requests', ONE_ID]), h.err()).toBe(0);
-    expect(h.out().slice(before)).toMatch(/ {2}From {6}the app at Nov 17 \d\d:40\n/);
+    expect(h.out().slice(before)).toMatch(/ {2}From {6}the app at Nov 17 \d\d:40 \S+\n/);
 
     const waiting = harness([reply(200, { ...body, mode: 'ask', status: 'sent' }), reply(200, [])]);
     waiting.signedIn();

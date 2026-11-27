@@ -403,18 +403,22 @@ function stateCell(out: Style, row: AppRequestRecord): string {
   return out.rich ? paint(`${mark} ${word}`) : word;
 }
 
-/** `2026-11-17T09:14:03+00:00` as `Nov 17 09:14` in the person's time zone, or the text itself when it is not a time. */
+/**
+ * `2026-11-17T09:14:03+00:00` as `Nov 17 09:14 UTC` in the person's time
+ * zone, with the zone's short name so a reader never takes local time for
+ * Siren's (review round 1, C25), or the text itself when it is not a time.
+ */
 function when(iso: string, zone: string | undefined): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return clean(iso);
   let format: Intl.DateTimeFormat;
   try {
-    format = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone || undefined });
+    format = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short', timeZone: zone || undefined });
   } catch {
-    format = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    format = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short' });
   }
   const parts = Object.fromEntries(format.formatToParts(date).map((part) => [part.type, part.value]));
-  return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute}`;
+  return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
 }
 
 /**

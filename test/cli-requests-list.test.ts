@@ -33,8 +33,8 @@ describe('siren apps requests: the list', () => {
     expect(h.out()).toBe(
       [
         'ID\tWHEN\tAPP\tFEATURE\tABOUT\tSENDS\tSTATE',
-        'b79943ff\tNov 17 09:14\tacme-payouts\tPayout method\tpayout 88\t1\twaiting',
-        '01234567\tNov 16 08:00\tacme-payouts\tPost-conversion\tconversion 29\t1\tdelivered',
+        'b79943ff\tNov 17 09:14 UTC\tacme-payouts\tPayout method\tpayout 88\t1\twaiting',
+        '01234567\tNov 16 08:00 UTC\tacme-payouts\tPost-conversion\tconversion 29\t1\tdelivered',
         '',
       ].join('\n'),
     );
@@ -48,7 +48,7 @@ describe('siren apps requests: the list', () => {
     const h = harness([apps(), list(stuck), found(stuck)], { env: UTC });
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--attention']), h.err()).toBe(0);
-    expect(h.out()).toBe(['ID\tWHEN\tAPP\tFEATURE\tABOUT\tSENDS\tWHY', 'b79943ff\tNov 17 09:14\tacme-payouts\tPayout method\tpayout 88\t3\tHost not found', ''].join('\n'));
+    expect(h.out()).toBe(['ID\tWHEN\tAPP\tFEATURE\tABOUT\tSENDS\tWHY', 'b79943ff\tNov 17 09:14 UTC\tacme-payouts\tPayout method\tpayout 88\t3\tHost not found', ''].join('\n'));
     expect(h.err()).toBe(['1 request needs you in Acme (3), sandbox', 'siren apps requests b79943ff shows it, and siren apps resend b79943ff sends it again.', ''].join('\n'));
   });
 
@@ -189,7 +189,7 @@ describe('short request ids', () => {
     expect(await h.run(['apps', 'requests']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['GET /apps', 'GET /apps/requests', 'GET /apps/requests', 'GET /apps/requests']);
     expect(queryOf(h, 3)).toEqual({ idPrefix: 'apr_b79943ff' });
-    expect(h.out()).toContain(`${OTHER_ID}\tNov 16 08:00`);
+    expect(h.out()).toContain(`${OTHER_ID}\tNov 16 08:00 UTC`);
     expect(h.err()).toContain(`siren apps requests ${APP_REQUEST_ID} shows one.`);
     expect(h.out()).not.toMatch(/^b79943ff\t/m);
   });
@@ -240,8 +240,8 @@ describe('siren apps requests <id>: one request', () => {
         '  Kind      ask · Payout method (payoutMethod)',
         '  App       acme-payouts · acme-ledger (app:12)',
         '  About     payout 88',
-        '  Created   Nov 17 09:14',
-        '  Answer    none yet, due Nov 18 09:14',
+        '  Created   Nov 17 09:14 UTC',
+        '  Answer    none yet, due Nov 18 09:14 UTC',
         '',
         'SENDS',
         '#\tSTATUS\tHTTP\tTHE APP SAID',
@@ -265,7 +265,7 @@ describe('siren apps requests <id>: one request', () => {
     answered.signedIn();
     expect(await answered.run(['apps', 'requests', APP_REQUEST_ID]), answered.err()).toBe(0);
     expect(answered.out()).toContain('  Answer    {"outcome":"paid","reference":"TX-1"}');
-    expect(answered.out()).toContain('  From      dev@acme.example at Nov 17 10:00');
+    expect(answered.out()).toContain('  From      dev@acme.example at Nov 17 10:00 UTC');
     expect(answered.out()).toContain('Siren sent no data.');
 
     const stuck = harness([detail({ status: 'needs_attention', lastError: 'Host not found' }), apps(), reply(200, []), found(waiting)], { env: UTC });
