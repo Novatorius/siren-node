@@ -122,7 +122,7 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
     return { h, text: h.out().slice(before) };
   }
 
-  it('shows the plan with + markers and the organization, then a ✓ report with the key, each feature and two numbered steps', async () => {
+  it('shows the plan with + markers and the organization, then a ✓ report with the key, each feature and the next step', async () => {
     const { h, text } = await firstApply();
     expect(text).toBe(
       [
@@ -140,7 +140,7 @@ describe('siren apps apply: the plan and the result (catalog mockup 1)', () => {
         '  URL from      SIREN_APP_URL',
         '',
         'Next',
-        '  1  siren apps requests --follow   watch what Siren sends it',
+        '  siren apps requests --follow   watch what Siren sends it',
         '',
         // Review round 1, C3 and C24: what picks each new feature, and the env file, with no server file init never wrote.
         'No program picks notify-crm yet, so Siren never sends it. Pick it on a program',

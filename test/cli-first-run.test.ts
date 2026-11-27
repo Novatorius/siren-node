@@ -288,7 +288,7 @@ describe("cli pass 1 re-check: the reviewer's small points", () => {
     h.signedIn({ [UAT]: session({ baseUrl: UAT, edition: 'production' }) });
     await h.run(['apps', 'init', '--key', APP_KEY]);
     expect(await h.run(['apps', 'apply', '--yes', '--live', '--base-url', UAT]), h.err()).toBe(0);
-    expect(h.out()).toContain(`\n  1  siren apps requests --follow --base-url ${UAT}`);
+    expect(h.out()).toContain(`\n  siren apps requests --follow --base-url ${UAT}`);
   });
 
   it('points $schema at the versioned schema on unpkg, which resolves with or without a local install, and the package ships that file', async () => {
