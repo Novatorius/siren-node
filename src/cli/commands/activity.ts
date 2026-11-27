@@ -7,7 +7,7 @@ import { currenciesFor, moneyText } from '../money';
 import type { CurrencyDefinitions } from '../money';
 import { orgScope } from '../org';
 import { minute, sirenDate } from '../record-view';
-import { clean, styleFor } from '../style';
+import { clean, hanging, styleFor } from '../style';
 import { CliUsageError } from '../targets';
 import { itemsOf } from './condition-sets';
 import { sinceOf } from './logs';
@@ -336,15 +336,22 @@ export async function activity(input: CommandInput): Promise<number> {
     item.text,
   ]);
   const widths = [0, 1, 2, 3].map((column) => Math.max(...rows.map((row) => row[column]!.length)));
-  for (const [index, row] of rows.entries()) {
-    const cells = row.slice(0, 4).map((cell, column) => (widths[column]! === 0 ? undefined : cell.padEnd(widths[column]!))).filter((cell): cell is string => cell !== undefined);
-    if (out.rich) {
-      const [when = '', what = '', ...rest] = cells;
-      run.print(out.fit(`${when}  ${out.bold(what)}  ${[...rest, row[4]].join('  ')}`.replace(/\s+$/, ''), 80));
-      // The page goes beneath, under the record's type and id when that fits in 80 columns.
-      const url = items[index]!.url;
-      run.print(`${' '.repeat(Math.max(2, Math.min(widths[0]! + 2, 80 - url.length)))}${out.dim(url)}`);
-    } else {
+  if (out.rich) {
+    // In a terminal the record's page prints once, above the items. Each item is a heading line, then its full text wrapped beneath, never cut.
+    const name = record.id === undefined ? record.type : `${record.type} ${record.id}`;
+    run.print(out.bold(`Activity on ${name}`));
+    run.print(out.dim(recordUrl));
+    for (const row of rows) {
+      const [when = '', what = '', status = '', amount = ''] = row;
+      const head = [when, out.bold(what), status, amount].filter((cell) => cell !== '').join('  ');
+      run.print('');
+      run.print(head);
+      if (row[4] !== '') run.print(hanging('  ', row[4]!, '  '));
+    }
+    run.print('');
+  } else {
+    for (const [index, row] of rows.entries()) {
+      const cells = row.slice(0, 4).map((cell, column) => (widths[column]! === 0 ? undefined : cell.padEnd(widths[column]!))).filter((cell): cell is string => cell !== undefined);
       // Through a pipe, one line an item, its address last, so awk '{print $NF}' reads the address.
       run.print([...cells, row[4], items[index]!.url].filter((cell) => cell !== '').join('  '));
     }
@@ -363,6 +370,9 @@ export async function activity(input: CommandInput): Promise<number> {
   tip(nextCursor === null ? shown : `${shown} ${run.command(again)} reads the next page.`);
   const conversion = items.find((item) => item.kind === 'conversion');
   if (conversion !== undefined) tip(`${run.command(`explain conversion ${conversion.id}`)} says why it paid what it did.`);
+  // Notes have no page of their own, so the tip names an item that does, or the record.
+  const paged = items.find((item) => item.type !== 'note');
+  if (out.rich) tip(`${run.command(paged === undefined ? `open ${record.type}${record.id === undefined ? '' : ` ${record.id}`}` : `open ${paged.type} ${paged.id}`)} opens its page in Siren.`);
   return 0;
 }
 
