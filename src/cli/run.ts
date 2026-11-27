@@ -11,12 +11,12 @@ import * as fixtures from './commands/fixtures';
 import * as simulate from './commands/simulate';
 import * as conditionSets from './commands/condition-sets';
 import * as enrollers from './commands/enrollers';
-import * as notes from './commands/notes';
 import * as recipes from './commands/recipes';
 import { fieldProblems, fieldsLine } from './validation';
 import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
+import { RESOURCE_COMMANDS } from './resources.generated';
 import * as sandbox from './commands/sandbox';
 import * as seed from './commands/seed';
 import * as session from './commands/session';
@@ -87,10 +87,6 @@ export const COMMANDS = [
   'recipes catalog',
   'recipes show',
   'recipes fetch',
-  'notes',
-  'notes add',
-  'notes edit',
-  'notes delete',
   'condition-sets list',
   'condition-sets get',
   'condition-sets matches',
@@ -114,7 +110,7 @@ type Options = NonNullable<ParseArgsConfig['options']>;
  * commands that test an app against Siren. Records holds the commands
  * generated from Siren's API, which {@link recordRows} lists.
  */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Notes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -130,18 +126,14 @@ interface CommandSpec {
   flags: Readonly<Record<string, readonly [string, string]>>;
   /** One or two command lines that do something real. */
   examples: readonly string[];
+  /** A write's body fields, each with the values or type it takes, which `--help` lists under Fields. */
+  fields?: ReadonlyArray<readonly [string, string]>;
   /** The fewest and the most arguments after the command words. */
   positionals: readonly [number, number];
   /** True for a command that sends nothing and so needs no Siren address. */
   offline?: boolean;
   /** True for a command that changes nothing, which a live organization serves without `--live`. */
   readsOnly?: boolean;
-  /**
-   * True for a write a live organization takes without `--live`, since it
-   * changes no program, reward or payout, such as a note. LIVE_WRITES names
-   * every other write.
-   */
-  liveSafe?: boolean;
   /** True for a command whose route takes no personal access token, so it needs a signed-in session even with SIREN_TOKEN set. */
   sessionOnly?: boolean;
   run: CommandHandler;
@@ -836,60 +828,6 @@ const SPECS: Record<Command, CommandSpec> = {
     sessionOnly: true,
     run: recipes.recipesFetch,
   },
-  notes: {
-    usage: 'notes --on <type:id> [--search <words>] [--since <time>] [--limit <n>]',
-    summary: "List a record's notes, newest first: the ones people wrote and the ones Siren writes as things happen. --on collaborator:1 names one record, and --on program reads every program's.",
-    group: 'Notes',
-    short: "List a record's notes",
-    options: { on: { type: 'string', multiple: true }, search: { type: 'string' }, since: { type: 'string' }, limit: { type: 'string' }, json: { type: 'boolean' } },
-    flags: {
-      on: ['--on <type:id>', 'The record, such as collaborator:1, or a type alone'],
-      search: ['--search <words>', 'Only notes that hold these words'],
-      since: ['--since <time>', 'Only notes from then on: 2h, 7d, or a date'],
-      limit: ['--limit <n>', 'How many, 1 to 100 (20)'],
-      json: JSON_FLAG,
-    },
-    examples: ['siren notes --on collaborator:1', 'siren notes --on program:4 --since 7d --search payout'],
-    positionals: [0, 0],
-    readsOnly: true,
-    run: notes.notesList,
-  },
-  'notes add': {
-    usage: 'notes add <type:id> (<text> | --stdin)',
-    summary: 'Add a note to a record. siren collaborators note 1 "Called about the March payout" is the same. A note changes no program, reward or payout, so a live organization takes it without --live.',
-    group: 'Notes',
-    short: 'Add a note to a record',
-    options: { stdin: { type: 'boolean' }, json: { type: 'boolean' } },
-    flags: { stdin: ['--stdin', 'Read the text from standard input'], json: JSON_FLAG },
-    examples: ['siren collaborators note 1 "Called about the March payout"', 'siren notes add program:4 --stdin < call.txt'],
-    positionals: [1, 2],
-    liveSafe: true,
-    run: notes.notesAdd,
-  },
-  'notes edit': {
-    usage: 'notes edit <id> (<text> | --stdin) [--revision <key>]',
-    summary: "Change the text of a note you wrote. --revision sends the key siren notes --json shows, so Siren refuses the change when the note changed since.",
-    group: 'Notes',
-    short: 'Change a note you wrote',
-    options: { stdin: { type: 'boolean' }, revision: { type: 'string' }, json: { type: 'boolean' } },
-    flags: { stdin: ['--stdin', 'Read the text from standard input'], revision: ['--revision <key>', 'The revision you read, to refuse a stale change'], json: JSON_FLAG },
-    examples: ['siren notes edit 42 "Called twice about the March payout"'],
-    positionals: [1, 2],
-    liveSafe: true,
-    run: notes.notesEdit,
-  },
-  'notes delete': {
-    usage: 'notes delete <id> [--yes]',
-    summary: "Delete a note you wrote, or any note as an admin. The record's notes keep a line saying a note was deleted.",
-    group: 'Notes',
-    short: 'Delete a note',
-    options: { yes: { type: 'boolean' } },
-    flags: { yes: YES_FLAG },
-    examples: ['siren notes delete 42 --yes'],
-    positionals: [1, 1],
-    liveSafe: true,
-    run: notes.notesDelete,
-  },
   'condition-sets list': {
     usage: 'condition-sets list [--json]',
     summary: 'List the condition sets, the saved lists of conditions Siren checks each day, such as joined in the last 30 days, with when Siren last checked each.',
@@ -1126,18 +1064,24 @@ function recipesHelpText(style: Style): string {
   ].join('\n');
 }
 
-/** What `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
+/** What `siren sandbox`, `siren logs`, `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
 const GROUP_SUMMARIES = {
+  // Review round 1, C16: siren sandbox and siren logs were unknown commands alone and with --help.
+  sandbox: 'Copy a live setup into a sandbox organization, list your sandboxes, clear their activity, and read the emails a sandbox caught.',
+  logs: 'Watch what happens in the organization as it happens: app requests, deliveries, webhooks, events and API calls.',
   'condition-sets': "Condition sets are saved lists of conditions Siren checks each day, such as joined in the last 30 days. See who matches one now, and make one from JSON. Siren's plan must include them.",
   enrollers: 'Enrollers add people to programs, distributors and groups, or take them out, when something happens to them. See what each does and did, and run one now. A Siren without enrollers says so.',
 } as const;
+
+/** The heading each group's help lists its commands under. */
+const GROUP_TITLES: Readonly<Record<keyof typeof GROUP_SUMMARIES, string>> = { sandbox: 'Sandbox', logs: 'Logs', 'condition-sets': 'Condition sets', enrollers: 'Enrollers' };
 
 function groupHelpText(style: Style, group: keyof typeof GROUP_SUMMARIES): string {
   return [
     ...wrap(GROUP_SUMMARIES[group], style.width),
     '',
     ...section(style, 'Usage', [`  siren ${group} <command> [flags]`]),
-    ...section(style, group === 'enrollers' ? 'Enrollers' : 'Condition sets', commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
+    ...section(style, GROUP_TITLES[group], commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
     ...section(style, 'Learn more', learnMore(style, true)),
   ].join('\n');
 }
@@ -1163,6 +1107,8 @@ function commandHelp(style: Style, spec: CommandSpec): string {
     '',
     ...section(style, 'Usage', [`  siren ${spec.usage}`]),
     ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text, style.width)) : []),
+    // Review round 1, C20: a write lists the fields -d takes, with their values.
+    ...(spec.fields !== undefined && spec.fields.length > 0 ? section(style, 'Fields', columns(spec.fields.map(([name, text]) => [`${name}=`, text] as const), 22, (text) => text, style.width)) : []),
     // CLI pass 3: the global flags once by name, since siren --help explains each.
     ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, style.width - 2).map((line) => `  ${line}`)),
     ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
@@ -1221,6 +1167,13 @@ function commandNamed(words: readonly string[]): Command {
     const guess = (COMMANDS as readonly string[]).includes(asApps) ? asApps : nearest(asApps, COMMANDS);
     throw new CommandUnknown('siren', words[0] ?? '', guess === undefined ? [] : [guess]);
   }
+  // A record word cut by a typo, such as colaborators, names the resource it was near, with its operation (review round 1, C16).
+  const firstWords = [...new Set(COMMANDS.map((command) => command.split(' ')[0]!))];
+  const record = words[0] === undefined || nearest(words[0], firstWords) !== undefined ? undefined : nearest(words[0], RESOURCE_COMMANDS.map((resource) => resource.name));
+  if (record !== undefined && record !== words[0]) {
+    const op = words[1];
+    throw new CommandUnknown('siren', words[0] ?? '', [op !== undefined && records.commandFor([record, op]) !== undefined ? `${record} ${op}` : record]);
+  }
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
   const guesses = started.length > 0 && started.length <= 4 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
   const group: CommandUnknown['group'] = (words[0] === 'apps' || words[0] === 'recipes') && words.length > 1 ? `siren ${words[0]}` : 'siren';
@@ -1260,13 +1213,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   // Stills the first-run welcome when the command ends, if no output stilled it first.
   let settle = async () => undefined as void;
   try {
-    let loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
-    // siren collaborators note 1 "…" is siren notes add collaborator:1 "…".
-    const rewritten = notes.noteShorthand(argv, loose.positionals);
-    if (rewritten !== argv) {
-      argv = rewritten;
-      loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
-    }
+    const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
     let words = loose.positionals;
     let wantsHelp = loose.values.help === true;
     if (words[0] === 'help') {
@@ -1296,7 +1243,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       io.stdout(recipesHelpText(styleFor(io, 'stdout', {})));
       return 0;
     }
-    if ((words[0] === 'condition-sets' || words[0] === 'enrollers') && words.length === 1) {
+    if ((words[0] === 'condition-sets' || words[0] === 'enrollers' || words[0] === 'sandbox' || words[0] === 'logs') && words.length === 1) {
       io.stdout(groupHelpText(styleFor(io, 'stdout', {}), words[0]));
       return 0;
     }
@@ -1335,7 +1282,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const flags = targetFlags(values);
     const context = spec.offline
       ? null
-      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true || spec.liveSafe === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
+      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, typedLine(argv, name));
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     targetUrl = context?.target.baseUrl;
     // A command that sends nothing names the Siren the next command would reach, the one logged in to included,
@@ -1400,6 +1347,33 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   } finally {
     await settle();
   }
+}
+
+/**
+ * The command line as typed, for a refusal that offers it again, such as
+ * `collaborators update 99999 -d nickname=x`: every argument and flag but
+ * the ones {@link commandLine} adds back, --sandbox, --live and --base-url,
+ * each quoted for a shell. It used to keep the arguments alone, so the
+ * --live hint dropped every -d (review round 1, C10).
+ */
+function typedLine(argv: readonly string[], name: string): string {
+  const words = name.split(' ');
+  const rest: string[] = [];
+  let matched = 0;
+  for (let at = 0; at < argv.length; at++) {
+    const arg = argv[at]!;
+    if (arg === '--sandbox' || arg === '--live' || arg.startsWith('--base-url=')) continue;
+    if (arg === '--base-url') {
+      at++;
+      continue;
+    }
+    if (matched < words.length && arg === words[matched]) {
+      matched++;
+      continue;
+    }
+    rest.push(records.shellWord(arg));
+  }
+  return [name, ...rest].join(' ');
 }
 
 /**

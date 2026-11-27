@@ -1,4 +1,4 @@
-import { isSirenDate, stamp } from '../record-view';
+import { isSirenDate, stamp, zoneName } from '../record-view';
 import { clean } from '../style';
 import type { Style } from '../style';
 
@@ -31,23 +31,25 @@ function scalar(value: unknown): boolean {
 }
 
 const NAME_KEYS = ['name', 'fullName', 'title', 'label', 'email'];
-const MONEY_KEYS = ['amount', 'value', 'total', 'subtotal', 'commission', 'balance', 'onHold', 'share', 'orderTotal'];
+const MONEY_KEYS = ['amount', 'value', 'total', 'totalValue', 'subtotal', 'commission', 'balance', 'onHold', 'share', 'orderTotal'];
 /** The fields that name an amount's currency, in the order Siren pairs them. */
 const CURRENCY_KEYS = ['currency', 'units', 'awardType', 'obligationAwardType'];
 const DATE_KEYS = ['dateCreated', 'createdDate', 'createdAt', 'happenedAt', 'date'];
 
 /**
  * The columns a list shows by default (lean output, section 5): the id, the
- * name or else the email, the status, the money, the related record by
- * name, and the date. Relation ids such as `engagementId` are left out. A
- * record with none of these keeps every scalar field, `id` first.
+ * name and the email beside it, the status, the money, the related record
+ * by name, and the date. Relation ids such as `engagementId` are left out.
+ * A record with none of these keeps every scalar field, `id` first.
  */
 export function defaultColumns(keys: readonly string[]): string[] {
   const first = (candidates: readonly string[]) => candidates.find((key) => keys.includes(key));
   const id = first(['id', 'key']);
   const named = first(NAME_KEYS);
+  // A person's email shows beside the name, since two people can share a name (review round 1, C13).
+  const email = named !== undefined && named !== 'email' && keys.includes('email') ? 'email' : undefined;
   const related = keys.find((key) => /[a-z]Name$/.test(key) && key !== named);
-  const chosen = [id, named, keys.includes('status') ? 'status' : undefined, ...MONEY_KEYS.filter((key) => keys.includes(key)), related, first(DATE_KEYS)].filter((key): key is string => key !== undefined);
+  const chosen = [id, named, email, keys.includes('status') ? 'status' : undefined, ...MONEY_KEYS.filter((key) => keys.includes(key)), related, first(DATE_KEYS)].filter((key): key is string => key !== undefined);
   if (chosen.length - (id === undefined ? 0 : 1) < 1) return keys.includes('id') ? ['id', ...keys.filter((key) => key !== 'id')] : [...keys];
   return chosen;
 }
@@ -85,6 +87,42 @@ export interface TableOptions {
   indent?: boolean;
 }
 
+/** The header words for a field, where its name says less than a word does (review round 1, C25). */
+const HEADER_WORDS: Readonly<Record<string, string>> = {
+  fullName: 'name',
+  createdDate: 'created',
+  dateCreated: 'created',
+  createdAt: 'created',
+  modifiedDate: 'modified',
+  dateModified: 'modified',
+  happenedAt: 'happened',
+  collaboratorName: 'collaborator',
+  programName: 'program',
+  distributorName: 'distributor',
+  totalValue: 'amount',
+  obligationAwardType: 'unit',
+  awardType: 'unit',
+  units: 'unit',
+  isTest: 'test',
+};
+
+/**
+ * A column's header: the field in capital words, such as NAME for fullName
+ * and COLLABORATOR ID for collaboratorId, with a date column's zone, as
+ * CREATED (UTC). Two columns that would share words keep their field names.
+ */
+export function headers(keys: readonly string[], rows: readonly Record<string, unknown>[], zone?: string, now?: number): string[] {
+  const words = (key: string) => (HEADER_WORDS[key] ?? key.replace(/([a-z\d])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ')).toUpperCase();
+  const said = keys.map(words);
+  const at = now === undefined ? new Date() : new Date(now);
+  return keys.map((key, column) => {
+    const text = said.filter((one) => one === said[column]).length > 1 ? key.replace(/([a-z\d])([A-Z])/g, '$1 $2').toUpperCase() : said[column]!;
+    // Only a cell read in the zone says so: without a clock the cell keeps Siren's own text, offset and all.
+    const dated = now !== undefined && rows.some((row) => isSirenDate(row[key]));
+    return clean(dated ? `${text} (${zoneName(zone, at)})` : text);
+  });
+}
+
 /** A cell, with a Siren date read as `Today 13:58`, `Nov 24 19:58` or `Mar 2, 2025` when the clock is given. */
 function tableCell(value: unknown, options: TableOptions): string {
   return options.now !== undefined && isSirenDate(value) ? stamp(value, options.zone, options.now) : cell(value);
@@ -97,7 +135,7 @@ export function table(style: Style, rows: readonly Record<string, unknown>[], op
   if (keys.length === 0) return [];
   const indent = options.indent ?? true;
   const lines = style.table(
-    keys.map((key) => clean(key)),
+    headers(keys, rows, options.zone, options.now),
     rows.map((row) => keys.map((key) => tableCell(row[key], options))),
     width - (indent ? 2 : 0),
   );

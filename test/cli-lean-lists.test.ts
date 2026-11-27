@@ -15,6 +15,8 @@ const programs = [
 ];
 const envelope = (items: unknown[], page = 1, totalPages = 1, total = items.length, perPage = 10) => ({ items, total, page, perPage, totalPages });
 const queryOf = (h: ReturnType<typeof harness>, at = 0) => Object.fromEntries(new URL(h.http.requests[at]!.url).searchParams);
+/** A list's query without the fields every list now asks Siren for (review round 1, C13). */
+const withoutFields = (query: Record<string, string>) => Object.fromEntries(Object.entries(query).filter(([key]) => key !== 'fields'));
 const signedIn = (replies: Parameters<typeof harness>[0], options: Parameters<typeof harness>[1] = {}) => {
   const h = harness(replies, { env: { TZ: 'UTC' }, ...options });
   h.signedIn();
@@ -25,7 +27,7 @@ describe('a generated list through a pipe', () => {
   it('prints the table alone on standard output, with dates as dates, and the count and Next on standard error', async () => {
     const h = signedIn([reply(200, envelope(programs))]);
     expect(await h.run(['programs', 'list']), h.err()).toBe(0);
-    expect(h.out()).toBe(['id\tname\tstatus\tcreatedDate', '2\tPartner program\tdraft\tToday 09:58', '1\tReferral program\tactive\tMar 2, 2025', ''].join('\n'));
+    expect(h.out()).toBe(['ID\tNAME\tSTATUS\tCREATED (UTC)', '2\tPartner program\tdraft\tToday 09:58', '1\tReferral program\tactive\tMar 2, 2025', ''].join('\n'));
     expect(h.err()).toContain('2 programs');
     expect(h.err()).toContain('siren programs get 2');
   });
@@ -35,9 +37,9 @@ describe('a generated list through a pipe', () => {
     expect(await h.run(['programs', 'list'])).toBe(0);
     expect(queryOf(h, 0)).toMatchObject({ orderBy: 'id', order: 'desc' });
     expect(await h.run(['programs', 'list', '-d', 'order=asc'])).toBe(0);
-    expect(queryOf(h, 1)).toEqual({ order: 'asc' });
+    expect(withoutFields(queryOf(h, 1))).toEqual({ order: 'asc' });
     expect(await h.run(['conversions', 'list'])).toBe(0);
-    expect(queryOf(h, 2)).toEqual({});
+    expect(withoutFields(queryOf(h, 2))).toEqual({});
   });
 });
 
@@ -52,8 +54,8 @@ describe('--ids and --fields', () => {
   it('shows only the fields named, asks Siren for them where the route takes fields, and cuts --json to them', async () => {
     const h = signedIn([reply(200, envelope(programs)), reply(200, envelope(programs))]);
     expect(await h.run(['programs', 'list', '--fields', 'id,name']), h.err()).toBe(0);
-    expect(queryOf(h, 0)).toMatchObject({ fields: 'id,name' });
-    expect(h.out()).toBe('id\tname\n2\tPartner program\n1\tReferral program\n');
+    expect(queryOf(h, 0).fields?.split(',')).toEqual(expect.arrayContaining(['id', 'name']));
+    expect(h.out()).toBe('ID\tNAME\n2\tPartner program\n1\tReferral program\n');
     expect(await h.run(['programs', 'list', '--fields', 'name', '--json'])).toBe(0);
     expect(JSON.parse(h.out().slice(h.out().indexOf('{')))).toEqual({ items: [{ name: 'Partner program' }, { name: 'Referral program' }], total: 2, page: 1, perPage: 10, totalPages: 1 });
   });
@@ -106,7 +108,7 @@ describe('review of PR 94', () => {
     expect(await h.run(['get', '/programs', '--ids']), h.err()).toBe(0);
     expect(h.out()).toBe('2\n1\n');
     expect(await h.run(['get', '/programs', '--fields', 'name'])).toBe(0);
-    expect(h.out()).toContain('name\nPartner program\nReferral program\n');
+    expect(h.out()).toContain('NAME\nPartner program\nReferral program\n');
   });
 
   it('leaves no generated record command on a word a hand-written command owns', async () => {
@@ -132,19 +134,19 @@ describe('default columns (lean output, section 5)', () => {
   it('shows the id, status, money, the related name and the date, and leaves relation ids out, in a pipe as in a terminal', async () => {
     const h = signedIn([reply(200, envelope(conversions)), reply(200, registry)]);
     expect(await h.run(['conversions', 'list']), h.err()).toBe(0);
-    expect(h.out()).toBe(['id\tstatus\tamount\tcollaboratorName\tdateCreated', '5632\tpending\t$5.00 USD\tShay Okonkwo\tToday 09:20', ''].join('\n'));
+    expect(h.out()).toBe(['ID\tSTATUS\tAMOUNT\tCOLLABORATOR\tCREATED (UTC)', '5632\tpending\t$5.00 USD\tShay Okonkwo\tToday 09:20', ''].join('\n'));
   });
 
   it('shows the email when a record has no name', async () => {
     const h = signedIn([reply(200, envelope([{ id: 3, nickname: 'ana', email: 'ana@example.com', status: 'active', referralCode: 'ANA', dateCreated: '2026-11-17T09:20:41+00:00' }]))]);
     expect(await h.run(['collaborators', 'list']), h.err()).toBe(0);
-    expect(h.out().split('\n')[0]).toBe('id\temail\tstatus\tdateCreated');
+    expect(h.out().split('\n')[0]).toBe('ID\tEMAIL\tSTATUS\tCREATED (UTC)');
   });
 
   it('keeps every column a record has when none of them is a known kind', async () => {
     const h = signedIn([reply(200, envelope([{ id: 'x', alpha: 1, beta: 2 }]))]);
     expect(await h.run(['get', '/odd']), h.err()).toBe(0);
-    expect(h.out().split('\n')[0]).toBe('id\talpha\tbeta');
+    expect(h.out().split('\n')[0]).toBe('ID\tALPHA\tBETA');
   });
 });
 
@@ -152,7 +154,7 @@ describe('query filters as flags (lean output, section 5)', () => {
   it("sends each route's query parameter from its own flag, in kebab case", async () => {
     const h = signedIn([reply(200, envelope([]))]);
     expect(await h.run(['conversions', 'list', '--status', 'pending', '--collaborator-id', '12']), h.err()).toBe(0);
-    expect(queryOf(h)).toEqual({ status: 'pending', collaboratorId: '12' });
+    expect(withoutFields(queryOf(h))).toEqual({ status: 'pending', collaboratorId: '12' });
   });
 
   it('refuses a value the parameter does not take, naming what it takes, and sends nothing', async () => {
@@ -174,6 +176,6 @@ describe('query filters as flags (lean output, section 5)', () => {
   it('asks for no order of its own when --order-by or --order names one', async () => {
     const h = signedIn([reply(200, envelope([]))]);
     expect(await h.run(['programs', 'list', '--order', 'asc'])).toBe(0);
-    expect(queryOf(h)).toEqual({ order: 'asc' });
+    expect(withoutFields(queryOf(h))).toEqual({ order: 'asc' });
   });
 });

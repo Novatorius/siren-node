@@ -91,7 +91,7 @@ describe('money in record commands', () => {
     expect(await h.run(['payouts', 'list']), h.err()).toBe(0);
     expect(h.out()).toContain('12431');
     // With no registry to draw it, the amount keeps its currency column beside it.
-    expect(h.out()).toMatch(/value\tcurrency/);
+    expect(h.out()).toMatch(/VALUE\tCURRENCY/);
     expect(h.out()).toMatch(/12431\tEUR/);
   });
 });

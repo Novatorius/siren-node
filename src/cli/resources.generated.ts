@@ -18,6 +18,8 @@ export interface ResourceRoute {
   readonly fields?: readonly string[];
   /** The scalar type openapi gives each body field it types plainly, by name, dotted for a nested field. `|null` marks one Siren takes null for. */
   readonly types?: Readonly<Record<string, string>>;
+  /** The values openapi allows for a body field, by name, dotted for a nested field. */
+  readonly enums?: Readonly<Record<string, readonly string[]>>;
   /** The body fields Siren requires. */
   readonly required?: readonly string[];
 }
@@ -88,6 +90,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "submitMessage": "string",
           "confirmationUrl": "string|null"
         },
+        "enums": {
+          "statusForSignups": [
+            "pending",
+            "active"
+          ]
+        },
         "required": [
           "name",
           "enabled",
@@ -120,6 +128,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "approveExisting": "boolean",
           "submitMessage": "string",
           "confirmationUrl": "string|null"
+        },
+        "enums": {
+          "statusForSignups": [
+            "pending",
+            "active"
+          ]
         }
       },
       "delete": {
@@ -436,6 +450,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "source": "string",
           "approveExisting": "boolean"
         },
+        "enums": {
+          "statusOnSignup": [
+            "pending",
+            "active"
+          ]
+        },
         "required": [
           "email",
           "source",
@@ -749,6 +769,14 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "transactionId": "integer|null",
           "obligationId": "integer|null"
         },
+        "enums": {
+          "status": [
+            "pending",
+            "approved",
+            "rejected",
+            "expired"
+          ]
+        },
         "required": [
           "engagementId",
           "type",
@@ -770,6 +798,14 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "type": "string",
           "transactionId": "integer|null",
           "obligationId": "integer|null"
+        },
+        "enums": {
+          "status": [
+            "pending",
+            "approved",
+            "rejected",
+            "expired"
+          ]
         }
       },
       "delete": {
@@ -1089,6 +1125,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "revenuePercentage": "integer|null",
           "collaboratorGroupId": "integer|null"
         },
+        "enums": {
+          "status": [
+            "active",
+            "inactive"
+          ]
+        },
         "required": [
           "name",
           "description",
@@ -1126,6 +1168,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
           "distributionPoolResolver": "string",
           "revenuePercentage": "integer|null",
           "collaboratorGroupId": "integer|null"
+        },
+        "enums": {
+          "status": [
+            "active",
+            "inactive"
+          ]
         }
       },
       "delete": {
@@ -1394,7 +1442,15 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "param": "id",
         "fields": [
           "status"
-        ]
+        ],
+        "enums": {
+          "status": [
+            "pending",
+            "processing",
+            "complete",
+            "failed"
+          ]
+        }
       },
       "delete": {
         "method": "DELETE",
@@ -1516,6 +1572,11 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "types": {
           "externalId": "string",
           "externalType": "string"
+        },
+        "enums": {
+          "localType": [
+            "collaborator"
+          ]
         },
         "required": [
           "localType",
@@ -1738,6 +1799,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "types": {
           "payoutId": "integer|null"
         },
+        "enums": {
+          "status": [
+            "draft",
+            "approved",
+            "rejected",
+            "complete",
+            "deleted",
+            "cancelled"
+          ]
+        },
         "required": [
           "collaboratorId",
           "status",
@@ -1759,6 +1830,16 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "types": {
           "awardType": "string",
           "payoutId": "integer|null"
+        },
+        "enums": {
+          "status": [
+            "draft",
+            "approved",
+            "rejected",
+            "complete",
+            "deleted",
+            "cancelled"
+          ]
         }
       },
       "delete": {
@@ -1842,6 +1923,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         ],
         "types": {
           "lastTriggered": "string"
+        },
+        "enums": {
+          "status": [
+            "active",
+            "inactive"
+          ]
         }
       }
     }
@@ -2476,6 +2563,12 @@ export const RESOURCE_COMMANDS: readonly ResourceCommand[] = [
         "types": {
           "targetUrl": "string",
           "description": "string|null"
+        },
+        "enums": {
+          "status": [
+            "active",
+            "paused"
+          ]
         }
       },
       "delete": {

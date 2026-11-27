@@ -47,47 +47,5 @@
       "activeConversionTypes": "[\"sale\",\"renewal\"]",
       "transactionPercent": "10"
     }
-  },
-  "collaboratorNotes": [
-    {
-      "id": 420,
-      "renderedContent": "Siren could not send Neva Volkman the Payout sent email to the collaborator yet and will try again. The mail engine gave no status code.",
-      "creationSource": "notification_rule",
-      "dateCreated": "2026-11-25T19:29:37+00:00"
-    },
-    {
-      "id": 413,
-      "renderedContent": "Siren could not send Neva Volkman the Payout sent email to the collaborator yet and will try again. The mail engine gave no status code.",
-      "creationSource": "notification_rule",
-      "dateCreated": "2026-11-25T19:13:33+00:00"
-    },
-    {
-      "id": 401,
-      "renderedContent": "Siren could not send Neva Volkman the Payout sent email to the collaborator yet and will try again. The mail engine gave no status code.",
-      "creationSource": "notification_rule",
-      "dateCreated": "2026-11-25T19:05:32+00:00"
-    }
-  ],
-  "programNotes": [
-    {
-      "id": 132,
-      "renderedContent": "Conversion for order #seed-c37dac07-8 ($342.00 USD) in Referral Program rejected by the system",
-      "creationSource": "conversion",
-      "dateCreated": "2026-11-25T18:57:38+00:00"
-    },
-    {
-      "id": 128,
-      "renderedContent": "Conversion for order #seed-c37dac07-3 ($298.00 USD) in Referral Program rejected by the system",
-      "creationSource": "conversion",
-      "dateCreated": "2026-11-25T18:57:38+00:00"
-    },
-    {
-      "id": 124,
-      "renderedContent": "Conversion for order #seed-c37dac07-7 ($223.00 USD) in Referral Program approved by the system",
-      "creationSource": "conversion",
-      "dateCreated": "2026-11-25T18:57:37+00:00"
-    }
-  ],
-  "collaboratorNotesTotal": 39,
-  "programNotesTotal": 48
+  }
 }

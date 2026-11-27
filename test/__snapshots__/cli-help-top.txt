@@ -54,12 +54,6 @@ RECIPES
   recipes show        Print one ready-made recipe
   recipes fetch       Print the recipe a Beacon handoff carries
 
-NOTES
-  notes               List a record's notes
-  notes add           Add a note to a record
-  notes edit          Change a note you wrote
-  notes delete        Delete a note
-
 CONDITION SETS
   condition-sets list        List the condition sets
   condition-sets get         Show one condition set

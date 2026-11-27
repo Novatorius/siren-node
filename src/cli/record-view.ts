@@ -125,6 +125,20 @@ export function stamp(iso: string, zone: string | undefined, now: number): strin
   return day(iso, zone);
 }
 
+/**
+ * The short name of `zone` at `iso`, such as `UTC`, `EST` or `GMT+2`, so a
+ * time never reads as another zone's (review round 1, C25). The machine's
+ * own zone when `zone` is unset.
+ */
+export function zoneName(zone: string | undefined, at: Date = new Date()): string {
+  const named = (timeZone: string | undefined) => new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', timeZone }).formatToParts(at).find((part) => part.type === 'timeZoneName')?.value;
+  try {
+    return named(zone || undefined) ?? 'local';
+  } catch {
+    return named(undefined) ?? 'local';
+  }
+}
+
 /** True for text that is a Siren date and time, such as `2026-11-24T19:58:00+00:00` or `2026-11-24 19:58:00`. */
 export function isSirenDate(value: unknown): value is string {
   return typeof value === 'string' && ISO.test(value);
@@ -134,7 +148,8 @@ export function isSirenDate(value: unknown): value is string {
 function scalarText(value: string | number | boolean | null, zone: string | undefined): string {
   if (value === null) return '-';
   // A timestamp keeps its time, as `Nov 25, 2026 18:57` (review of PR 94).
-  if (typeof value === 'string') return ISO.test(value) ? `${day(value, zone)} ${minute(value, zone).split(' ').at(-1)}` : clean(value.replace(/\s+/g, ' '));
+  // It names its zone, as Nov 25, 2026 18:57 UTC (review round 1, C25).
+  if (typeof value === 'string') return ISO.test(value) ? `${day(value, zone)} ${minute(value, zone).split(' ').at(-1)} ${zoneName(zone, sirenDate(value))}` : clean(value.replace(/\s+/g, ' '));
   return String(value);
 }
 

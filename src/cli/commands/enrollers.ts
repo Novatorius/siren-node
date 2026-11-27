@@ -87,8 +87,8 @@ export async function enrollersList(input: CommandInput): Promise<number> {
   }
   const triggers = await triggersOf(http);
   const out = styleFor(input.io, 'stdout', input.values);
-  const rows = enrollers.map((enroller) => [clean(String(enroller.id ?? '')), clean(String(enroller.name ?? '')), clean(String(enroller.status ?? '')), `when ${triggerName(triggers, enroller.triggerId)}`]);
-  for (const line of columns(rows)) run.print(out.fold(line));
+  const rows = enrollers.map((enroller) => [clean(String(enroller.id ?? '')), clean(String(enroller.name ?? '')), clean(String(enroller.status ?? '')), triggerName(triggers, enroller.triggerId)]);
+  for (const line of out.table(['ID', 'NAME', 'STATUS', 'STARTS'], rows, out.rich ? out.width : Number.POSITIVE_INFINITY)) run.print(line);
   const total = answer.total ?? enrollers.length;
   if (total > enrollers.length) input.io.stderr(`${enrollers.length} of ${total} enrollers.\n`);
   printNext(input, out, [`enrollers get ${clean(String(enrollers[0]!.id))}`]);

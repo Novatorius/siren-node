@@ -24,7 +24,7 @@ describe('siren condition-sets list and get', () => {
     const h = signedIn([reply(200, recorded.sets)]);
     expect(await h.run(['condition-sets', 'list']), h.err()).toBe(0);
     expect(h.paths()).toEqual(['GET /condition-sets']);
-    expect(h.out()).toBe('1  Example: in the Creator Circle group  1 condition  checked Nov 24, 2026\n');
+    expect(h.out()).toBe(['ID\tNAME\tCONDITIONS\tLAST CHECKED (UTC)', '1\tExample: in the Creator Circle group\t1 condition\tNov 24, 2026', ''].join('\n'));
     expect(h.err()).toContain('siren condition-sets matches 1');
   });
 
