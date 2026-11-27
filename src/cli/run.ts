@@ -8,7 +8,6 @@ import * as fixtures from './commands/fixtures';
 import * as simulate from './commands/simulate';
 import * as conditionSets from './commands/condition-sets';
 import * as enrollers from './commands/enrollers';
-import * as notes from './commands/notes';
 import * as recipes from './commands/recipes';
 import { fieldProblems, fieldsLine } from './validation';
 import * as trigger from './commands/trigger';
@@ -84,10 +83,6 @@ export const COMMANDS = [
   'recipes catalog',
   'recipes show',
   'recipes fetch',
-  'notes',
-  'notes add',
-  'notes edit',
-  'notes delete',
   'condition-sets list',
   'condition-sets get',
   'condition-sets matches',
@@ -111,7 +106,7 @@ type Options = NonNullable<ParseArgsConfig['options']>;
  * commands that test an app against Siren. Records holds the commands
  * generated from Siren's API, which {@link recordRows} lists.
  */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Notes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -133,12 +128,6 @@ interface CommandSpec {
   offline?: boolean;
   /** True for a command that changes nothing, which a live organization serves without `--live`. */
   readsOnly?: boolean;
-  /**
-   * True for a write a live organization takes without `--live`, since it
-   * changes no program, reward or payout, such as a note. LIVE_WRITES names
-   * every other write.
-   */
-  liveSafe?: boolean;
   /** True for a command whose route takes no personal access token, so it needs a signed-in session even with SIREN_TOKEN set. */
   sessionOnly?: boolean;
   run: CommandHandler;
@@ -830,60 +819,6 @@ const SPECS: Record<Command, CommandSpec> = {
     sessionOnly: true,
     run: recipes.recipesFetch,
   },
-  notes: {
-    usage: 'notes --on <type:id> [--search <words>] [--since <time>] [--limit <n>]',
-    summary: "List a record's notes, newest first: the ones people wrote and the ones Siren writes as things happen. --on collaborator:1 names one record, and --on program reads every program's.",
-    group: 'Notes',
-    short: "List a record's notes",
-    options: { on: { type: 'string', multiple: true }, search: { type: 'string' }, since: { type: 'string' }, limit: { type: 'string' }, json: { type: 'boolean' } },
-    flags: {
-      on: ['--on <type:id>', 'The record, such as collaborator:1, or a type alone'],
-      search: ['--search <words>', 'Only notes that hold these words'],
-      since: ['--since <time>', 'Only notes from then on: 2h, 7d, or a date'],
-      limit: ['--limit <n>', 'How many, 1 to 100 (20)'],
-      json: JSON_FLAG,
-    },
-    examples: ['siren notes --on collaborator:1', 'siren notes --on program:4 --since 7d --search payout'],
-    positionals: [0, 0],
-    readsOnly: true,
-    run: notes.notesList,
-  },
-  'notes add': {
-    usage: 'notes add <type:id> (<text> | --stdin)',
-    summary: 'Add a note to a record. siren collaborators note 1 "Called about the March payout" is the same. A note changes no program, reward or payout, so a live organization takes it without --live.',
-    group: 'Notes',
-    short: 'Add a note to a record',
-    options: { stdin: { type: 'boolean' }, json: { type: 'boolean' } },
-    flags: { stdin: ['--stdin', 'Read the text from standard input'], json: JSON_FLAG },
-    examples: ['siren collaborators note 1 "Called about the March payout"', 'siren notes add program:4 --stdin < call.txt'],
-    positionals: [1, 2],
-    liveSafe: true,
-    run: notes.notesAdd,
-  },
-  'notes edit': {
-    usage: 'notes edit <id> (<text> | --stdin) [--revision <key>]',
-    summary: "Change the text of a note you wrote. --revision sends the key siren notes --json shows, so Siren refuses the change when the note changed since.",
-    group: 'Notes',
-    short: 'Change a note you wrote',
-    options: { stdin: { type: 'boolean' }, revision: { type: 'string' }, json: { type: 'boolean' } },
-    flags: { stdin: ['--stdin', 'Read the text from standard input'], revision: ['--revision <key>', 'The revision you read, to refuse a stale change'], json: JSON_FLAG },
-    examples: ['siren notes edit 42 "Called twice about the March payout"'],
-    positionals: [1, 2],
-    liveSafe: true,
-    run: notes.notesEdit,
-  },
-  'notes delete': {
-    usage: 'notes delete <id> [--yes]',
-    summary: "Delete a note you wrote, or any note as an admin. The record's notes keep a line saying a note was deleted.",
-    group: 'Notes',
-    short: 'Delete a note',
-    options: { yes: { type: 'boolean' } },
-    flags: { yes: YES_FLAG },
-    examples: ['siren notes delete 42 --yes'],
-    positionals: [1, 1],
-    liveSafe: true,
-    run: notes.notesDelete,
-  },
   'condition-sets list': {
     usage: 'condition-sets list [--json]',
     summary: 'List the condition sets, the saved lists of conditions Siren checks each day, such as joined in the last 30 days, with when Siren last checked each.',
@@ -1246,13 +1181,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   // Stills the first-run welcome when the command ends, if no output stilled it first.
   let settle = async () => undefined as void;
   try {
-    let loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
-    // siren collaborators note 1 "…" is siren notes add collaborator:1 "…".
-    const rewritten = notes.noteShorthand(argv, loose.positionals);
-    if (rewritten !== argv) {
-      argv = rewritten;
-      loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
-    }
+    const loose = parseArgs({ args: [...argv], options: ALL_OPTIONS, strict: false, allowPositionals: true });
     let words = loose.positionals;
     let wantsHelp = loose.values.help === true;
     if (words[0] === 'help') {
@@ -1321,7 +1250,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const flags = targetFlags(values);
     const context = spec.offline
       ? null
-      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true || spec.liveSafe === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
+      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     targetUrl = context?.target.baseUrl;
     // A command that sends nothing names the Siren the next command would reach, the one logged in to included,
