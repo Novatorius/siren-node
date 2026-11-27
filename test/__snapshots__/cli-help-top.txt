@@ -54,6 +54,10 @@ RECIPES
   recipes show        Print one ready-made recipe
   recipes fetch       Print the recipe a Beacon handoff carries
 
+ACTIVITY
+  activity            List what happened to a record
+  explain             Say why a sale paid what it did
+
 NOTES
   notes               List a record's notes
   notes add           Add a note to a record
@@ -79,6 +83,7 @@ RECORDS
   get <path>          Read any route, such as get /programs
   post <path>         Write to any route, and put, patch and delete
   resources           List the resources and their operations
+  open                Open a record's page in Siren's app
 
 ACCOUNT
   logout              Log out, and forget the session here
@@ -99,6 +104,7 @@ ENVIRONMENT
   SIREN_BASE_URL      The Siren to use when no flag names one
   SIREN_ORG           The organization to act in, when no flag names one
   SIREN_TOKEN         A personal access token, for scripts and CI
+  SIREN_APP_URL       Siren's app, for links, when it isn't beside the API
   SIREN_DEBUG=1       The same as --verbose
   NO_COLOR, CI        Plain output, and no logo animation
 

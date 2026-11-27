@@ -6,6 +6,7 @@ import type { HttpTransport } from '../../http';
 import { contextOf } from '../context';
 import type { CommandContext, CommandInput } from '../context';
 import { orgScope } from '../org';
+import { recordLink } from '../links';
 import { day } from '../record-view';
 import { clean, styleFor } from '../style';
 import type { Style } from '../style';
@@ -243,8 +244,10 @@ export async function conditionSetsGet(input: CommandInput): Promise<number> {
   } catch (error) {
     throw gated(error, SETS);
   }
+  const current = run.current();
+  const url = recordLink(run.target.baseUrl, input.io.env, current.orgSlug || String(current.orgId), 'condition_set', id);
   if (input.values.json === true) {
-    run.print(JSON.stringify(set, null, 2));
+    run.print(JSON.stringify('url' in set ? set : { ...set, url }, null, 2));
     return 0;
   }
   const catalog = await catalogOf(http);
@@ -276,7 +279,7 @@ export async function conditionSetsGet(input: CommandInput): Promise<number> {
   if (usedBy.length > 0) {
     lines.push('', `  ${out.bold(`used by (${usedBy.length})`)}`, ...columns(usedBy.map((use) => [`${clean(String(use.type ?? ''))} ${clean(String(use.id ?? ''))}`, clean(String(use.name ?? '')), clean(String(use.status ?? (use.enabled === false ? 'off' : '')))])).map((line) => fit(`    ${line}`)));
   }
-  run.print(lines.join('\n'));
+  run.print([...lines, '', url].join('\n'));
   const firstEnroller = usedBy.find((use) => use.type === 'enroller');
   printNext(input, out, [`condition-sets matches ${id}`, ...(firstEnroller === undefined ? [] : [`enrollers get ${clean(String(firstEnroller.id))}`])]);
   return 0;

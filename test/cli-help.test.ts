@@ -36,6 +36,7 @@ describe('help: siren --help', () => {
       'DEVELOPER TOOLS',
       'SANDBOX',
       'RECIPES',
+      'ACTIVITY',
       'NOTES',
       'CONDITION SETS',
       'ENROLLERS',
@@ -60,7 +61,8 @@ describe('help: siren --help', () => {
     };
     expect(under('DEVELOPER TOOLS')).toEqual(['listen', 'trigger', 'trigger ask', 'logs tail', 'simulate', 'fixtures', 'apps test']);
     expect(under('SANDBOX')).toEqual(['sandbox create', 'sandbox list', 'sandbox reset', 'sandbox inbox', 'seed']);
-    expect(under('RECORDS')).toEqual(['<resource> <op>', 'get <path>', 'post <path>', 'resources']);
+    expect(under('RECORDS')).toEqual(['<resource> <op>', 'get <path>', 'post <path>', 'resources', 'open']);
+    expect(under('ACTIVITY')).toEqual(['activity', 'explain']);
   });
 
   it('lists every command once, on one line, with its name and a short summary aligned', async () => {

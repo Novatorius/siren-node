@@ -2276,6 +2276,30 @@ program, opportunity, distribution, distributor, org, collaborator_group, progra
 customer, coupon, product, application_form, notification and notification_rule. Siren reads one
 record's notes at a time, so a second `--on` is refused.
 
+### Activity, explanations and links
+
+These three read and change nothing, so a live organization needs no `--live`.
+
+| Command | What it does |
+| --- | --- |
+| `siren activity --on <type:id>` | Lists what happened to a record, newest first, one line each: its notes, the status changes Siren noted, and its conversions and payouts where Siren lists them for that type. Each line has the date, the record's type and id, its status and amount where it has one, and ends with its page in Siren's app. Through a pipe each one is a single line, and in a terminal the page goes on a dim line beneath. `--kind note,status,conversion,payout` keeps to those kinds, `--since 30d` or a date starts back in time, and `--limit` takes 1 to 100 (20). The count and the command for the next page, with `--cursor`, go to standard error. `--on org` reads the organization's own notes. `--json` prints `record`, `items` with amounts as Siren stores them, `nextCursor`, and `hidden` for any part Siren refused. |
+| `siren explain <type> <id>` | Says why a sale, conversion or reward paid what it did, in order: the engagement that won it, each conversion, and each reward with where it stands. A draft reward waits for its conversion to be approved, an approved one is owed, one in a payout is paid only once the payout is marked paid, and the summary says which. `--chain` shows the whole chain, from the opportunity, the sale and every engagement that competed for it, with Siren's reason when one lost, to the payout and its fulfillment. The types are `transaction` (or `sale`), `conversion`, `obligation` (or `reward`) and `engagement`. `--json` prints the summary, the state, the amounts by where they stand, and each step with its page. |
+| `siren open <type> <id>` | Prints the record's page in Siren's app, and opens it in the browser when standard output is a terminal. A payout opens on the fulfillment that holds it, since the app has no payout page, and an application opens on the applications list. |
+
+`siren activity` reads three routes, `GET /notes`, `GET /conversions` and `GET /payouts`, since Siren
+has no single timeline route yet. Conversions are listed for collaborators, programs, engagements,
+sales and obligations, and payouts for collaborators and fulfillments. When Siren refuses one part,
+such as payouts on a plan without them, the rest still prints and a line on standard error says what
+was left out and why. `siren explain` reads `GET /notes/chain`, the read behind the record flow graph
+in Siren's app, and a Siren without that route gets a refusal that says so.
+
+Every page address comes from one map of record type to page, checked against the routes of Siren's
+Cloud app, and ends with `?org=<slug>`, so the app opens in the organization the command used. A
+record view, such as `siren collaborators get 1`, ends with the same address, and its `--json` holds
+it as `url`. The app's address is the API's own host, with `api.` read as `app.`, so
+`api.sirenaffiliates.com` links to `app.sirenaffiliates.com`. Set `SIREN_APP_URL` when your app
+lives elsewhere.
+
 ### Condition sets and enrollers
 
 A condition set is a saved list of conditions Siren checks each day, such as "joined in the last 30
@@ -2303,9 +2327,10 @@ without it, gets a refusal that says which. Making a set or an enroller, and run
 A record read, such as `siren collaborators get 1`, puts the record's name in the headline and
 prints its fields as aligned rows. Each list in it, such as a collaborator's programs, is its own
 section with one line for each, the first 10 shown and the rest counted. A collaborator or a
-program ends with its latest three notes. Next names the commands that open what it points to.
-Through a pipe the record goes to standard output and Next to standard error, and `--json` prints
-Siren's answer whole.
+program ends with its latest three notes. The view's last line is the record's page in Siren's
+app. Next names the commands that open what it points to. Through a pipe the record goes to
+standard output and Next to standard error, and `--json` prints Siren's answer whole, with the
+page as `url` beside it.
 
 A list, such as `siren programs list`, comes newest first where Siren's route takes an order, and
 dates read as `Today 13:58`, `Nov 24 19:58` or `Mar 2, 2025`. Through a pipe, standard output holds

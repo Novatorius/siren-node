@@ -15,6 +15,7 @@ import { CliRefusal, CliUsageError } from '../targets';
 import { clean, styleFor } from '../style';
 import { cell, clip, recordRows, table, WIDTH } from './resource-output';
 import { minute, recordView } from '../record-view';
+import { recordLink, resourceTypeOf } from '../links';
 import { currenciesFor, holdsMoney, withMoney } from '../money';
 import type { ViewSection } from '../record-view';
 
@@ -634,7 +635,12 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     const notes = noted !== undefined && isObject(body) && body.id !== undefined && body.id !== null ? await latestNotes(transport, noted, String(body.id), input.io.env.TZ) : undefined;
     // Amounts beside a currency print as money, read with the organization's currencies. --json and --ids keep Siren's integers.
     const shown = !plan.json && !plan.ids && holdsMoney(body) ? withMoney(body, await currenciesFor(input.io.configDir, `${run.target.baseUrl} ${run.current().orgId}`, input.io.now(), async () => parseJsonBody(await transport.request({ method: 'GET', path: '/registries/currencies', retriable: true })))) : body;
-    print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run), notes);
+    // A record read names its page in Siren's app: the last line of the view, and `url` in --json.
+    const linkType = plan.resource !== undefined && plan.words === `${plan.resource.name} get` ? resourceTypeOf(plan.resource.name) : undefined;
+    const current = run.current();
+    // Only a plain id goes into an address, so nothing Siren sends can make the link say something else.
+    const link = linkType !== undefined && isObject(body) && /^\d+$/.test(String(body.id ?? '')) ? recordLink(run.target.baseUrl, input.io.env, current.orgSlug || String(current.orgId), linkType, String(body.id), { fulfillmentId: body.fulfillmentId }) : undefined;
+    print(input, plan, status, shown, outgoing.method === 'GET' ? undefined : orgLabel(run), notes, link);
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
@@ -749,7 +755,7 @@ async function latestNotes(transport: ReturnType<typeof createHttpTransport>, so
   }
 }
 
-function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string, notes?: ViewSection): void {
+function print(input: CommandInput, plan: Plan, status: number, body: unknown, org?: string, notes?: ViewSection, link?: string): void {
   const out = (text: string) => input.io.stdout(text.endsWith('\n') ? text : `${text}\n`);
   const listed = isEnvelope(body) ? body.items : Array.isArray(body) ? body : undefined;
   const listedRecords = (listed ?? []).filter(isObject);
@@ -767,7 +773,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     const pick = (record: unknown) => (plan.fields !== undefined && isObject(record) ? Object.fromEntries(plan.fields.filter((field) => field in record).map((field) => [field, record[field]])) : record);
     const items = isEnvelope(body) ? body.items.map(pick) : Array.isArray(body) ? body.map(pick) : undefined;
     const shaped = items === undefined ? body : isEnvelope(body) ? { ...body, items } : items;
-    out(JSON.stringify(shaped ?? null, null, 2));
+    out(JSON.stringify(link !== undefined && isObject(shaped) && !('url' in shaped) ? { ...shaped, url: link } : (shaped ?? null), null, 2));
     return;
   }
 
@@ -813,7 +819,7 @@ function print(input: CommandInput, plan: Plan, status: number, body: unknown, o
     // A record read prints as a record view (lean-output.md, section 1).
     const view = recordView(style, record, { what: singular(name), words: name, zone: input.io.env.TZ, resources: RESOURCE_COMMANDS.filter((resource) => resource.ops.get !== undefined).map((resource) => resource.name) }, notes === undefined ? [] : [notes]);
     const next = [...view.next, ...(notes !== undefined && plan.resource !== undefined ? [`notes --on ${NOTED[plan.resource.name]}:${cell(id)}`, `${plan.resource.name} note ${cell(id)} "<text>"`] : [])];
-    out(view.lines.join('\n'));
+    out([...view.lines, ...(link === undefined ? [] : ['', link])].join('\n'));
     if (next.length > 0) {
       const steps = ['', style.bold('Next'), ...next.map((words, at) => `  ${at + 1}  ${style.command(input.command(words))}`)].join('\n');
       // Through a pipe, Next goes to standard error, so standard output carries the record alone.

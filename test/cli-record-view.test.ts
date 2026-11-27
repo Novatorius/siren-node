@@ -55,6 +55,9 @@ describe('siren collaborators get, as a record view', () => {
         '    Nov 25 19:05  Siren could not send Neva Volkman the Payout sent email to the collaborator yet and will try again. The mail engine gave no status code.',
         '    and 36 more',
         '',
+        // The record's page in Siren's app ends the view, on standard output, since it is part of the record.
+        'https://sandbox.sirenaffiliates.com/collaborators/1/view?org=3',
+        '',
       ].join('\n'),
     );
     // Through a pipe, Next goes to standard error, so standard output is the record alone.
@@ -73,11 +76,11 @@ describe('siren collaborators get, as a record view', () => {
     expect(shown).not.toContain('[{');
   });
 
-  it('prints the record and nothing else with --json, and reads no notes', async () => {
+  it("prints the record and its page in Siren's app as url with --json, and reads no notes", async () => {
     const h = harness([reply(200, recorded.collaborator)], UTC);
     h.signedIn();
     expect(await h.run(['collaborators', 'get', '1', '--json'])).toBe(0);
-    expect(JSON.parse(h.out())).toEqual(recorded.collaborator);
+    expect(JSON.parse(h.out())).toEqual({ ...recorded.collaborator, url: 'https://sandbox.sirenaffiliates.com/collaborators/1/view?org=3' });
     expect(h.paths()).toEqual(['GET /collaborators/1']);
   });
 

@@ -68,7 +68,8 @@ describe('the generated resource commands', () => {
     const h = signedIn([reply(200, programs[0]), reply(200, [], { 'x-siren-estimated-count': '0' })]);
     expect(await h.run(['programs', 'get', '1'])).toBe(0);
     expect(h.paths()).toEqual(['GET /programs/1', 'GET /notes']);
-    expect(h.out()).toBe('program 1 · Referral program\n\n  status  active\n  units   usd\n');
+    // The view ends with the program's page in Siren's app.
+    expect(h.out()).toBe('program 1 · Referral program\n\n  status  active\n  units   usd\n\nhttps://sandbox.sirenaffiliates.com/programs/1/view?org=3\n');
   });
 
   it('prints Siren\'s answer as JSON with --json, and nothing else', async () => {

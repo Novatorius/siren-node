@@ -117,6 +117,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `siren activity --on <type:id>` lists what happened to a record, newest first: its notes, the
+  status changes Siren noted, and its conversions and payouts, each with its date, type and id,
+  status, amount and page in Siren's app. It merges `GET /notes`, `GET /conversions` and `GET
+  /payouts`, takes `--kind`, `--since`, `--limit` and `--cursor`, and says on standard error what it
+  left out when Siren refuses one part.
+- `siren explain <type> <id>` says why a sale, conversion or reward paid what it did, from Siren's
+  `GET /notes/chain`. It says where each reward stands, from a draft to paid, and never calls a
+  reward paid before its payout is marked paid. `--chain` shows the whole chain from the sale and
+  every engagement that competed for it to the payout.
+- `siren open <type> <id>` prints a record's page in Siren's app and opens it in the browser in a
+  terminal. A record view ends with the same address, and a record's `--json` holds it as `url`.
+  The addresses come from one map checked against the Cloud app's routes, carry `?org=<slug>`, and
+  follow `SIREN_APP_URL` when set.
 - Generated lists take `--ids`, one id a line, and `--fields a,b,c`, which shapes the table and
   `--json`. They ask for newest first where the route takes an order, and print dates as dates.
   Generated help opens with a sentence, such as "List programs, newest first.", before the route.
