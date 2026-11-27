@@ -144,6 +144,17 @@ describe('style: tables', () => {
     expect(fitted.at(-1)).toBe('signups       off     Signups');
   });
 
+  it('never narrows a column below its longest word, so a key with no spaces keeps the columns after it in line', () => {
+    const keys = [
+      ['acme-crm', 'on', 'a short address'],
+      ['connector-proof-1795650158592', 'on', 'key only'],
+    ];
+    const lines = rich.table(['APP', 'STATE', 'ADDRESS'], keys, 40);
+    const at = (line: string) => line.search(/ on /);
+    expect(at(lines[1]!)).toBe(at(lines.find((line) => line.startsWith('connector'))!));
+    expect(lines.find((line) => line.startsWith('connector'))).toBe('connector-proof-1795650158592  on     key only');
+  });
+
   it('narrows a wide middle column and wraps it in place, keeping every word and the columns after it (review round 1, C8)', () => {
     const name = 'Acme very very very very very very long program name';
     const lines = rich.table(['ID', 'NAME', 'STATUS'], [['1', name, 'active']], 40);
