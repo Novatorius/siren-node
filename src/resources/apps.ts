@@ -31,7 +31,6 @@ import type {
   VerifyAppRequestOptions,
 } from '../record-types';
 import type { AppStatus } from '../taxonomy';
-import { FeatureKind } from '../taxonomy';
 import type { ApiKeyScopeGroups, WebhookCatalogEntry, WebhookDelivery, WebhookHeaders, WebhookTestResult } from '../types';
 import { SirenError, UnexpectedResponseError } from '../errors';
 import { pickFields } from './create-fields';
@@ -447,12 +446,8 @@ export class AppsResource {
         checkKind(copy.kind, 'apps.declare()', ` on feature ${index}`);
         return copy;
       });
-      const needAddress = (sent.features as Record<string, unknown>[]).some((feature) => feature.kind !== FeatureKind.CustomEvent);
-      if (needAddress && sent.url == null) {
-        throw new SirenError(
-          'Siren: apps.declare() needs a url for an app with features other than custom events. Siren asks the app at its address, so it refuses such features on an app with none.',
-        );
-      }
+      // Features with no url go to Siren, which takes them on a sandbox, where siren listen carries the
+      // requests, and refuses them on live with a 422 that names the url.
     }
 
     const route = `PUT ${path}`;

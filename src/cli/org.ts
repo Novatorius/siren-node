@@ -133,14 +133,15 @@ export async function settleOrg(io: CliIo, memberships: readonly StoredMembershi
  * whole order, as `sandbox create --from` does on the live Siren, and costs
  * `POST /auth/switch-org` when it is not the organization in use, plus
  * `GET /auth/memberships` when login kept no list or the list lacks it.
- * `list` is the command a refusal names, `orgs` unless given.
+ * `list` is the command a refusal names, `orgs` unless given, and `from`
+ * the flag that named the organization, such as `--from`.
  */
 export async function orgScope(
   run: CommandContext,
   input: CommandInput,
   session: StoredSession,
   words: string,
-  options: { name?: string; list?: string } = {},
+  options: { name?: string; list?: string; from?: string } = {},
 ): Promise<OrgScope> {
   const list = run.command(options.list ?? 'orgs');
   if (options.name === undefined) {
@@ -148,7 +149,7 @@ export async function orgScope(
     const org = chosen.org;
     return { ...ownScope(run, org), source: chosen.source, flag: chosen.source === 'flag' ? ` --org ${org.orgSlug || org.orgId}` : '' };
   }
-  const wanted: OrgWanted = { name: options.name, source: 'flag', from: `siren ${words}` };
+  const wanted: OrgWanted = { name: options.name, source: 'flag', from: options.from ?? `siren ${words}` };
   let memberships = membershipsOf(session);
   if (session.memberships === undefined || findOrg(memberships, wanted.name) === undefined) memberships = await run.memberships();
   const { org } = await settleOrg(input.io, memberships, wanted, list);

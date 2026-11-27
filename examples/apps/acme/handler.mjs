@@ -16,7 +16,7 @@
 // - An ask gets its 200 at once, and its answer goes to
 //   `siren.apps.requests.answer()` without holding up the 200:
 //   a payout method's payout is marked paid with the reference
-//   `acme-<payoutId>`, and a distribution resolver's pool is divided among
+//   `acme-<payout id>`, read from the ask's `data.payout.id`, and a distribution resolver's pool is divided among
 //   its metrics in proportion to each metric's value, in whole minor units.
 //   An ask is counted as handled only once its answer is accepted, so a
 //   repeat after a failed answer is answered again.
@@ -166,8 +166,10 @@ export function describeTell(siren, request) {
 export function answerFor(request) {
   const { data } = request;
   if (request.feature.kind === 'payoutMethod') {
-    if (typeof data.payoutId !== 'number' && typeof data.payoutId !== 'string') throw new Error('a payout ask needs data.payoutId.');
-    return { outcome: 'paid', reference: `acme-${data.payoutId}` };
+    // Siren sends a payout ask's data as { payout: { id, fulfillmentId, attempt }, amount, collaborator }.
+    const payoutId = data.payout !== null && typeof data.payout === 'object' ? data.payout.id : undefined;
+    if (typeof payoutId !== 'number' && typeof payoutId !== 'string') throw new Error('a payout ask needs data.payout.id.');
+    return { outcome: 'paid', reference: `acme-${payoutId}` };
   }
   if (request.feature.kind === 'distributionResolver') {
     if (!Number.isSafeInteger(Number(data.amount)) || !Array.isArray(data.metrics) || data.metrics.length === 0) {

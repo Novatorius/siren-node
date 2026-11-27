@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AppsResource } from '../src/resources/apps';
+import { specServes } from './spec-routes';
 
 /*
  * Slice C6: the architecture note names every app call the slice adds, and
@@ -48,39 +49,27 @@ describe('apps-sdk-container: the note and the mutation list', () => {
   });
 });
 
-/** Each old key and webhook operation in openapi.yaml, and the app route that replaces it. */
-const REPLACED_ROUTES: Array<[string, string]> = [
-  ['listWebhookSubscriptions', 'GET /apps'],
-  ['listWebhookEventTypes', 'GET /apps/events'],
-  ['getWebhookSubscription', 'GET /apps/{key}'],
-  ['updateWebhookSubscription', 'PATCH /apps/{key}'],
-  ['deleteWebhookSubscription', 'PATCH /apps/{key}'],
-  ['sendWebhookTest', 'POST /apps/{key}/test'],
-  ['listWebhookDeliveries', 'GET /apps/{key}/deliveries'],
+/** The app routes that replaced the old key and webhook routes. */
+const REPLACING_ROUTES: Array<[string, string]> = [
+  ['get', '/apps'],
+  ['post', '/apps'],
+  ['get', '/apps/events'],
+  ['get', '/apps/{key}'],
+  ['patch', '/apps/{key}'],
+  ['post', '/apps/{key}/test'],
+  ['get', '/apps/{key}/deliveries'],
+  ['post', '/apps/{key}/key'],
+  ['get', '/apps/scopes'],
+  ['delete', '/apps/{key}/key'],
 ];
 
-/** The text of one operation: from its operationId line to the next operation's. */
-function operation(spec: string, id: string): string {
-  const start = spec.indexOf(`operationId: ${id}\n`);
-  expect(start, id).toBeGreaterThan(-1);
-  const next = spec.indexOf('operationId: ', start + 12);
-  return spec.slice(start, next === -1 ? undefined : next);
-}
-
-describe('apps-sdk-container review fix 7: openapi.yaml marks the old routes deprecated', () => {
-  it.each(REPLACED_ROUTES)('%s is deprecated and names %s', (id, route) => {
-    const text = operation(read('openapi.yaml'), id);
-    expect(text).toMatch(/\n {6}deprecated: true\n/);
-    expect(text.replace(/\s+/g, ' ')).toContain(`Deprecated: an app holds its ${id.includes('ApiKey') ? 'key' : 'address'} now. Use \`${route}\``);
+describe("apps-sdk-container review fix 7: Siren's spec serves the app routes that replaced the old ones", () => {
+  it.each(REPLACING_ROUTES)('openapi.json serves %s %s', (method, path) => {
+    expect(specServes(method, path)).toBe(true);
   });
 
-  it('marks no app route deprecated', () => {
-    const spec = read('openapi.yaml');
-    const apps = spec.slice(spec.indexOf('\n  /apps'));
-    const ids = [...apps.matchAll(/operationId: (\w+)/g)].map((match) => match[1]!);
-    expect(ids.length).toBeGreaterThan(10);
-    for (const id of ids.filter((name) => !REPLACED_ROUTES.some(([old]) => old === name))) {
-      expect(operation(spec, id), id).not.toContain('deprecated: true');
-    }
+  it('openapi.json has no /api-keys list and no POST /webhooks, which Siren answers 404 and 405', () => {
+    expect(specServes('get', '/api-keys')).toBe(false);
+    expect(specServes('post', '/webhooks')).toBe(false);
   });
 });

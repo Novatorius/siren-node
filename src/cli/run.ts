@@ -4,7 +4,21 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_FILE_NAME } from './app-file';
 import * as apply from './commands/apply';
+import * as listen from './commands/listen';
+import * as logs from './commands/logs';
+import * as appsTest from './commands/apps-test';
+import * as fixtures from './commands/fixtures';
+import * as simulate from './commands/simulate';
+import * as conditionSets from './commands/condition-sets';
+import * as enrollers from './commands/enrollers';
+import * as recipes from './commands/recipes';
+import { fieldProblems, fieldsLine } from './validation';
+import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
+import * as records from './commands/resources';
+import { RESOURCE_COMMANDS } from './resources.generated';
+import * as sandbox from './commands/sandbox';
+import * as seed from './commands/seed';
 import * as session from './commands/session';
 import { CommandContext, tokenRefusal } from './context';
 import type { CommandHandler } from './context';
@@ -53,6 +67,36 @@ export const COMMANDS = [
   'apps on',
   'apps off',
   'apps delete',
+  'listen',
+  'trigger',
+  'trigger ask',
+  'logs tail',
+  'simulate',
+  'fixtures',
+  'apps test',
+  'sandbox create',
+  'sandbox list',
+  'sandbox reset',
+  'sandbox inbox',
+  'seed',
+  'recipes preview',
+  'recipes apply',
+  'recipes status',
+  'recipes imports',
+  'recipes export',
+  'recipes catalog',
+  'recipes show',
+  'recipes fetch',
+  'condition-sets list',
+  'condition-sets get',
+  'condition-sets matches',
+  'condition-sets create',
+  'condition-sets conditions',
+  'enrollers list',
+  'enrollers get',
+  'enrollers log',
+  'enrollers run',
+  'enrollers create',
 ] as const;
 
 /** One of {@link COMMANDS}. */
@@ -60,8 +104,13 @@ export type Command = (typeof COMMANDS)[number];
 
 type Options = NonNullable<ParseArgsConfig['options']>;
 
-/** The headings `siren --help` lists the commands under, in order. */
-const GROUPS = ['Getting started', 'Apps', 'Requests', 'Account'] as const;
+/**
+ * The headings `siren --help` lists the commands under, in order, as gh
+ * groups its own. Developer tools holds listen, trigger, logs and the other
+ * commands that test an app against Siren. Records holds the commands
+ * generated from Siren's API, which {@link recordRows} lists.
+ */
+const GROUPS = ['Getting started', 'Apps', 'Requests', 'Developer tools', 'Sandbox', 'Recipes', 'Condition sets', 'Enrollers', 'Records', 'Account'] as const;
 
 /** One command's line: its options, how many arguments follow its words, and its body. */
 interface CommandSpec {
@@ -77,6 +126,8 @@ interface CommandSpec {
   flags: Readonly<Record<string, readonly [string, string]>>;
   /** One or two command lines that do something real. */
   examples: readonly string[];
+  /** A write's body fields, each with the values or type it takes, which `--help` lists under Fields. */
+  fields?: ReadonlyArray<readonly [string, string]>;
   /** The fewest and the most arguments after the command words. */
   positionals: readonly [number, number];
   /** True for a command that sends nothing and so needs no Siren address. */
@@ -122,6 +173,23 @@ const GUIDE_URL = 'https://github.com/Novatorius/siren-node#command-line-tool';
 const APP_FILE_FLAG = ['--app-file <path>', 'The app file beside the env file, if apply saved none'] as const;
 const YES_FLAG = ['--yes', 'Skip the question. Needed with no terminal'] as const;
 const JSON_FLAG = ['--json', 'Print JSON for a script, and nothing else'] as const;
+
+/** The options `trigger` and `simulate` share. */
+const ACTIVITY_OPTIONS: Options = {
+  collaborator: { type: 'string' },
+  program: { type: 'string' },
+  amount: { type: 'string' },
+  currency: { type: 'string' },
+  add: { type: 'string', multiple: true },
+};
+
+const ACTIVITY_FLAGS: Readonly<Record<string, readonly [string, string]>> = {
+  collaborator: ['--collaborator <id>', 'Who to credit, the oldest active one if left out'],
+  program: ['--program <id>', 'Credit someone in this program'],
+  amount: ['--amount <49.99>', "The sale's total or the refund's part, 10.00 by default"],
+  currency: ['--currency <code>', "A currency code, the organization's own if left out"],
+  add: ['--add <key=value>', 'Set one field of the event. Repeat it for more'],
+};
 
 const SPECS: Record<Command, CommandSpec> = {
   signup: {
@@ -404,13 +472,486 @@ const SPECS: Record<Command, CommandSpec> = {
     positionals: [1, 1],
     run: apply.appsDelete,
   },
+  listen: {
+    usage: 'listen [--forward-to <url>] [--app <key>] [--events <types>] [--json]',
+    summary: "While it runs, send the app's asks, tells and events to a handler on this machine. Sandbox only.",
+    group: 'Developer tools',
+    short: 'Send the app\'s requests to this machine',
+    options: { 'forward-to': { type: 'string' }, app: { type: 'string' }, events: { type: 'string' }, json: { type: 'boolean' } },
+    sessionOnly: true,
+    flags: {
+      'forward-to': ['--forward-to <url>', "Where your handler runs, such as localhost:8787/siren. Defaults to the app file's localhost url."],
+      app: ['--app <key>', 'The app to listen for. Defaults to the key in siren.app.json.'],
+      events: ['--events <types>', 'Only these, as a comma list of event types and app.request.'],
+      json: ['--json', 'Print one JSON object per line, for a script.'],
+    },
+    examples: ['siren listen --forward-to localhost:8787/siren', 'siren listen --app acme-payouts --events app.request --json'],
+    positionals: [0, 0],
+    run: listen.listen,
+  },
+  'logs tail': {
+    usage: 'logs tail [flags]',
+    summary: "Print what happens in the organization as it happens: app requests, deliveries, webhooks, events and API calls. Ctrl-C stops.",
+    group: 'Developer tools',
+    short: 'Watch requests, deliveries and API calls live',
+    options: {
+      app: { type: 'string' },
+      feature: { type: 'string' },
+      status: { type: 'string' },
+      type: { type: 'string' },
+      method: { type: 'string' },
+      path: { type: 'string' },
+      source: { type: 'string' },
+      since: { type: 'string' },
+      limit: { type: 'string' },
+      expand: { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      app: ['--app <key>', "Only this app's entries"],
+      feature: ['--feature <key>', "Only this feature's requests and deliveries"],
+      status: ['--status <list>', 'ok, failed or refused, joined by commas'],
+      type: ['--type <list>', 'request, delivery, webhook, event or api'],
+      method: ['--method <verb>', 'Only API calls with this method'],
+      path: ['--path <prefix>', 'Only API calls whose path starts so'],
+      source: ['--source <list>', 'dashboard, api_key, app, cli or site'],
+      since: ['--since <time>', 'Start back in time: 10m, 2h, 1d or an ISO time'],
+      limit: ['--limit <n>', 'Stop after n entries'],
+      expand: ['--expand', 'Show each entry\'s body'],
+      json: ['--json', 'Print one JSON object a line, and nothing else'],
+    },
+    examples: ['siren logs tail --app acme-payouts --status failed', 'siren logs tail --since 1h --limit 50 --json'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: logs.logsTail,
+  },
+  'apps test': {
+    usage: 'apps test <key> [--json]',
+    summary: "Send the app's address one signed test delivery, and print what it answered.",
+    group: 'Developer tools',
+    short: "Send the app's address a test delivery",
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren apps test acme-payouts'],
+    positionals: [1, 1],
+    run: appsTest.appsTest,
+  },
+  trigger: {
+    usage: 'trigger <sale|refund|visit|event> [flags]',
+    summary: 'Make a sale, refund, visit or custom event in a sandbox, and print who earns what and what each app was sent, or why it was sent nothing.',
+    group: 'Developer tools',
+    short: 'Make test activity in a sandbox',
+    options: { ...ACTIVITY_OPTIONS, opportunity: { type: 'string' }, transaction: { type: 'string' }, approve: { type: 'boolean' }, wait: { type: 'string' }, json: { type: 'boolean' } },
+    flags: {
+      ...ACTIVITY_FLAGS,
+      approve: ['--approve', 'Approve the sale\'s conversions too, so Siren tells the apps a program picks'],
+      opportunity: ['--opportunity <id>', "A visit's opportunity to sell on, a new visit if left out"],
+      transaction: ['--transaction <id>', 'The sale a refund undoes, the newest if left out'],
+      wait: ['--wait <seconds>', "How long to wait on an app's answer, 30 by default"],
+      json: JSON_FLAG,
+    },
+    examples: ['siren trigger sale --amount 49.99 --approve', 'siren trigger refund --transaction 3307'],
+    positionals: [1, 1],
+    run: trigger.trigger,
+  },
+  'trigger ask': {
+    usage: 'trigger ask <app> <feature> [--wait <seconds>] [--yes] [--json]',
+    summary: "Send one feature its kind's sample ask, marked as a test, and print the answer. Nothing acts on it.",
+    group: 'Developer tools',
+    short: "Send a feature a test ask",
+    options: { wait: { type: 'string' }, yes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: { wait: ['--wait <seconds>', 'How long to wait for the answer, 60 by default'], yes: ['--yes', 'Send a live sample without asking'], json: JSON_FLAG },
+    examples: ['siren trigger ask acme-crm split-the-pool'],
+    positionals: [2, 2],
+    run: trigger.triggerAsk,
+  },
+  fixtures: {
+    usage: 'fixtures <file.json> [--yes] [--json]',
+    summary: "Run a file of trigger steps in order, each able to read an earlier step's answer.",
+    group: 'Developer tools',
+    short: 'Run a file of trigger steps',
+    options: { yes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: { yes: ['--yes', 'Send live sample asks without asking'], json: JSON_FLAG },
+    examples: ['siren fixtures checkout.json'],
+    positionals: [1, 1],
+    run: fixtures.fixtures,
+  },
+  simulate: {
+    usage: 'simulate [<scenario.json|->] [flags]',
+    summary:
+      "Run a scenario through your organization's setup, keep nothing, and print the transaction, what each program counted, conversions, obligations, and why. Give Beacon's scenario document, {recipe?, actions}, or write one with the flags. The tool never picks who referred the sale.",
+    group: 'Developer tools',
+    short: 'Show what a scenario would make, writing nothing',
+    options: {
+      'referred-by': { type: 'string' },
+      direct: { type: 'boolean' },
+      coupon: { type: 'string' },
+      line: { type: 'string', multiple: true },
+      close: { type: 'string' },
+      'print-scenario': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      'referred-by': ['--referred-by <id|email>', 'Who referred the sale: an id, an export key, or an email or name'],
+      direct: ['--direct', 'A sale nobody referred'],
+      coupon: ['--coupon <code>', 'A coupon used on the sale'],
+      line: ['--line <pairs>', 'A line item, such as "sku=TEE qty=2 price=25.00", repeatable. It also takes name, type, category, value and currency, the organization\'s own if left out'],
+      close: ['--close <distributor>', "Close a distributor's period and show each share of the pot"],
+      'print-scenario': ['--print-scenario', 'Print the scenario the flags write, and run nothing'],
+      json: ['--json', "Print Siren's whole result"],
+    },
+    examples: ['siren simulate --referred-by 39 --line "sku=TEE qty=2 price=25.00"', 'siren simulate sale.json'],
+    positionals: [0, 1],
+    readsOnly: true,
+    run: simulate.simulate,
+  },
+  'sandbox create': {
+    usage: 'sandbox create --from <live org> [flags]',
+    summary:
+      "Copy a live organization's setup into a new sandbox organization: apps and their features, programs, groups and settings. Collaborators, keys, secrets and app addresses stay on the live Siren.",
+    group: 'Sandbox',
+    short: 'Copy a live setup into a sandbox',
+    options: { from: { type: 'string' }, 'live-url': { type: 'string' }, name: { type: 'string' }, json: { type: 'boolean' } },
+    flags: {
+      from: ['--from <slug or id>', 'The live organization to copy'],
+      'live-url': ['--live-url <url>', 'The live Siren, if not your one live session'],
+      name: ['--name <name>', 'The new organization\'s name'],
+      json: JSON_FLAG,
+    },
+    examples: ['siren sandbox create --from acme', 'siren sandbox create --from acme --live-url siren.acme.example'],
+    positionals: [0, 0],
+    run: sandbox.create,
+  },
+  'sandbox list': {
+    usage: 'sandbox list [flags]',
+    summary: 'List your sandbox organizations, and the live organization each was copied from.',
+    group: 'Sandbox',
+    short: 'List your sandbox organizations',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren sandbox list'],
+    positionals: [0, 0],
+    run: sandbox.list,
+  },
+  'sandbox reset': {
+    usage: 'sandbox reset [flags]',
+    summary:
+      'Clear the sandbox organization\'s activity: conversions, obligations, transactions, payouts, requests and deliveries. Its setup stays. You type the slug to confirm.',
+    group: 'Sandbox',
+    short: 'Clear activity, keep setup',
+    options: { confirm: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { confirm: ['--confirm <slug>', 'The slug, for when no terminal can ask'], json: JSON_FLAG },
+    examples: ['siren sandbox reset --org acme-sandbox', 'siren sandbox reset --org acme-sandbox --confirm acme-sandbox'],
+    positionals: [0, 0],
+    run: sandbox.reset,
+  },
+  'sandbox inbox': {
+    usage: 'sandbox inbox [<number>] [flags]',
+    summary: 'List the emails the sandbox caught for the organization, or show one.',
+    group: 'Sandbox',
+    short: "Read the sandbox's caught emails",
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many to list, 1 to 100 (20)'], json: JSON_FLAG },
+    examples: ['siren sandbox inbox --org acme-sandbox', 'siren sandbox inbox 31'],
+    positionals: [0, 1],
+    run: sandbox.inbox,
+  },
+  seed: {
+    usage: 'seed [flags]',
+    summary: 'Fill the sandbox organization with sample sales spread back over past months, and sample collaborators when it has too few.',
+    group: 'Sandbox',
+    short: 'Fill a sandbox with sample sales',
+    options: {
+      sales: { type: 'string' },
+      collaborators: { type: 'string' },
+      months: { type: 'string' },
+      seed: { type: 'string' },
+      'no-wait': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      sales: ['--sales <n>', 'Sales to send, 1 to 200 (50)'],
+      collaborators: ['--collaborators <n>', 'Collaborators to credit, 1 to 25 (10)'],
+      months: ['--months <n>', 'Months back to spread them, 1 to 6 (3)'],
+      seed: ['--seed <n>', 'The same seed makes the same sales'],
+      'no-wait': ['--no-wait', 'Queue the job and stop'],
+      json: JSON_FLAG,
+    },
+    examples: ['siren seed --org acme-sandbox', 'siren seed --sales 120 --months 6'],
+    positionals: [0, 0],
+    run: seed.seed,
+  },
+  'recipes preview': {
+    usage: 'recipes preview <file|-> [flags]',
+    summary: "Show what a recipe would make in this organization, and write nothing. Siren checks it as apply does, so a recipe that previews cleanly applies. - reads it from standard input. Needs siren login: an API key can't use recipes yet.",
+    group: 'Recipes',
+    short: 'Show what a recipe would make',
+    options: { 'configuration-only': { type: 'boolean' }, paused: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: {
+      'configuration-only': ['--configuration-only', 'Leave out the people, mappings and group members'],
+      paused: ['--paused', 'Make every program and distributor inactive'],
+      json: ['--json', "Print Siren's preview as JSON"],
+    },
+    examples: ['siren recipes preview launch.recipe.json', 'siren recipes export | siren recipes preview -'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesPreview,
+  },
+  'recipes apply': {
+    usage: 'recipes apply <file|-> [flags]',
+    summary: "Preview a recipe, ask, apply it, and follow the import to its end, then list each record it made by id. Siren applies the same recipe once, so a retry never imports it twice. Siren makes a recipe's programs, groups and distributors anew on each apply, so --again stops before it would copy one this organization has, unless --copy. Needs siren login: an API key can't apply recipes yet.",
+    group: 'Recipes',
+    short: 'Preview, ask, then apply a recipe',
+    options: {
+      yes: { type: 'boolean' },
+      var: { type: 'string' },
+      again: { type: 'boolean' },
+      copy: { type: 'boolean' },
+      'configuration-only': { type: 'boolean' },
+      paused: { type: 'boolean' },
+      'no-wait': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      yes: YES_FLAG,
+      var: ['--var <key=id,…>', 'The record each of its variables uses, by id'],
+      again: ['--again', 'Apply it again though it was applied before. Stops when that would copy a record here'],
+      copy: ['--copy', 'With --again, make the copies anyway'],
+      'configuration-only': ['--configuration-only', 'Leave out the people, mappings and group members'],
+      paused: ['--paused', 'Make every program and distributor inactive'],
+      'no-wait': ['--no-wait', 'Print the import id and stop, without following it'],
+      json: ['--json', 'Print the preview, or the finished import, as JSON'],
+    },
+    examples: ['siren recipes apply launch.recipe.json', 'siren recipes show gold-partners | siren recipes apply - --yes'],
+    positionals: [1, 1],
+    sessionOnly: true,
+    run: recipes.recipesApply,
+  },
+  'recipes status': {
+    usage: 'recipes status <importId> [--json]',
+    summary: 'Show one recipe import: how far each section got, the people added, updated, skipped and failed, and each failure.',
+    group: 'Recipes',
+    short: 'Show one recipe import',
+    options: { json: { type: 'boolean' } },
+    flags: { json: ['--json', 'Print the whole import, with every person, as JSON'] },
+    examples: ['siren recipes status 7f3a9c'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesStatus,
+  },
+  'recipes imports': {
+    usage: 'recipes imports [--limit <n>] [--json]',
+    summary: "List this organization's recent recipe imports, newest first.",
+    group: 'Recipes',
+    short: 'List recent recipe imports',
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many, 1 to 100. Siren sends 25 unless told'], json: JSON_FLAG },
+    examples: ['siren recipes imports --limit 5'],
+    positionals: [0, 0],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesImports,
+  },
+  'recipes export': {
+    usage: 'recipes export [--include <sections>] [--sizes]',
+    summary: "Print this organization's setup as a recipe, to save, edit, or apply elsewhere. What it leaves out, such as drafts, is named on standard error.",
+    group: 'Recipes',
+    short: "Print this organization's setup as a recipe",
+    options: { include: { type: 'string' }, sizes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: {
+      include: ['--include <a,b>', 'Only these sections, such as programs,collaboratorGroups'],
+      sizes: ['--sizes', 'Print how many records each section holds, and no recipe'],
+      json: ['--json', 'With --sizes, print the counts as JSON'],
+    },
+    examples: ['siren recipes export > setup.recipe.json', 'siren recipes export --include programs,programGroups'],
+    positionals: [0, 0],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesExport,
+  },
+  'recipes catalog': {
+    usage: 'recipes catalog [filters] [--json]',
+    summary: "List Beacon's ready-made recipes, with whether each fits this organization's store and plan.",
+    group: 'Recipes',
+    short: 'List ready-made recipes',
+    options: {
+      type: { type: 'string' },
+      goal: { type: 'string' },
+      tier: { type: 'string' },
+      integrations: { type: 'string' },
+      features: { type: 'string' },
+      search: { type: 'string' },
+      limit: { type: 'string' },
+      json: { type: 'boolean' },
+    },
+    flags: {
+      type: ['--type <type>', 'Such as affiliate or referral'],
+      goal: ['--goal <goal>', 'What the program is for'],
+      tier: ['--tier <tier>', 'The plan it needs'],
+      integrations: ['--integrations <a,b>', 'The stores and tools it works with'],
+      features: ['--features <a,b>', 'The Siren features it needs'],
+      search: ['--search <words>', 'Words in its name or description'],
+      limit: ['--limit <n>', 'How many, 1 to 100'],
+      json: JSON_FLAG,
+    },
+    examples: ['siren recipes catalog --type referral', 'siren recipes catalog --search partners'],
+    positionals: [0, 0],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesCatalog,
+  },
+  'recipes show': {
+    usage: 'recipes show <catalogId>',
+    summary: 'Print one ready-made recipe from the catalog, to save, edit and apply.',
+    group: 'Recipes',
+    short: 'Print one ready-made recipe',
+    options: {},
+    flags: {},
+    examples: ['siren recipes show gold-partners > partners.recipe.json'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesShow,
+  },
+  'recipes fetch': {
+    usage: 'recipes fetch <token|link>',
+    summary: 'Print the recipe a Beacon handoff carries, from its token or the link Beacon gave.',
+    group: 'Recipes',
+    short: 'Print the recipe a Beacon handoff carries',
+    options: {},
+    flags: {},
+    examples: ['siren recipes fetch <link> > beacon.recipe.json'],
+    positionals: [1, 1],
+    readsOnly: true,
+    sessionOnly: true,
+    run: recipes.recipesFetch,
+  },
+  'condition-sets list': {
+    usage: 'condition-sets list [--json]',
+    summary: 'List the condition sets, the saved lists of conditions Siren checks each day, such as joined in the last 30 days, with when Siren last checked each.',
+    group: 'Condition sets',
+    short: 'List the condition sets',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets list'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: conditionSets.conditionSetsList,
+  },
+  'condition-sets get': {
+    usage: 'condition-sets get <id> [--json]',
+    summary: "Show one condition set: its conditions in Siren's words, when Siren last checked it, and the enrollers that use it.",
+    group: 'Condition sets',
+    short: 'Show one condition set',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets get 1'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: conditionSets.conditionSetsGet,
+  },
+  'condition-sets matches': {
+    usage: 'condition-sets matches (<id> | <file> | -) [--limit <n>] [--json]',
+    summary: 'Count who matches a condition set now and name the first few. Given a file, or - for standard input, it counts who would match conditions not yet saved, and saves nothing.',
+    group: 'Condition sets',
+    short: 'Count and name who matches now',
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many people to name, 1 to 25 (5)'], json: JSON_FLAG },
+    examples: ['siren condition-sets matches 1', 'siren condition-sets matches draft.json'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: conditionSets.conditionSetsMatches,
+  },
+  'condition-sets create': {
+    usage: 'condition-sets create (<file> | -) [--json]',
+    summary: 'Make a condition set from JSON with name and conditions. siren condition-sets conditions lists the conditions and the values each takes, and siren condition-sets matches <file> counts its matches before you make it.',
+    group: 'Condition sets',
+    short: 'Make a condition set from JSON',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets create joined-this-month.json'],
+    positionals: [1, 1],
+    run: conditionSets.conditionSetsCreate,
+  },
+  'condition-sets conditions': {
+    usage: 'condition-sets conditions [--json]',
+    summary: 'List the conditions a set can use, each with its sentence and the values it takes.',
+    group: 'Condition sets',
+    short: 'List the conditions a set can use',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren condition-sets conditions'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: conditionSets.conditionSetsConditions,
+  },
+  'enrollers list': {
+    usage: 'enrollers list [--status <status>] [--json]',
+    summary: 'List the enrollers, the rules that add people to programs, distributors and groups, or take them out, when something happens to them.',
+    group: 'Enrollers',
+    short: 'List the enrollers',
+    options: { status: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { status: ['--status <status>', 'Only enrollers in this status, such as active'], json: JSON_FLAG },
+    examples: ['siren enrollers list', 'siren enrollers list --status active'],
+    positionals: [0, 0],
+    readsOnly: true,
+    run: enrollers.enrollersList,
+  },
+  'enrollers get': {
+    usage: 'enrollers get <id> [--json]',
+    summary: 'Show one enroller: what starts it, what it does, and its latest log lines.',
+    group: 'Enrollers',
+    short: 'Show one enroller',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren enrollers get 1'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: enrollers.enrollersGet,
+  },
+  'enrollers log': {
+    usage: 'enrollers log <id> [--limit <n>] [--json]',
+    summary: 'Show what an enroller did, newest first: who it added or took out, and why it skipped someone.',
+    group: 'Enrollers',
+    short: 'Show what an enroller did',
+    options: { limit: { type: 'string' }, json: { type: 'boolean' } },
+    flags: { limit: ['--limit <n>', 'How many lines, 1 to 100 (20)'], json: JSON_FLAG },
+    examples: ['siren enrollers log 1'],
+    positionals: [1, 1],
+    readsOnly: true,
+    run: enrollers.enrollersLog,
+  },
+  'enrollers run': {
+    usage: 'enrollers run <id> [--yes] [--json]',
+    summary: "Run an enroller now on everyone who matches. It says how many people would move first, then asks. It moves people, so a live organization needs --live.",
+    group: 'Enrollers',
+    short: 'Run an enroller now',
+    options: { yes: { type: 'boolean' }, json: { type: 'boolean' } },
+    flags: { yes: YES_FLAG, json: JSON_FLAG },
+    examples: ['siren enrollers run 2'],
+    positionals: [1, 1],
+    run: enrollers.enrollersRun,
+  },
+  'enrollers create': {
+    usage: 'enrollers create (<file> | -) [--json]',
+    summary: 'Make an enroller from JSON: name, triggerId and triggerArgs, and the programs, distributors or groups it adds people to or takes them out of. siren enrollers get <id> --json shows the fields.',
+    group: 'Enrollers',
+    short: 'Make an enroller from JSON',
+    options: { json: { type: 'boolean' } },
+    flags: { json: JSON_FLAG },
+    examples: ['siren enrollers create welcome.json'],
+    positionals: [1, 1],
+    run: enrollers.enrollersCreate,
+  },
 };
 
 /** The command table, for tests that hold other lists to it. */
 export const COMMAND_SPECS: Readonly<Record<Command, Readonly<CommandSpec>>> = SPECS;
 
 /** Every option any command takes, for the first read of the line, which finds the command. */
-const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, ...Object.values(SPECS).map((spec) => spec.options));
+const ALL_OPTIONS: Options = Object.assign({ version: { type: 'boolean', short: 'v' } }, GLOBAL, records.OPTIONS, ...Object.values(SPECS).map((spec) => spec.options));
 
 /** `text` broken into lines of at most `width` characters, at spaces. */
 const wrap = wrapWords;
@@ -452,6 +993,21 @@ function commandRows(style: Style, commands: readonly Command[]): string[] {
   );
 }
 
+/** The record commands, generated from Siren's API, as the top help lists them. */
+function recordRows(style: Style): string[] {
+  return columns(
+    [
+      ['<resource> <op>', 'List, get, create, update or delete a record'],
+      ['get <path>', 'Read any route, such as get /programs'],
+      ['post <path>', 'Write to any route, and put, patch and delete'],
+      ['resources', 'List the resources and their operations'],
+    ],
+    22,
+    (text) => style.bold(text),
+    style.width,
+  );
+}
+
 /** The lines of LEARN MORE. */
 function learnMore(style: Style, perCommand: boolean): string[] {
   return [
@@ -466,7 +1022,11 @@ function helpText(style: Style): string {
     'Declare Siren apps, and watch and answer what Siren sends them.',
     '',
     ...section(style, 'Usage', ['  siren <command> [flags]']),
-    ...GROUPS.flatMap((group) => section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group)))),
+    ...GROUPS.flatMap((group) =>
+      group === 'Records'
+        ? section(style, group, recordRows(style))
+        : section(style, group, commandRows(style, COMMANDS.filter((command) => SPECS[command].group === group))),
+    ),
     ...section(style, 'Flags', columns([...GLOBAL_FLAGS, ['-v, --version', 'Show the version']], 22, (text) => text, style.width)),
     ...section(
       style,
@@ -490,6 +1050,42 @@ function helpText(style: Style): string {
 }
 
 /** The text `siren apps` prints: the app and request commands, in the same shape. */
+/** The words that start a two-word command, such as `apps` in `siren apps list`. */
+const GROUP_WORDS = ['apps', 'logs', 'sandbox', 'recipes', 'condition-sets', 'enrollers'] as const;
+
+/** The text `siren recipes` prints: what recipes are for, and the commands. */
+function recipesHelpText(style: Style): string {
+  return [
+    ...wrap("Preview and apply a recipe, a file that sets up programs, groups and people at once, follow its import, and export this organization's setup as one. Needs siren login: an API key can't use recipes yet.", style.width),
+    '',
+    ...section(style, 'Usage', ['  siren recipes <command> [flags]']),
+    ...section(style, 'Recipes', commandRows(style, COMMANDS.filter((command) => command.startsWith('recipes ')))),
+    ...section(style, 'Learn more', learnMore(style, true)),
+  ].join('\n');
+}
+
+/** What `siren sandbox`, `siren logs`, `siren condition-sets` and `siren enrollers` print alone: what they are, and their commands. */
+const GROUP_SUMMARIES = {
+  // Review round 1, C16: siren sandbox and siren logs were unknown commands alone and with --help.
+  sandbox: 'Copy a live setup into a sandbox organization, list your sandboxes, clear their activity, and read the emails a sandbox caught.',
+  logs: 'Watch what happens in the organization as it happens: app requests, deliveries, webhooks, events and API calls.',
+  'condition-sets': "Condition sets are saved lists of conditions Siren checks each day, such as joined in the last 30 days. See who matches one now, and make one from JSON. Siren's plan must include them.",
+  enrollers: 'Enrollers add people to programs, distributors and groups, or take them out, when something happens to them. See what each does and did, and run one now. A Siren without enrollers says so.',
+} as const;
+
+/** The heading each group's help lists its commands under. */
+const GROUP_TITLES: Readonly<Record<keyof typeof GROUP_SUMMARIES, string>> = { sandbox: 'Sandbox', logs: 'Logs', 'condition-sets': 'Condition sets', enrollers: 'Enrollers' };
+
+function groupHelpText(style: Style, group: keyof typeof GROUP_SUMMARIES): string {
+  return [
+    ...wrap(GROUP_SUMMARIES[group], style.width),
+    '',
+    ...section(style, 'Usage', [`  siren ${group} <command> [flags]`]),
+    ...section(style, GROUP_TITLES[group], commandRows(style, COMMANDS.filter((command) => command.startsWith(`${group} `)))),
+    ...section(style, 'Learn more', learnMore(style, true)),
+  ].join('\n');
+}
+
 function appsHelpText(style: Style): string {
   const apps = COMMANDS.filter((command) => command.startsWith('apps ') && SPECS[command].group !== 'Requests');
   const requests = COMMANDS.filter((command) => SPECS[command].group === 'Requests');
@@ -511,6 +1107,8 @@ function commandHelp(style: Style, spec: CommandSpec): string {
     '',
     ...section(style, 'Usage', [`  siren ${spec.usage}`]),
     ...(own.length > 0 ? section(style, 'Flags', columns(own, 22, (text) => text, style.width)) : []),
+    // Review round 1, C20: a write lists the fields -d takes, with their values.
+    ...(spec.fields !== undefined && spec.fields.length > 0 ? section(style, 'Fields', columns(spec.fields.map(([name, text]) => [`${name}=`, text] as const), 22, (text) => text, style.width)) : []),
     // CLI pass 3: the global flags once by name, since siren --help explains each.
     ...section(style, 'Global flags', wrap(`${globalFlagNames()} work with every command. siren --help explains them.`, style.width - 2).map((line) => `  ${line}`)),
     ...section(style, 'Examples', spec.examples.map((example) => `  ${style.dim('$')} ${example}`)),
@@ -557,7 +1155,10 @@ async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
 
 /** The command a line names, from its words, or {@link CliUsageError} with the nearest real one. */
 function commandNamed(words: readonly string[]): Command {
-  const name = words[0] === 'apps' ? `apps ${words[1] ?? ''}`.trim() : (words[0] ?? '');
+  // A first word that is a command alone and starts a two-word one, such as trigger and trigger ask, is the two-word one when its second word matches.
+  const pair = `${words[0] ?? ''} ${words[1] ?? ''}`.trim();
+  if (words[0] !== 'apps' && (COMMANDS as readonly string[]).includes(pair)) return pair as Command;
+  const name = (GROUP_WORDS as readonly string[]).includes(words[0] ?? '') ? `${words[0]} ${words[1] ?? ''}`.trim() : (words[0] ?? '');
   if ((COMMANDS as readonly string[]).includes(name)) return name as Command;
   // A name cut short, such as apps rotate, names every command it starts. Otherwise the nearest by edit distance.
   // CLI pass 3, should-fix 6: "app list" means apps list, so a group word near apps is read as apps with the rest of the line.
@@ -566,10 +1167,17 @@ function commandNamed(words: readonly string[]): Command {
     const guess = (COMMANDS as readonly string[]).includes(asApps) ? asApps : nearest(asApps, COMMANDS);
     throw new CommandUnknown('siren', words[0] ?? '', guess === undefined ? [] : [guess]);
   }
+  // A record word cut by a typo, such as colaborators, names the resource it was near, with its operation (review round 1, C16).
+  const firstWords = [...new Set(COMMANDS.map((command) => command.split(' ')[0]!))];
+  const record = words[0] === undefined || nearest(words[0], firstWords) !== undefined ? undefined : nearest(words[0], RESOURCE_COMMANDS.map((resource) => resource.name));
+  if (record !== undefined && record !== words[0]) {
+    const op = words[1];
+    throw new CommandUnknown('siren', words[0] ?? '', [op !== undefined && records.commandFor([record, op]) !== undefined ? `${record} ${op}` : record]);
+  }
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
   const guesses = started.length > 0 && started.length <= 4 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
-  const group = words[0] === 'apps' && words.length > 1 ? 'siren apps' : 'siren';
-  const word = group === 'siren apps' ? (words[1] ?? '') : name;
+  const group: CommandUnknown['group'] = (words[0] === 'apps' || words[0] === 'recipes') && words.length > 1 ? `siren ${words[0]}` : 'siren';
+  const word = group === 'siren' ? name : (words[1] ?? '');
   throw new CommandUnknown(group, word, guesses);
 }
 
@@ -595,7 +1203,7 @@ function commandNamed(words: readonly string[]): Command {
  */
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {
   let spec: CommandSpec | undefined;
-  let name: Command | undefined;
+  let name: string | undefined;
   let login = 'siren login';
   // What a refusal names: the arguments typed after the command, and its hint command lines.
   let typedArgs: readonly string[] = [];
@@ -631,9 +1239,24 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       io.stdout(appsHelpText(styleFor(io, 'stdout', {})));
       return 0;
     }
+    if (words[0] === 'recipes' && words.length === 1) {
+      io.stdout(recipesHelpText(styleFor(io, 'stdout', {})));
+      return 0;
+    }
+    if ((words[0] === 'condition-sets' || words[0] === 'enrollers' || words[0] === 'sandbox' || words[0] === 'logs') && words.length === 1) {
+      io.stdout(groupHelpText(styleFor(io, 'stdout', {}), words[0]));
+      return 0;
+    }
 
-    name = commandNamed(words);
-    spec = SPECS[name];
+    const record = records.commandFor(words);
+    if (record !== undefined) {
+      name = record.name;
+      spec = record.spec;
+    } else {
+      const named = commandNamed(words);
+      name = named;
+      spec = SPECS[named];
+    }
     if (wantsHelp) {
       io.stdout(commandHelp(styleFor(io, 'stdout', {}), spec));
       return 0;
@@ -659,7 +1282,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const flags = targetFlags(values);
     const context = spec.offline
       ? null
-      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
+      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, typedLine(argv, name));
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     targetUrl = context?.target.baseUrl;
     // A command that sends nothing names the Siren the next command would reach, the one logged in to included,
@@ -727,11 +1350,38 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
 }
 
 /**
+ * The command line as typed, for a refusal that offers it again, such as
+ * `collaborators update 99999 -d nickname=x`: every argument and flag but
+ * the ones {@link commandLine} adds back, --sandbox, --live and --base-url,
+ * each quoted for a shell. It used to keep the arguments alone, so the
+ * --live hint dropped every -d (review round 1, C10).
+ */
+function typedLine(argv: readonly string[], name: string): string {
+  const words = name.split(' ');
+  const rest: string[] = [];
+  let matched = 0;
+  for (let at = 0; at < argv.length; at++) {
+    const arg = argv[at]!;
+    if (arg === '--sandbox' || arg === '--live' || arg.startsWith('--base-url=')) continue;
+    if (arg === '--base-url') {
+      at++;
+      continue;
+    }
+    if (matched < words.length && arg === words[matched]) {
+      matched++;
+      continue;
+    }
+    rest.push(records.shellWord(arg));
+  }
+  return [name, ...rest].join(' ');
+}
+
+/**
  * Any error as a refusal the style module prints: a `CliRefusal` as it is,
  * an error from Siren with its message as the headline and its status and
  * code as detail, and anything else by its message.
  */
-function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: Command | undefined; args: readonly string[]; command: (words: string) => string }): CliRefusal {
+function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: string | undefined; args: readonly string[]; command: (words: string) => string }): CliRefusal {
   if (error instanceof CliRefusal) return error;
   const message = (error instanceof Error ? error.message : String(error)).replace(/^Siren: /, '');
   const host = baseUrl === undefined ? 'Siren' : hostName(baseUrl);
@@ -739,9 +1389,22 @@ function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: C
     return new CliRefusal(`Lost the connection to ${host}.`, { why: message, fixText: 'Try again. --verbose shows the request.', detail: httpDetail(error, baseUrl) });
   }
   if (!(error instanceof SirenError)) {
-    return new CliRefusal('Something went wrong inside the tool.', { why: message, fixText: 'Run it again with --verbose, and send the output to Siren support.' });
+    // --verbose adds the stack, which is what support needs from a fault inside the tool.
+    const stack = error instanceof Error && typeof error.stack === 'string' ? error.stack.split('\n').slice(1).map((line) => line.trimEnd()) : [];
+    return new CliRefusal('Something went wrong inside the tool.', { why: message, fixText: 'Run it again with --verbose, and send the output to Siren support.', detail: stack });
   }
   const detail = httpDetail(error, baseUrl);
+  // A validation failure on any hand-written command gets the same rows as a generated one.
+  const problems = fieldProblems(error);
+  if (problems.length > 0) {
+    return new CliRefusal(`${host} refused it.`, {
+      why: fieldsLine(problems),
+      problems,
+      problemsAs: 'rows',
+      ...(typed.name === undefined ? { fixText: 'Fix them and run again.' } : { fixLead: `Fix ${problems.length === 1 ? 'it' : 'them'} and run again.`, fix: `siren ${typed.name} --help`, fixWords: 'lists what it takes' }),
+      detail,
+    });
+  }
   // Siren's 404s name no key or id, so the tool names the one typed (CLI pass 3, should-fix 10).
   const [first] = typed.args;
   if (error instanceof NotFoundError && first !== undefined && typed.name?.startsWith('apps ') === true) {
@@ -759,7 +1422,7 @@ function asRefusal(error: unknown, baseUrl: string | undefined, typed: { name: C
 /** A command name the tool does not know, with the group it was typed in and the nearest real commands. */
 class CommandUnknown extends CliUsageError {
   constructor(
-    readonly group: 'siren' | 'siren apps',
+    readonly group: 'siren' | 'siren apps' | 'siren recipes',
     readonly word: string,
     guesses: readonly string[],
   ) {

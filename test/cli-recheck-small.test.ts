@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli/run';
-import { harness } from './cli-fakes';
+import { harness, session } from './cli-fakes';
 import { APP_KEY, appRecord } from './apps-siren-answers';
 import { reply } from './http-fakes';
 
@@ -41,9 +41,11 @@ describe("re-check should-fix 8: apps show reads the folder's app, and counts ar
 });
 
 describe('re-check should-fix 9: a missing environment variable is fixed in .env, not the file', () => {
+  // On a live organization: a sandbox may leave the url unset for siren listen (the developer tools).
   it('names the variable and .env in the fix', async () => {
-    const h = harness([]);
-    h.signedIn();
+    const UAT = 'https://uat.example.com/siren/v1';
+    const h = harness([], { edition: 'production', env: { SIREN_BASE_URL: UAT } });
+    h.signedIn({ [UAT]: session({ edition: 'production', baseUrl: UAT }) });
     h.write('siren.app.json', appFile);
     expect(await runCli(['apps', 'diff'], tty(h))).toBe(1);
     expect(strip(h.err()).trimEnd().split('\n').at(-1)).toBe('› Set SIREN_APP_URL in .env, then run siren apps diff again.');

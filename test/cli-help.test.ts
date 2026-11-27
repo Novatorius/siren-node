@@ -28,16 +28,46 @@ describe('help: siren --help', () => {
   it('has the shape of gh help: description, usage, grouped commands, flags, examples and learn more', async () => {
     const text = await helpOf(['--help']);
     expect(text.split('\n')[0]).toMatch(/^[A-Z].+\.$/);
-    expect(sections(text)).toEqual(['USAGE', 'GETTING STARTED', 'APPS', 'REQUESTS', 'ACCOUNT', 'FLAGS', 'ENVIRONMENT', 'EXAMPLES', 'LEARN MORE']);
+    expect(sections(text)).toEqual([
+      'USAGE',
+      'GETTING STARTED',
+      'APPS',
+      'REQUESTS',
+      'DEVELOPER TOOLS',
+      'SANDBOX',
+      'RECIPES',
+      'CONDITION SETS',
+      'ENROLLERS',
+      'RECORDS',
+      'ACCOUNT',
+      'FLAGS',
+      'ENVIRONMENT',
+      'EXAMPLES',
+      'LEARN MORE',
+    ]);
     expect(text).toContain('https://github.com/Novatorius/siren-node#command-line-tool');
     await expect(text).toMatchFileSnapshot('./__snapshots__/cli-help-top.txt');
   });
 
+  it('puts listen, trigger and logs under DEVELOPER TOOLS, and sandbox and seed under SANDBOX', async () => {
+    const text = await helpOf(['--help']);
+    const under = (heading: string): string[] => {
+      const lines = text.split('\n');
+      const start = lines.indexOf(heading);
+      const end = lines.indexOf('', start);
+      return lines.slice(start + 1, end).map((line) => line.trim().split(/ {2,}/)[0]!);
+    };
+    expect(under('DEVELOPER TOOLS')).toEqual(['listen', 'trigger', 'trigger ask', 'logs tail', 'simulate', 'fixtures', 'apps test']);
+    expect(under('SANDBOX')).toEqual(['sandbox create', 'sandbox list', 'sandbox reset', 'sandbox inbox', 'seed']);
+    expect(under('RECORDS')).toEqual(['<resource> <op>', 'get <path>', 'post <path>', 'resources']);
+  });
+
   it('lists every command once, on one line, with its name and a short summary aligned', async () => {
     const text = await helpOf(['--help']);
-    const listed = text.split('\n').filter((line) => /^ {2}(apps )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
+    const listed = text.split('\n').filter((line) => /^ {2}((apps|logs|trigger|sandbox|recipes|condition-sets|enrollers) )?[a-z-]+ {2,}\S/.test(line) && !line.trimStart().startsWith('-'));
     const names = listed.map((line) => line.trim().split(/ {2,}/)[0]);
-    expect([...names].sort()).toEqual([...COMMANDS].sort());
+    // RECORDS adds `resources` beside its lines with arguments, which the pattern skips.
+    expect([...names].sort()).toEqual([...COMMANDS, 'resources'].sort());
     expect(new Set(listed.map((line) => line.search(/ {2,}\S/) + line.slice(line.search(/ {2,}\S/)).search(/\S/))).size).toBe(1);
   });
 
@@ -46,6 +76,9 @@ describe('help: siren --help', () => {
     const apps = await helpOf(['apps']);
     expect(sections(apps)).toEqual(['USAGE', 'APPS', 'REQUESTS', 'LEARN MORE']);
     expect(apps).not.toContain('  login');
+    const recipes = await helpOf(['recipes']);
+    expect(sections(recipes)).toEqual(['USAGE', 'RECIPES', 'LEARN MORE']);
+    expect(recipes).toContain("an API key can't use recipes yet");
   });
 });
 

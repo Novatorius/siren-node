@@ -84,6 +84,8 @@ interface Screen {
 }
 
 const signedLive = (h: H) => h.signedIn({ [UAT]: session({ edition: 'production', baseUrl: UAT }) });
+/** A live Siren named in the environment, so a hint carries --live and no --base-url. */
+const LIVE_ENV = { edition: 'production' as const, env: { SIREN_BASE_URL: UAT } };
 const usesOf = (uses: number) => {
   const [notify, ledger] = appRecord().features;
   return appRecord({ features: [{ ...notify!, uses, openRequests: 0, usedBy: [] }, { ...ledger!, uses: 0, openRequests: 0, usedBy: [] }] });
@@ -100,10 +102,12 @@ const SCREENS: Screen[] = [
   },
   { name: 'apply with no file', argv: ['apps', 'apply'], setup: (h) => h.signedIn(), headline: "There's no siren.app.json here." },
   {
+    // On a live organization: a sandbox may leave the url unset for siren listen (the developer tools).
     name: 'apply with the url variable unset',
-    argv: ['apps', 'apply'],
+    argv: ['apps', 'apply', '--live'],
+    options: LIVE_ENV,
     setup: (h) => {
-      h.signedIn();
+      signedLive(h);
       h.write('siren.app.json', exampleFile);
     },
     headline: 'siren.app.json has a problem.',
@@ -163,27 +167,28 @@ describe('cli pass 3, must-fix 2: every error a person meets has three parts and
 });
 
 describe('cli pass 3, must-fix 3: problems in siren.app.json print under the ✗ headline', () => {
+  // On a live organization: a sandbox may leave the url unset for siren listen (the developer tools).
   it('prints the headline first, then each place dim with its message under it, then the fix', async () => {
-    const h = harness([]);
-    h.signedIn();
+    const h = harness([], LIVE_ENV);
+    signedLive(h);
     h.write('siren.app.json', exampleFile);
-    expect(await runCli(['apps', 'apply'], tty(h))).toBe(1);
+    expect(await runCli(['apps', 'apply', '--live'], tty(h))).toBe(1);
     const lines = strip(h.err()).trimEnd().split('\n');
     expect(lines[0]).toBe('✗ siren.app.json has a problem.');
     expect(lines[1]).toBe('  The tool checks the file before it sends anything, so nothing was sent.');
     expect(lines[2]).toMatch(/^ {2}siren\.app\.json:\d+:\d+$/);
     expect(lines[3]).toMatch(/^ {4}apps\.acme-payouts\.url needs the environment variable SIREN_APP_URL/);
     // Pass 3 re-check, should-fix 9: the one problem is a variable that isn't set, so the fix names .env.
-    expect(lines.at(-1)).toBe('› Set SIREN_APP_URL in .env, then run siren apps apply again.');
+    expect(lines.at(-1)).toBe('› Set SIREN_APP_URL in .env, then run siren apps apply --live again.');
     expect(h.err()).toMatch(/\u001b\[2msiren\.app\.json:\d+:\d+\u001b\[0m/);
     expect(h.out()).toBe('');
   });
 
   it('keeps one file:line:col line per problem when piped, for an editor or a script', async () => {
-    const h = harness([]);
-    h.signedIn();
+    const h = harness([], LIVE_ENV);
+    signedLive(h);
     h.write('siren.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply'])).toBe(1);
+    expect(await h.run(['apps', 'apply', '--live'])).toBe(1);
     expect(h.err()).toMatch(/^siren: siren\.app\.json has a problem\. .*\nsiren\.app\.json:\d+:\d+: apps\.acme-payouts\.url needs the environment variable SIREN_APP_URL/);
   });
 });

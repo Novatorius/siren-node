@@ -9,6 +9,7 @@ import {
   HttpTransport,
 } from './http';
 import { AppsResource } from './resources/apps';
+import { RecipesResource } from './resources/recipes';
 import { CollaboratorGroupsResource } from './resources/collaborator-groups';
 import { CollaboratorsResource } from './resources/collaborators';
 import { CreditsResource } from './resources/credits';
@@ -104,6 +105,12 @@ export class Siren {
    * own API key.
    */
   readonly apps: AppsResource;
+  /**
+   * Recipes: preview and apply one, follow its import, export the org's
+   * setup as one, and read Beacon's ready-made recipes. A signed-in
+   * member's session only, since an API key cannot call these routes yet.
+   */
+  readonly recipes: RecipesResource;
 
   /**
    * Reads only the options object's own properties: `apiKey`,
@@ -175,6 +182,7 @@ export class Siren {
     this.mappings = new MappingsResource(http);
     this.settings = new SettingsResource(http);
     this.apps = new AppsResource(http);
+    this.recipes = new RecipesResource(http);
   }
 }
 

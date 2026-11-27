@@ -1,0 +1,51 @@
+{
+  "recorded": "siren-pr-1250-cloud.uat.novatori.us (pkt/devtools), uat-org, 2026-11-25: GET /collaborators/1, GET /programs/1, and GET /notes for each with number=3",
+  "collaborator": {
+    "id": 1,
+    "status": "active",
+    "fullName": "Neva Volkman",
+    "nickname": "nevavolkman2715",
+    "email": "nevavolkman2715@example.com",
+    "referralCode": "KHK",
+    "programs": [
+      {
+        "id": 1,
+        "name": "Referral Program"
+      },
+      {
+        "id": 2,
+        "name": "Creator Program"
+      }
+    ],
+    "distributors": [
+      {
+        "id": 1,
+        "name": "Partner Revenue Share"
+      }
+    ],
+    "createdDate": "2026-11-25T18:57:27+00:00",
+    "modifiedDate": "2026-11-25T18:57:27+00:00",
+    "fields": {}
+  },
+  "program": {
+    "id": 1,
+    "name": "Referral Program",
+    "description": "Pays a share of every referred sale.",
+    "status": "active",
+    "units": "USD",
+    "incentiveType": {
+      "id": "saleTransactionPercentage",
+      "name": "Percentage of Transaction"
+    },
+    "incentiveResolverType": {
+      "id": "newestBindingWins",
+      "name": "Newest engagement wins"
+    },
+    "createdDate": "2026-11-25T18:57:27+00:00",
+    "modifiedDate": "2026-11-25T18:57:27+00:00",
+    "incentiveTypeArgs": {
+      "activeConversionTypes": "[\"sale\",\"renewal\"]",
+      "transactionPercent": "10"
+    }
+  }
+}

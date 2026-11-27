@@ -223,6 +223,12 @@ export interface SirenRequest {
    */
   headers?: Record<string, string>;
   /**
+   * Statuses outside 2xx handed back as the response in place of an error,
+   * for a route whose refusal body is itself the answer, such as the 422 a
+   * scenario simulation sends with every recipe problem in it.
+   */
+  answers?: readonly number[];
+  /**
    * Milliseconds for each send of this request, the resend after a 401
    * included, in place of the client's `timeout`. The resource checks it.
    */
@@ -437,7 +443,7 @@ export class HttpTransport {
       }
 
       const response = toApiResponse(reply);
-      if (response.status >= 200 && response.status < 300) return response;
+      if ((response.status >= 200 && response.status < 300) || req.answers?.includes(response.status)) return response;
 
       if (response.status === 401 && !refreshed) {
         refreshed = true;

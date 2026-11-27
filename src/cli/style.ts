@@ -130,6 +130,23 @@ function keptWhole(command: string, width: number): string {
   return visibleLength(command) <= width - 10 ? command.replace(/ /g, '\u00a0') : command;
 }
 
+/** The start of `text` that covers `columns` visible columns, escape codes kept. */
+function sliceVisible(text: string, columns: number): string {
+  let seen = 0;
+  let at = 0;
+  while (at < text.length && seen < columns) {
+    const code = /^\u001b\[[\d;?]*[A-Za-z]/.exec(text.slice(at));
+    if (code !== null) {
+      at += code[0].length;
+      continue;
+    }
+    const char = String.fromCodePoint(text.codePointAt(at)!);
+    at += char.length;
+    seen += 1;
+  }
+  return text.slice(0, at);
+}
+
 /** The narrowest a table column is made before its cells wrap, unless its header or values are narrower. */
 const MIN_COLUMN = 12;
 
@@ -232,6 +249,26 @@ export class Style {
     return this.rich ? `${RED}${BOLD}${this.wrap('✗ ', line)}${RESET}` : line;
   }
 
+  /**
+   * One line of aligned columns, or of text, wrapped at word boundaries to
+   * the terminal's width in a terminal, and whole through a pipe or with
+   * --json. A line that is too long breaks inside its last column, the one
+   * after its last run of two or more spaces, and each further line starts
+   * under that column. Nothing is ever cut (CLI review round 1, C8).
+   */
+  fold(line: string): string {
+    if (!this.rich || visibleLength(line) <= this.width) return line;
+    const plain = line.replace(/\u001b\[[\d;?]*[A-Za-z]/g, '');
+    const gap = [...plain.matchAll(/\S( {2,})(?=\S)/g)].at(-1);
+    let start = gap === undefined ? 0 : gap.index! + 1 + gap[1]!.length;
+    if (start > this.width - 20) start = 0;
+    const lead = start === 0 ? (plain.match(/^ */)?.[0] ?? '') : '';
+    const head = start === 0 ? lead : sliceVisible(line, start);
+    const tail = start === 0 ? line.slice(line.length - line.trimStart().length) : line.slice(head.length);
+    const indent = start === 0 ? `${lead}  ` : ' '.repeat(start);
+    return hanging(head, tail, indent, this.width);
+  }
+
   /** "! The key is not saved.", wrapped to the terminal's width. */
   warning(line: string): string {
     return this.rich ? this.wrap(`${this.amber('!')} `, line) : line;
@@ -258,7 +295,15 @@ export class Style {
       return `siren: ${refusal.message}\n${[...problems.map((problem) => `${problem.at}: ${problem.message}`), ...extra].map((line) => `${line}\n`).join('')}`;
     }
     const lines = [this.failure(refusal.headline), this.wrap('  ', parts.why)];
-    for (const problem of problems) lines.push(`  ${this.dim(problem.at)}`, this.wrap('    ', problem.message, '    '));
+    if (parts.problemsAs === 'rows') {
+      const width = Math.max(0, ...problems.map((problem) => problem.at.length)) + 2;
+      for (const problem of problems) {
+        const [first = '', ...rest] = wrapWords(problem.message, Math.max(20, this.width - 2 - width));
+        lines.push(`  ${this.dim(problem.at)}${' '.repeat(width - problem.at.length)}${first}`, ...rest.map((line) => `${' '.repeat(2 + width)}${line}`));
+      }
+    } else {
+      for (const problem of problems) lines.push(`  ${this.dim(problem.at)}`, this.wrap('    ', problem.message, '    '));
+    }
     const fix =
       parts.fix === undefined
         ? parts.fixText

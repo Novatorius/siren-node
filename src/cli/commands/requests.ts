@@ -6,6 +6,7 @@ import { MAX_APP_ANSWER_BYTES } from '../../resources/apps';
 import { appKeyArgument, appKeyInFolder, orgNamed } from './apply';
 import { kindLabel, kindName } from '../app-kinds';
 import { contextOf } from '../context';
+import { fieldProblems } from '../validation';
 import type { CommandContext, CommandInput } from '../context';
 import { clean, styleFor, visibleLength, wrapWords } from '../style';
 import type { Style } from '../style';
@@ -90,7 +91,7 @@ const PREFIX_LIMIT = 2;
  * don't start with `start`. Two or fewer that all match from such a Siren
  * are every request it holds, so they are the answer either way.
  */
-async function requestsStartingWith(run: CommandContext, start: string): Promise<string[] | undefined> {
+async function requestsStartingWith(run: Pick<CommandContext, 'siren'>, start: string): Promise<string[] | undefined> {
   let rows: AppRequestRecord[];
   try {
     rows = await run.siren().apps.requests.list({ idPrefix: `apr_${start}` });
@@ -132,9 +133,9 @@ async function requestIdFor(run: CommandContext, typed: string, org: string): Pr
 }
 
 /** How a command prints a request id: short, or whole on a Siren that can't find a request by its start. */
-type IdLabel = (id: string) => string;
+export type IdLabel = (id: string) => string;
 
-const whole: IdLabel = (id) => id;
+export const whole: IdLabel = (id) => id;
 
 /**
  * How to print request ids against this Siren: {@link shortId} when one
@@ -142,10 +143,21 @@ const whole: IdLabel = (id) => id;
  * can't, so the tool never prints a short id that no command could find.
  * A start the person typed was found that way already, so it costs no call.
  */
-async function idLabelFor(run: CommandContext, sample: string, typed?: string): Promise<IdLabel> {
+export async function idLabelFor(run: Pick<CommandContext, 'siren'>, sample: string, typed?: string): Promise<IdLabel> {
   if (typed !== undefined && !REQUEST_ID.test(typed)) return shortId;
   const ids = await requestsStartingWith(run, shortId(sample)).catch(() => undefined);
   return ids?.length === 1 && ids[0] === sample ? shortId : whole;
+}
+
+/**
+ * {@link idLabelFor} asked once per run, at the first request id, for a
+ * command that prints ids as they come, such as `listen` and `logs tail`.
+ * Every later id takes the same answer, so a run costs Siren one
+ * `idPrefix` call at most.
+ */
+export function idLabeller(run: Pick<CommandContext, 'siren'>): (sample: string) => Promise<IdLabel> {
+  let label: Promise<IdLabel> | undefined;
+  return (sample) => (label ??= idLabelFor(run, sample).catch(() => whole));
 }
 
 /** Enough of `id` to tell it from the others that start with `start`. */
@@ -712,6 +724,8 @@ const KNOWN_CODES: ReadonlySet<string> = new Set<string>([...Object.values(AppEr
  */
 function answerRefusal(run: ReturnType<typeof contextOf>, error: unknown): unknown {
   if (!(error instanceof SirenError) || error.statusCode === undefined) return error;
+  // A validation failure prints one row a field, as every command prints it (run.ts asRefusal).
+  if (fieldProblems(error).length > 0) return error;
   const code = appErrorCode(error);
   if (code === AppErrorCode.NotNeedingAttention) {
     return new CliRefusal("This request doesn't need an answer.", { why: error.message, fix: run.command('apps requests --attention'), fixWords: 'to list the ones that do' });

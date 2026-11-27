@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { specServes } from './spec-routes';
 
 /*
  * Slice 2 acceptance tests for packet P8: the reference docs describe the
  * slice's public surface. The README's configuration section, the CHANGELOG's
- * 0.4.0 section and openapi.yaml are what a caller reads, so each new
+ * 0.4.0 section and Siren's openapi.json are what a caller reads, so each new
  * option, class and route must appear there, and no sentence may still say
  * every 401 is sent once.
  */
@@ -26,15 +27,6 @@ function section(markdown: string, heading: string): string {
 /** Sentences, split on a full stop followed by white space. */
 function sentences(text: string): string[] {
   return text.replace(/\s+/g, ' ').split(/(?<=\.)\s/);
-}
-
-/** One path block in openapi.yaml, from its key to the next path. */
-function path(openapi: string, key: string): string {
-  const start = openapi.indexOf(`\n  ${key}:\n`);
-  expect(start, key).toBeGreaterThan(-1);
-  const rest = openapi.slice(start + 1);
-  const next = rest.slice(1).search(/\n {2}\/|\n\S/);
-  return next < 0 ? rest : rest.slice(0, next + 1);
 }
 
 describe('P8: README configuration', () => {
@@ -97,20 +89,9 @@ describe('P8: CHANGELOG', () => {
   });
 });
 
-describe('P8: openapi.yaml', () => {
-  it.each([
-    ['/conversions/{id}', 'retrieveConversion'],
-    ['/transactions/{id}', 'retrieveTransaction'],
-  ])('documents GET %s with its query, scopes and answers', (key, operationId) => {
-    const block = path(read('openapi.yaml'), key);
-
-    expect(block).toMatch(/\n {4}get:\n/);
-    expect(block).toContain(`operationId: ${operationId}`);
-    for (const name of ['fields', 'include', 'propertyId']) {
-      expect(block, name).toMatch(new RegExp(`name: ${name}\\b|parameters/${name[0]!.toUpperCase()}${name.slice(1)}\\b`));
-    }
-    expect(block).toContain('connectorToken');
-    expect(block).toMatch(/'200':/);
-    expect(block).toMatch(/'404':/);
+describe("P8: openapi.json, Siren's spec", () => {
+  it.each(['/conversions/{id}', '/transactions/{id}'])('serves GET %s', (key) => {
+    expect(specServes('get', key)).toBe(true);
   });
 });
+

@@ -92,6 +92,8 @@ export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbo
       }
       if (route === 'GET /apps') return send(200, renamedBody('apps-list-200'));
       if (route === 'GET /apps/requests') return send(200, capturedBody('apps-requests-list-empty'));
+      // GET /logs as contract/devtools-logs.md section 5 shapes it: nothing new, and read again in 200 ms.
+      if (route === 'GET /logs') return send(200, { entries: [], nextCursor: 'eyJoIjp7fX0', nextPollMs: 200 });
       if (route === 'POST /auth/logout') return send(200, capturedBody('auth-logout-200'));
       return send(404, { error: 'Not found.' });
     });

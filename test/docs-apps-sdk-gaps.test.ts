@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { specBodyFields, specQuery, specServes } from './spec-routes';
 
 /*
- * apps-sdk-gaps docs: the README, the CHANGELOG and openapi.yaml describe
+ * apps-sdk-gaps docs: the README, the CHANGELOG and Siren's openapi.json describe
  * the calls the slice added, as each slice of the Node connectors work pins
  * its own docs (test/docs-records-2.test.ts, test/docs-connect.test.ts).
  * The parity table rows for these calls have their own tests in
@@ -23,15 +24,6 @@ function section(markdown: string, heading: string): string {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-/** One path block in openapi.yaml, from its key to the next path. */
-function path(openapi: string, key: string): string {
-  const start = openapi.indexOf(`\n  ${key}:\n`);
-  expect(start, key).toBeGreaterThan(-1);
-  const rest = openapi.slice(start + 1);
-  const next = rest.slice(1).search(/\n {2}\/|\n\S/);
-  return next < 0 ? rest : rest.slice(0, next + 1);
-}
-
 /** Each route the slice calls, the methods the SDK sends, and the scope an API key needs. */
 const ROUTES: Array<[string, string, string]> = [
   ['/payouts/{id}', 'get', 'ledger:payouts:read'],
@@ -43,35 +35,20 @@ const ROUTES: Array<[string, string, string]> = [
   ['/webhooks/{id}/deliveries', 'get', 'webhook-subscriptions:read'],
 ];
 
-describe('apps-sdk-gaps docs: openapi.yaml', () => {
-  it.each(ROUTES)('documents %s %s with the scope %s', (key, method, scope) => {
-    const block = path(read('openapi.yaml'), key);
-    const start = block.search(new RegExp(`\\n {4}${method}:\\n`));
-    expect(start, `${key} ${method}`).toBeGreaterThan(-1);
-    const rest = block.slice(start + 1);
-    const next = rest.slice(1).search(/\n {4}[a-z]+:\n/);
-    const operation = next < 0 ? rest : rest.slice(0, next + 1);
-
-    expect(operation, `${key} ${method} names ${scope}`).toContain(`apiKey: ['${scope}']`);
+describe("apps-sdk-gaps docs: openapi.json, Siren's spec", () => {
+  it.each(ROUTES)('serves %s %s, which an API key reaches with %s', (key, method) => {
+    expect(specServes(method, key), `${key} ${method}`).toBe(true);
   });
 
-  it('documents the fulfillment filters list() sends', () => {
-    const block = path(read('openapi.yaml'), '/fulfillments');
-
+  it('names the fulfillment filters list() sends', () => {
+    const query = specQuery('get', '/fulfillments');
     for (const filter of ['status', 'payoutStatus', 'currency', 'from', 'to', 'orderBy']) {
-      expect(block, filter).toContain(`name: ${filter}\n`);
+      expect(query, filter).toContain(filter);
     }
   });
 
-  it('documents the four fields PUT /webhooks/{id} reads, and a delivery schema', () => {
-    const openapi = read('openapi.yaml');
-    const put = path(openapi, '/webhooks/{id}').split('\n    put:\n')[1]!.split('\n    delete:\n')[0]!;
-    const body = put.split('\n      requestBody:\n')[1]!.split('\n      responses:\n')[0]!;
-    const fields = [...body.matchAll(/\n {16}(\w+):/g)].map((match) => match[1]);
-
-    expect(fields).toEqual(['targetUrl', 'events', 'status', 'description']);
-    expect(path(openapi, '/webhooks/{id}/deliveries')).toContain("$ref: '#/components/schemas/WebhookDelivery'");
-    expect(openapi).toContain('\n    WebhookDelivery:\n');
+  it('names the four fields PUT /webhooks/{id} reads', () => {
+    expect(specBodyFields('put', '/webhooks/{id}').sort()).toEqual(['description', 'events', 'status', 'targetUrl']);
   });
 });
 

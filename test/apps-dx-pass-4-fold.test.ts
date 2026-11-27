@@ -6,6 +6,7 @@ import { AppHandlerError } from '../src/errors';
 import { appRequestFromRecord } from '../src/testing';
 import { FakeHttpClient, reply } from './http-fakes';
 import { BASE } from './record-fakes';
+import { specServes } from './spec-routes';
 
 /*
  * The pass 4 re-check, folded in (review/sdk-dx/pass-4-recheck-fold-spec.md),
@@ -23,7 +24,6 @@ import { BASE } from './record-fakes';
 
 const README = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 const CHANGELOG = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
-const OPENAPI = readFileSync(new URL('../openapi.yaml', import.meta.url), 'utf8');
 const SECRET = 'a-secret-for-the-pass-4-fold';
 
 /** The text under `heading`, up to the next heading of the same or a higher level. */
@@ -268,12 +268,11 @@ describe('the dead methods are gone', () => {
     expect(http.requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(['GET /siren/v1/apps/scopes']);
   });
 
-  it('drops the removed operations from openapi.yaml', () => {
-    expect(OPENAPI).not.toMatch(/^ {2}\/api-keys/m);
-    for (const id of ['createWebhookSubscription', 'createApiKey', 'listApiKeys', 'listApiKeyScopes', 'revokeApiKey']) {
-      expect(OPENAPI, id).not.toContain(`operationId: ${id}`);
+  // openapi.yaml is gone. openapi.json is Siren's own spec, so the removed routes are checked there.
+  it("finds none of the removed routes in Siren's spec", () => {
+    for (const [method, path] of [['post', '/webhooks'], ['get', '/api-keys'], ['post', '/api-keys'], ['get', '/api-keys/scopes'], ['delete', '/api-keys/{id}']] as const) {
+      expect(specServes(method, path), `${method} ${path}`).toBe(false);
     }
-    expect(OPENAPI).not.toContain('GET /api-keys/scopes');
   });
 
   it('names what replaces them in the Unreleased Breaking notes', () => {

@@ -94,6 +94,8 @@ export async function appsInit(input: CommandInput): Promise<number> {
   }
   const missing = await keepEnvFilesOutOfGit(io.cwd);
   const style = styleFor(io, 'stdout', {});
+  // Live when --live was typed, or when the Siren a hint reaches is live, as after a live login: the hints then carry --live (review round 1, C10).
+  const live = values.live === true || /(?:^| )--live(?: |$)/.test(input.command('apps apply'));
   io.stdout(
     style.report({
       headline: `Created ${style.bold(APP_FILE_NAME)}`,
@@ -103,11 +105,18 @@ export async function appsInit(input: CommandInput): Promise<number> {
         ['Feature', `notify · ${kindName('postConversionAction')}`],
         ...(missing.length > 0 ? [['Ignored', `${missing.join(', ')} (added to .gitignore)`] as const] : []),
       ],
-      next: [
-        { text: "Set SIREN_APP_URL to your handler's https address", aside: 'in .env or your shell' },
-        { text: style.command(input.command('apps apply')) },
+      // A live Siren refuses siren listen, so its first app needs SIREN_APP_URL.
+      next: live
+        ? [{ text: 'Set SIREN_APP_URL to your https address', aside: 'in .env' }, { text: style.command(input.command('apps apply')) }]
+        : [{ text: style.command(input.command('apps apply')) }, { text: style.command(input.command('listen --forward-to localhost:3000/siren')) }],
+      tips: [
+        // Review round 1, C2: a sandbox older than siren listen needs the address too, and apply says so if it does.
+        ...(live
+          ? []
+          : ['On a sandbox, you may leave SIREN_APP_URL unset, and siren listen sends its requests to your machine. A sandbox without siren listen yet needs the address, and apply says so.']),
+        ...(live ? ['A live app needs SIREN_APP_URL set to an https address Siren can reach, since forwarding with listen works on a sandbox only.'] : ['A live organization needs SIREN_APP_URL set to an https address.']),
+        `Add features in ${APP_FILE_NAME}. Your editor completes them.`,
       ],
-      tips: ['Siren sends requests only to https, so run your handler on an https address.', `Add features in ${APP_FILE_NAME}. Your editor completes them.`],
     }),
   );
   return 0;
@@ -344,6 +353,7 @@ export async function appsApply(input: CommandInput): Promise<number> {
   const { shown, path, parsed, shell, session, key, params, changes, lines, envPath } = plan;
   const out = styleFor(io, 'stdout', input.values);
   const err = styleFor(io, 'stderr', input.values);
+  const listens = params.url == null && session.edition !== 'production';
   if (lines.length === 0) {
     if (json) run.print(JSON.stringify({ plan: planData(plan), applied: false }, null, 2));
     else {
@@ -384,6 +394,8 @@ export async function appsApply(input: CommandInput): Promise<number> {
   let app: Awaited<ReturnType<typeof siren.apps.declare>>;
   try {
     app = await siren.apps.declare(key, params);
+  } catch (error) {
+    throw noAddressRefusal(run, error, params) ?? error;
   } finally {
     spinner?.cancel();
   }
@@ -426,8 +438,14 @@ export async function appsApply(input: CommandInput): Promise<number> {
   }
   // Review round 1, C24: name the env file the handler loads, and no server file init never wrote.
   if (app.created) tips.push(`Your handler reads its key and secret from ${envName}. With Node, start it with --env-file=${envName}.`);
-  // A read, which needs no --live.
-  const next = app.created ? [{ text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' }] : [];
+  const next = app.created
+    ? [
+        // An app with no address on a sandbox gets its requests through siren listen. Review round 1, C10: a command that runs as printed.
+        ...(listens ? [{ text: out.command(run.command('listen --forward-to localhost:3000/siren')) }] : []),
+        // A read, which needs no --live.
+        { text: out.command(commandLine(run.target, 'apps requests --follow', false)), aside: 'watch what Siren sends it' },
+      ]
+    : [];
   run.print(out.report({ headline: `${app.created ? 'Made' : 'Updated'} ${out.bold(key)} in ${clean(session.orgName)}`, rows, next, tips }).replace(/\n$/, ''));
   return 0;
 }
@@ -471,7 +489,13 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
   // The shell wins over .env beside the file, as Node's --env-file and dotenv do.
   const fromFile = await appVariablesIn(dirname(path));
   const shell = (name: string) => io.env[name] !== undefined && io.env[name] !== '';
-  const parsed = parseAppFile(text, { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) });
+  const variables = { ...fromFile, ...Object.fromEntries(Object.entries(io.env).filter(([name]) => shell(name))) };
+  let parsed = parseAppFile(text, variables);
+  // On a sandbox, siren listen carries the requests, so an app may go without a url.
+  run.appFilePath = path;
+  const withoutUrl = parsed.file === null ? parseAppFile(text, variables, { urlMayBeUnset: true }) : undefined;
+  // The edition the target reports, so a file problem shows before anyone is asked to sign in (review of PR 94).
+  if (withoutUrl?.file && (await run.targetEdition()) !== 'production') parsed = withoutUrl;
   if (parsed.file === null) {
     // CLI pass 3, must-fix 3: the problems print under the ✗ headline, each at its place.
     const problems = parsed.problems.map((problem) => {
@@ -490,9 +514,10 @@ async function readPlan(input: CommandInput, run: CommandContext, mode: 'apply' 
     });
   }
 
-  run.appFilePath = path;
   const session = await run.signedIn();
   const { key, params } = declarationFor(parsed.file);
+  // --json prints the plan and nothing else, so this line goes only to a reader.
+  if (input.values.json !== true) for (const name of parsed.unset ?? []) run.print(`${name} is not set, so ${key} has no address. On a sandbox, siren listen sends its requests to your machine.`);
   if (params.url != null && onThisMachine(params.url)) {
     run.warn(
       "siren: The app's url is on this machine's own address, which a Siren running in a container cannot reach. " +
@@ -1225,7 +1250,7 @@ interface ShownSecrets {
  * the file is revoked. Never
  * prints either value, and answers false.
  */
-async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<string | false> {
+export async function saveSecrets(run: CommandContext, key: string, envPath: string, secrets: ShownSecrets, revoked: boolean): Promise<string | false> {
   const { rawKey, signingSecret } = secrets;
   const both = rawKey !== undefined && signingSecret !== undefined;
   try {
@@ -1365,4 +1390,24 @@ async function isFile(path: string): Promise<boolean> {
 function keyFromFolder(cwd: string): string {
   const key = basename(cwd).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64).replace(/-+$/, '');
   return key === '' || key === 'requests' ? 'my-app' : key;
+}
+
+/**
+ * Review round 1, C2: a Siren that has no `siren listen` yet refuses an app
+ * with features and no address, 409 `app_features_need_key_and_address`
+ * (AppsOwnPartsFlowTest.php). Siren's sentence says what it lacks, not what
+ * to do, so the tool says the fix: the address in SIREN_APP_URL. Undefined
+ * for any other error, which prints as it always does.
+ */
+function noAddressRefusal(run: CommandContext, error: unknown, params: Plan['params']): CliRefusal | undefined {
+  if (params.url != null || appErrorCode(error) !== 'app_features_need_key_and_address') return undefined;
+  const data = (error as { data?: unknown }).data;
+  const missing = typeof data === 'object' && data !== null ? (data as { missing?: unknown }).missing : undefined;
+  if (Array.isArray(missing) && !missing.includes('address')) return undefined;
+  return new CliRefusal(`${hostName(run.target.baseUrl)} needs an address for an app with features, so nothing was sent.`, {
+    why: "This Siren doesn't have siren listen yet, so the app can't go without one.",
+    fixLead: "Set SIREN_APP_URL to your handler's https address in .env, then run",
+    fix: run.command('apps apply'),
+    fixWords: 'again',
+  });
 }

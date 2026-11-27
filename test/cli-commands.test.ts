@@ -413,11 +413,12 @@ describe('apps-cli: siren apps init, apply and the app key', () => {
     expect(h.printed().replace(/\n  /g, " ")).toContain(`siren apps rotate-key ${KEY}`);
   });
 
+  // A sandbox applies an app with no url for siren listen (test/cli-listen.test.ts), so the live one shows the problem.
   it('prints each problem in the app file with its line, and sends nothing', async () => {
-    const h = harness([reply(200, app)]);
-    h.signedIn();
+    const h = harness([reply(200, app)], { edition: 'production' });
+    h.signedIn({ [LIVE_BASE_URL]: session({ edition: 'production' }) });
     h.write('siren.app.json', exampleFile);
-    expect(await h.run(['apps', 'apply'])).toBe(1);
+    expect(await h.run(['apps', 'apply', '--live'])).toBe(1);
     expect(h.http.requests).toHaveLength(0);
     expect(h.err()).toContain('SIREN_APP_URL');
     expect(h.err()).toMatch(/siren\.app\.json:9\b/);

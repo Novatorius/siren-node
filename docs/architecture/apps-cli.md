@@ -160,6 +160,7 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | `siren apps list [--json]` | `GET /apps` | One block per app with its features, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
 | `siren apps show [key] [--json]` | `GET /apps/{key}` | The key, with the name beside it only when it differs, then the app and its features. Each kind reads `Post-conversion action (postConversionAction)` when the line fits the terminal. When it does not, the table drops the code name first, a Kinds row in the block names the code names, and only then is NAME cut with an ellipsis. `--json` keeps both, each archived feature marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. A PICKED BY column counts the records that select each feature, from `usedBy`, and each active feature nothing picks gets a line on how to pick it (review round 1, C3). |
 | `siren apps requests [--app <key> or --all] [--attention] [--follow] [--json]` | `GET /apps` once, then `GET /apps/requests` and `GET /apps/requests?status=needs_attention` | A count line, then a table, newest first: the organization's latest 50 and every request that needs attention, however old, so an app that `apps list` counts one for never shows none. The columns are ID (the first 8 hex characters, or the whole id on a Siren without the prefix lookup), WHEN (local time, from `TZ`), APP, FEATURE (the kind's short name), ABOUT, SENDS and STATE, or WHY with `--attention`. In a folder whose siren.app.json holds one app, `--app` defaults to that app, the count line names it, and a tip names `--all`, which lists every app (CLI pass 3, should-fix 7). One app's list has no APP column. In a terminal the table leaves out SENDS, then ABOUT, then APP until it fits the width, and shows the newest 20 rows with a dim count of the rest, which `--json` prints. A tell that needs attention offers only resend, since Siren answers an answer to a tell with 422 (should-fix 8). `--attention` reads the attention list alone. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once as a row, and ends with 130 on Ctrl-C, or with 1 when the target changed edition. `--json` prints the rows as Siren sent them, as one array, or one object a line with `--follow`. |
+| `siren logs tail [flags]` | `GET /logs` with the filters, then again with `nextCursor` after `nextPollMs` (contract/devtools-logs.md) | One line per entry, oldest first: local time, type, summary, status and duration, 80 columns at most. A failed or refused entry is red with ✗, its reason under it, and `siren apps requests <id>` when it is about a request. `--json` prints one entry a line. `--limit <n>` ends with 0 after n entries, Ctrl-C with 130, a changed edition with 1, and 5 minutes without an answer with 1. |
 | `siren apps requests <id> [--json]` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | A block with the request's state, kind, app and feature, subject, time, and the answer Siren took and who gave it, or that none came yet. Then SENDS, a table of each send with its HTTP status and what the app said back, then DATA, the data Siren sent, as indented key and value lines with the keys dim and aligned at each level, an object's entries two spaces in under its key, each object in a list under its number from 1, and a list of plain values on one line. In a terminal a long value wraps under itself, so no line passes 80 columns. `--json` keeps the data whole. Then the commands that answer it or send it again. Here and in `answer` and `resend`, a request id may be its first 4 or more hex characters after `apr_`, with or without the `apr_`, as git takes a commit's. The tool finds the whole id with one call, `GET /apps/requests?idPrefix=apr_<start>`, which Siren reads from feat/apps 76d5bbdf83 and answers with at most two of the organization's matches, newest first (CLI pass 3, must-fix 1). One match is the request. None is refused with `siren apps requests`. Two are refused with both listed and "and maybe more", and the tool never picks one. An older Siren refuses the param with 400 or ignores it and answers its latest requests. Against that Siren a start is refused with the advice to give the whole id, and the list, its tips and the views print whole ids, since a short one could not be found. Before it prints a short id, a command makes one lookup for an id it shows, the list's newest or the request it acted on, and prints whole ids when that lookup doesn't find it. A start the person typed was found that way already, so it costs no second call. A request whose answer Siren took prints no tip, so it costs none. `--json` prints Siren's detail with three fields added: `appKey` and `featureKey`, which Siren's detail names only by id, and `sends`, the deliveries found for the request. The keys are null and `sends` is empty when the app is gone. The SDKs' replay helpers read this object. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | `✓ Answered <short id>` with the answer, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
 | `siren apps resend <id>` | `POST /apps/requests/{id}/resend`, and on 409 `app_request_not_resendable` for a request not `applied`, `GET /apps/requests/{requestKey}` and `GET /apps` | `✓ Sent <short id> again` with the request's state and sends. On that 409, that its app is off, with `siren apps on <key>` and the resend to run after. An `applied` request is told there is nothing to send. |
@@ -180,6 +181,24 @@ included, and answers 2 in its own words with the usage line: a request id that 
 an object, has no text `outcome`, or is longer than 16384 bytes. Before, `siren apps answer
 apr_xyz` exited 1 with the SDK's line, which named `apps.requests.answer()` (e2e step 11d), and
 `requests --app <bad key>` sent the list before it refused. test/cli-arguments.test.ts covers each.
+
+### Recipes
+
+`siren recipes` (src/cli/commands/recipes.ts) sends Siren's recipe routes through
+`siren.recipes` (src/resources/recipes.ts), read from Siren feat/apps 76d5bbdf83,
+lib/Recipes/Service/Rest. Siren serves them to a signed-in session only, so each command is
+`sessionOnly`. `preview` is the check, since Siren's validation also refuses a store integration
+or plan the recipe needs, which a schema alone can't see. `apply` previews, asks for each
+variable that `--var` didn't name, asks before it applies, and sends `importKey` as `cli-` and the
+SHA-256 of the recipe's JSON with sorted keys. Siren then runs that recipe once in an org, a
+lost connection sends it again safely, and a second apply gets 409 naming the earlier job.
+`--again` sends no key. It then asks `GET /recipes/imports/{jobId}` every 2 seconds, and Ctrl-C
+stops the watching with 130 while the import goes on. `fetch` takes a Beacon handoff token,
+because `POST /recipes/fetch` reads a signed JWT, and `show` prints a catalog recipe from the
+catalog's own `payload`. The package ships `siren.recipe.schema.json`, which
+scripts/copy-recipe-schema.mjs copies from Siren's lib/Recipes/Core/recipe.schema.json, and
+test/recipe-schema.test.ts checks it against the recorded hash. The tool takes a file's
+`$schema` out before sending, since the schema allows no other key at a recipe's top.
 
 ### Confirmation and plan answers
 
@@ -427,7 +446,7 @@ the logo itself, beside the code or beside the password prompts, so it plays no 
 
 `siren` with nothing after it plays the whole hook, since the card is its whole job. The two halves
 of the logo slide in and grip, 39 frames 50 milliseconds apart, about 1.9 seconds. Then the logo
-floats: it lifts up to one braille row (4 dots) into a blank row above it and settles, over a dim
+floats: it lifts up to one row, in half-row steps, into a blank row above it and settles, over a dim
 shadow that narrows as it rises, 20 frames more. The shadow goes when the logo settles, so no stray
 line sits above the next output. The whole run takes 2.95 seconds.
 
@@ -444,10 +463,16 @@ or who is logged in to which organization on which Siren, the three commands tha
 once logged in), and `siren --help`, and answers 0. It reads credentials.json and sends nothing.
 The signed-out card names the Siren only when it is not the default sandbox or live one. In a terminal the card takes the marks every screen has: a green ✓ and the email in bold when logged in, an amber ! when not, and "live" in amber. It names a Siren by its host, never its scheme (should-fix 9). A command that sends nothing, such as `apps init`, writes its hints for the Siren the next command would reach, so they keep `--live` after a live login (should-fix 11). The delete question names the organization, as every write question does (should-fix 12).
 
-The frames are braille, 24 characters by 14 lines, in src/cli/hook-frames.ts. They come from the
+The frames are quadrant blocks (▘ ▝ ▖ ▗ and the blocks they combine into), 24 characters by 14
+lines, in src/cli/hook-frames.ts. Each character holds 2 by 2 pixels. Blocks, not braille, because
+braille opens gaps between the rows in some terminals, as in COSMIC Terminal with Fira Mono.
+Braille dots never reach a cell's edges, Fira Mono has no braille so another font draws it, and line spacing above 1.0 widens the
+gap under every row. Block elements fill the cell, Fira Mono and most monospace fonts carry them,
+and terminals such as VTE, kitty, WezTerm, Alacritty and Windows Terminal draw them to the cell's
+edges whatever the spacing. They come from the
 website's public/logo-animated-once.svg through scripts/build-hook-frames.mjs with `--slow 1.6`,
 which steps the SVG's 1.2 second CSS animation in headless Chromium at 1.6 times as many points. The
-hover is not in the file: hook.ts lifts the last frame by whole dots. The package gains no runtime
+hover is not in the file: hook.ts lifts the last frame by half rows. The package gains no runtime
 dependency. The green is
 the dark theme's `--primary` in Siren's frontend/src/index.css, `164 100% 50%`, which that file
 names the exact logo color #00FFB9. The logo fills both halves with it. The tool draws it in
@@ -490,7 +515,8 @@ played.
   run, so a refresh and a second call use it. `apps requests --follow` reads it again before each
   poll after the first (`recheckEdition()`), so a target that changes edition during the run stops
   it with the same one line before the session is sent there again. That costs one more GET every
-  2 seconds while following. `apps init` sends nothing and reads nothing.
+  2 seconds while following. `logs tail` does the same before each read of the feed.
+  `apps init` sends nothing and reads nothing.
 - A live edition needs `--live` to sign up and to change anything: `apply`, `answer`,
   `resend`, `rotate-key`, `rotate-secret`, `add-key`, `on`, `off` and `delete`, whatever address
   chose it. Signing in needs none, since it changes nothing in an organization, so a new person's
@@ -619,12 +645,12 @@ answers each request:
 - A request that fails `verifyRequest` gets 400 and nothing else happens.
 - Every request that passes gets 200. A repeat, found by `id`, gets 200 and is not acted on again.
 - An ask is answered after the 200 with `requests.answer()`. A fulfillment method's payout is
-  answered `{ outcome: 'paid', reference: 'acme-<payoutId>' }`. A distribution resolver's pool is
+  answered `{ outcome: 'paid', reference: 'acme-<payout id>' }`, the id read from `data.payout.id`. A distribution resolver's pool is
   answered `{ outcome: 'resolved', shares: [{ id, amount }] }`, divided by each metric's value in
   whole minor units, the remainder going to the largest fractions. An ask counts as handled only
   once its answer is accepted.
 - An ask whose data lacks what the answer needs, such as a pool with no metrics or a payout with no
-  `payoutId`, gets 500 and a logged line that says why, and no guessed answer. Siren sends it again
+  `data.payout.id`, gets 500 and a logged line that says why, and no guessed answer. Siren sends it again
   on its deadline, then marks it `needs_attention`. `createRequestListener` gives server.mjs a
   listener that answers 500 for anything the handler throws and keeps serving (AP-A905).
 
@@ -912,7 +938,7 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: Siren made 1 conversion on opportunity <id>.` A sale no program pays for prints `Siren recorded it on opportunity <id> and made no conversion (no_program).` and Siren's message, which is what step 7 skipped gives (capture events-sale-200-no-program). | example-app |
 | 9 | Approve the conversion in the dashboard. Then `siren apps requests --follow`, and in another terminal `siren apps requests <id>` for the tell | The tell's line going from `sent` to `delivered`. The single request shows the send, `HTTP 200`, the app's answer and the body Siren sent. Ctrl-C ends `--follow` with exit 130. | cli-requests, Siren slices 2 and 3 |
 | 10 | Close the program's distribution with slice 4's test route (claim C7) | `--follow` shows the ask `sent`, then `answered`, then `applied`. The server logs the answer, and the distribution completes with the app's shares. | example-app, sdk-verify, sdk-answer, Siren slice 4 |
-| 11 | With slice 5 only: pick "Acme: Acme ledger" on an autofulfiller and run a payout through it | The payout waits, then shows as paid with reference `acme-<payoutId>` | example-app, Siren slice 5 |
+| 11 | With slice 5 only: pick "Acme: Acme ledger" on an autofulfiller and run a payout through it | The payout waits, then shows as paid with reference `acme-<payout id>` | example-app, Siren slice 5 |
 | 12 | Stop the server with Ctrl-C, close another distribution as in step 10, and run `siren apps requests --attention --follow` | Nothing at first. About three minutes later, after three one-minute windows, the ask's line with `needs_attention` and its send error. The Apps screen marks it too. Each window's end is a wake on Siren's task queue, so this needs a Siren whose worker runs: the public sandbox, or a Siren you run with `SIREN_DURABLE_TASKS` on (README, "Running against your own Siren Cloud"). With it off, the ask is sent once, its job fails at the first wake, and it never needs attention. | cli-requests, the shortest window in the example's app file, Siren slices 2 and 3 |
 | 13 | `npm start` again, then `siren apps resend <id>` | `✓ Sent <short id> again` with its state back at waiting, then `--follow` shows `answered` and `applied` | cli-requests |
 | 14 | Or, with the server still stopped and the ask still shown by `siren apps requests --attention` after step 12, read the metric ids with `siren apps requests <id>` and run `siren apps answer <id> --body '{"outcome":"resolved","shares":[{"id":"<metric id>","amount":<minor units>}]}'` | `✓ Answered <short id>` with the answer. Sending it again prints `Siren already had this answer for <short id>. Nothing changed.` A person may answer only a request that needs attention, so the same answer to an ask still `pending` or `sent` is refused with Siren's line and `See the requests that need attention with siren apps requests --attention.` | cli-requests, sdk-answer |
@@ -986,8 +1012,9 @@ https.
 
 ## Claims on others
 
-- Slices 4 and 5: the data of a fulfillment-method ask is `{ payoutId, amount, currency }` as
-  Siren's fixture shows, and the answer `{ outcome: 'paid', reference }` as answer.json shows. The
+- Slices 4 and 5: the data of a fulfillment-method ask is `{ payout: { id, fulfillmentId,
+  attempt }, amount, collaborator }`, as Siren's AppPayoutQuestion builds it and the kind's
+  sample shows, and the answer `{ outcome: 'paid', reference }` as answer.json shows. The
   distribution resolver's data `{ amount, currency, metrics: [{ id, value }] }` and answer
   `{ outcome: 'resolved', shares: [{ id, amount }] }` are this slice's guess. Slice 5 owns both and
   the example follows it.

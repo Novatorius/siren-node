@@ -1679,6 +1679,14 @@ gain each one under the same name. The `siren` command-line tool ships with this
 | `siren.apps.features.retrieve()` | `GET /apps/{app}/features/{id}` | Reads one feature with how many records select it and which. |
 | `siren.apps.features.update()` | `PATCH /apps/{app}/features/{id}` | Changes a feature's name, description or settings. Its kind and key never change. |
 | `siren.apps.features.delete()` | `DELETE /apps/{app}/features/{id}` | Archives a feature a record selects, and deletes one nothing selects. |
+| `siren.recipes.preview()` | `POST /recipes/preview` | Checks a recipe and says what applying it would make, writing nothing. |
+| `siren.recipes.apply()` | `POST /recipes/apply` | Starts importing a recipe and answers the import, once per `importKey`. |
+| `siren.recipes.import()` | `GET /recipes/imports/{jobId}` | Reads one import: its progress per section and each person's outcome. |
+| `siren.recipes.imports()` | `GET /recipes/imports` | Lists the organization's recent imports, newest first. |
+| `siren.recipes.export()` | `GET /recipes/export` | Answers the organization's setup as a recipe, and what it left out. |
+| `siren.recipes.exportSizes()` | `GET /recipes/export` | Counts the records in each section an export would hold. |
+| `siren.recipes.catalog()` | `GET /recipes/catalog` | Lists Beacon's ready-made recipes, with whether each fits the organization. |
+| `siren.recipes.fetch()` | `POST /recipes/fetch` | Reads the recipe a Beacon handoff token carries. |
 
 ## Storefront module (browser)
 
@@ -2229,6 +2237,80 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps add-key <key>` | Makes a key for an app that holds none and writes it as `SIREN_API_KEY` where apply wrote the first, or beside the file named by `--app-file`. The key holds no scopes until the next `siren apps apply`. |
 | `siren apps on <key>` and `siren apps off <key>` | Turn the app on or off, and say what that means: an app that is off gets nothing from Siren until `siren apps on <key>`. |
 | `siren apps delete <key> --yes` | Deletes the app and revokes its key. When records still use it, it names them, and the command to turn the app off while it is on, or that those records must change once it is already off. |
+| `siren listen --forward-to localhost:8787/siren` | On a sandbox, sends the app's asks, tells and events to a handler on this machine while it runs, so the app needs no public address. Siren signs each one with the app's own secret, and the handler's reply goes back to Siren as the delivery's result. Ctrl-C stops it with exit code 130, and Siren sends to the app's address again. An app with no url gets its signing secret in `.env.sandbox` the first time. A live Siren takes no listen session, so the command refuses a live target and names `siren login --sandbox`. |
+| `siren logs tail` | Prints what happens in the organization as it happens, one line each: app requests and each status change, deliveries to an app's address, webhook deliveries, events and API calls, with the time, type, summary, status and how long it took. A failed or refused entry shows its reason and the command that shows more. `--app`, `--feature`, `--status ok,failed,refused`, `--type request,delivery,webhook,event,api`, `--method`, `--path` and `--source dashboard,api_key,app,cli,site` narrow it. `--since 10m` starts back in time, up to 7 days, `--limit <n>` stops after n entries, `--expand` shows each entry's body, and `--json` prints one JSON object a line. Siren sets how often it asks, about once a second. Ctrl-C exits 130. |
+| `siren apps test <key>` | Sends the app's address one signed `webhook.test` delivery and prints the HTTP status it answered. A delivery that did not arrive exits 1 with the status and the error. A live organization needs `--live`. |
+| `siren trigger <sale\|refund\|visit\|event>` | Makes one sale, refund, visit or custom event in a sandbox organization, through the same code Siren runs for `POST /event/{slug}`, and prints the conversion, each reward and who earns it. `--collaborator`, `--program`, `--amount`, `--currency`, `--opportunity` and `--transaction` choose what it makes, and each `--add key=value` sets one field of the event. While a reward waits on an app's answer it reads the sale again every 2 seconds, up to `--wait` seconds (30 by default). A live Siren is refused before anything is sent. |
+| `siren trigger ask <app> <feature>` | Siren sends the feature its kind's sample request now, marked `"test": true`, and the command prints the answer. Siren checks the answer as it would any other, and nothing acts on it. A live organization needs `--live`, and the command asks before it sends unless `--yes`. A payout method takes no sample on a live organization, since an app that ignores the `test` flag could pay out on one. |
+| `siren fixtures <file.json>` | Runs a file of trigger steps in order: `{"fixtures": [{"name": "sale", "trigger": "sale", "params": {"amount": "49.99"}}]}`. A step's `params` take the flags' names, and `${name:path}` reads an earlier step's answer, such as `${sale:transactionId}`. `${.env:NAME}` reads the environment. An `ask` step takes `app` and `feature` and follows the rules of `siren trigger ask`. It stops at the first refusal. |
+| `siren simulate [<scenario.json\|->]` | Runs a scenario through the organization's own setup on `POST /simulations/scenario`, keeps nothing, and prints the transaction line by line, what each program counted, conversions, obligations, why and what was skipped, and each share of a pot when a period closes. It takes Beacon's scenario document, `{recipe?, actions}`, or writes one from `--referred-by`, `--direct`, `--coupon`, `--line` and `--close`. `--print-scenario` prints that document and runs nothing. It never picks who referred a sale. `--json` prints Siren's whole result. A Siren without the scenario route runs a referred sale on its older `POST /simulations/sale` and refuses anything else. It changes nothing, so a live organization needs no `--live`. |
+| `siren sandbox create --from <org>` | Copies a live organization's setup into a new sandbox organization: apps and their features, programs, groups and settings. Collaborators, keys and secrets stay on the live Siren, and the sandbox makes its own keys and secrets without printing them. `--live-url` names the live Siren when you keep more than one live session. Each copied app has no address, so no sandbox ask reaches the live app's server. Run `siren listen` or set a url to take them. Before it makes anything, it asks the sandbox to check the setup, and a field Siren would refuse stops the copy with that field and Siren's reason, so you fix it on the live organization and run it again. Your session keeps its organization, so the next commands name the new one with `--org`. |
+| `siren sandbox list` | Lists your organizations on the sandbox and the live organization each copy came from. |
+| `siren sandbox reset` | Clears the sandbox organization's conversions, obligations, transactions, payouts, requests and deliveries, and keeps its setup. You type the organization's slug to confirm, or pass `--confirm <slug>` with no terminal. |
+| `siren sandbox inbox [<number>]` | Lists the emails the sandbox caught for the organization, newest first, or shows one with its text. |
+| `siren seed` | Fills the sandbox organization with sample test sales spread back over past months: `--sales` up to 200, `--collaborators` up to 25 and `--months` up to 6. It makes sample collaborators when the organization has too few. Siren never pays test sales or counts them in reports. |
+| `siren recipes preview <file\|->` | Says what a recipe would make in the organization, and writes nothing. When the organization already has programs, groups or distributors with the recipe's names, it warns that applying makes copies, since Siren makes those again on every apply, and offers the list before apply. Siren checks it as apply does, so each problem prints at its path, and a plan or store integration the recipe needs is named in plain words. `-` reads the recipe from standard input. |
+| `siren recipes apply <file\|->` | Previews the recipe, asks for the id of each record it uses but doesn't make (`--var key=<id>` names them), asks before applying (`--yes` skips that), then follows the import with a progress line to its end. It sends an import key made from the recipe's content, so Siren applies the same recipe once and a retry never imports it twice. `--again` applies it again as an update. `--no-wait` prints the import id and stops. |
+| `siren recipes status <importId>` | Shows one import: how far each section got, the people added, updated, skipped and failed, and each failure. |
+| `siren recipes imports` | Lists the organization's recent imports, newest first. |
+| `siren recipes export [--include <sections>]` | Prints the organization's setup as a recipe on standard output, and names what it left out, such as drafts, on standard error. |
+| `siren recipes catalog` and `siren recipes show <id>` | List Beacon's ready-made recipes with whether each fits the organization's store and plan, and print one to save, edit and apply. |
+| `siren recipes fetch <token\|link>` | Prints the recipe a Beacon handoff carries. |
+
+Recipes need a signed-in session, from `siren login`. An API key can't use them yet. A recipe file
+may name `siren.recipe.schema.json` from this package in `$schema`, so an editor completes it. The
+tool takes `$schema` out before it sends the recipe, since Siren takes no other key at a recipe's
+top. In code, `siren.recipes` makes the same calls: `preview`, `apply`, `import`, `imports`,
+`export`, `exportSizes`, `catalog` and `fetch`.
+
+### Condition sets and enrollers
+
+A condition set is a saved list of conditions Siren checks each day, such as "joined in the last 30
+days". An enroller is a rule that adds people to programs, distributors and collaborator groups, or
+takes them out, when something happens to them, such as starting to match a condition set.
+
+| Command | What it does |
+| --- | --- |
+| `siren condition-sets list` | Lists the sets, with how many conditions each has and when Siren last checked it. |
+| `siren condition-sets get <id>` | Shows one set's conditions in Siren's own words, such as `Joined less than 30 days ago`, and the enrollers that use it. |
+| `siren condition-sets matches <id>` | Counts who matches now and names the first five. `--limit` names up to 25. Given a file, or `-`, it counts who would match conditions not yet saved, and saves nothing. |
+| `siren condition-sets create <file\|->` | Makes a set from JSON with `name` and `conditions`. |
+| `siren condition-sets conditions` | Lists the conditions a set can use and the values each takes. |
+| `siren enrollers list` | Lists the enrollers, with their status and what starts each. `--status` narrows the list. |
+| `siren enrollers get <id>` | Shows what starts an enroller, what it does, and its latest log lines. |
+| `siren enrollers log <id>` | Shows what an enroller did, newest first. |
+| `siren enrollers run <id>` | Says how many people a run would move, asks, then runs the enroller on everyone who matches now. `--yes` skips the question. |
+| `siren enrollers create <file\|->` | Makes an enroller from JSON, in the fields `siren enrollers get <id> --json` shows. |
+
+A set needs a plan that includes condition sets, and an enroller a plan that includes enrollers.
+Enrollers arrive in a newer Siren than condition sets. A Siren without one of them, or a plan
+without it, gets a refusal that says which. Making a set or an enroller, and running one, need
+`--live` on a live organization, since they move people.
+
+A record read, such as `siren collaborators get 1`, puts the record's name in the headline and
+prints its fields as aligned rows. Each list in it, such as a collaborator's programs, is its own
+section with one line for each, the first 10 shown and the rest counted. Next names the commands
+that open what it points to.
+Through a pipe the record goes to standard output and Next to standard error, and `--json` prints
+Siren's answer whole.
+
+Money prints as money, such as `€19.62 EUR`, in a table, a record and `--json`. Siren stores an
+amount in its currency's smallest unit, so `--json` keeps that integer and adds the text beside it:
+`"value": 1962, "currency": "EUR", "valueFormatted": "€19.62 EUR"`. The tool draws a currency from
+the organization's currency registry, or from the runtime's own currency data for an ISO code the
+registry doesn't list. A ledger unit the registry doesn't list, such as points, keeps its integer.
+
+A list, such as `siren programs list`, comes newest first where Siren's route takes an order, and
+dates read as `Today 13:58`, `Nov 24 19:58` or `Mar 2, 2025`. Through a pipe, standard output holds
+the table alone, and the count, Next and tips go to standard error. `--ids` prints one id a line,
+such as `siren programs list --ids --all`. `--fields id,name,status` shows only those fields, in the
+table and in `--json`, and asks Siren for them where the route takes `fields`.
+
+When Siren refuses a request's fields, every command prints one row a field under what was
+refused, such as `email  must be a valid email address of 254 characters or fewer`. A field with
+no value says only that it is required, and a field that takes set values lists them. Through a
+pipe, each field is one `field: message` line. With `--json`, a generated command prints the
+error with Siren's own `context`, so a script reads `failedValidations` as Siren sent it.
 
 Each command acts in one of your organizations. It takes `--org <slug>` first, then `SIREN_ORG`,
 then `org` in siren.app.json, then your only organization. With none of those it asks in a
@@ -2328,7 +2410,7 @@ Siren ships official SDKs in three languages, all built against the same API:
 ## Links
 
 - Siren — https://sirenaffiliates.com
-- OpenAPI specification — [`./openapi.yaml`](./openapi.yaml)
+- OpenAPI specification, generated from Siren's REST routes — [`./openapi.json`](./openapi.json)
 - Issues — https://github.com/Novatorius/siren-node/issues
 
 ## Contributing

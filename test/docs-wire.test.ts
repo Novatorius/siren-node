@@ -1,45 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ErrorCode, WebhookEventType } from '../src/index';
+import { specServes } from './spec-routes';
 
 /*
  * Slice 1 acceptance tests for packet P8: the reference docs describe every
- * wire change in this slice. `openapi.yaml` is the API reference this
- * repository ships, so each new field, route, event and code must appear in
+ * wire change in this slice. Siren's generated openapi.json is the API
+ * reference this repository ships, so each route the slice reads must be in
  * it, and the CHANGELOG and README must name each new public method and class.
  */
 
 function read(name: string): string {
   return readFileSync(new URL(`../${name}`, import.meta.url), 'utf8');
-}
-
-const openapi = read('openapi.yaml');
-
-/** One schema under `components.schemas`, from its name to the next schema. */
-function schema(name: string): string {
-  const start = openapi.indexOf(`\n    ${name}:\n`);
-  expect(start, `schema ${name}`).toBeGreaterThan(-1);
-  const rest = openapi.slice(start + 1);
-  // Up to and including the newline before the next schema or section.
-  const next = rest.slice(1).search(/\n {2,4}\S/);
-  return next < 0 ? rest : rest.slice(0, next + 2);
-}
-
-/**
- * One property of a schema, from its key to the next key at the same depth.
- * Properties sit 8 spaces in, under the schema's `properties:`, so a word in a
- * description or an example never counts as the property.
- */
-function property(block: string, name: string): string | null {
-  const lines = block.split('\n');
-  const start = lines.findIndex((line) => line.startsWith(`        ${name}:`));
-  if (start < 0) return null;
-  const end = lines.findIndex((line, index) => index > start && /^ {0,8}\S/.test(line));
-  return lines.slice(start, end < 0 ? undefined : end).join('\n');
-}
-
-function hasProperty(block: string, name: string): boolean {
-  return property(block, name) !== null;
 }
 
 /** The text of the `## [0.4.0]` section, where this work was released. */
@@ -50,45 +22,10 @@ function unreleased(): string {
   return changelog.slice(start, end < 0 ? undefined : end);
 }
 
-describe('P8: openapi.yaml', () => {
-  it('SalePayload documents the test flag and LineItem documents lineId', () => {
-    expect(hasProperty(schema('SalePayload'), 'test')).toBe(true);
-    expect(hasProperty(schema('LineItem'), 'lineId')).toBe(true);
-  });
-
-  it('RefundPayload documents amount, currency, lines, whole and kind, and RefundLine its four fields', () => {
-    const refund = schema('RefundPayload');
-    for (const property of ['refundId', 'amount', 'currency', 'lines', 'whole', 'kind']) {
-      expect(hasProperty(refund, property), property).toBe(true);
-    }
-    const line = schema('RefundLine');
-    for (const property of ['lineId', 'sku', 'quantity', 'amount']) {
-      expect(hasProperty(line, property), property).toBe(true);
-    }
-  });
-
-  it('SiteVisitedPayload documents the tracking code form of collaboratorId', () => {
-    expect(property(schema('SiteVisitedPayload'), 'collaboratorId')).toContain('tracking:');
-  });
-
-  it('WebhookEventType lists every event this SDK knows', () => {
-    const block = schema('WebhookEventType');
-    for (const value of Object.values(WebhookEventType)) {
-      const listed = block.includes(`- ${value}\n`) || block.includes(`- '${value}'\n`);
-      expect(listed, value).toBe(true);
-    }
-  });
-
-  it('documents GET /webhooks/events and GET /apps/scopes', () => {
-    expect(openapi).toMatch(/\n {2}\/webhooks\/events:\n {4}get:/);
-    expect(openapi).toMatch(/\n {2}\/apps\/scopes:\n {4}get:/);
-  });
-
-  it('lists every error code Siren sends in an ErrorCode schema', () => {
-    const block = schema('ErrorCode');
-    for (const code of Object.values(ErrorCode)) {
-      expect(block.includes(`- ${code}\n`), code).toBe(true);
-    }
+describe("P8: openapi.json, Siren's spec", () => {
+  it('serves GET /webhooks/events and GET /apps/scopes, the two catalog reads', () => {
+    expect(specServes('get', '/webhooks/events')).toBe(true);
+    expect(specServes('get', '/apps/scopes')).toBe(true);
   });
 });
 

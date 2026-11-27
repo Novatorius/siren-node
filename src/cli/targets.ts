@@ -101,11 +101,32 @@ export const LIVE_WRITES = [
   'apps on',
   'apps off',
   'apps delete',
+  // The developer tools that can act on a live organization with --live.
+  'trigger ask',
+  'fixtures',
+  'apps test',
+  // The developer tools that act on a sandbox alone. Their target is never live, so a hint to one never gains --live,
+  // and they are listed so the table's readsOnly and offline marks still name every command that sends a change.
+  'listen',
+  'trigger',
+  'sandbox create',
+  'sandbox list',
+  'sandbox reset',
+  'sandbox inbox',
+  'seed',
+  'recipes apply',
+  // A set or an enroller decides who moves, and a run moves people in and out of programs, distributors and groups.
+  'condition-sets create',
+  'enrollers create',
+  'enrollers run',
 ] as const;
 
-/** True when `words`, a command and its arguments, start with a command of {@link LIVE_WRITES}. */
+/** A raw route call that changes a record, such as `post /programs`, or a generated record command that does, such as `programs delete 7`. */
+const RECORD_WRITE = /^(?:(?:post|put|patch|delete) |[a-z][a-z-]* (?:create|update|delete|bulk)(?: |$)|collaborator-groups add(?: |$))/;
+
+/** True when `words`, a command and its arguments, start with a command of {@link LIVE_WRITES}, or change a record ({@link RECORD_WRITE}). */
 function changesLive(words: string): boolean {
-  return LIVE_WRITES.some((command) => words === command || words.startsWith(`${command} `));
+  return RECORD_WRITE.test(words) || LIVE_WRITES.some((command) => words === command || words.startsWith(`${command} `));
 }
 
 /**
@@ -263,6 +284,12 @@ export type RefusalParts = {
    * one `place: message` line, as a compiler prints one (CLI pass 3, must-fix 3).
    */
   problems?: ReadonlyArray<{ at: string; message: string }>;
+  /**
+   * `rows` prints the problems as aligned `field  message` rows, for the
+   * fields of a request Siren refused. A file's problems keep the place on
+   * its own line. Piped, both are one `place: message` line each.
+   */
+  problemsAs?: 'rows';
   note?: string;
   detail?: readonly string[];
 } & (

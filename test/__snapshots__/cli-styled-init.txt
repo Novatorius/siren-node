@@ -5,8 +5,11 @@
   [2mIgnored[0m   .env.sandbox, .env.live, .env.*.tmp (added to .gitignore)
 
 [1mNext[0m
-  1  Set SIREN_APP_URL to your handler's https address   [2min .env or your shell[0m
-  2  [1msiren apps apply[0m
+  1  [1msiren apps apply[0m
+  2  [1msiren listen --forward-to localhost:3000/siren[0m
 
-[2m› Siren sends requests only to https, so run your handler on an https address.[0m
+[2m› On a sandbox, you may leave SIREN_APP_URL unset, and siren listen sends its[0m
+[2m  requests to your machine. A sandbox without siren listen yet needs the[0m
+[2m  address, and apply says so.[0m
+[2m› A live organization needs SIREN_APP_URL set to an https address.[0m
 [2m› Add features in siren.app.json. Your editor completes them.[0m

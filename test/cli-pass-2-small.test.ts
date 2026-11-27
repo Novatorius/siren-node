@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseAppFile } from '../src/cli/app-file';
 import { COMMANDS, COMMAND_SPECS } from '../src/cli/run';
-import { LIVE_WRITES } from '../src/cli/targets';
-import { AuthAnswers, EMAIL, PASSWORD, harness } from './cli-fakes';
+import { LIVE_WRITES, commandLine } from '../src/cli/targets';
+import { AuthAnswers, EMAIL, PASSWORD, harness, session } from './cli-fakes';
 import { APP_KEY, AppAnswers, appRecord } from './apps-siren-answers';
 import { capturedReply } from './cloud-captures';
 import { reply } from './http-fakes';
@@ -44,9 +44,24 @@ describe('finding 8: --live only on a command that changes a live organization',
   it('names every command that is no read and works online, and login and logout need none (review round 1, C1)', () => {
     for (const command of COMMANDS) {
       const spec = COMMAND_SPECS[command];
+      // Logging in changes nothing in an organization, so it takes no --live (review round 1, C1).
       const changes = spec.readsOnly !== true && spec.offline !== true && command !== 'logout' && command !== 'login';
       expect(LIVE_WRITES.includes(command as never), command).toBe(changes);
     }
+  });
+
+  it('adds --live to a hint for a record write on a live organization (review of PR 94)', () => {
+    expect(commandLine({ addressFlag: '', live: true }, 'programs delete 4')).toBe('siren programs delete 4 --live');
+    expect(commandLine({ addressFlag: '', live: true }, 'conversions bulk approve --stdin --yes')).toBe('siren conversions bulk approve --stdin --yes --live');
+    expect(commandLine({ addressFlag: '', live: true }, 'collaborator-groups add 5 --stdin --yes')).toBe('siren collaborator-groups add 5 --stdin --yes --live');
+  });
+
+  it('shows an unset url variable on a live Siren before asking anyone to sign in (review of PR 94)', async () => {
+    const h = harness([], { edition: 'production' });
+    h.write('siren.app.json', fileWith({ url: '${SIREN_APP_URL}', features }));
+    expect(await h.run(['apps', 'apply', '--base-url', UAT, '--live'])).toBe(1);
+    expect(h.err()).toContain('needs the environment variable SIREN_APP_URL');
+    expect(h.err()).not.toMatch(/sign in|siren login/i);
   });
 
   it('says siren apps init, with no --live, when a live apply finds no file', async () => {
@@ -113,10 +128,11 @@ describe('finding 10: the plan says when the app is off', () => {
 
 describe('finding 11: a file error names its place once', () => {
   it('prints no path before a message that already starts with its app', async () => {
-    const h = harness([]);
-    h.signedIn();
+    // On a live organization: a sandbox may leave the url unset for siren listen (the developer tools).
+    const h = harness([], { edition: 'production' });
+    h.signedIn({ [UAT]: session({ edition: 'production', baseUrl: UAT }) });
     h.write('siren.app.json', fileWith({ features: { note: { kind: 'postConversionAction', name: 'Note' } } }));
-    expect(await h.run(['apps', 'apply'])).toBe(1);
+    expect(await h.run(['apps', 'apply', '--base-url', UAT, '--live'])).toBe(1);
     const line = h.err().split('\n').find((text) => text.includes('has features and no url'))!;
     expect(line).toMatch(new RegExp(`^siren\\.app\\.json:\\d+:\\d+: apps\\.${KEY} has features and no url\\.`));
   });

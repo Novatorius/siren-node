@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { specServes } from './spec-routes';
 
 /*
  * Slice 3 acceptance tests for packet P11: the reference docs describe the
- * record resources. Slice 5 edits README.md, CHANGELOG.md and openapi.yaml,
+ * record resources. Slice 5 edits README.md and CHANGELOG.md, and Siren's openapi.json serves the routes,
  * so P11 starts only after slice 5 merges into feat/node-commerce-connectors,
  * and after P10, since the README names the client fields P10 adds.
  */
@@ -25,15 +26,6 @@ function section(markdown: string, heading: string): string {
 /** Sentences, split on a full stop followed by white space. */
 function sentences(text: string): string[] {
   return text.replace(/\s+/g, ' ').split(/(?<=\.)\s/);
-}
-
-/** One path block in openapi.yaml, from its key to the next path. */
-function path(openapi: string, key: string): string {
-  const start = openapi.indexOf(`\n  ${key}:\n`);
-  expect(start, key).toBeGreaterThan(-1);
-  const rest = openapi.slice(start + 1);
-  const next = rest.slice(1).search(/\n {2}\/|\n\S/);
-  return next < 0 ? rest : rest.slice(0, next + 1);
 }
 
 const ROUTES: Array<[string, string[]]> = [
@@ -150,12 +142,10 @@ describe('P11: CHANGELOG', () => {
   });
 });
 
-describe('P11: openapi.yaml', () => {
-  it.each(ROUTES)('documents %s with each method the SDK sends', (key, methods) => {
-    const block = path(read('openapi.yaml'), key);
-
+describe("P11: openapi.json, Siren's spec", () => {
+  it.each(ROUTES)('serves %s with each method the SDK sends', (key, methods) => {
     for (const method of methods) {
-      expect(block, `${key} ${method}`).toMatch(new RegExp(`\\n {4}${method}:\\n`));
+      expect(specServes(method, key), `${key} ${method}`).toBe(true);
     }
   });
 });

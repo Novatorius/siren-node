@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- `apps.declare()` no longer refuses, before sending, an app with features other than custom
+  events and no `url`. Siren decides. A sandbox takes such an app, and `siren listen` carries its
+  requests, and a live organization answers 422 naming the url. Code that caught the old local
+  error catches the 422 `ValidationError` now.
+- `siren get --all --json` prints one envelope holding every page's items, the same shape as one
+  page, in place of a bare array.
+- Through a pipe, a generated list prints its table alone on standard output, starting at the
+  margin, and its count, Next and tips on standard error. A script that read the count from
+  standard output reads standard error now, or uses `--json`.
+- `openapi.yaml` is gone. `openapi.json` replaces it, a byte copy of the spec Siren writes from its
+  REST controllers, so it lists the routes Siren serves on Cloud and WordPress and marks each with
+  `x-siren-platforms`. Its named schemas drop from 50 to 2, `Error` and `ListEnvelope`. Request
+  bodies and record answers are written inline on each operation, and answers Siren does not declare
+  are open and listed under `x-siren-open-routes`. Code generators should read `openapi.json` for
+  paths, parameters and request bodies, and take response models from this package's exported
+  TypeScript types, which cover what the spec leaves open.
 - `siren.apiKeys` (`create`, `list`, `scopes` and `revoke`) and
   `siren.webhooks.subscriptions.create()` are removed, with `ApiKeysResource`, `ApiKey`,
   `CreatedApiKey`, `CreateApiKeyParams`, `CreatedWebhookSubscription` and
@@ -101,6 +117,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Generated lists take `--ids`, one id a line, and `--fields a,b,c`, which shapes the table and
+  `--json`. They ask for newest first where the route takes an order, and print dates as dates.
+  Generated help opens with a sentence, such as "List programs, newest first.", before the route.
+- `siren condition-sets` lists, shows and makes condition sets, and `siren condition-sets matches`
+  counts who matches one now and names the first few, or counts the matches of conditions not yet
+  saved. `siren enrollers` lists and shows enrollers, prints their log, makes one from JSON, and
+  runs one now after saying how many people would move. A Siren or a plan without them gets a
+  refusal that says which.
+- The generated `siren notes list`, `create`, `update` and `delete` are gone. Notes on records are
+  an operator's job, which Siren's MCP connector covers, so the CLI has no notes commands.
+- A generated `get`, such as `siren collaborators get 1`, prints a record view: the record's name
+  in the headline, aligned rows, a nested object as dotted rows, and each list of objects as its
+  own section, one line an item, never cut mid-value. Through a pipe, Next goes to standard error.
+- A validation failure prints one row a field on every command, with each field's needs, in
+  place of one paragraph. `--json` on a generated command now carries Siren's `context`, which held
+  `failedValidations` and was dropped before.
+- `siren recipes`, with `preview`, `apply`, `status`, `imports`, `export`, `catalog`, `show` and
+  `fetch`. `apply` previews, asks, applies under an import key made from the recipe, and follows
+  the import to its end. `siren.recipes` makes the same calls from code. The package ships
+  `siren.recipe.schema.json`, a copy of Siren's recipe schema, for editor completion.
 - `apps.requests.list()` takes `limit` (1 to 100) and `before` (a request id) to page through every
   request, as `GET /apps/requests` now reads them.
 - `apps.requests.list({ idPrefix })` finds requests by the start of their id, `apr_` and 4 to 32
@@ -427,6 +463,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A Siren date without a zone, such as `2026-11-24 15:51:48`, is read as UTC, as Siren stores it,
+  rather than as the machine's own time.
+- The prepare script sends tsup's output to standard error, so `npm pack --json` prints JSON alone
+  under every npm version. On a dry run with dist already built, it keeps that dist rather than
+  rebuild it, since a dry run writes nothing.
 - No command waits on the Siren logo any more. The first-run hook is drawn beside the command, which
   starts at once and stills the logo with its first line, where it used to play for about three
   seconds first. `siren login --password` asks for the email and password beside the floating logo,

@@ -162,3 +162,22 @@ export {
 } from './resources/apps';
 
 export { Siren as default } from './client';
+export { RecipesResource, recipeProblems } from './resources/recipes';
+export type {
+  Recipe,
+  RecipeApplyOptions,
+  RecipeCatalog,
+  RecipeCatalogEntry,
+  RecipeCatalogFilters,
+  RecipeExport,
+  RecipeImport,
+  RecipeImportSummary,
+  RecipeOutcomes,
+  RecipePreview,
+  RecipePreviewOptions,
+  RecipePreviewSample,
+  RecipePreviewSection,
+  RecipeProblem,
+  RecipeSource,
+  RecipeVariable,
+} from './resources/recipes';

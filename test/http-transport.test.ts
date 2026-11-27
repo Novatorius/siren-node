@@ -164,6 +164,15 @@ describe('P4: HttpTransport sends through the HttpClient seam', () => {
     expect(bare.estimatedCount).toBe(40);
   });
 
+  it('hands back a status the request names in answers, and still throws for any other refusal', async () => {
+    const client = new FakeHttpClient([reply(422, { validation: { valid: false, errors: [] } }), reply(422, { error: { message: 'No.' } })]);
+    const http = transport(client);
+    const answered = await http.request({ method: 'POST', path: '/simulations/scenario', body: {}, retriable: false, answers: [422] });
+    expect(answered.status).toBe(422);
+    expect(JSON.parse(await answered.text())).toEqual({ validation: { valid: false, errors: [] } });
+    expect(await rejection(http.request({ method: 'POST', path: '/simulations/scenario', body: {}, retriable: false }))).toBeInstanceOf(SirenError);
+  });
+
   it('maps an error reply from the client to the typed error, with its message and Retry-After', async () => {
     const client = new FakeHttpClient([
       reply(404, CloudAnswers.notFound),

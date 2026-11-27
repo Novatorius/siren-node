@@ -353,6 +353,14 @@ const NODE_ONLY = [
   'siren.apps.features.retrieve()',
   'siren.apps.features.update()',
   'siren.apps.features.delete()',
+  'siren.recipes.preview()',
+  'siren.recipes.apply()',
+  'siren.recipes.import()',
+  'siren.recipes.imports()',
+  'siren.recipes.export()',
+  'siren.recipes.exportSizes()',
+  'siren.recipes.catalog()',
+  'siren.recipes.fetch()',
 ];
 
 /**

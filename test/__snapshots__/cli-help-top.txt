@@ -28,6 +28,52 @@ REQUESTS
   apps answer         Answer an ask by hand
   apps resend         Send a request again
 
+DEVELOPER TOOLS
+  listen              Send the app's requests to this machine
+  trigger             Make test activity in a sandbox
+  trigger ask         Send a feature a test ask
+  logs tail           Watch requests, deliveries and API calls live
+  simulate            Show what a scenario would make, writing nothing
+  fixtures            Run a file of trigger steps
+  apps test           Send the app's address a test delivery
+
+SANDBOX
+  sandbox create      Copy a live setup into a sandbox
+  sandbox list        List your sandbox organizations
+  sandbox reset       Clear activity, keep setup
+  sandbox inbox       Read the sandbox's caught emails
+  seed                Fill a sandbox with sample sales
+
+RECIPES
+  recipes preview     Show what a recipe would make
+  recipes apply       Preview, ask, then apply a recipe
+  recipes status      Show one recipe import
+  recipes imports     List recent recipe imports
+  recipes export      Print this organization's setup as a recipe
+  recipes catalog     List ready-made recipes
+  recipes show        Print one ready-made recipe
+  recipes fetch       Print the recipe a Beacon handoff carries
+
+CONDITION SETS
+  condition-sets list        List the condition sets
+  condition-sets get         Show one condition set
+  condition-sets matches     Count and name who matches now
+  condition-sets create      Make a condition set from JSON
+  condition-sets conditions  List the conditions a set can use
+
+ENROLLERS
+  enrollers list      List the enrollers
+  enrollers get       Show one enroller
+  enrollers log       Show what an enroller did
+  enrollers run       Run an enroller now
+  enrollers create    Make an enroller from JSON
+
+RECORDS
+  <resource> <op>     List, get, create, update or delete a record
+  get <path>          Read any route, such as get /programs
+  post <path>         Write to any route, and put, patch and delete
+  resources           List the resources and their operations
+
 ACCOUNT
   logout              Log out, and forget the session here
   whoami              Show who you are logged in as

@@ -1,0 +1,1046 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sirenaffiliates.com/schemas/recipe.v1.json",
+  "title": "Siren Recipe",
+  "description": "Declarative configuration for a Siren installation. Producers such as migration adapters and the Beacon MCP emit recipes. Siren installs consume them via /recipes/apply.",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Recipe schema version. Additive growth (new stanzas, new optional fields) stays at version 1. Breaking changes bump the version."
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "recipeId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Beacon recipe ID when this recipe was fetched from Beacon; otherwise null or omitted."
+    },
+    "tracking": {
+      "type": "object",
+      "description": "Site-wide attribution settings. Optional; an omitted stanza preserves the target install's existing values (upsert semantic).",
+      "additionalProperties": false,
+      "properties": {
+        "urlKey": {
+          "type": "string",
+          "description": "The URL parameter name used for affiliate referral links (e.g. 'ref' produces ?ref=slug). Migration-critical. Must match the source platform's parameter name so existing links keep resolving."
+        },
+        "minimumIdLength": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minimum character length for a collaborator's tracking slug. Aliases shorter than this value are rejected."
+        }
+      }
+    },
+    "commerce": {
+      "type": "object",
+      "description": "Site-wide commerce settings. Optional; an omitted stanza preserves the target install's existing values (upsert semantic).",
+      "additionalProperties": false,
+      "properties": {
+        "defaultCurrency": {
+          "type": "string",
+          "description": "Default currency identifier for records that don't specify one. Resolved at apply time against CurrencyProviderService."
+        }
+      }
+    },
+    "customEvents": {
+      "type": "object",
+      "description": "The org's own trigger events the recipe uses, keyed by recipe-local identifier. Siren Cloud only. A program or distributor names one as an engagement trigger with the type customEvent:<key>. On import Siren reuses the org's active event with the same name, ignoring case, or makes a new one with its own address, and wires the programs and distributors to it. New events count toward the plan's limit.",
+      "additionalProperties": {
+        "$ref": "#/$defs/customEvent"
+      }
+    },
+    "variables": {
+      "type": "object",
+      "description": "Records the recipe uses but does not create, keyed by an identifier a distributor's program limit names where it would name a program or program group key. The person importing the recipe chooses each record, and the apply request carries the answers in variableAnswers.",
+      "maxProperties": 100,
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+      "additionalProperties": { "$ref": "#/$defs/variable" }
+    },
+    "programs": {
+      "type": "object",
+      "description": "Programs keyed by recipe-local identifier. Other stanzas reference programs by this key.",
+      "additionalProperties": {
+        "$ref": "#/$defs/program"
+      }
+    },
+    "programGroups": {
+      "type": "object",
+      "description": "Program groups keyed by recipe-local identifier. Groups reference their member programs by program key.",
+      "additionalProperties": {
+        "$ref": "#/$defs/programGroup"
+      }
+    },
+    "distributors": {
+      "type": "object",
+      "description": "Distributors keyed by recipe-local identifier.",
+      "additionalProperties": {
+        "$ref": "#/$defs/distributor"
+      }
+    },
+    "collaboratorGroups": {
+      "type": "object",
+      "description": "Collaborator groups keyed by recipe-local identifier. Groups reference their member collaborators by collaborator key, and bind to programs and distributors via programKeys and distributorKeys.",
+      "additionalProperties": {
+        "$ref": "#/$defs/collaboratorGroup"
+      }
+    },
+    "collaborators": {
+      "type": "object",
+      "description": "Collaborators keyed by recipe-local identifier. Upsert by email at apply time; the recipe-local key exists only for references from mappings and bindings.",
+      "additionalProperties": {
+        "$ref": "#/$defs/collaborator"
+      }
+    },
+    "products": {
+      "type": "object",
+      "description": "Products keyed by recipe-local identifier. Each names a product Siren already has by SKU, or a store listing by its store's id, and sets its name and owners. Products come from stores, so an entry only creates one when it names the store's id for it. Applied after collaborators, so owners can name collaborators the same recipe adds.",
+      "additionalProperties": {
+        "$ref": "#/$defs/product"
+      }
+    },
+    "mappings": {
+      "type": "array",
+      "description": "Cross-system identity bridges. Each entry maps a Siren-owned entity (localType + localKey into a recipe stanza) to an external-system entity (externalType + externalId). Registry-backed on both type fields; unknown pairings surface in the preview as requiring an integration the install lacks. Export emits only localTypes that have a recipe stanza (collaborator, program, distributor) so localKey resolves on re-import; runtime-only mappings such as opportunity→collaborator lifetime bindings are per-customer history and are intentionally excluded.",
+      "items": {
+        "$ref": "#/$defs/mapping"
+      }
+    },
+    "currencies": {
+      "type": "object",
+      "description": "Custom (internal) currencies keyed by recipe-local identifier. Programs and autofulfillers reference these by currency code.",
+      "additionalProperties": {
+        "$ref": "#/$defs/currency"
+      }
+    },
+    "autofulfillers": {
+      "type": "object",
+      "description": "Autofulfiller mappings keyed by recipe-local identifier. Each binds a currency to a fulfillment method.",
+      "additionalProperties": {
+        "$ref": "#/$defs/autofulfiller"
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "description": "Notification rules keyed by recipe-local identifier. Each says: when an event happens, email an audience a subject and body. Siren Cloud only. A WordPress site refuses a recipe that holds any. Applying the recipe again updates the rules it made rather than making more. The approval request (applied to org_admins) and the approved and declined emails to the collaborator are one rule each, so an entry for one of them updates the rule the site already has.",
+      "additionalProperties": {
+        "$ref": "#/$defs/notification"
+      }
+    }
+  },
+  "$defs": {
+    "notification": {
+      "type": "object",
+      "required": [
+        "event",
+        "audience",
+        "subject",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": [
+            "applied",
+            "approved",
+            "declined",
+            "joined",
+            "reward_earned",
+            "reward_approved",
+            "payout_sent",
+            "reward_held",
+            "payout_failed",
+            "payout_waiting",
+            "payout_setup"
+          ],
+          "description": "When the email goes: someone applies, an application is approved or declined, a collaborator joins more, a reward is earned, approved or held for review, a payout is sent, an automatic payout fails, a payout waits on the collaborator's Stripe or PayPal setup, or a collaborator needs to set up payouts."
+        },
+        "audience": {
+          "type": "string",
+          "enum": [
+            "collaborator",
+            "org_admins",
+            "property_admins",
+            "custom"
+          ],
+          "description": "Who the email goes to. property_admins is offered only on the reward events, and reward_held emails only the merchant's side. custom goes to customAddress."
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The subject. It may carry merge tags such as {org.name}."
+        },
+        "body": {
+          "description": "The body. Plain text, where each blank line starts a new paragraph, or an editor document with type doc. It may carry merge tags such as {collaborator.nickname}.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "const": "doc"
+                }
+              }
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the rule sends. Defaults to true."
+        },
+        "customAddress": {
+          "type": "string",
+          "description": "The address a custom audience rule goes to. Required while a custom rule is on."
+        }
+      }
+    },
+    "currency": {
+      "type": "object",
+      "required": [
+        "name",
+        "symbol"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Currency code. Defaults to the recipe-local key when omitted."
+        },
+        "name": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "symbolPosition": {
+          "type": "string",
+          "enum": [
+            "before",
+            "after"
+          ]
+        },
+        "exchangeRate": {
+          "type": "integer",
+          "description": "Internal currency units per $1."
+        }
+      }
+    },
+    "autofulfiller": {
+      "type": "object",
+      "required": [
+        "currency",
+        "method"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "type": "string",
+          "description": "Currency code this autofulfiller handles."
+        },
+        "method": {
+          "type": "string",
+          "description": "Registered fulfillment method key."
+        }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "description": "One record the importer chooses.",
+      "required": ["type", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "minLength": 1, "maxLength": 64, "description": "The kind of record, such as program or programGroup." },
+        "name": { "type": "string", "minLength": 1, "maxLength": 255, "description": "What the import asks about, such as Dealer program." },
+        "help": { "type": "string", "maxLength": 255, "description": "One more sentence shown under the name." }
+      }
+    },
+    "customEvent": {
+      "type": "object",
+      "description": "One of the org's own trigger events. The org's site sends it to Siren with an API key, and it credits the collaborator the send names.",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "The name members see, such as \"Posted a comment\". Unique among the org's active events, ignoring case."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "What the event means, shown on its page and in the trigger pickers."
+        },
+        "fieldSchema": {
+          "type": "object",
+          "description": "The fields a send may carry, as the event types API takes them: {\"fields\": {\"<name>\": {\"type\": \"string\" | \"integer\" | \"numeric\" | \"boolean\", \"required\": bool}}}. Optional."
+        }
+      }
+    },
+    "program": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "status",
+        "incentiveType",
+        "incentiveResolverType",
+        "units"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "inactive"
+          ]
+        },
+        "incentiveType": {
+          "type": "string",
+          "description": "Registered incentive type key. Resolved at apply time against IncentiveStorageService."
+        },
+        "incentiveResolverType": {
+          "type": "string",
+          "description": "Registered incentive resolver key. Resolved at apply time against IncentiveResolverStorageService."
+        },
+        "incentiveArgs": {
+          "type": "object",
+          "description": "Type-specific arguments whose shape depends on incentiveType (e.g. transactionPercent for saleTransactionPercentage, payoutPerTransaction for saleFixedPerTransaction, payoutPerProduct for saleFixedPerProduct, payoutPerLead + leadRequalificationDays for leadFixed). Not schema-enforced here because the set of incentive types is registry-backed and extension packages add their own; per-type validation happens at apply time. Leaves room to later publish per-type sub-schemas that the preview layer can look up and enforce."
+        },
+        "units": {
+          "type": "string",
+          "description": "Currency identifier. Resolved at apply time against CurrencyProviderService."
+        },
+        "autoApprove": {
+          "type": "boolean",
+          "description": "When true, conversions produced by this program are auto-approved rather than held pending operator review."
+        },
+        "expirationDays": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Attribution window in days. Controls how long an engagement from this program remains eligible to convert."
+        },
+        "activeConversionTypes": {
+          "type": "array",
+          "description": "Conversion types this program responds to (e.g. sale, renewal, lead). Registry-backed; unknown values surface in the preview as requiring a feature the install lacks.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "engagementTypes": {
+          "type": "array",
+          "description": "Engagement triggers this program listens to, with optional score weighting.",
+          "items": {
+            "$ref": "#/$defs/engagementListener"
+          }
+        },
+        "transactionCompilers": {
+          "type": "array",
+          "description": "Transaction detail compilers applied when evaluating this program.",
+          "items": {
+            "type": "string",
+            "description": "Registered transaction compiler key."
+          }
+        },
+        "lineItemFilters": {
+          "$ref": "#/$defs/lineItemFilters"
+        },
+        "postConversionActions": {
+          "type": "array",
+          "description": "Post-conversion action strategies bound to this program. Each entry references a registered PostConversionActionStrategy by type ID. Concrete actions own any additional configuration via their own datastores.",
+          "items": {
+            "$ref": "#/$defs/programPostConversionAction"
+          }
+        },
+        "engagementFilters": {
+          "type": "array",
+          "description": "Engagement (customer) filter ids this program opts into — vetoes applied before an engagement is created (e.g. suppressAttributedOpportunity). Registry-backed; an id with no registered filter is a harmless no-op at apply time.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "programGroup": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "sorter"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "sorter": {
+          "type": "string",
+          "description": "Registered sorter strategy key (e.g. newestBindingWins, oldestBindingWins). Real registry lives in GroupSorterStorageService; unknown values surface in preview as 'requires feature X'."
+        },
+        "programs": {
+          "type": "array",
+          "description": "Member programs, referenced by program key.",
+          "items": {
+            "type": "string",
+            "description": "Program key reference into recipe.programs."
+          }
+        }
+      }
+    },
+    "distributor": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "status",
+        "units",
+        "distributionResolver",
+        "distributionPoolResolver"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "inactive"
+          ]
+        },
+        "units": {
+          "type": "string",
+          "description": "Currency identifier. Resolved at apply time against CurrencyProviderService."
+        },
+        "distributionResolver": {
+          "type": "string",
+          "description": "Registered distribution resolver key (e.g. newestBindingWins, evenlySharedPool). Resolved at apply time against DistributionIncentiveResolverStorageService."
+        },
+        "distributionArgs": {
+          "type": "object",
+          "description": "Type-specific arguments whose shape depends on distributionResolver. Not schema-enforced here because the set is registry-backed; per-resolver validation happens at apply time. Empty or omitted when the resolver takes no args."
+        },
+        "distributionPoolResolver": {
+          "type": "string",
+          "description": "Pool source key. Two are recognized. revenueSinceLastDistribution pays out of the revenue counted since the last distribution, and needs at least one transaction compiler. scoreTotal pays out of the scores added up at close, and accrues nothing as sales come in. The split ids older recipes put here (evenlySharedPool, performanceSharedPool, topScoreWins) are read as revenueSinceLastDistribution. Any other value is refused, and the recipe is not applied."
+        },
+        "poolResolverArgs": {
+          "type": "object",
+          "description": "Type-specific arguments whose shape depends on distributionPoolResolver. Both pool sources carry percentage, an integer 0-100. For revenueSinceLastDistribution it is the share of the counted revenue that goes to the pool. For scoreTotal it is the share of the scores added up that goes to the pool, so 100 with a performance split pays each person their score in minor units. Previously stored globally in the configs table. Storing it per distributor fixes the known parallel-importer clobbering bug."
+        },
+        "schedule": {
+          "type": "array",
+          "description": "When the distributor pays out: an ordered list of date modifier expressions applied to \"now\" to compute the next trigger date, such as [\"first day of next month\"]. Each string is passed to PHP's DateTime::modify(). If the computed date is in the past, apply bumps it forward one year. Required, with at least one expression: a distributor with no schedule never opens a period, so it scores nothing and pays nothing, and the recipe is refused. A structured alternative (e.g. monthly-on-the-first) is a future addition.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "engagementTypes": {
+          "type": "array",
+          "description": "Engagement triggers this distributor listens to, with optional score weighting.",
+          "items": {
+            "$ref": "#/$defs/distributorEngagementListener"
+          }
+        },
+        "transactionCompilers": {
+          "type": "array",
+          "description": "The parts of a sale this distributor counts, as registered transaction compiler keys, such as includeLineItems for products and subscriptions. At least one is required when the pool is revenueSinceLastDistribution, since the pool adds up the parts picked. It is also required on a scoreTotal bonus with a metric that fires on a sale, such as awardedSale, at any calculation, or with a saleValue metric: a sale counts only when a compiler picks one of its lines, and saleValue scores the total of the lines picked. Without one, such a distributor counts no sale and pays nothing, so the recipe is refused. A bonus whose metrics never read a sale, such as one paid only by credits added by hand, may leave it out.",
+          "items": {
+            "type": "string",
+            "description": "Registered transaction compiler key."
+          }
+        },
+        "lineItemFilters": {
+          "$ref": "#/$defs/lineItemFilters"
+        },
+        "postAllocationActions": {
+          "type": "array",
+          "description": "Post-allocation action strategies bound to this distributor. Each entry references a registered PostAllocationActionStrategy by type ID. Concrete actions own any additional configuration via their own datastores.",
+          "items": {
+            "$ref": "#/$defs/distributorPostAllocationAction"
+          }
+        },
+        "metricFilters": {
+          "type": "array",
+          "description": "Metric (customer) filter ids this distributor opts into — vetoes applied before a metric is created (e.g. suppressAttributedOpportunity). Registry-backed; an id with no registered filter is a harmless no-op at apply time.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "description": "Conditions a person's period result must meet to be paid, such as at least 10 triggers. Each names a registered condition and its args. Checked against the conditions registry when the recipe is validated.",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "args"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "args": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "collaboratorGroup": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "structure"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "structure": {
+          "type": "string",
+          "description": "Registered structure resolver key (e.g. flat). Resolved at apply time against CollaboratorGroupStructureResolverProviderService."
+        },
+        "members": {
+          "type": "array",
+          "description": "Group members, each referencing a collaborator by recipe key. Members are populated after the collaborators stanza is processed.",
+          "items": {
+            "$ref": "#/$defs/collaboratorGroupMember"
+          }
+        },
+        "programKeys": {
+          "type": "array",
+          "description": "Programs governed by this group, referenced by program key. Binds each program to this collaborator group so only group members are eligible.",
+          "items": {
+            "type": "string",
+            "description": "Program key reference into recipe.programs."
+          }
+        },
+        "distributorKeys": {
+          "type": "array",
+          "description": "Distributors governed by this group, referenced by distributor key. Binds each distributor to this collaborator group so only group members are eligible.",
+          "items": {
+            "type": "string",
+            "description": "Distributor key reference into recipe.distributors."
+          }
+        }
+      }
+    },
+    "collaboratorGroupMember": {
+      "type": "object",
+      "required": [
+        "collaboratorKey"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "collaboratorKey": {
+          "type": "string",
+          "description": "Key into recipe.collaborators. Resolved at apply time to a collaborator ID."
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Structure-specific metadata for this member. Interpretation depends on the group's structure resolver. Flat structures ignore metadata; hierarchical structures may read parent pointers, weights, etc."
+        }
+      }
+    },
+    "collaborator": {
+      "type": "object",
+      "required": [
+        "email",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "fullName": {
+          "type": "string"
+        },
+        "nickname": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Natural key for upsert at apply time. CollaboratorSubmissionService::getOrCreateCollaborator uses this to find-or-create; when a collaborator with this email already exists on the target, the recipe's fields update it and omitted fields preserve existing values."
+        },
+        "status": {
+          "type": "string",
+          "description": "Collaborator lifecycle status (e.g. active, pending, rejected). Registry-backed via CollaboratorStatusProvider. `invited` is honoured only with `invitation`, and otherwise applies as pending."
+        },
+        "aliases": {
+          "type": "array",
+          "description": "Typed identity aliases this collaborator owns. Nested rather than a separate stanza because aliases belong to exactly one collaborator.",
+          "items": {
+            "$ref": "#/$defs/alias"
+          }
+        },
+        "coupons": {
+          "type": "array",
+          "description": "Coupon codes that credit this collaborator. Each names a code, and may name the integration and the store it belongs to. A code that names neither counts at every store. Coupon codes in `aliases`, the older shape, are still accepted.",
+          "items": {
+            "$ref": "#/$defs/coupon"
+          }
+        },
+        "bindings": {
+          "type": "array",
+          "description": "Intra-Siren relationships this collaborator participates in: programs, distributors and collaborator groups, named by recipe key or by the ID of an existing record. Nested on collaborator rather than a separate stanza because collaborator is always one side of every known binding junction.",
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        },
+        "referralCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The collaborator's referral code, the one their links carry, set exactly as given and made their current code. A code another collaborator holds fails this collaborator rather than giving them a new one. Use it to keep the codes people already shared on another platform. Unlike `aliases`, it replaces the code Siren generates for a new collaborator."
+        },
+        "meta": {
+          "type": "object",
+          "description": "Custom fields kept on the collaborator, as key and text value. Keys are lower case letters, digits and underscores, starting with a letter. An empty value removes the field.",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "onExisting": {
+          "type": "string",
+          "enum": [
+            "merge",
+            "update",
+            "skip"
+          ],
+          "description": "What to do when a collaborator with this email already exists. `merge` (the default) adds what the entry names, such as bindings, aliases and coupons, and leaves their name, status and referral code alone. `update` also sets their name, status, referral code and custom fields from the entry. `skip` leaves them untouched."
+        },
+        "invitation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Emails the collaborator a link to set up their account, through the same invitation email the Collaborators screen sends. With status `invited` they join as invited and become a collaborator when they accept. With any other status they are added now and the email lets them set up their account. Nobody is emailed twice within a week, nobody who already has an account is emailed, and every email waits until the organization's email address is confirmed. Only platforms that send invitation emails accept it.",
+          "properties": {
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 1000,
+              "description": "The organization's own words for the email, as plain text."
+            },
+            "statusOnAccept": {
+              "type": "string",
+              "enum": [
+                "active",
+                "pending"
+              ],
+              "description": "The status an invited collaborator gets when they accept. Defaults to active."
+            }
+          }
+        }
+      }
+    },
+    "coupon": {
+      "type": "object",
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The code shoppers type."
+        },
+        "integration": {
+          "type": "string",
+          "description": "The integration the code belongs to, such as wc, edd or shopify. Omit for every integration."
+        },
+        "propertyId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The Siren Cloud Property the code belongs to. Omit for every store, or on a WordPress site."
+        }
+      }
+    },
+    "alias": {
+      "type": "object",
+      "required": [
+        "type",
+        "code"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Registered alias type (e.g. tracking, coupon). Registry-backed; unknown types surface in the preview as requiring a feature the install lacks."
+        },
+        "code": {
+          "type": "string",
+          "description": "The alias value (tracking slug, coupon code, etc). Unique within its type on the target."
+        },
+        "issuedDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 date-time the alias was originally issued. Carried from migration sources so historical attribution stays correct; when omitted, apply uses now."
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "required": [
+        "targetType"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "targetType": {
+          "type": "string",
+          "description": "Registered target domain type: program, distributor or collaboratorGroup. Registry-backed; unknown values surface in the preview as requiring a feature the install lacks."
+        },
+        "targetKey": {
+          "type": "string",
+          "description": "Key into the recipe stanza matching targetType. targetType 'program' + targetKey 'gold' resolves to recipe.programs.gold, which apply-time resolves to the Siren ID for the junction insert."
+        },
+        "targetId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The ID of a record that already exists in Siren, for a binding to something the recipe does not create. Use it instead of targetKey."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "targetKey"
+          ]
+        },
+        {
+          "required": [
+            "targetId"
+          ]
+        }
+      ]
+    },
+    "mapping": {
+      "type": "object",
+      "required": [
+        "localType",
+        "localKey",
+        "externalType",
+        "externalId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "localType": {
+          "type": "string",
+          "description": "Siren domain type on the local side (e.g. collaborator, program, distributor). Registry-backed; resolved at apply time against Siren's mapping type registry."
+        },
+        "localKey": {
+          "type": "string",
+          "description": "Key into this recipe's stanza for localType. localType 'collaborator' + localKey 'alice' resolves to recipe.collaborators.alice, which apply-time resolves to a Siren ID."
+        },
+        "externalType": {
+          "type": "string",
+          "description": "External system type (e.g. wc_product, edd_download, llms_course, ld_course, nc_product, gf_field, user). Registry-backed; unknown types surface in the preview as requiring an integration the install lacks."
+        },
+        "externalId": {
+          "type": "string",
+          "description": "Identifier in the external system (SKU, post ID, user ID, etc.) as a string. Apply layer coerces to the integration's native type based on externalType."
+        }
+      }
+    },
+    "engagementListener": {
+      "type": "object",
+      "description": "One engagement trigger an entity (program or distributor) listens to, with optional score weighting and calculation strategy.",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Registered engagement trigger key, or customEvent:<key> for one of the recipe's own events in the customEvents stanza."
+        },
+        "value": {
+          "type": "integer",
+          "description": "Score weight for this engagement. Used by the 'fixed' calculation type. When omitted, the apply-time default is used."
+        },
+        "calculationType": {
+          "type": "string",
+          "description": "Registered engagement/metric calculation strategy key (e.g. 'fixed', 'upline', 'downline'). Defaults to 'fixed' when omitted. Registry-backed; unknown values surface in the preview as requiring a feature the install lacks."
+        },
+        "args": {
+          "type": "object",
+          "description": "Calculation-type-specific arguments stored as config values. Shape depends on calculationType (e.g. pointsAtLayer1..pointsAtLayer5 for cascade calculations). Not schema-enforced; per-type validation happens at apply time."
+        }
+      }
+    },
+    "distributorEngagementListener": {
+      "type": "object",
+      "description": "One metric a distributor scores, as an engagementListener, plus the program limit of a metric that fires on a sale.",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "integer",
+          "description": "What one trigger scores at the fixed calculation, a whole number. On a scoreTotal pool each score is paid as money, so value is an amount in the distributor's minor units, the unit a program's payoutPerTransaction uses: 30000 pays $300 for each customer in USD. There it must be 1 or more, except on the manual metric, where a credit added by hand may carry its own amount. On a revenueSinceLastDistribution pool it is a weight that sets each person's share of the pool. When omitted, apply stores 1."
+        },
+        "calculationType": {
+          "type": "string",
+          "description": "How each trigger is scored. fixed, the default when omitted, scores value each time. saleValue scores a percent of what the sale is worth to the distributor, in minor units, and needs args.rate. It works only on a metric that fires on a sale, such as awardedSale. On a scoreTotal pool its score is paid as money. On a revenueSinceLastDistribution pool it is a weight, and it can't sit beside a fixed metric. Other registered keys take their own args."
+        },
+        "args": {
+          "type": "object",
+          "description": "Arguments of the calculation, stored as config values. saleValue takes rate, the percent of each sale's value, above 0 and at most 100, with decimals allowed: 5 pays 5 percent of each sale. fixed reads value instead. Other calculations take their own, such as pointsAtLayer1..pointsAtLayer5 for cascade calculations."
+        },
+        "triggerArgs": {
+          "type": "object",
+          "description": "The programs whose awarded sales the metric counts. programScope is any or listed. programs and programGroups name keys of the recipe's programs and programGroups stanzas.",
+          "additionalProperties": false,
+          "properties": {
+            "programScope": {
+              "type": "string",
+              "enum": [
+                "any",
+                "listed"
+              ]
+            },
+            "programs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "programGroups": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "lineItemFilters": {
+      "type": "object",
+      "description": "Filters controlling which transaction line items count toward the containing entity's rewards or pool. withSkus and inCategories reference external catalog data (WooCommerce/EDD product SKUs and taxonomy terms); these surface in the preview when the target install lacks them.",
+      "additionalProperties": false,
+      "properties": {
+        "withTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "collaboratorOwned": {
+          "type": "boolean"
+        },
+        "withSkus": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inCategories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "programPostConversionAction": {
+      "type": "object",
+      "description": "Post-conversion action strategy attached to a program. Identified by registry key only — concrete action strategies persist any per-program configuration in their own datastores.",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Registered PostConversionActionStrategy key."
+        }
+      }
+    },
+    "distributorPostAllocationAction": {
+      "type": "object",
+      "description": "Post-allocation action strategy attached to a distributor. Identified by registry key only — concrete action strategies persist any per-distributor configuration in their own datastores.",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Registered PostAllocationActionStrategy key."
+        }
+      }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "sku"
+          ]
+        },
+        {
+          "required": [
+            "platformId",
+            "integration"
+          ]
+        }
+      ],
+      "description": "One product. Matched by `platformId` with `integration` (and `propertyId`) when given, otherwise by `sku` across the listings stores have sent, narrowed by `propertyId` and `integration` when given. A SKU that matches several different products is refused rather than guessed.",
+      "properties": {
+        "sku": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The SKU a store gave the product."
+        },
+        "platformId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 191,
+          "description": "The store's own id for the listing, such as a WooCommerce post ID or a Shopify product ID."
+        },
+        "integration": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "description": "The integration the listing belongs to, such as wc, shopify or stripe."
+        },
+        "propertyId": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The store (Property) the listing belongs to. 0, the default, means every store, as on a WordPress site."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The product's name in Siren. A new listing takes it, and an update renames the product."
+        },
+        "owners": {
+          "type": "array",
+          "maxItems": 10,
+          "description": "The collaborators who own the product and earn from its sales under product owner programs. Needs a plan with product ownership.",
+          "items": {
+            "$ref": "#/$defs/collaboratorReference"
+          }
+        },
+        "ownersMode": {
+          "type": "string",
+          "enum": [
+            "replace",
+            "add"
+          ],
+          "description": "`replace` (the default) makes `owners` the product's whole list of owners. `add` keeps the owners it has and adds these, up to ten in all."
+        },
+        "onExisting": {
+          "type": "string",
+          "enum": [
+            "update",
+            "skip"
+          ],
+          "description": "What to do when the product is found. `update` (the default) sets its name and owners. `skip` leaves it as it is."
+        }
+      }
+    },
+    "collaboratorReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A collaborator, named one way: by the recipe key of a collaborator this recipe adds, by the ID of one that exists, or by their email address or referral code.",
+      "oneOf": [
+        {
+          "required": [
+            "collaboratorKey"
+          ]
+        },
+        {
+          "required": [
+            "collaboratorId"
+          ]
+        },
+        {
+          "required": [
+            "email"
+          ]
+        },
+        {
+          "required": [
+            "referralCode"
+          ]
+        }
+      ],
+      "properties": {
+        "collaboratorKey": {
+          "type": "string",
+          "description": "Key into recipe.collaborators."
+        },
+        "collaboratorId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "referralCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    }
+  }
+}

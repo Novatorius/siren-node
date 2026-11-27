@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RECIPE_NOTE, parseAppFile } from '../src/cli/app-file';
 import { COMMANDS } from '../src/cli/run';
-import { resolveTarget } from '../src/cli/targets';
+import { LIVE_BASE_URL, resolveTarget } from '../src/cli/targets';
 import { SANDBOX_BASE_URL } from '../src/http';
 import { reply } from './http-fakes';
 import { AuthAnswers, EMAIL, PASSWORD, harness, session } from './cli-fakes';
@@ -197,7 +197,7 @@ describe('cli pass 1, finding 9: --base-url takes a bare host', () => {
 });
 
 describe('cli pass 1, finding 5: apps init writes a first app a newcomer can apply', () => {
-  it('writes one Post-conversion action, one name, a $schema, and says where SIREN_APP_URL goes', async () => {
+  it('writes one Post-conversion action, one name, a $schema, and says where SIREN_APP_URL goes and how listen reaches this machine', async () => {
     const h = harness([]);
     expect(await h.run(['apps', 'init', '--key', APP_KEY, '--name', 'Acme']), h.err()).toBe(0);
     const file = JSON.parse(h.file('siren.app.json')) as Record<string, any>;
@@ -210,7 +210,8 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
     expect(parseAppFile(h.file('siren.app.json'), { SIREN_APP_URL: 'https://acme.example/siren' }).problems).toEqual([]);
     expect(h.out()).toContain('.env');
     expect(h.out()).toContain('Your editor completes them.');
-    expect(h.out()).toContain('run your handler on an https address');
+    // Review round 1, C10: a listen line that runs as printed.
+    expect(h.out()).toContain('siren listen --forward-to localhost:3000/siren');
   });
 
   it('keeps the two env files out of git by name, so .env.example can still be committed', async () => {
@@ -232,10 +233,10 @@ describe('cli pass 1, finding 5: apps init writes a first app a newcomer can app
   });
 
   it('names the place once in a problem line', async () => {
-    const h = harness([]);
-    h.signedIn();
+    const h = harness([], { edition: 'production' });
+    h.signedIn({ [LIVE_BASE_URL]: session({ edition: 'production' }) });
     await h.run(['apps', 'init', '--key', APP_KEY]);
-    expect(await h.run(['apps', 'apply', '--yes'])).toBe(1);
+    expect(await h.run(['apps', 'apply', '--yes', '--live'])).toBe(1);
     expect(h.err()).toMatch(/siren\.app\.json:\d+:\d+: apps\.acme-payouts\.url needs the environment variable SIREN_APP_URL/);
     expect(h.err()).not.toContain('url: apps.');
     expect(h.err()).toContain('.env');

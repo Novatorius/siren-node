@@ -77,15 +77,18 @@ describe('apps-cli: the example app keeps serving', () => {
 
     const payout = signed((request) => {
       request.id = BAD_ID;
-      request.data = { amount: 2500, currency: 'USD' };
+      request.data = { amount: { value: 2500, units: 'USD' } };
     });
     expect((await app.handle(payout.body, payout.headers)).status).toBe(500);
-    expect(lines.join('\n')).toMatch(/payoutId/);
+    expect(lines.join('\n')).toMatch(/data\.payout\.id/);
 
     expect((await app.handle(pool.body, pool.headers)).status).toBe(500);
     expect(http.requests).toHaveLength(0);
 
-    const good = await app.handle(fixture.body, fixture.headers);
+    const ask = signed((request) => {
+      request.data = { payout: { id: 88, fulfillmentId: 31, attempt: 1 }, amount: { value: 2500, units: 'USD' } };
+    });
+    const good = await app.handle(ask.body, ask.headers);
     expect(good.status).toBe(200);
     await good.answered;
     expect(http.requests).toHaveLength(1);

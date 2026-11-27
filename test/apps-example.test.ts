@@ -7,6 +7,7 @@ import { answerFor, createAcmeApp } from '../examples/apps/acme/handler.mjs';
 import { saleLine, sendSale } from '../examples/apps/acme/sale.mjs';
 import { Siren } from '../src/client';
 import type { HttpResponse } from '../src/http';
+import { PAYOUT_DATA, ask, fixture } from './apps-example-ask';
 import { FakeHttpClient, reply } from './http-fakes';
 import { capturedReply } from './cloud-captures';
 import { BASE, bodyOf, unavailable } from './record-fakes';
@@ -16,19 +17,11 @@ import { BASE, bodyOf, unavailable } from './record-fakes';
  * docs/architecture/apps-cli.md, "The example app", and the comment at the
  * top of examples/apps/acme/handler.mjs.
  *
- * The request is Siren's signed fixture. The distribution resolver's data
- * and answer shapes are a claim on slice 5, written down in the note.
+ * The request is a payout ask as Siren sends one (test/apps-example-ask.ts). The
+ * distribution resolver's data and answer shapes are a claim on slice 5,
+ * written down in the note.
  */
 
-interface SignedFixture {
-  secret: string;
-  timestamp: number;
-  body: string;
-  headers: Record<string, string>;
-}
-const fixture = JSON.parse(
-  readFileSync(new URL('./fixtures/apps-exchange/signed-request.json', import.meta.url), 'utf8'),
-) as SignedFixture;
 const APP_KEY = `sk_test_${'0a'.repeat(32)}`;
 const REQUEST = 'apr_b79943ff8ca353ce5cf5312bb3fa66c7';
 
@@ -42,7 +35,7 @@ function acme(replies: Array<HttpResponse | Error>, now = fixture.timestamp) {
 describe('apps-cli: the example app', () => {
   it("answers Siren's signed ask with 200, then pays it with the app's key", async () => {
     const { http, app } = acme([reply(200, { status: 'accepted' })]);
-    const result = await app.handle(fixture.body, fixture.headers);
+    const result = await app.handle(ask.body, ask.headers);
     expect(result.status).toBe(200);
     await result.answered;
 
@@ -55,8 +48,8 @@ describe('apps-cli: the example app', () => {
 
   it('answers a repeat with 200 and acts on it once', async () => {
     const { http, app } = acme([reply(200, { status: 'accepted' })]);
-    await (await app.handle(fixture.body, fixture.headers)).answered;
-    const again = await app.handle(Buffer.from(fixture.body), fixture.headers);
+    await (await app.handle(ask.body, ask.headers)).answered;
+    const again = await app.handle(Buffer.from(ask.body), ask.headers);
     expect(again.status).toBe(200);
     await again.answered;
     expect(http.requests).toHaveLength(1);
@@ -64,22 +57,22 @@ describe('apps-cli: the example app', () => {
 
   it('answers again after an answer that failed', async () => {
     const { http, app } = acme([unavailable(), reply(200, { status: 'accepted' })]);
-    await (await app.handle(fixture.body, fixture.headers)).answered;
-    await (await app.handle(fixture.body, fixture.headers)).answered;
+    await (await app.handle(ask.body, ask.headers)).answered;
+    await (await app.handle(ask.body, ask.headers)).answered;
     expect(http.requests).toHaveLength(2);
   });
 
   it('refuses a request it cannot check with 400 and sends nothing', async () => {
     const changed = acme([reply(200, { status: 'accepted' })]);
-    expect((await changed.app.handle(fixture.body.replace('2500', '2600'), fixture.headers)).status).toBe(400);
+    expect((await changed.app.handle(ask.body.replace('2500', '2600'), ask.headers)).status).toBe(400);
     const stale = acme([reply(200, { status: 'accepted' })], fixture.timestamp + 3600);
-    expect((await stale.app.handle(fixture.body, fixture.headers)).status).toBe(400);
+    expect((await stale.app.handle(ask.body, ask.headers)).status).toBe(400);
     expect(changed.http.requests).toHaveLength(0);
     expect(stale.http.requests).toHaveLength(0);
   });
 
   it('pays a payout with its own reference, and divides a pool by each metric in whole minor units', () => {
-    expect(answerFor({ feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' }, data: { payoutId: 88, amount: 2500, currency: 'USD' } })).toEqual({
+    expect(answerFor({ feature: { kind: 'payoutMethod', key: 'acme-ledger', id: 'app:12' }, data: PAYOUT_DATA })).toEqual({
       outcome: 'paid',
       reference: 'acme-88',
     });

@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createAcmeApp } from '../examples/apps/acme/handler.mjs';
 import { sendSale } from '../examples/apps/acme/sale.mjs';
 import { Siren } from '../src/client';
+import { ask, fixture } from './apps-example-ask';
 import { FakeHttpClient, reply } from './http-fakes';
 import { BASE } from './record-fakes';
 
@@ -13,9 +13,6 @@ import { BASE } from './record-fakes';
  * and a visit Siren opens no opportunity for.
  */
 
-const fixture = JSON.parse(
-  readFileSync(new URL('./fixtures/apps-exchange/signed-request.json', import.meta.url), 'utf8'),
-) as { secret: string; timestamp: number; body: string; headers: Record<string, string> };
 const APP_KEY = `sk_test_${'0a'.repeat(32)}`;
 
 describe('the example app, beyond the contract', () => {
@@ -24,8 +21,8 @@ describe('the example app, beyond the contract', () => {
     const siren = new Siren({ apiKey: APP_KEY, baseUrl: BASE, httpClient: http, maxRetries: 0 });
     const app = createAcmeApp({ siren, signingSecret: fixture.secret, now: () => fixture.timestamp });
 
-    const first = await app.handle(fixture.body, fixture.headers);
-    const repeat = await app.handle(fixture.body, fixture.headers);
+    const first = await app.handle(ask.body, ask.headers);
+    const repeat = await app.handle(ask.body, ask.headers);
     expect(repeat.status).toBe(200);
     await Promise.all([first.answered, repeat.answered]);
     expect(http.requests).toHaveLength(1);
