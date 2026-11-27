@@ -2202,7 +2202,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | Command | What it does |
 |---|---|
 | `siren signup` | Makes an organization and logs you in. It asks for the organization's name, your email, the terms and a password, or takes `--org-name`, `--email`, `--accept-terms` and `--password-stdin`. |
-| `siren login` | Logs you in by a code you approve in the browser: it opens the dashboard's approval page, prints the code, the link and the Siren it polls in case the browser does not open, and waits up to 15 minutes. It opens no page on another host than the Siren it logs in to, except the dashboard beside a Siren Cloud API, and no plain http page off this machine. It logs in you, not one organization, and keeps every organization you belong to. `--password` or `--password-stdin` logs in with your email and password instead, on a machine with no browser. The commands after it talk to the Siren it logged in to, unless `--base-url`, `--sandbox` or `SIREN_BASE_URL` names another. |
+| `siren login` | Logs you in by a code you approve in the browser: it opens the dashboard's approval page, prints the code, the link and the Siren it polls in case the browser does not open, and waits up to 15 minutes. It opens no page on another host than the Siren it logs in to, except the dashboard beside a Siren Cloud API, and no plain http page off this machine. It logs in you, not one organization, and keeps every organization you belong to. `--password` or `--password-stdin` logs in with your email and password instead, on a machine with no browser. On a Siren with no browser login yet, it says so in one line and asks for your email and password in the same run. It needs no `--live` on a live Siren, since logging in changes nothing there. The commands after it talk to the Siren it logged in to, unless `--base-url`, `--sandbox` or `SIREN_BASE_URL` names another. |
 | `siren whoami` | Prints which credential the commands use, who it acts as, the organization and role, and the Siren and whether it is live. With `SIREN_TOKEN` set it names the token and asks Siren about it. Otherwise it reads the session file, sends nothing, and exits 1 when you are signed out. `--json` prints the same for a script, with `source` set to `SIREN_TOKEN` or `session`. |
 | `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. A session made when the Siren was the other edition is forgotten here and its tokens are not sent. |
 | `siren orgs` | Lists your organizations as a table, and marks the one `--org`, `SIREN_ORG` or the app file picks. `--json` prints them. |
@@ -2270,7 +2270,7 @@ its line and column, and nothing is sent.
 The tool talks to `SIREN_BASE_URL`, else the Siren you last signed in to, else the sandbox.
 `--base-url <url>` names another Siren, and takes plain http only for `localhost`, `127.0.0.1` and
 `host.docker.internal`. A bare host such as `siren.example.com` gets `https://` and `/siren/v1`.
-Signing in to a live organization and changing one need `--live`. Reading one (`orgs`, `use`,
+Changing a live organization needs `--live`. Logging in doesn't, and neither does reading one (`orgs`, `use`,
 `whoami`, `apps list`, `apps show`, `apps requests`) does not, and `--live` against a sandbox is
 refused. Every
 command that sends anything first asks the Siren whether it is a sandbox or live, and refuses a

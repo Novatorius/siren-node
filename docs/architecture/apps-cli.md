@@ -389,8 +389,8 @@ command writes its own escape codes.
   person typed, and Node's JSON parser text never prints. Problems in siren.app.json print under
   the ✗ headline, each place dim with its message under it, and piped, each is one
   `file:line:col: message` line (must-fix 3). A browser login against a Siren that answers
-  `POST /auth/cli/code` with 404 says it offers no browser login yet and names `siren login
-  --password` (must-fix 4). A command typo and a flag typo share the shape: the headline, the
+  `POST /auth/cli/code` with 404 says in one line that it has no browser login yet, and asks for
+  the email and password in the same run (must-fix 4, and review round 1, C1). A command typo and a flag typo share the shape: the headline, the
   help or usage line, and `› Did you mean …?` (should-fix 15). `siren app list` offers `siren apps
   list` (should-fix 6). With no session, every command says "Not logged in.", that the tool keeps
   no session for that host, and "Run siren login to log in."
@@ -469,7 +469,11 @@ played.
   with nothing sent, since every command sends a password or a session token (AP-A632).
 - Every command that sends anything reads the edition from `GET /auth/signup-options` first, on
   every run, before anything else is sent. `signup` and `login` read it before they ask for the
-  password. A Siren that names no edition counts as live. The read costs one GET with no
+  password. A Siren that names its edition is what it names. Siren Cloud's sandbox host
+  (`sandbox.sirenaffiliates.com`) is a sandbox and its live API host (`api.sirenaffiliates.com`)
+  is live, by their address, since both name no edition today. Any other Siren that names none is
+  never assumed live: the tool treats it as a sandbox, and `signup` and `login` say so in one line
+  on stderr (review round 1, C1). The read costs one GET with no
   credential, a few dozen bytes. Each attempt may take 3 seconds and it is sent once more after a
   network error, 429 or 5xx, so a target that hangs is given up after 6.5 seconds with the line
   `<address> did not answer when the tool asked which edition it is, so nothing was sent.`
@@ -478,16 +482,17 @@ played.
   poll after the first (`recheckEdition()`), so a target that changes edition during the run stops
   it with the same one line before the session is sent there again. That costs one more GET every
   2 seconds while following. `apps init` sends nothing and reads nothing.
-- A live edition needs `--live` to sign up, sign in, and change anything: `apply`, `answer`,
+- A live edition needs `--live` to sign up and to change anything: `apply`, `answer`,
   `resend`, `rotate-key`, `rotate-secret`, `add-key`, `on`, `off` and `delete`, whatever address
-  chose it. The reads, `whoami`, `orgs`, `use`, `apps list`, `apps show` and `apps requests`, need
-  none, since signing in with `--live` already said the person means that Siren (CLI pass 1,
-  finding 2). Signing out sends only the session's own tokens, to revoke them. `--live` against a
-  sandbox is refused. A new app's question names the organization and whether it is live.
+  chose it. Signing in needs none, since it changes nothing in an organization, so a new person's
+  first `siren login` works on a live Siren too (review round 1, C1). The reads, `whoami`, `orgs`,
+  `use`, `apps list`, `apps show` and `apps requests`, need none (CLI pass 1, finding 2). Signing
+  out sends only the session's own tokens, to revoke them. `--live` against a sandbox is refused,
+  except by `login`, which ignores it. A new app's question names the organization and whether it is live.
 - A stored session keeps the edition and the address it was made for (`edition`, `baseUrl`). A
   command whose target now reports another edition, or a session stored for another address,
   stops with one line before it sends anything with the session: what the target is now, what the
-  session was made for, and the `siren login` to run, with `--live` when the target is live. So a
+  session was made for, and the `siren login` to run. So a
   session made on a sandbox never lists or changes a live organization because the same address
   became live, and a live session never acts on a Siren that became a sandbox. The checkpoint saw
   both against a real Cloud (e2e steps 20a and 20l) before this check.

@@ -19,6 +19,37 @@ import { CliRefusal, CliUsageError } from './targets';
 /** Which kind of Siren Cloud answered. `GET /auth/signup-options` names it from slice 7 on. */
 export type Edition = 'sandbox' | 'production';
 
+/** How the tool settled a Siren's edition: by its address, by what it reported, or as a sandbox because it reported none. */
+export type EditionSource = 'host' | 'reported' | 'unreported';
+
+/** Siren Cloud's sandbox and live API hosts, which are what they are by their address when they name no edition. */
+const KNOWN_HOSTS: Readonly<Record<string, Edition>> = {
+  'sandbox.sirenaffiliates.com': 'sandbox',
+  'api.sirenaffiliates.com': 'production',
+};
+
+/**
+ * The edition the tool acts on for `baseUrl`, and how it was settled (CLI
+ * review round 1, C1). A Siren that names its edition is what it names.
+ * Siren Cloud's own sandbox host is a sandbox and its live host is live by
+ * their address, since both answer with no edition today. Any other Siren
+ * that names none is never assumed live: the tool treats it as a sandbox
+ * and says so in one line. Before this, the sandbox host itself was refused
+ * as live.
+ */
+export function editionOf(baseUrl: string, reported: Edition | undefined): { edition: Edition; source: EditionSource } {
+  if (reported !== undefined) return { edition: reported, source: 'reported' };
+  let host: string;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    host = '';
+  }
+  const known = KNOWN_HOSTS[host];
+  if (known !== undefined) return { edition: known, source: 'host' };
+  return { edition: 'sandbox', source: 'unreported' };
+}
+
 /** The person, as Siren's auth answers describe them (AuthService::userPayload()). */
 export interface SessionUser {
   id: number;
@@ -164,16 +195,17 @@ export class SessionAuthClient {
   }
 
   /**
-   * `GET /auth/signup-options`, and its `edition`. An answer with no
-   * `edition`, from a Siren older than slice 7, counts as `production`, so
-   * the tool treats an unknown Cloud as live. Each attempt may take
+   * `GET /auth/signup-options`, and the edition it names, or undefined when
+   * it names none, as a Siren older than slice 7 does. Siren Cloud's own
+   * sandbox and live hosts answer with no edition today, so
+   * {@link editionOf} settles those by their address. Each attempt may take
    * {@link EDITION_TIMEOUT_MS}, and it is sent again once, so a target that
    * hangs raises `ConnectionError` after 6.5 seconds.
    */
-  async edition(): Promise<Edition> {
+  async edition(): Promise<Edition | undefined> {
     const body = await this.send('GET', '/auth/signup-options', undefined, undefined, true, [], { timeout: EDITION_TIMEOUT_MS, retries: EDITION_RETRIES });
     if (!isObject(body)) throw unexpected('/auth/signup-options', 200);
-    return body.edition === 'sandbox' ? 'sandbox' : 'production';
+    return body.edition === 'sandbox' || body.edition === 'production' ? body.edition : undefined;
   }
 
   /**

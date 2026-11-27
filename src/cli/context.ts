@@ -8,8 +8,8 @@ import { APP_FILE_NAME } from './app-file';
 import { findOrg, membershipsOf, orgFrom, orgOverruled, orgWanted, settleOrg } from './org';
 import type { OrgChoice, OrgWanted } from './org';
 import type { CliIo } from './io';
-import { SessionAuthClient } from './session-auth';
-import type { Edition, Membership, PersonalToken, SessionTokens } from './session-auth';
+import { SessionAuthClient, editionOf } from './session-auth';
+import type { Edition, EditionSource, Membership, PersonalToken, SessionTokens } from './session-auth';
 import { SANDBOX_BASE_URL } from '../http';
 import { CliRefusal, LIVE_BASE_URL, assertEditionAllowed, assertSessionMatches, commandLine, hostName } from './targets';
 import type { Target } from './targets';
@@ -127,6 +127,7 @@ export class CommandContext {
   readonly auth: SessionAuthClient;
   private session: StoredSession | null = null;
   private editionRead: Promise<Edition> | null = null;
+  private editionSource: EditionSource | undefined;
   /** The token from SIREN_TOKEN and what Siren said about it, once {@link signedIn} chose it. */
   private personal: { token: string; about: PersonalToken } | null = null;
   /** The organization --org names, which wins over every other way to pick one. */
@@ -159,8 +160,9 @@ export class CommandContext {
    * not answer, in place of the transport's line.
    */
   private async readEdition(): Promise<Edition> {
+    let reported: Edition | undefined;
     try {
-      return await this.auth.edition();
+      reported = await this.auth.edition();
     } catch (error) {
       if (!(error instanceof ConnectionError)) throw error;
       throw new CliRefusal(`Can't reach ${hostName(this.target.baseUrl)}.`, {
@@ -168,6 +170,19 @@ export class CommandContext {
         fixText: 'Check the address, or try again in a minute.',
       });
     }
+    const settled = editionOf(this.target.baseUrl, reported);
+    this.editionSource = settled.source;
+    return settled.edition;
+  }
+
+  /**
+   * The one line that says what the tool did when the target reported no
+   * edition, or undefined when it reported one or is a Siren Cloud host
+   * the tool knows. `signup`, `login` and `whoami` print it.
+   */
+  editionNote(): string | undefined {
+    if (this.editionSource !== 'unreported') return undefined;
+    return `${hostName(this.target.baseUrl)} doesn't say whether it is a sandbox or live, so siren treats it as a sandbox.`;
   }
 
   /** Writes one line to standard output. */
@@ -195,7 +210,8 @@ export class CommandContext {
    * The edition the target reports now, from `GET /auth/signup-options`.
    * Read at the first call, and the same answer is given to every later call
    * until {@link recheckEdition} reads it again, so a refresh never reads it
-   * twice. A Siren that names none counts as live.
+   * twice. Siren Cloud's own hosts are settled by their address, and a
+   * Siren that names none counts as a sandbox ({@link editionOf}).
    */
   targetEdition(): Promise<Edition> {
     this.editionRead ??= this.readEdition();

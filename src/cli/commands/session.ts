@@ -43,6 +43,8 @@ export async function signup(input: CommandInput): Promise<number> {
 
   const edition = await run.targetEdition();
   assertEditionAllowed(run.target, edition, 'signup', 'Signing up on a live Siren');
+  const note = run.editionNote();
+  if (note !== undefined) run.warn(styleFor(io, 'stderr', {}).warning(note));
 
   const orgName = text(values['org-name']) ?? (await askLine(io, 'Organization name: ', '--org-name'));
   const email = text(values.email) ?? (await askLine(io, 'Email: ', '--email'));
@@ -126,9 +128,12 @@ function inCi(env: Readonly<Record<string, string | undefined>>): boolean {
 
 /**
  * `siren login`: logs in the person, not one organization. Reads
- * credentials.json first, as `signup` does, then reads the edition and
- * checks it against `--live`. With no password flag it logs in by a code
- * the person approves in the browser ({@link DeviceSignIn}). With
+ * credentials.json first, as `signup` does, then reads the edition, which
+ * the session keeps. It needs no `--live`, since signing in changes nothing
+ * in an organization. With no password flag it logs in by a code the
+ * person approves in the browser ({@link DeviceSignIn}), and on a Siren
+ * with no browser login it says so in one line and asks for the email and
+ * password in the same run (review round 1, C1). With
  * `--password` or `--password-stdin` it asks for or reads the email and
  * password. Either way it keeps every organization the person belongs to,
  * and each later command picks one (CommandContext `pickOrg`). With no
@@ -158,23 +163,37 @@ export async function login(input: CommandInput): Promise<number> {
   // A credentials file the tool would refuse stops the command here, before the password leaves the machine.
   await run.store.get(run.target.baseUrl);
 
+  // Logging in changes nothing in an organization, so it needs no --live on a live Siren (review round 1, C1).
   const edition = await run.targetEdition();
-  assertEditionAllowed(run.target, edition, 'login', 'Logging in to a live organization');
+  const note = run.editionNote();
+  if (note !== undefined) run.warn(styleFor(io, 'stderr', {}).warning(note));
 
   const style = styleFor(io, 'stdout', {});
+  const host = new URL(run.target.baseUrl).host;
   const view = browser ? loginView(io, values) : undefined;
   // --password asks beside the logo where it may play. --password-stdin asks nothing.
-  const prompts = !browser && !passwordFromStdin ? passwordView(io, values, new URL(run.target.baseUrl).host) : undefined;
-  const end = view ?? prompts;
+  let prompts = !browser && !passwordFromStdin ? passwordView(io, values, host) : undefined;
+  let end: LoginEnd | undefined = view ?? prompts;
   let result: LoginResult;
   try {
-    result = view !== undefined
-      ? await new DeviceSignIn(run.command('login'), view).signIn(run.auth, io)
-      : await new PasswordSignIn(prompts).signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
+    if (view !== undefined) {
+      try {
+        result = await new DeviceSignIn(run.command('login'), view).signIn(run.auth, io);
+      } catch (error) {
+        // A Siren without browser login answers POST /auth/cli/code with 404 before anything shows, so the same command asks for the password instead.
+        if (!(error instanceof SirenError && error.statusCode === 404)) throw error;
+        run.warn(styleFor(io, 'stderr', {}).warning(`${host} has no browser login yet, so siren asks for your email and password.`));
+        prompts = passwordView(io, values, host);
+        end = prompts;
+        result = await new PasswordSignIn(prompts).signIn(run.auth, io, { passwordFromStdin: false });
+      }
+    } else {
+      result = await new PasswordSignIn(prompts).signIn(run.auth, io, { email: text(values.email), passwordFromStdin });
+    }
   } catch (error) {
     // The device login drifts its halves away itself. The password login's go here, before the ✗ line.
     await prompts?.failed();
-    throw signInRefusal(error, run.command('login'), run.target.baseUrl, view !== undefined);
+    throw signInRefusal(error, run.command('login'), run.target.baseUrl);
   }
   try {
     return await keepLogin(input, result, edition, style, end);
@@ -417,7 +436,7 @@ export function confirmationLine(window: EmailConfirmationWindow | undefined, no
  * Siren. Any other error is answered as it is, so a wrong password shows
  * Siren's own message.
  */
-function signInRefusal(error: unknown, login: string, baseUrl: string, browser = false): unknown {
+function signInRefusal(error: unknown, login: string, baseUrl: string): unknown {
   const code = error instanceof SirenError ? error.code : undefined;
   if (code === 'email_unconfirmed') {
     return new CliRefusal("Your email address isn't confirmed yet.", {
@@ -425,14 +444,6 @@ function signInRefusal(error: unknown, login: string, baseUrl: string, browser =
       fixLead: 'Open the email Siren sent to your inbox, confirm the address, then run',
       fix: login,
       fixWords: 'again',
-    });
-  }
-  // CLI pass 3, must-fix 4: a Siren without browser sign-in answers POST /auth/cli/code with 404.
-  if (browser && error instanceof SirenError && error.statusCode === 404) {
-    return new CliRefusal(`${hostName(baseUrl)} doesn't offer browser login yet.`, {
-      why: 'It has no browser sign-in yet. Log in with your email and password.',
-      fix: login.replace(/^siren login/, 'siren login --password'),
-      detail: httpDetail(error, baseUrl),
     });
   }
   const plan = planRefusal(code, login);

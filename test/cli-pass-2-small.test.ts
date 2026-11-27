@@ -41,10 +41,10 @@ describe('finding 7: an unknown kind gets the nearest kind, not all fourteen', (
 });
 
 describe('finding 8: --live only on a command that changes a live organization', () => {
-  it('names every command that is no read and works online, and logout needs none', () => {
+  it('names every command that is no read and works online, and login and logout need none (review round 1, C1)', () => {
     for (const command of COMMANDS) {
       const spec = COMMAND_SPECS[command];
-      const changes = spec.readsOnly !== true && spec.offline !== true && command !== 'logout';
+      const changes = spec.readsOnly !== true && spec.offline !== true && command !== 'logout' && command !== 'login';
       expect(LIVE_WRITES.includes(command as never), command).toBe(changes);
     }
   });
