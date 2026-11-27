@@ -245,14 +245,14 @@ describe('siren get, post, put, patch and delete', () => {
   it('prints a refusal in three parts: what, why, and the command that helps', async () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await h.run(['programs', 'get', '99'])).toBe(1);
-    expect(h.err()).toBe('siren: Siren refused GET /programs/99. Siren answered 404 not_found: Program not found. Run siren programs list to see what is there.\n');
+    expect(h.err()).toBe('siren: Siren has no program 99 in organization 3. Siren answered 404 not_found: Program not found. Run siren programs list to list the programs there.\n');
   });
 
   it('styles the refusal in a terminal: a red ✗ headline, the why, and the command to run', async () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await runCli(['programs', 'get', '99'], { ...h.io, stderrTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } })).toBe(1);
     const plain = h.err().replace(/\u001b\[[\d;]*m/g, '');
-    expect(plain).toBe('✗ Siren refused GET /programs/99.\n  Siren answered 404 not_found: Program not found.\n› Run siren programs list to see what is there.\n');
+    expect(plain).toBe('✗ Siren has no program 99 in organization 3.\n  Siren answered 404 not_found: Program not found.\n› Run siren programs list to list the programs there.\n');
   });
 
   it('styles a list in a terminal: a green ✓ headline and a dim header', async () => {
@@ -268,7 +268,7 @@ describe('siren get, post, put, patch and delete', () => {
   it('prints a refusal as JSON on standard error with --json', async () => {
     const h = signedIn([reply(404, { error: { message: 'Program not found.', code: 'not_found' } })]);
     expect(await h.run(['get', '/programs/99', '--json'])).toBe(1);
-    expect(JSON.parse(h.err())).toEqual({ error: { message: 'Program not found.', status: 404, code: 'not_found', fix: 'siren get /programs to see what is there', context: null } });
+    expect(JSON.parse(h.err())).toEqual({ error: { message: 'Program not found.', status: 404, code: 'not_found', fix: 'siren programs list to see what is there', context: null } });
     expect(h.out()).toBe('');
   });
 });
@@ -282,7 +282,7 @@ describe('the live guard', () => {
   it('refuses a live write without --live, before sending it', async () => {
     const h = signedInLive([reply(201, { id: 3 })], { env: { SIREN_BASE_URL: LIVE } });
     expect(await h.run(['post', '/programs', '-d', 'name=X'])).toBe(1);
-    expect(h.err()).toContain('is a live Siren. A change to a live organization needs --live, so none happens by accident. Run siren post /programs --live.');
+    expect(h.err()).toContain('is a live Siren. A change to a live organization needs --live, so none happens by accident. Run siren post /programs -d name=X --live.');
     expect(h.paths()).toEqual([]);
   });
 

@@ -357,6 +357,29 @@ function exampleField(resource: ResourceCommand, route: ResourceRoute): string {
   return `${field}=${sample}`;
 }
 
+/** The global flags {@link commandLine} adds again, or that a hint leaves off. */
+const HINT_DROPS = new Set(['sandbox', 'live', 'base-url', 'quiet', 'verbose', 'help', 'dry-run', 'json']);
+
+/** One word of a command line, quoted for a shell when it holds anything but plain characters. */
+export function shellWord(word: string): string {
+  return /^[\w@%+=:,./[\]-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The command as typed: `words`, its arguments, and each flag but the
+ * global ones, such as `collaborators update 99999 -d nickname=x`, so a
+ * hint offers the same line again (review round 1, C10).
+ */
+export function typedLine(input: Partial<Pick<CommandInput, 'args' | 'values'>>, words: string): string {
+  const parts = [words, ...(input.args ?? []).map(shellWord)];
+  for (const [key, value] of Object.entries(input.values ?? {})) {
+    if (HINT_DROPS.has(key) || value === undefined || value === false) continue;
+    const flag = key.length === 1 ? `-${key}` : `--${key}`;
+    for (const one of Array.isArray(value) ? (value as unknown[]) : [value]) parts.push(one === true ? flag : `${flag} ${shellWord(String(one))}`);
+  }
+  return parts.join(' ');
+}
+
 /** `siren resources`: every generated resource and its operations. */
 async function listResources(input: CommandInput): Promise<number> {
   const style = styleFor(input.io, 'stdout', {});
@@ -755,7 +778,7 @@ async function send(input: CommandInput, plan: Plan): Promise<number> {
     return 0;
   } catch (error) {
     if (!(error instanceof SirenError) || error.statusCode === undefined) throw error;
-    const refusal = refusalOf(error, plan, input);
+    const refusal = refusalOf(error, plan, input, orgSlug(run));
     if (!plan.json) throw refusal;
     const fix = refusal.parts.fix === undefined ? null : `${refusal.parts.fix}${refusal.parts.fixWords === undefined ? '' : ` ${refusal.parts.fixWords}`}`;
     // Siren's context goes through untouched, so a script sees each failed field (failedValidations) and any other detail.
@@ -783,6 +806,16 @@ async function confirmLiveDelete(input: CommandInput, run: CommandContext, plan:
 }
 
 /** The organization this run acts in, as apply names it: `Acme (acme), live`. */
+/** The organization's slug, or its id, as a refusal names it, or undefined with no session to read it from. */
+function orgSlug(run: CommandContext): string | undefined {
+  try {
+    const session = run.current();
+    return session.orgSlug === undefined ? `organization ${clean(String(session.orgId))}` : clean(session.orgSlug);
+  } catch {
+    return undefined;
+  }
+}
+
 function orgLabel(run: CommandContext): string {
   const session = run.current();
   return `${clean(session.orgName)} (${session.orgSlug === undefined ? session.orgId : clean(session.orgSlug)}), ${session.edition === 'production' ? 'live' : 'sandbox'}`;
@@ -926,8 +959,10 @@ function pastTense(method: HttpMethod): string {
  * said, and the command that helps. Its status and code are the detail
  * --verbose shows.
  */
-export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'words'>, input: Pick<CommandInput, 'command'>): CliRefusal {
+export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'resource' | 'words'>, input: Pick<CommandInput, 'command'> & Partial<Pick<CommandInput, 'args' | 'values'>>, org?: string): CliRefusal {
   const { method, path } = plan.outgoing;
+  // The line as typed, -d and all, so a hint that offers it again runs as printed (review round 1, C10).
+  const again = typedLine(input, plan.words);
   const problems = fieldProblems(error);
   if (problems.length > 0) {
     // A validation failure: what was refused, how many fields, then one row a field (lean output, "Validation failures").
@@ -948,8 +983,28 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
   const said = clean(error.message.replace(/^Siren: /, '')).replace(/\.?$/, '.');
   const fields = error instanceof BadRequestError && error.fieldErrors.length > 0 ? ` ${error.fieldErrors.map((field) => `${clean(field.field)}: ${clean(field.message)}`).join(' ')}` : '';
   const why = `Siren answered ${status}${error.code ? ` ${clean(error.code)}` : ''}: ${said}${fields}`;
-  const list = plan.resource?.ops.list ? `${plan.resource.name} list` : `get /${path.split('/').filter(Boolean)[0] ?? ''}`;
+  // A raw call on a route no generated list reaches, such as get /nope, points to siren resources, never to the same failing call.
+  const listed = plan.resource ?? routeOf('GET', `/${path.split('/').filter(Boolean)[0] ?? ''}`)?.resource;
+  const list = listed?.ops.list !== undefined ? `${listed.name} list` : 'resources';
   const help = `${plan.words} --help`;
+  const typedId = plan.resource !== undefined && input.args?.[0] !== undefined ? input.args[0] : undefined;
+  if (status === 404 && typedId !== undefined && plan.resource !== undefined) {
+    // A record that isn't there is named the way siren explain names it (review round 1, C16).
+    return new CliRefusal(`Siren has no ${singular(plan.resource.name)} ${clean(typedId)}${org === undefined ? '' : ` in ${org}`}.`, {
+      why,
+      fix: input.command(list),
+      fixWords: `to list the ${plan.resource.name.replace(/-/g, ' ')} there`,
+      detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
+    });
+  }
+  if (status === 404 && plan.resource === undefined && listed === undefined) {
+    return new CliRefusal(`Siren has no route at ${method} ${path}.`, {
+      why,
+      fix: input.command('resources'),
+      fixWords: 'lists the records this tool reads and writes',
+      detail: [`HTTP status: ${status}`, ...(error.code === undefined ? [] : [`Error code: ${error.code}`])],
+    });
+  }
   const fix: { fix: string; fixWords: string } =
     status === 401
       ? { fix: input.command('login'), fixWords: 'to log in again' }
@@ -962,8 +1017,8 @@ export function refusalOf(error: SirenError, plan: Pick<Plan, 'outgoing' | 'reso
             : status === 405
               ? { fix: `siren ${help}`, fixWords: `to see the methods, since Siren serves no ${method} on ${path}` }
               : status >= 500
-                ? { fix: input.command(`${plan.words} --dry-run`), fixWords: 'to see what was sent, and try again in a minute' }
-                : { fix: input.command(`${plan.words} --dry-run`), fixWords: 'to see what was sent' };
+                ? { fix: input.command(`${again} --dry-run`), fixWords: 'to see what was sent, and try again in a minute' }
+                : { fix: input.command(`${again} --dry-run`), fixWords: 'to see what was sent' };
   return new CliRefusal(`Siren refused ${method} ${path}.`, {
     why,
     ...fix,

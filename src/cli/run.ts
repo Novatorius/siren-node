@@ -13,6 +13,7 @@ import { fieldProblems, fieldsLine } from './validation';
 import * as trigger from './commands/trigger';
 import * as requests from './commands/requests';
 import * as records from './commands/resources';
+import { RESOURCE_COMMANDS } from './resources.generated';
 import * as sandbox from './commands/sandbox';
 import * as seed from './commands/seed';
 import * as session from './commands/session';
@@ -1152,6 +1153,13 @@ function commandNamed(words: readonly string[]): Command {
     const guess = (COMMANDS as readonly string[]).includes(asApps) ? asApps : nearest(asApps, COMMANDS);
     throw new CommandUnknown('siren', words[0] ?? '', guess === undefined ? [] : [guess]);
   }
+  // A record word cut by a typo, such as colaborators, names the resource it was near, with its operation (review round 1, C16).
+  const firstWords = [...new Set(COMMANDS.map((command) => command.split(' ')[0]!))];
+  const record = words[0] === undefined || nearest(words[0], firstWords) !== undefined ? undefined : nearest(words[0], RESOURCE_COMMANDS.map((resource) => resource.name));
+  if (record !== undefined && record !== words[0]) {
+    const op = words[1];
+    throw new CommandUnknown('siren', words[0] ?? '', [op !== undefined && records.commandFor([record, op]) !== undefined ? `${record} ${op}` : record]);
+  }
   const started = name.length >= 3 ? COMMANDS.filter((command) => command.startsWith(name)) : [];
   const guesses = started.length > 0 && started.length <= 4 ? started : [nearest(name, COMMANDS)].filter((guess) => guess !== undefined);
   const group: CommandUnknown['group'] = (words[0] === 'apps' || words[0] === 'recipes') && words.length > 1 ? `siren ${words[0]}` : 'siren';
@@ -1260,7 +1268,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     const flags = targetFlags(values);
     const context = spec.offline
       ? null
-      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, [name, ...args].join(' '));
+      : new CommandContext(io, resolveTarget(flags, io.env, await remembered(io)), spec.readsOnly === true, spec.sessionOnly === true ? name : undefined, typedLine(argv, name));
     if (context !== null) context.orgFlag = typeof values.org === 'string' ? values.org : undefined;
     targetUrl = context?.target.baseUrl;
     // A command that sends nothing names the Siren the next command would reach, the one logged in to included,
@@ -1325,6 +1333,33 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   } finally {
     await settle();
   }
+}
+
+/**
+ * The command line as typed, for a refusal that offers it again, such as
+ * `collaborators update 99999 -d nickname=x`: every argument and flag but
+ * the ones {@link commandLine} adds back, --sandbox, --live and --base-url,
+ * each quoted for a shell. It used to keep the arguments alone, so the
+ * --live hint dropped every -d (review round 1, C10).
+ */
+function typedLine(argv: readonly string[], name: string): string {
+  const words = name.split(' ');
+  const rest: string[] = [];
+  let matched = 0;
+  for (let at = 0; at < argv.length; at++) {
+    const arg = argv[at]!;
+    if (arg === '--sandbox' || arg === '--live' || arg.startsWith('--base-url=')) continue;
+    if (arg === '--base-url') {
+      at++;
+      continue;
+    }
+    if (matched < words.length && arg === words[matched]) {
+      matched++;
+      continue;
+    }
+    rest.push(records.shellWord(arg));
+  }
+  return [name, ...rest].join(' ');
 }
 
 /**
