@@ -1,8 +1,9 @@
 import { execFile, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { askHidden } from '../src/cli/io';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { askHidden, askVisible } from '../src/cli/io';
 import { buildCli, configFolder, startFakeCloud } from './cli-loopback';
 import type { FakeCloud } from './cli-loopback';
 
@@ -24,21 +25,23 @@ const driver = join(__dirname, 'pty', 'type-at-prompt.py');
 const python = process.platform === 'win32' ? undefined : ['python3', 'python'].find((name) => spawnSync(name, ['--version']).status === 0);
 const RUNS = 30;
 const CTRL_C_RUNS = 6;
+const STARTUP_RUNS = 10;
 const EMAIL = 'pty-person@example.invalid';
 const PASSWORD = 'Zq7-made-up-Xv9-never-real';
 
 interface Typed {
   afterPrompt: string;
   passwordShown: boolean;
+  earlyShown: boolean;
   exit: number | null;
   echoAfter: boolean;
 }
 
-function typeAtPrompt(cli: string, cloud: FakeCloud, mode: 'enter' | 'ctrl-c'): Promise<Typed> {
+function typeAtPrompt(cli: string, cloud: FakeCloud, mode: 'enter' | 'ctrl-c' | 'startup', go?: string): Promise<Typed> {
   return new Promise((resolve, reject) => {
     const env: NodeJS.ProcessEnv = { ...process.env, SIREN_CONFIG_DIR: configFolder() };
     delete env.SIREN_BASE_URL;
-    execFile(python!, [driver, process.execPath, cli, cloud.baseUrl, EMAIL, PASSWORD, mode], { env, timeout: 30_000, encoding: 'utf8' }, (error, stdout, stderr) => {
+    execFile(python!, [driver, process.execPath, cli, cloud.baseUrl, EMAIL, PASSWORD, mode, ...(go === undefined ? [] : [go])], { env, timeout: 30_000, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (error !== null) return reject(new Error(`${error.message}\n${stderr}`));
       resolve(JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as Typed);
     });
@@ -72,12 +75,38 @@ class RecordingTerminal extends EventEmitter {
 }
 
 describe('apps-cli: the hidden password prompt', () => {
-  it('turns echo off before the question appears, and gives the mode back after Enter', async () => {
+  /*
+   * The question now waits for a short drain after echo goes off (coordinator,
+   * 2026-11-27), so the order is raw mode, reading, the question, and the
+   * mode back after Enter. A key that came before the question is dropped.
+   */
+  it('turns echo off before the question appears, drops what came before it, and gives the mode back after Enter', async () => {
     const terminal = new RecordingTerminal();
-    const answer = askHidden('Password: ', terminal as unknown as NodeJS.ReadStream, terminal as unknown as NodeJS.WriteStream);
+    const answer = askHidden('Password: ', terminal as unknown as NodeJS.ReadStream, terminal as unknown as NodeJS.WriteStream, 5);
+    terminal.emit('data', Buffer.from('typed-early\r'));
+    await vi.waitFor(() => expect(terminal.done).toContain('write "Password: "'));
     terminal.emit('data', Buffer.from('made-up\r'));
     expect(await answer).toBe('made-up');
-    expect(terminal.done).toEqual(['raw true', 'write "Password: "', 'read', 'raw false', 'write "\\n"']);
+    expect(terminal.done).toEqual(['raw true', 'read', 'write "Password: "', 'raw false', 'write "\\n"']);
+  });
+
+  it('stops on Ctrl-C typed before the question appears', async () => {
+    const terminal = new RecordingTerminal();
+    const answer = askHidden('Password: ', terminal as unknown as NodeJS.ReadStream, terminal as unknown as NodeJS.WriteStream, 5);
+    terminal.emit('data', Buffer.from('\u0003'));
+    await expect(answer).rejects.toThrow('Stopped.');
+    expect(terminal.done).not.toContain('write "Password: "');
+    expect(terminal.done.at(-2)).toBe('raw false');
+  });
+
+  it('reads the visible prompt in raw mode too, echoing what is typed, so no gap with echo on lies before the password', async () => {
+    const terminal = new RecordingTerminal();
+    const answer = askVisible('Email: ', terminal as unknown as NodeJS.ReadStream, terminal as unknown as NodeJS.WriteStream, 5);
+    terminal.emit('data', Buffer.from('early'));
+    await vi.waitFor(() => expect(terminal.done).toContain('write "Email: "'));
+    terminal.emit('data', Buffer.from('ab\u007fc\u001b[D\r'));
+    expect(await answer).toBe('ac');
+    expect(terminal.done).toEqual(['raw true', 'read', 'write "Email: "', 'write "a"', 'write "b"', 'write "\\b \\b"', 'write "c"', 'raw false', 'write "\\n"']);
   });
 });
 
@@ -102,6 +131,34 @@ describe.skipIf(python === undefined)('apps-cli: the hidden password prompt in a
       expect(typed.echoAfter).toBe(true);
     }
   }, 180_000);
+
+  /*
+   * Coordinator, 2026-11-27, after 1 in 30 of the runs above echoed under
+   * load: a key typed before echo is off must never be shown or sent. The
+   * fake Cloud holds its answer to the edition read, the first thing the
+   * command sends, and the driver types "early-" and the password with Enter
+   * while it waits. The command has echo off by then, drops those keys, and
+   * asks for the email as if nothing was typed.
+   */
+  it(`shows and sends nothing typed while the command starts, in ${STARTUP_RUNS} runs`, async () => {
+    const runs: Typed[] = [];
+    for (let run = 0; run < STARTUP_RUNS; run += 1) {
+      const go = join(configFolder(), 'go');
+      cloud.beforeEdition = async () => {
+        writeFileSync(go, '');
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      };
+      try {
+        runs.push(await typeAtPrompt(cli, cloud, 'startup', go));
+      } finally {
+        cloud.beforeEdition = undefined;
+      }
+    }
+    const shown = runs.filter((typed) => typed.earlyShown || typed.afterPrompt !== '' || typed.passwordShown);
+    expect(shown.length, `${shown.length} of ${STARTUP_RUNS} runs showed it: ${JSON.stringify(shown[0])}`).toBe(0);
+    for (const typed of runs) expect(typed.exit).toBe(0);
+    expect(cloud.logins.slice(-STARTUP_RUNS)).toEqual(Array.from({ length: STARTUP_RUNS }, () => ({ email: EMAIL, password: PASSWORD })));
+  }, 120_000);
 
   it(`shows nothing typed before Ctrl-C, stops with exit code 1, and gives the terminal its echo back, in ${CTRL_C_RUNS} runs`, async () => {
     const runs: Typed[] = [];

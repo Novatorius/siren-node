@@ -53,7 +53,11 @@ export interface FakeCloud {
   edition: 'sandbox' | 'production';
   /** When true, `GET /auth/signup-options` gets no answer at all, as a target that hangs. */
   hangEdition: boolean;
+  /** Awaited before `GET /auth/signup-options` is answered, so a test can act while the command starts. */
+  beforeEdition?: () => Promise<void>;
   seen: SeenRequest[];
+  /** The email and password of each `POST /auth/login`, in order. */
+  logins: Array<{ email: string; password: string }>;
   close(): Promise<void>;
 }
 
@@ -65,20 +69,25 @@ export function loopbackAccessToken(): string {
 /** Starts the fake Cloud on a free port of 127.0.0.1. */
 export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbox'): Promise<FakeCloud> {
   const seen: SeenRequest[] = [];
-  const state = { edition, hangEdition: false };
+  const logins: Array<{ email: string; password: string }> = [];
+  const state: { edition: 'sandbox' | 'production'; hangEdition: boolean; beforeEdition?: () => Promise<void> } = { edition, hangEdition: false };
   const server = createServer((request, response) => {
     const path = (request.url ?? '').split('?')[0]!.replace(/^\/siren\/v1/, '');
     seen.push({ method: request.method ?? '', path, authorization: request.headers.authorization });
-    request.resume();
-    request.on('end', () => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', async () => {
       const send = (status: number, body: unknown) => {
         response.writeHead(status, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify(body));
       };
       const route = `${request.method} ${path}`;
       if (route === 'GET /auth/signup-options' && state.hangEdition) return undefined;
+      if (route === 'GET /auth/signup-options' && state.beforeEdition !== undefined) await state.beforeEdition();
       if (route === 'GET /auth/signup-options') return send(200, capturedBody(`auth-signup-options-${state.edition === 'production' ? 'production' : 'sandbox'}`));
       if (route === 'POST /auth/login') {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as { email?: string; password?: string };
+        logins.push({ email: body.email ?? '', password: body.password ?? '' });
         return send(200, capturedBody('auth-login-200', { '<ACCESSTOKEN>': loopbackAccessToken(), '<REFRESHTOKEN>': 'made-up-refresh-token' }));
       }
       if (route === 'GET /apps') return send(200, renamedBody('apps-list-200'));
@@ -103,7 +112,14 @@ export async function startFakeCloud(edition: 'sandbox' | 'production' = 'sandbo
     set hangEdition(value) {
       state.hangEdition = value;
     },
+    get beforeEdition() {
+      return state.beforeEdition;
+    },
+    set beforeEdition(value) {
+      state.beforeEdition = value;
+    },
     seen,
+    logins,
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();

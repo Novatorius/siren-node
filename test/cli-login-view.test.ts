@@ -61,9 +61,13 @@ describe('login screen: while it waits', () => {
 });
 
 describe('login screen: how it ends', () => {
-  it('grips the halves when the approval lands, puts the ✓ line in the spinner\'s place, and gives the cursor back', async () => {
+  it('draws the gripped logo at once when the approval lands, puts the ✓ line in the spinner\'s place, and gives the cursor back', async () => {
     const { h, fake } = await login([code(), pending(), approved()]);
     const text = fake.text();
+    // No frame waits between the approval and the end: the gripped frame is the write after the last spinner.
+    const lastWaiting = fake.writes.map((write) => write.includes('Waiting for approval')).lastIndexOf(true);
+    expect(fake.writes.slice(lastWaiting + 1)).toHaveLength(2);
+    expect(fake.writtenAtWait.filter((at) => at > lastWaiting + 1)).toEqual([]);
     const end = text.lastIndexOf(LAST[3]!.trim());
     expect(end).toBeGreaterThan(text.lastIndexOf('Waiting for approval'));
     expect(strip(fake.writes.at(-2) ?? '')).toContain(`✓ Logged in as ${EMAIL} · 2 organizations`);
@@ -73,12 +77,20 @@ describe('login screen: how it ends', () => {
     expect(h.credentials().sessions).toBeDefined();
   });
 
-  it('drifts the halves away on a denial, clears the spinner, and prints the ✗ line after', async () => {
+  /*
+   * Coordinator, 2026-11-27, relaying Alex's rule that no command waits on an
+   * animation: the endings snap. The denial used to drift the halves apart
+   * over seven frames before the ✗ line. Now one write clears the logo and
+   * the spinner, with no wait between the denial and the ✗ line.
+   */
+  it('clears the logo and the spinner at once on a denial, and prints the ✗ line after', async () => {
     const { h, fake, code: exit } = await login([code(), pending(), denied()]);
     expect(exit).toBe(1);
     const lastWait = fake.writes.map((write) => write.includes('Waiting for approval')).lastIndexOf(true);
     const afterDenial = fake.writes.slice(lastWait + 1);
-    expect(afterDenial.some((write) => write.includes(FIRST[3]!.trim()))).toBe(true);
+    expect(afterDenial).toHaveLength(2);
+    expect(fake.writtenAtWait.filter((at) => at > lastWait + 1)).toEqual([]);
+    expect(afterDenial.some((write) => write.includes(FIRST[3]!.trim()))).toBe(false);
     expect(strip(fake.writes.at(-2) ?? '')).not.toMatch(/[⠁-⣿]/);
     expect(fake.writes.at(-1)).toBe('\u001b[?25h');
     expect(h.err()).toContain('The login was denied in the browser.');
