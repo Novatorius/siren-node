@@ -219,7 +219,7 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
     expect(h.out()).toContain('job7f3a');
     expect(h.out()).toContain(FILE);
     // Through a pipe, standard output holds the table alone, and the hint goes to standard error (review of PR 94).
-    expect(h.out().split('\n')[0]).toMatch(/^ID +STARTED/);
+    expect(h.out().split('\n')[0]).toMatch(/^ID\tSTARTED/);
     expect(h.out()).not.toContain('shows one');
     expect(h.err()).toContain('siren recipes status job7f3a shows one.');
   });
@@ -277,8 +277,8 @@ describe('siren recipes status, imports, export, catalog, show and fetch', () =>
     h.signedIn();
     expect(await h.run(['recipes', 'catalog', '--search', 'gold']), h.err()).toBe(0);
     expect(new URL(recipeRequests(h)[0]!.url).searchParams.get('q')).toBe('gold');
-    expect(h.out()).toMatch(/gold-partners +Gold partners +yes/);
-    expect(h.out()).toMatch(/tiers +Tiers +needs plus/);
+    expect(h.out()).toMatch(/gold-partners\tGold partners\t[^\n]*yes/);
+    expect(h.out()).toMatch(/tiers\tTiers\t[^\n]*needs plus/);
     expect(h.out()).not.toContain('saves one to edit');
     expect(h.err()).toContain('saves one to edit and apply.');
     const before = h.out().length;

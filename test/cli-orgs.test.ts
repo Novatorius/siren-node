@@ -264,7 +264,8 @@ describe('orgs: SIREN_ORG and the app file disagree', () => {
       h.write('siren.app.json', appFile('acme'));
       expect(await h.run(['apps', 'list']), h.err()).toBe(0);
       expect(await h.run(['apps', 'off', APP_KEY]), h.err()).toBe(0);
-      expect(h.err()).toBe('');
+      // Only the list's count line, which goes to stderr through a pipe, and no note about the organization.
+      expect(h.err()).toMatch(/^1 app in Acme \(\w+\), sandbox\n$/);
     }
   });
 });

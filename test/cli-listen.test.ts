@@ -349,7 +349,7 @@ describe('siren listen', () => {
     expect(bodyOf(h.http.requests[1])).not.toHaveProperty('url');
     expect(h.file('.env.sandbox')).toContain(`SIREN_SIGNING_SECRET=${SECRET}`);
     expect(h.out()).toContain('SIREN_APP_URL is not set');
-    expect(h.out()).toContain('siren listen --forward-to localhost:<port>/<path>');
+    expect(h.out()).toContain('siren listen --forward-to localhost:3000/siren');
     expect(h.printed()).not.toContain(SECRET);
 
     const live = harness([], { edition: 'production' });

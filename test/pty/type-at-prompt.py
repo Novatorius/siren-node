@@ -1,12 +1,15 @@
 """Runs `siren login --password` in a pseudo-terminal and types at its prompts with no pause.
 
-Usage: python3 type-at-prompt.py <node> <cli.js> <base url> <email> <password> <enter|ctrl-c>
+Usage: python3 type-at-prompt.py <node> <cli.js> <base url> <email> <password> <enter|ctrl-c|startup> [go file]
 
 The child is a shell that runs the command, prints its exit code, then prints
 `stty -a`, so the terminal's mode after the command ended shows too. The
 password goes in the instant `Password: ` arrives, the way a fast typist or a
 password manager does it. With `ctrl-c`, the first four characters go in and
-then Ctrl-C.
+then Ctrl-C. With `startup`, it waits until the go file exists, which the fake
+Cloud makes while it holds its answer to the edition read, types `early-` and
+the password with Enter while the command is still starting, then answers the
+prompts as with `enter`.
 
 Prints one JSON line: what came back on the terminal between `Password: ` and
 the next line break, whether any of the password came back anywhere, the exit
@@ -38,12 +41,23 @@ def read_until(fd, wanted, seen, limit=15.0):
 
 def main():
     node, cli, base, email, password, mode = sys.argv[1:7]
+    go = sys.argv[7] if len(sys.argv) > 7 else None
     script = '"$0" "$1" login --password --base-url "$2"; echo "EXIT=$?"; stty -a'
     pid, fd = pty.fork()
     if pid == 0:
         os.execv("/bin/sh", ["/bin/sh", "-c", script, node, cli, base])
 
     seen = bytearray()
+    if mode == "startup":
+        waited = 0.0
+        while not os.path.exists(go):
+            ready, _, _ = select.select([fd], [], [], 0.01)
+            if ready:
+                seen.extend(os.read(fd, 4096))
+            waited += 0.01
+            if waited > 15:
+                raise SystemExit("the go file never came, saw %r" % bytes(seen))
+        os.write(fd, b"early-" + password.encode() + b"\r")
     read_until(fd, b"Email: ", seen)
     os.write(fd, email.encode() + b"\r")
     read_until(fd, b"Password: ", seen)
@@ -73,6 +87,7 @@ def main():
     print(json.dumps({
         "afterPrompt": line,
         "passwordShown": password[:4] in after,
+        "earlyShown": "early-" in text,
         "exit": int(exit_code.group(1)) if exit_code else None,
         "echoAfter": re.search(r"(?<![-\w])echo(?![\w])", stty) is not None,
     }))

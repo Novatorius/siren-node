@@ -474,9 +474,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No command waits on the Siren logo any more. The first-run hook is drawn beside the command, which
   starts at once and stills the logo with its first line, where it used to play for about three
   seconds first. `siren login --password` asks for the email and password beside the floating logo,
-  with both prompts live from the first frame, and grips the halves when Siren accepts the password.
-  Under `-q`, `NO_COLOR`, `CI`, a small terminal or a standard stream that is not a terminal it asks
-  at the plain prompts, as before.
+  with both prompts live from the first frame. Both logins draw their ending at once, the gripped logo
+  on success and a cleared one on failure, so the shell's prompt never waits on the logo. Under `-q`,
+  `NO_COLOR`, `CI`, a small terminal or a standard stream that is not a terminal it asks at the plain
+  prompts, as before.
+- `siren login --password` and `siren signup` turn the terminal's echo off before they send or draw
+  anything, and every prompt drops the keys typed before its question appears. A password typed
+  early is no longer shown or sent as the answer to the email prompt.
 - The 400 for a signed body that is not an app request of version 1 names the first field that
   breaks its rule, such as "The request's `id` must be `apr_` followed by 32 hex characters."
 - The README leads with answering Siren: What you can do, Install with the branch install lines,

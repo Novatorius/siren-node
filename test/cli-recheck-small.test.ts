@@ -53,11 +53,12 @@ describe('re-check should-fix 9: a missing environment variable is fixed in .env
 });
 
 describe('re-check should-fix 11: the browser-login refusal says what the person does', () => {
-  it('says to log in with email and password, not that the tool asks', async () => {
-    const h = harness([reply(404, { error: { message: 'Not found.', context: [] } })], { interactive: true });
+  it('says once that there is no browser login, then asks for the email and password (review round 1, C1 and C27)', async () => {
+    const h = harness([reply(404, { error: { message: 'Not found.', context: [] } })], { interactive: true, typed: [''] });
     expect(await h.run(['login'])).toBe(1);
-    expect(h.err()).toContain('It has no browser sign-in yet. Log in with your email and password.');
-    expect(h.err()).not.toContain('the tool asks');
+    expect(h.err()).toContain('has no browser login yet, so siren asks for your email and password.');
+    expect(h.err()).not.toContain('browser sign-in');
+    expect(h.prompts).toContain('Email: ');
   });
 });
 

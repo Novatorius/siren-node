@@ -48,7 +48,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
       expect(h.editionReads).toHaveLength(1);
       expect(h.err()).toBe(
         'siren: example.invalid became a live Siren since you logged in. Your session was made when it was a sandbox one, so nothing was sent with it. ' +
-          `Run siren login --base-url ${BASE} --live.\n`,
+          `Run siren login --base-url ${BASE}.\n`,
       );
     }
   });
@@ -68,12 +68,12 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     }
   });
 
-  it('a Siren that names no edition counts as live, so a sandbox session is refused there', async () => {
+  it('a Siren that names no edition never counts as live, so a sandbox session goes on there (review round 1, C1)', async () => {
     const h = harness([reply(200, [app])], { edition: 'none' });
     h.signedIn({ [BASE]: session() });
-    expect(await h.run(['apps', 'list', '--base-url', BASE, '--live'])).toBe(1);
-    expect(h.paths()).toEqual([]);
-    expect(h.err()).toContain('became a live Siren');
+    expect(await h.run(['apps', 'list', '--base-url', BASE]), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['GET /apps']);
+    expect(h.err()).not.toContain('live');
   });
 
   it('checks every command that sends anything with a session, and none of them sends anything else on a mismatch', async () => {
@@ -141,7 +141,7 @@ describe('apps-cli: the edition the target reports now, on every command', () =>
     expect(followed).toBe(other.err());
     expect(followed).toBe(
       'siren: sandbox.sirenaffiliates.com became a live Siren since you logged in. Your session was made when it was a sandbox one, so nothing was sent with it. ' +
-        'Run siren login --live.\n',
+        'Run siren login.\n',
     );
   });
 

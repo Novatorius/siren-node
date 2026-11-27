@@ -146,7 +146,7 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | Command | Sends | Prints |
 | --- | --- | --- |
 | `siren signup [--org-name] [--email] [--password-stdin] [--accept-terms]` | `GET /auth/signup-options`, then `POST /auth/register-org` once | The organization and the address signed in to. See "Confirmation and plan answers" for the other outcomes. |
-| `siren login` | signup-options, `POST /auth/cli/code`, then `POST /auth/cli/token` each interval | The logo with its halves apart beside the code, the link and a spinner while it waits, the halves gripping when the approval lands, then `Logged in as <email> · N organizations` and a Next with `siren apps init`, or `siren apps apply` in a folder with siren.app.json (CLI pass 3, should-fix 14). |
+| `siren login` | signup-options, `POST /auth/cli/code`, then `POST /auth/cli/token` each interval | The logo with its halves apart beside the code, the link and a spinner while it waits, the gripped logo drawn at once when the approval lands, then `Logged in as <email> · N organizations` and a Next with `siren apps init`, or `siren apps apply` in a folder with siren.app.json (CLI pass 3, should-fix 14). |
 | `siren login --password [--email]`, or `--password-stdin --email` | signup-options, `POST /auth/login`, and `POST /auth/select-org` with the first organization for a person in several | The same line, and the days left to confirm the address when Siren says so. `--email` alone is a usage error. |
 | `siren logout` | `POST /auth/logout` with the access token and the refresh token | That the session is forgotten. It forgets it even when Siren refuses, and it needs no `--live` (AP-A640). |
 | `siren whoami [--json]` | nothing, or with `SIREN_TOKEN` signup-options and `GET /personal-tokens/current` | Which credential is in use, who it acts as, the organization and role, and whether that Siren is live. For a session, the session file's path, and exit 1 when none is kept there (CLI pass 1, finding 2). For a token, its name, last four characters and expiry. |
@@ -158,8 +158,8 @@ lists its options with a line each, the shared ones, and an example (CLI pass 1,
 | `siren apps events [--json]` | `GET /apps/events` | An EVENT and MEANS table in the catalog's order, or Siren's list as JSON. |
 | `siren apps diff [file] [--json]` | `GET /apps/{key}`, and the scope and event lists when the file names one the app lacks | The plan apply would print, or that the file matches, with no question. Exit 0 when it matches and 3 when it differs, as `terraform plan -detailed-exitcode` and `git diff --exit-code` do (CLI pass 2, finding 1). It reads only, so a live organization needs no `--live`, and it skips apply's env file checks since it writes nothing. `--json` prints the plan with each change marked `add`, `remove` or `change`. |
 | `siren apps list [--json]` | `GET /apps` | One block per app with its features, and under an app whose `needsAttention` is above 0 the count and `siren apps requests --app <key> --attention`, or the JSON Siren sent. |
-| `siren apps show [key] [--json]` | `GET /apps/{key}` | The key, with the name beside it only when it differs, then the app and its features. Each kind reads `Post-conversion action (postConversionAction)` when the line fits the terminal. When it does not, the table drops the code name first, a Kinds row in the block names the code names, and only then is NAME cut with an ellipsis. `--json` keeps both, each archived feature marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. |
-| `siren apps requests [--app <key> or --all] [--attention] [--follow] [--json]` | `GET /apps` once, then `GET /apps/requests` and `GET /apps/requests?status=needs_attention` | A count line, then a table, oldest first: the organization's latest 50 and every request that needs attention, however old, so an app that `apps list` counts one for never shows none. The columns are ID (the first 8 hex characters, or the whole id on a Siren without the prefix lookup), WHEN (local time, from `TZ`), APP, FEATURE (the kind's short name), ABOUT, SENDS and STATE, or WHY with `--attention`. In a folder whose siren.app.json holds one app, `--app` defaults to that app, the count line names it, and a tip names `--all`, which lists every app (CLI pass 3, should-fix 7). One app's list has no APP column. In a terminal the table leaves out SENDS, then ABOUT, then APP until it fits the width, and shows the newest 20 rows with a dim count of the rest, which `--json` prints. A tell that needs attention offers only resend, since Siren answers an answer to a tell with 422 (should-fix 8). `--attention` reads the attention list alone. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once as a row, and ends with 130 on Ctrl-C, or with 1 when the target changed edition. `--json` prints the rows as Siren sent them, as one array, or one object a line with `--follow`. |
+| `siren apps show [key] [--json]` | `GET /apps/{key}` | The key, with the name beside it only when it differs, then the app and its features. Each kind reads `Post-conversion action (postConversionAction)` when the line fits the terminal. When it does not, the table drops the code name first, a Kinds row in the block names the code names, and only then is NAME cut with an ellipsis. `--json` keeps both, each archived feature marked "archived, so Siren no longer calls it" beside it, as `list` and `apply` mark it, and the `needsAttention` line `list` prints. A PICKED BY column counts the records that select each feature, from `usedBy`, and each active feature nothing picks gets a line on how to pick it (review round 1, C3). |
+| `siren apps requests [--app <key> or --all] [--attention] [--follow] [--json]` | `GET /apps` once, then `GET /apps/requests` and `GET /apps/requests?status=needs_attention` | A count line, then a table, newest first: the organization's latest 50 and every request that needs attention, however old, so an app that `apps list` counts one for never shows none. The columns are ID (the first 8 hex characters, or the whole id on a Siren without the prefix lookup), WHEN (local time, from `TZ`), APP, FEATURE (the kind's short name), ABOUT, SENDS and STATE, or WHY with `--attention`. In a folder whose siren.app.json holds one app, `--app` defaults to that app, the count line names it, and a tip names `--all`, which lists every app (CLI pass 3, should-fix 7). One app's list has no APP column. In a terminal the table leaves out SENDS, then ABOUT, then APP until it fits the width, and shows the newest 20 rows with a dim count of the rest, which `--json` prints. A tell that needs attention offers only resend, since Siren answers an answer to a tell with 422 (should-fix 8). `--attention` reads the attention list alone. `--follow` asks again every 2 seconds, reading the target's edition before each poll, prints each new request or status change once as a row, and ends with 130 on Ctrl-C, or with 1 when the target changed edition. `--json` prints the rows as Siren sent them, as one array, or one object a line with `--follow`. |
 | `siren logs tail [flags]` | `GET /logs` with the filters, then again with `nextCursor` after `nextPollMs` (contract/devtools-logs.md) | One line per entry, oldest first: local time, type, summary, status and duration, 80 columns at most. A failed or refused entry is red with ✗, its reason under it, and `siren apps requests <id>` when it is about a request. `--json` prints one entry a line. `--limit <n>` ends with 0 after n entries, Ctrl-C with 130, a changed edition with 1, and 5 minutes without an answer with 1. |
 | `siren apps requests <id> [--json]` | `GET /apps/requests/{requestKey}`, `GET /apps`, `GET /webhooks/{subscription}/deliveries`, in that order | A block with the request's state, kind, app and feature, subject, time, and the answer Siren took and who gave it, or that none came yet. Then SENDS, a table of each send with its HTTP status and what the app said back, then DATA, the data Siren sent, as indented key and value lines with the keys dim and aligned at each level, an object's entries two spaces in under its key, each object in a list under its number from 1, and a list of plain values on one line. In a terminal a long value wraps under itself, so no line passes 80 columns. `--json` keeps the data whole. Then the commands that answer it or send it again. Here and in `answer` and `resend`, a request id may be its first 4 or more hex characters after `apr_`, with or without the `apr_`, as git takes a commit's. The tool finds the whole id with one call, `GET /apps/requests?idPrefix=apr_<start>`, which Siren reads from feat/apps 76d5bbdf83 and answers with at most two of the organization's matches, newest first (CLI pass 3, must-fix 1). One match is the request. None is refused with `siren apps requests`. Two are refused with both listed and "and maybe more", and the tool never picks one. An older Siren refuses the param with 400 or ignores it and answers its latest requests. Against that Siren a start is refused with the advice to give the whole id, and the list, its tips and the views print whole ids, since a short one could not be found. Before it prints a short id, a command makes one lookup for an id it shows, the list's newest or the request it acted on, and prints whole ids when that lookup doesn't find it. A start the person typed was found that way already, so it costs no second call. A request whose answer Siren took prints no tip, so it costs none. `--json` prints Siren's detail with three fields added: `appKey` and `featureKey`, which Siren's detail names only by id, and `sends`, the deliveries found for the request. The keys are null and `sends` is empty when the app is gone. The SDKs' replay helpers read this object. A request the organization does not have gets one line that names `siren apps requests`. |
 | `siren apps answer <id> (--body <json> or --file <path>)` | `POST /apps/requests/{id}/answer` with the session | `✓ Answered <short id>` with the answer, or that Siren already had this answer. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. Siren refuses a hand answer to any other ask with 409 `app_request_not_needing_attention`, named by Siren (pkt/apps-screen-a at fcf19b1f0), and the command prints Siren's line and that `--attention` list. A refusal whose code the SDK does not know prints Siren's message and the code, and exits 1. |
@@ -261,18 +261,27 @@ test/cli-hidden-prompt.test.ts saw it in 45 of 60 runs before the fix and in non
 Where the hook may play, `--password` asks beside the logo (src/cli/hook.ts, `startPasswordStage`).
 Alex, 2026-11-27: "Animate while also showing the login at the same time." The first prompt draws
 the whole screen at once: the logo on the left with its halves floating apart, and on the right the
-wordmark, the Siren's host, `Email: ` and `Password: `, with the cursor at the first prompt. Standard
-input goes into raw mode before anything is drawn and stays there until the screen closes, so the
-terminal never echoes and the password is never drawn. A timer moves the halves every 50
+wordmark, the Siren's host, `Email: ` and `Password: `, with the cursor at the first prompt. The
+screen reads keys in raw mode from before anything is drawn until it closes, so the terminal never
+echoes and the password is never drawn. A timer moves the halves every 50
 milliseconds. It saves the cursor, redraws only the logo's columns and the status line, and puts
 the cursor back, so a key is echoed where it was typed and never waits for a frame. Keys typed ahead
-of a prompt, Enter included, wait for it. Backspace and Ctrl-U edit the line, and arrow keys are
-ignored. While Siren checks the password a spinner turns beside "Logging in". The halves grip and
-"✓ Logged in as …" takes the spinner's place when Siren accepts it, and they drift away before the ✗
-line when it refuses. Ctrl-C stops the login at a prompt or during the check, and nothing is kept.
+of the second prompt, Enter included, wait for it. Backspace and Ctrl-U edit the line, and arrow keys are
+ignored. While Siren checks the password a spinner turns beside "Logging in". When Siren accepts it,
+the gripped logo and "✓ Logged in as …" are drawn at once and the next steps follow. When it
+refuses, the logo clears at once and the ✗ line follows. Neither ending waits on a frame, here or in
+the browser login, so the shell's prompt comes back straight away. Ctrl-C stops the login at a prompt or during the check, and nothing is kept.
 The screen gives way to the plain prompts under every skip rule of the hook, when standard input or
 standard error is not a terminal, and when the logo and the prompts with room to type do not fit
 side by side or stacked.
+
+Echo goes off before the password login sends or draws anything. `siren login --password` and
+`siren signup` put standard input in raw mode first thing (`quietKeys` in src/cli/io.ts) and drop
+every key until a prompt reads, so a password typed while the command starts or waits on Siren is
+neither shown nor taken as an answer. Every prompt, the plain ones included, reads in raw mode, and
+for 20 milliseconds after echo goes off it drops what standard input holds before it writes its
+question. A key typed before the tool started was echoed by the terminal already, since no program
+can stop that, and it is dropped too. Ctrl-C while nothing reads keys stops the command.
 
 `DeviceSignIn` is the other, and `siren login` uses it by default in a terminal (Alex's ruling
 M105, contract/cli-signin.md in the run folder). It follows RFC 8628:
@@ -408,8 +417,8 @@ command writes its own escape codes.
   person typed, and Node's JSON parser text never prints. Problems in siren.app.json print under
   the ✗ headline, each place dim with its message under it, and piped, each is one
   `file:line:col: message` line (must-fix 3). A browser login against a Siren that answers
-  `POST /auth/cli/code` with 404 says it offers no browser login yet and names `siren login
-  --password` (must-fix 4). A command typo and a flag typo share the shape: the headline, the
+  `POST /auth/cli/code` with 404 says in one line that it has no browser login yet, and asks for
+  the email and password in the same run (must-fix 4, and review round 1, C1). A command typo and a flag typo share the shape: the headline, the
   help or usage line, and `› Did you mean …?` (should-fix 15). `siren app list` offers `siren apps
   list` (should-fix 6). With no session, every command says "Not logged in.", that the tool keeps
   no session for that host, and "Run siren login to log in."
@@ -494,7 +503,11 @@ played.
   with nothing sent, since every command sends a password or a session token (AP-A632).
 - Every command that sends anything reads the edition from `GET /auth/signup-options` first, on
   every run, before anything else is sent. `signup` and `login` read it before they ask for the
-  password. A Siren that names no edition counts as live. The read costs one GET with no
+  password. A Siren that names its edition is what it names. Siren Cloud's sandbox host
+  (`sandbox.sirenaffiliates.com`) is a sandbox and its live API host (`api.sirenaffiliates.com`)
+  is live, by their address, since both name no edition today. Any other Siren that names none is
+  never assumed live: the tool treats it as a sandbox, and `signup` and `login` say so in one line
+  on stderr (review round 1, C1). The read costs one GET with no
   credential, a few dozen bytes. Each attempt may take 3 seconds and it is sent once more after a
   network error, 429 or 5xx, so a target that hangs is given up after 6.5 seconds with the line
   `<address> did not answer when the tool asked which edition it is, so nothing was sent.`
@@ -504,16 +517,17 @@ played.
   it with the same one line before the session is sent there again. That costs one more GET every
   2 seconds while following. `logs tail` does the same before each read of the feed.
   `apps init` sends nothing and reads nothing.
-- A live edition needs `--live` to sign up, sign in, and change anything: `apply`, `answer`,
+- A live edition needs `--live` to sign up and to change anything: `apply`, `answer`,
   `resend`, `rotate-key`, `rotate-secret`, `add-key`, `on`, `off` and `delete`, whatever address
-  chose it. The reads, `whoami`, `orgs`, `use`, `apps list`, `apps show` and `apps requests`, need
-  none, since signing in with `--live` already said the person means that Siren (CLI pass 1,
-  finding 2). Signing out sends only the session's own tokens, to revoke them. `--live` against a
-  sandbox is refused. A new app's question names the organization and whether it is live.
+  chose it. Signing in needs none, since it changes nothing in an organization, so a new person's
+  first `siren login` works on a live Siren too (review round 1, C1). The reads, `whoami`, `orgs`,
+  `use`, `apps list`, `apps show` and `apps requests`, need none (CLI pass 1, finding 2). Signing
+  out sends only the session's own tokens, to revoke them. `--live` against a sandbox is refused,
+  except by `login`, which ignores it. A new app's question names the organization and whether it is live.
 - A stored session keeps the edition and the address it was made for (`edition`, `baseUrl`). A
   command whose target now reports another edition, or a session stored for another address,
   stops with one line before it sends anything with the session: what the target is now, what the
-  session was made for, and the `siren login` to run, with `--live` when the target is live. So a
+  session was made for, and the `siren login` to run. So a
   session made on a sandbox never lists or changes a live organization because the same address
   became live, and a live session never acts on a Siren that became a sandbox. The checkpoint saw
   both against a real Cloud (e2e steps 20a and 20l) before this check.
@@ -918,7 +932,7 @@ It needs Node 18.3 or later, a checkout of the siren-node pull request's branch,
 | 2 | `siren signup`, answering the prompts: organization name, email, the terms, and the password at a hidden prompt | `Made <org> (<slug>) on <address>, and signed in as <email>.` On a live edition: `<address> is a live Siren. Add --live to sign up on a live Siren.` With sign-up off: `Sign-up is turned off on <address>. Ask its owner, or use siren login.` | cli-session |
 | 3 | In the checkout: `npm ci && npm run build`, then `cd examples/apps/acme && npm install` | npm's usual output | example-app |
 | 4 | In a second terminal: `cloudflared tunnel --url http://localhost:8787`. Back in the first: `export SIREN_APP_URL=<the https address it printed>` | A `https://<words>.trycloudflare.com` address | none, cloudflared |
-| 5 | `siren apps apply` | The plan, then `✓ Made acme-payouts in <org>` with a `Key` row (`sk_test_<8 hex>… in .env.sandbox, with its signing secret`), one row per feature with its `app:{id}`, `URL from  SIREN_APP_URL`, and two numbered next steps. No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |
+| 5 | `siren apps apply` | The plan, then `✓ Made acme-payouts in <org>` with a `Key` row (`sk_test_<8 hex>… in .env.sandbox, with its signing secret`), one row per feature with its `app:{id}`, `URL from  SIREN_APP_URL`, the next step `siren apps requests --follow`, a line for each feature nothing picks yet with the recipe line that picks it (review round 1, C3), and the env file the handler loads. No key, secret or url is printed. | cli-app-file, cli-apply, sdk-apps |
 | 6 | `npm start` | `Acme example app on http://localhost:8787, for <address> (<folder>/.env.sandbox).` | example-app |
 | 7 | In the dashboard, signed in with the same email and password: make a program with a sale reward, pick "Acme: Tell the CRM" among its post-conversion actions and "Acme: Acme split" as its distributor's resolver, and add a collaborator with a tracking code. Open Webhooks. | The three Acme features in the pickers, and the app's subscription marked as managed by the app | Siren slices 1, 3 (claim C3), 4 and 11, not this slice |
 | 8 | `npm run send-sale -- tracking:<code> 49` | `Sent a sale of 49 USD through <folder>/.env.sandbox: Siren made 1 conversion on opportunity <id>.` A sale no program pays for prints `Siren recorded it on opportunity <id> and made no conversion (no_program).` and Siren's message, which is what step 7 skipped gives (capture events-sale-200-no-program). | example-app |

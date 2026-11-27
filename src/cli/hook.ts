@@ -1,6 +1,7 @@
 import { chmod, mkdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { HOOK_FRAMES, HOOK_FRAME_MS, HOOK_WIDTH } from './hook-frames';
+import { KEY_DRAIN_MS } from './io';
 import type { CliIo, CliScreen } from './io';
 import { CliRefusal } from './targets';
 import { visibleLength } from './style';
@@ -327,6 +328,8 @@ async function rememberPlayed(io: CliIo): Promise<void> {
  */
 async function playCard(io: CliIo, flags: HookFlags, card: HookCard): Promise<HookEnd | null> {
   if (hookSkip(io.screen, io.env, flags) !== null || io.screen?.size == null) return null;
+  // Review round 1, C14: once per machine, so bare siren after the first run answers at once.
+  if (await hasPlayed(io)) return null;
   const layout = hookLayout(io.screen.size, card);
   if (layout === null) return null;
   const end = await playHook(io.screen, io.env, card, layout);
@@ -336,8 +339,9 @@ async function playCard(io: CliIo, flags: HookFlags, card: HookCard): Promise<Ho
 
 /**
  * What `siren` with nothing after it does: plays the hook with the card
- * when it may, else prints the plain card: the wordmark, where you stand
- * and what comes next. Answers the exit code, 0, or 130 after Ctrl-C.
+ * the first time on this machine, when it may, else prints the plain card:
+ * the wordmark, where you stand and what comes next. Answers the exit
+ * code, 0, or 130 after Ctrl-C.
  */
 export async function welcome(io: CliIo, flags: HookFlags, card: HookCard): Promise<number> {
   const end = await playCard(io, flags, card);
@@ -437,9 +441,9 @@ export interface LoginCard {
 export interface LoginStage {
   /** Waits `ms` while the halves float apart and the spinner turns. Ctrl-C stops the login. */
   wait(ms: number): Promise<void>;
-  /** The halves slide in and grip, the logo floats and settles, and `line` takes the spinner's place with a ✓. */
+  /** Draws the gripped logo at once, with `line` in the spinner's place with a ✓, and gives the terminal back. */
   approved(line: string): Promise<void>;
-  /** The halves drift away, and the spinner's line clears for the ✗ line the tool prints next. */
+  /** Clears the logo and the spinner's line at once for the ✗ line the tool prints next. */
   failed(): Promise<void>;
   /** True once the person pressed Ctrl-C. */
   stopped(): boolean;
@@ -548,25 +552,15 @@ export function startLoginStage(io: CliIo, flags: HookFlags, card: LoginCard): L
     async approved(line) {
       if (closed) return;
       status = `${color}✓${RESET} ${line}`;
-      const grip = hookSequence().slice(APART);
-      for (const frame of grip) {
-        if (keys.pressed !== null) break;
-        redraw(frame);
-        await screen.wait(HOOK_FRAME_MS);
-      }
       redraw(hookSequence().at(-1)!);
       close();
       await rememberPlayed(io);
     },
     async failed() {
-      // Ctrl-C already gave the terminal back, or gives it back now with no drift.
+      // Ctrl-C already gave the terminal back, or gives it back now with the halves where they were.
       if (closed) return;
       if (keys.pressed === CTRL_C) return close();
       status = '';
-      for (let index = APART; index >= 0 && keys.pressed === null; index--) {
-        redraw(frameAt(index));
-        await screen.wait(HOOK_FRAME_MS);
-      }
       redraw(blank);
       close();
     },
@@ -590,9 +584,9 @@ export interface PasswordStage {
   promptSecret(question: string): Promise<string>;
   /** Turns the spinner beside "Logging in" until `work` settles. Ctrl-C stops waiting. */
   during<T>(work: Promise<T>): Promise<T>;
-  /** The halves slide in and grip, and `line` takes the spinner's place with a ✓. */
+  /** Draws the gripped logo at once, with `line` in the spinner's place with a ✓, and gives the terminal back. */
   approved(line: string): Promise<void>;
-  /** The halves drift away, and the spinner's line clears for the ✗ line the tool prints next. */
+  /** Clears the logo and the spinner's line at once for the ✗ line the tool prints next. */
   failed(): Promise<void>;
 }
 
@@ -622,7 +616,7 @@ const ESCAPE_SEQUENCE = /^\u001b(?:\[[0-?]*[ -/]*[@-~]|O.|.)?/su;
  * is never shown. Keys typed ahead of a prompt wait for it. Ctrl-C stops the
  * login at any point.
  */
-export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCard): PasswordStage | null {
+export async function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCard): Promise<PasswordStage | null> {
   const screen = io.screen;
   if (!io.interactive || io.stderrTty === false) return null;
   if (hookSkip(screen, io.env, flags) !== null || screen === undefined || screen.size === null) return null;
@@ -634,13 +628,22 @@ export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCa
   if (fits === null) return null;
 
   // Raw mode goes on before the first character is drawn, so nothing typed the moment a prompt shows is echoed.
+  // Keys that arrive before the prompts are drawn were not typed at them, so the drain drops all but Ctrl-C.
   let queue = '';
+  let draining = true;
+  let stoppedEarly = false;
   let feed = () => undefined as void;
   const stopListening = screen.listen((key) => {
+    if (draining) {
+      if (key.includes(CTRL_C)) stoppedEarly = true;
+      return;
+    }
     queue += key;
     feed();
   });
   if (stopListening === null) return null;
+  await screen.wait(KEY_DRAIN_MS);
+  draining = false;
 
   const color = greenFor(io.env);
   const mark = `${color}${BOLD}Siren${RESET} ${card.version}`;
@@ -721,7 +724,6 @@ export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCa
   }
   let reading: Reading | null = null;
   let phase: 'asking' | 'waiting' | 'ending' = 'asking';
-  let skipEnd = false;
   let onStop: ((error: Error) => void) | null = null;
   let afterReturn = false;
   const stop = (error: Error) => {
@@ -746,10 +748,7 @@ export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCa
       const char = String.fromCodePoint(queue.codePointAt(0)!);
       if (char === CTRL_C) {
         queue = '';
-        if (phase === 'ending') {
-          skipEnd = true;
-          return;
-        }
+        if (phase === 'ending') return;
         return stop(
           phase === 'waiting'
             ? new CliRefusal('Stopped logging in.', { why: 'You pressed Ctrl-C, so the tool kept no session.', fixText: 'Run siren login --password again when you are ready.' })
@@ -757,9 +756,8 @@ export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCa
         );
       }
       if (phase !== 'asking') {
-        // After the password, a key only hurries the ending along.
+        // After the password, only Ctrl-C counts.
         queue = queue.slice(char.length);
-        skipEnd = true;
         continue;
       }
       // Between two prompts the keys wait for the next one, so nothing typed ahead is lost.
@@ -796,6 +794,7 @@ export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCa
 
   screen.write(HIDE_CURSOR);
   screen.write(block());
+  if (stoppedEarly) queue = CTRL_C;
   let tick = 0;
   stopTimer = screen.every(HOOK_FRAME_MS, () => {
     tick += 1;
@@ -822,17 +821,13 @@ export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCa
         work.then(resolve, reject);
       });
     },
+    // Both endings are drawn at once, so the next lines and the shell's prompt never wait on the logo.
     async approved(line) {
       if (closed) return;
       phase = 'ending';
       stopTimer();
       hide();
       status = `${color}✓${RESET} ${line}`;
-      for (const frame of hookSequence().slice(APART)) {
-        if (skipEnd) break;
-        paint(frame);
-        await screen.wait(HOOK_FRAME_MS);
-      }
       paint(hookSequence().at(-1)!);
       close();
       await rememberPlayed(io);
@@ -843,10 +838,6 @@ export function startPasswordStage(io: CliIo, flags: HookFlags, card: PasswordCa
       stopTimer();
       hide();
       status = '';
-      for (let index = APART; index >= 0 && !skipEnd; index--) {
-        paint(frameAt(index));
-        await screen.wait(HOOK_FRAME_MS);
-      }
       paint(blank);
       close();
     },

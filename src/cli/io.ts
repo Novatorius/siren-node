@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import { getEventListeners } from 'node:events';
 import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { FetchHttpClient } from '../http';
 import type { HttpClient } from '../http';
 import { CliRefusal } from './targets';
@@ -26,6 +25,12 @@ export interface CliIo {
   prompt(question: string): Promise<string>;
   /** As {@link prompt}, with the typed characters hidden. Only called when `interactive`. */
   promptSecret(question: string): Promise<string>;
+  /**
+   * Turns echo off and drops keys until a prompt reads, for a command about
+   * to ask for a password, and answers a function that gives the mode back.
+   * Absent, as in tests, nothing changes. See {@link quietKeys}.
+   */
+  holdKeys?(): () => void;
   /** All of standard input as text, for `--password-stdin`. */
   readStdin(): Promise<string>;
   /** The environment: `SIREN_BASE_URL` and the `${NAME}` values an app file names. */
@@ -145,8 +150,9 @@ export function nodeIo(): CliIo {
       process.stderr.write(text);
     },
     interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
-    prompt: askVisible,
-    promptSecret: askHidden,
+    prompt: (question) => askVisible(question),
+    promptSecret: (question) => askHidden(question),
+    holdKeys: () => quietKeys(),
     readStdin: async () => {
       const chunks: Buffer[] = [];
       for await (const chunk of process.stdin) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
@@ -223,10 +229,12 @@ function nodeScreen(): CliScreen {
       if (input.isTTY !== true) return null;
       const wasRaw = input.isRaw;
       const onData = (chunk: Buffer | string) => onKey(chunk.toString());
+      const stopReading = readingKeys();
       input.setRawMode(true);
       input.on('data', onData);
       input.resume();
       return () => {
+        stopReading();
         input.off('data', onData);
         if (input.isRaw !== wasRaw) input.setRawMode(wasRaw);
         input.pause();
@@ -246,20 +254,65 @@ function stopped(): CliRefusal {
   return new CliRefusal('Stopped.', { why: 'You pressed Ctrl-C, so nothing was sent.', fixText: 'Run the command again when you are ready.' });
 }
 
-/** Asks on standard error and answers the line typed, through `node:readline`. */
-function askVisible(question: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const rl = createInterface({ input: process.stdin, output: process.stderr, terminal: true });
-    rl.once('SIGINT', () => {
-      rl.close();
-      process.stderr.write('\n');
-      reject(stopped());
-    });
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
+/**
+ * How long a prompt reads and drops what standard input holds, with echo
+ * already off, before it writes its question. Keys typed before a question
+ * appears were never an answer to it, and may be a password typed early.
+ */
+export const KEY_DRAIN_MS = 20;
+
+/** How many readers take keys from standard input right now: prompts, and the screen's listeners. */
+let keyReaders = 0;
+
+/**
+ * Turns the terminal's echo off now and drops every key typed until a
+ * prompt or the screen reads, and answers a function that gives the mode
+ * back. A command that will ask for a password calls it first, before it
+ * draws or sends anything, so a password typed early, while the command
+ * starts or waits on Siren, is neither echoed nor taken as an answer. Keys
+ * typed before the tool started were echoed by the terminal already, and
+ * are dropped too. Ctrl-C while nothing reads keys stops the command, as it
+ * would with echo on.
+ */
+export function quietKeys(input: NodeJS.ReadStream = process.stdin): () => void {
+  if (input.isTTY !== true) return () => undefined;
+  const wasRaw = input.isRaw;
+  const drop = (chunk: Buffer | string) => {
+    if (keyReaders === 0 && chunk.toString().includes('\u0003')) process.kill(process.pid, 'SIGINT');
+  };
+  input.setRawMode(true);
+  input.on('data', drop);
+  input.resume();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    input.off('data', drop);
+    if (input.isRaw !== wasRaw) input.setRawMode(wasRaw);
+    input.pause();
+  };
+}
+
+/** Counts a reader of keys until the answered function is called. */
+export function readingKeys(): () => void {
+  keyReaders += 1;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    keyReaders -= 1;
+  };
+}
+
+
+/** Asks on standard error and answers the line typed, showing what is typed. See {@link askHidden}. */
+export function askVisible(
+  question: string,
+  input: Pick<NodeJS.ReadStream, 'isRaw' | 'setRawMode' | 'on' | 'off' | 'resume' | 'pause'> = process.stdin,
+  output: Pick<NodeJS.WriteStream, 'write'> = process.stderr,
+  drainMs = KEY_DRAIN_MS,
+): Promise<string> {
+  return askRaw(question, false, input, output, drainMs);
 }
 
 /**
@@ -272,8 +325,15 @@ function askVisible(question: string): Promise<string> {
  * The order matters. `setRawMode` waits for the terminal to take the output
  * already written (libuv sets the mode with TCSADRAIN), so a question written
  * first lets a person who types the instant it appears get in before echo is
- * off, and the terminal shows what they typed. The email prompt before this
- * one leaves the terminal echoing, as readline does when it closes.
+ * off, and the terminal shows what they typed.
+ *
+ * Keys that reach the prompt before its question is written are dropped:
+ * for {@link KEY_DRAIN_MS} after echo goes off it reads and throws away what
+ * standard input holds, and only then writes the question. A key typed
+ * before then was not typed at this prompt. It may be a password typed while
+ * the command started, which the terminal echoed when it arrived, and which
+ * must not then be sent as an answer as well. The email prompt before this
+ * one reads in raw mode too, so no gap with echo on lies between the two.
  *
  * The mode goes back as soon as the prompt ends, not only when the process
  * exits, so a command that asks again or keeps running after the prompt
@@ -285,18 +345,38 @@ export function askHidden(
   question: string,
   input: Pick<NodeJS.ReadStream, 'isRaw' | 'setRawMode' | 'on' | 'off' | 'resume' | 'pause'> = process.stdin,
   output: Pick<NodeJS.WriteStream, 'write'> = process.stderr,
+  drainMs = KEY_DRAIN_MS,
+): Promise<string> {
+  return askRaw(question, true, input, output, drainMs);
+}
+
+/** An escape sequence a key such as an arrow sends, which a prompt ignores whole. */
+const ESCAPE_SEQUENCE = /^\u001b(?:\[[0-?]*[ -/]*[@-~]|O.|.)?/su;
+
+/** The prompt both {@link askVisible} and {@link askHidden} are: raw mode, a drain, the question, the line. */
+function askRaw(
+  question: string,
+  hidden: boolean,
+  input: Pick<NodeJS.ReadStream, 'isRaw' | 'setRawMode' | 'on' | 'off' | 'resume' | 'pause'>,
+  output: Pick<NodeJS.WriteStream, 'write'>,
+  drainMs: number,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let typed = '';
     let done = false;
+    let asked = false;
+    let afterReturn = false;
     const wasRaw = input.isRaw;
+    const stopReading = readingKeys();
     const restore = () => {
       if (input.isRaw !== wasRaw) input.setRawMode(wasRaw);
     };
     const finish = (error?: Error) => {
       if (done) return;
       done = true;
+      clearTimeout(timer);
       input.off('data', onData);
+      stopReading();
       restore();
       input.pause();
       output.write('\n');
@@ -304,19 +384,48 @@ export function askHidden(
       else reject(error);
     };
     const onData = (chunk: Buffer | string) => {
-      for (const char of chunk.toString()) {
+      let text = chunk.toString();
+      // Before the question is written, only Ctrl-C counts.
+      if (!asked) {
+        if (text.includes('\u0003')) finish(stopped());
+        return;
+      }
+      while (text !== '') {
+        if (text.startsWith('\u001b')) {
+          text = text.slice(ESCAPE_SEQUENCE.exec(text)?.[0].length || 1);
+          continue;
+        }
+        const char = String.fromCodePoint(text.codePointAt(0)!);
+        text = text.slice(char.length);
+        const wasReturn = afterReturn;
+        afterReturn = char === '\r';
+        if (char === '\n' && wasReturn) continue;
         if (char === '\r' || char === '\n' || char === '\u0004') return finish();
         if (char === '\u0003') return finish(stopped());
-        if (char === '\u007f' || char === '\b') typed = [...typed].slice(0, -1).join('');
-        else if (char >= ' ') typed += char;
+        if (char === '\u007f' || char === '\b') {
+          if (typed === '') continue;
+          typed = [...typed].slice(0, -1).join('');
+          if (!hidden) output.write('\b \b');
+        } else if (char === '\u0015') {
+          if (!hidden) output.write('\b \b'.repeat([...typed].length));
+          typed = '';
+        } else if (char >= ' ') {
+          typed += char;
+          if (!hidden) output.write(char);
+        }
       }
     };
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      // Echo goes off first, and only then does the question appear.
+      // Echo goes off first, then what standard input already holds is dropped, and only then does the question appear.
       input.setRawMode(true);
-      output.write(question);
       input.on('data', onData);
       input.resume();
+      timer = setTimeout(() => {
+        if (done) return;
+        asked = true;
+        output.write(question);
+      }, drainMs);
     } catch (error) {
       finish(error instanceof Error ? error : new Error(String(error)));
     }

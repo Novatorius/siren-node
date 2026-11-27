@@ -85,17 +85,37 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(h.paths()).not.toContain('POST /auth/register-org');
   });
 
-  it('refuses a live Siren without --live, before asking for the password', async () => {
-    for (const edition of ['production', 'none'] as const) {
-      for (const argv of [['login', '--password', '--email', EMAIL], ['signup', '--org-name', 'Acme', '--email', EMAIL, '--accept-terms']]) {
-        const h = harness([], { edition, interactive: true, secrets: [PASSWORD], typed: ['y'] });
-        expect(await h.run(argv)).toBe(1);
-        expect(h.editionReads).toHaveLength(1);
-        expect(h.paths()).toEqual([]);
-        expect(h.secretPrompts).toEqual([]);
-        expect(h.err()).toContain('--live');
-      }
-    }
+  it('refuses a sign-up on a live Siren without --live, before asking for the password', async () => {
+    const h = harness([], { edition: 'production', interactive: true, secrets: [PASSWORD], typed: ['y'] });
+    expect(await h.run(['signup', '--org-name', 'Acme', '--email', EMAIL, '--accept-terms'])).toBe(1);
+    expect(h.editionReads).toHaveLength(1);
+    expect(h.paths()).toEqual([]);
+    expect(h.secretPrompts).toEqual([]);
+    expect(h.err()).toContain('--live');
+  });
+
+  it('logs in to a live Siren with no --live, since signing in changes nothing there (review round 1, C1)', async () => {
+    const h = harness([AuthAnswers.oneOrg()], { edition: 'production', interactive: true, secrets: [PASSWORD] });
+    expect(await h.run(['login', '--password', '--email', EMAIL, '--base-url', BASE]), h.err()).toBe(0);
+    expect(h.paths()).toEqual(['POST /auth/login']);
+    expect(h.err()).not.toContain('--live');
+    expect(JSON.parse(h.credentialsText()).sessions[BASE].edition).toBe('production');
+  });
+
+  it('never takes a Siren that names no edition for live: the sandbox host by its address, any other with a one-line note (review round 1, C1)', async () => {
+    const sandbox = harness([AuthAnswers.oneOrg()], { edition: 'none', stdin: PASSWORD });
+    expect(await sandbox.run(['login', '--email', EMAIL, '--password-stdin']), sandbox.err()).toBe(0);
+    expect(sandbox.err()).toBe('');
+    expect(JSON.parse(sandbox.credentialsText()).sessions[SANDBOX_BASE_URL].edition).toBe('sandbox');
+
+    const live = harness([AuthAnswers.oneOrg()], { edition: 'none', stdin: PASSWORD });
+    expect(await live.run(['login', '--live', '--email', EMAIL, '--password-stdin']), live.err()).toBe(0);
+    expect(JSON.parse(live.credentialsText()).sessions[LIVE_BASE_URL].edition).toBe('production');
+
+    const other = harness([AuthAnswers.oneOrg()], { edition: 'none', stdin: PASSWORD });
+    expect(await other.run(['login', '--base-url', BASE, '--email', EMAIL, '--password-stdin']), other.err()).toBe(0);
+    expect(other.err()).toBe(`${new URL(BASE).host} doesn't say whether it is a sandbox or live, so siren treats it as a sandbox.\n`);
+    expect(JSON.parse(other.credentialsText()).sessions[BASE].edition).toBe('sandbox');
   });
 
   it("says what to do when Siren asks for the address to be confirmed, or has sign-up turned off", async () => {
@@ -180,12 +200,7 @@ describe('apps-cli: siren signup, login and the session', () => {
     expect(() => h.credentialsText()).toThrow();
   });
 
-  it('keeps --live for a live organization: refuses it on a sandbox, and requires it for a live session', async () => {
-    const sandbox = harness([], { stdin: PASSWORD });
-    expect(await sandbox.run(['login', '--live', '--email', EMAIL, '--password-stdin'])).toBe(1);
-    expect(sandbox.editionReads[0]?.url).toBe(`${LIVE_BASE_URL}/auth/signup-options`);
-    expect(sandbox.paths()).toEqual([]);
-
+  it('keeps --live for a change to a live organization, and needs none for a read', async () => {
     const live = harness([reply(200, [app])], { edition: 'production' });
     live.signedIn({ [BASE]: session({ edition: 'production' }) });
     // A change needs --live. A read needs none since CLI pass 1 (finding 2).
@@ -590,7 +605,7 @@ describe('apps-cli: siren apps requests, answer and resend', () => {
     h.signedIn();
     expect(await h.run(['apps', 'requests', REQUEST]), h.err()).toBe(0);
     expect(h.paths()).toEqual([`GET /apps/requests/${REQUEST}`, 'GET /apps', `GET /apps/${KEY}/deliveries`, LOOKUP]);
-    expect(h.out()).toMatch(/\n1  failed +500  +upstream timeout\n/);
+    expect(h.out()).toMatch(/\n1\tfailed\t500\tupstream timeout\n/);
     expect(h.out()).toContain('upstream timeout');
     expect(h.out()).toContain('{"received":true}');
     expect(h.out()).toContain('  payoutId  88');

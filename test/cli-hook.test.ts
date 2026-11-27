@@ -105,11 +105,12 @@ describe('apps-cli: the hook plays on first run', () => {
     expect(fake.writes.length).toBe(before);
   });
 
-  it('plays on siren with nothing after it, every time, and exits 0', async () => {
+  it('plays on siren with nothing after it the first time only, then prints the card at once (review round 1, C14)', async () => {
     const { fake, run } = setup();
     expect(await run([])).toBe(0);
+    expect(fake.waits).toHaveLength(FRAME_COUNT - 1);
     expect(await run([])).toBe(0);
-    expect(fake.waits).toHaveLength(2 * (FRAME_COUNT - 1));
+    expect(fake.waits).toHaveLength(FRAME_COUNT - 1);
     expect(fake.text()).toContain('siren login');
   });
 

@@ -41,11 +41,11 @@ describe('finding 7: an unknown kind gets the nearest kind, not all fourteen', (
 });
 
 describe('finding 8: --live only on a command that changes a live organization', () => {
-  it('names every command that is no read and works online, and logout needs none', () => {
+  it('names every command that is no read and works online, and login and logout need none (review round 1, C1)', () => {
     for (const command of COMMANDS) {
       const spec = COMMAND_SPECS[command];
-      // A liveSafe write, such as a note, changes no program, reward or payout, so it takes no --live.
-      const changes = spec.readsOnly !== true && spec.offline !== true && spec.liveSafe !== true && command !== 'logout';
+      // A liveSafe write, such as a note, changes no program, reward or payout, so it takes no --live. Nor does login (review round 1, C1).
+      const changes = spec.readsOnly !== true && spec.offline !== true && spec.liveSafe !== true && command !== 'logout' && command !== 'login';
       expect(LIVE_WRITES.includes(command as never), command).toBe(changes);
     }
   });
@@ -79,7 +79,7 @@ describe('finding 8: --live only on a command that changes a live organization',
     const h = harness([AuthAnswers.oneOrg(), reply(200, appRecord({ needsAttention: 2 })), reply(200, off)], { edition: 'production', stdin: PASSWORD, env: URL_ENV });
     expect(await h.run(['login', '--base-url', UAT, '--live', '--email', EMAIL, '--password-stdin']), h.err()).toBe(0);
     expect(await h.run(['apps', 'show', KEY]), h.err()).toBe(0);
-    expect(h.out()).toContain(`siren apps requests --app ${KEY} --attention lists the 2`);
+    expect(h.err()).toContain(`siren apps requests --app ${KEY} --attention lists the 2`);
 
     h.write('siren.app.json', fileWith({ url: '${SIREN_APP_URL}', features }));
     expect(await h.run(['apps', 'diff']), h.err()).toBe(0);
@@ -94,7 +94,9 @@ describe('finding 9: no app:id note on every apply', () => {
     h.write('siren.app.json', fileWith({ url: '${SIREN_APP_URL}', scopes: ['event:sale'], features }));
     expect(await h.run(['apps', 'apply', '--yes']), h.err()).toBe(0);
     expect(h.out()).toContain('app:11');
-    expect(h.out()).not.toMatch(/autofulfiller|stores/);
+    expect(h.out()).not.toMatch(/stores/);
+    // Review round 1, C3: what picks a new feature is said, since one nothing picks never fires.
+    expect(h.out()).toContain('No autofulfiller picks acme-ledger yet');
   });
 });
 

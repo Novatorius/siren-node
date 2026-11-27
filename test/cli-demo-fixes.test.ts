@@ -62,6 +62,7 @@ describe('demo fix 2: apps requests shows a request that needs attention, howeve
     const h = harness([reply(200, [appRecord()]), reply(200, { requests: [] }), reply(200, { requests: [] })]);
     h.signedIn();
     expect(await h.run(['apps', 'requests', '--app', APP_KEY]), h.err()).toBe(0);
-    expect(h.out()).toBe(`No requests for ${APP_KEY} yet.\nsiren apps requests --app ${APP_KEY} --follow watches for them.\n`);
+    expect(h.err()).toBe(`No requests for ${APP_KEY} yet.\nsiren apps requests --app ${APP_KEY} --follow watches for them.\n`);
+    expect(h.out()).toBe('');
   });
 });

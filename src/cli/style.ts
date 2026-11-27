@@ -80,16 +80,30 @@ export function unbroken(text: string): string {
 }
 
 /** `text` broken at spaces into lines of at most `width` visible columns. A word longer than `width` keeps a line of its own. */
-export function wrapWords(text: string, width: number): string[] {
+export function wrapWords(text: string, width: number, rest = width): string[] {
   const lines: string[] = [];
   let line = '';
+  const room = () => (lines.length === 0 ? width : rest);
   for (const word of text.split(' ')) {
-    if (line !== '' && visibleLength(line) + 1 + visibleLength(word) > width) {
+    if (line !== '' && visibleLength(line) + 1 + visibleLength(word) > room()) {
       lines.push(line);
-      line = word;
-    } else {
-      line = line === '' ? word : `${line} ${word}`;
+      line = '';
     }
+    // Review round 1, C27: a path longer than the line, such as the session file whoami names,
+    // breaks after a slash, so it stays whole and inside the terminal.
+    if (visibleLength(word) > room() && !word.includes('\u001b') && !word.includes('\u00a0')) {
+      let piece = line === '' ? '' : `${line} `;
+      for (const part of word.split(/(?<=\/)/)) {
+        if (piece !== '' && visibleLength(piece) + part.length > room()) {
+          lines.push(piece);
+          piece = '';
+        }
+        piece += part;
+      }
+      line = piece;
+      continue;
+    }
+    line = line === '' ? word : `${line} ${word}`;
   }
   return [...lines, line];
 }
@@ -106,9 +120,7 @@ export function hanging(lead: string, text: string, indent = '  ', width = REPOR
   const rest = width - visibleLength(indent);
   const lines: string[] = [];
   for (const paragraph of text.split('\n')) {
-    const room = lines.length === 0 ? first : rest;
-    const [head = '', ...tail] = wrapWords(paragraph, room);
-    lines.push(head, ...(tail.length === 0 ? [] : wrapWords(tail.join(' '), rest)));
+    lines.push(...wrapWords(paragraph, lines.length === 0 ? first : rest, rest));
   }
   return lines.map((line, at) => `${at === 0 ? lead : indent}${line}`.replace(/\u00a0/g, ' ')).join('\n');
 }
@@ -343,10 +355,12 @@ export class Style {
    * is ever cut (CLI review round 1, C8). When the rows are wider than
    * `width`, the widest columns are narrowed until they fit, no column
    * below its header or {@link MIN_COLUMN}, and each cell wraps at word
-   * boundaries inside its column, so a row may take several lines. Pass
-   * `Infinity` for a pipe, where a row stays on one line.
+   * boundaries inside its column, so a row may take several lines.
+   * Through a pipe each row is one line of cells split by tabs, with no
+   * padding, so a script can split it (CLI review round 1, C12).
    */
   table(headers: readonly string[], rows: ReadonlyArray<readonly string[]>, width: number): string[] {
+    if (!this.rich) return [headers, ...rows].map((row) => row.map((cell) => cell.replace(/\t/g, ' ')).join('\t'));
     const all = [headers, ...rows];
     const natural = headers.map((_, column) => Math.max(...all.map((row) => visibleLength(row[column] ?? ''))));
     const widths = [...natural];

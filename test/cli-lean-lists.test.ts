@@ -25,7 +25,7 @@ describe('a generated list through a pipe', () => {
   it('prints the table alone on standard output, with dates as dates, and the count and Next on standard error', async () => {
     const h = signedIn([reply(200, envelope(programs))]);
     expect(await h.run(['programs', 'list']), h.err()).toBe(0);
-    expect(h.out()).toBe(['id  name              status  createdDate', '2   Partner program   draft   Today 09:58', '1   Referral program  active  Mar 2, 2025', ''].join('\n'));
+    expect(h.out()).toBe(['id\tname\tstatus\tcreatedDate', '2\tPartner program\tdraft\tToday 09:58', '1\tReferral program\tactive\tMar 2, 2025', ''].join('\n'));
     expect(h.err()).toContain('2 programs');
     expect(h.err()).toContain('siren programs get 2');
   });
@@ -53,7 +53,7 @@ describe('--ids and --fields', () => {
     const h = signedIn([reply(200, envelope(programs)), reply(200, envelope(programs))]);
     expect(await h.run(['programs', 'list', '--fields', 'id,name']), h.err()).toBe(0);
     expect(queryOf(h, 0)).toMatchObject({ fields: 'id,name' });
-    expect(h.out()).toBe('id  name\n2   Partner program\n1   Referral program\n');
+    expect(h.out()).toBe('id\tname\n2\tPartner program\n1\tReferral program\n');
     expect(await h.run(['programs', 'list', '--fields', 'name', '--json'])).toBe(0);
     expect(JSON.parse(h.out().slice(h.out().indexOf('{')))).toEqual({ items: [{ name: 'Partner program' }, { name: 'Referral program' }], total: 2, page: 1, perPage: 10, totalPages: 1 });
   });
@@ -132,19 +132,19 @@ describe('default columns (lean output, section 5)', () => {
   it('shows the id, status, money, the related name and the date, and leaves relation ids out, in a pipe as in a terminal', async () => {
     const h = signedIn([reply(200, envelope(conversions)), reply(200, registry)]);
     expect(await h.run(['conversions', 'list']), h.err()).toBe(0);
-    expect(h.out()).toBe(['id    status   amount     collaboratorName  dateCreated', '5632  pending  $5.00 USD  Shay Okonkwo      Today 09:20', ''].join('\n'));
+    expect(h.out()).toBe(['id\tstatus\tamount\tcollaboratorName\tdateCreated', '5632\tpending\t$5.00 USD\tShay Okonkwo\tToday 09:20', ''].join('\n'));
   });
 
   it('shows the email when a record has no name', async () => {
     const h = signedIn([reply(200, envelope([{ id: 3, nickname: 'ana', email: 'ana@example.com', status: 'active', referralCode: 'ANA', dateCreated: '2026-11-17T09:20:41+00:00' }]))]);
     expect(await h.run(['collaborators', 'list']), h.err()).toBe(0);
-    expect(h.out().split('\n')[0]).toBe('id  email            status  dateCreated');
+    expect(h.out().split('\n')[0]).toBe('id\temail\tstatus\tdateCreated');
   });
 
   it('keeps every column a record has when none of them is a known kind', async () => {
     const h = signedIn([reply(200, envelope([{ id: 'x', alpha: 1, beta: 2 }]))]);
     expect(await h.run(['get', '/odd']), h.err()).toBe(0);
-    expect(h.out().split('\n')[0]).toBe('id  alpha  beta');
+    expect(h.out().split('\n')[0]).toBe('id\talpha\tbeta');
   });
 });
 

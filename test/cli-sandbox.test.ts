@@ -326,7 +326,8 @@ describe('sandbox: siren sandbox create', () => {
     expect(await h.run(['sandbox', 'create', '--from', 'acme', '--live-url', 'siren.acme.example'])).toBe(1);
     expect(h.paths()).toEqual([]);
     expect(h.err()).toContain('login');
-    expect(h.err()).toContain('--live');
+    // Review round 1, C1: logging in needs no --live, so the hint names none.
+    expect(h.err()).not.toContain('login --live');
   });
 
   it('refuses a --from Siren that is a sandbox', async () => {
@@ -461,8 +462,8 @@ describe('sandbox: siren sandbox list', () => {
     expect(await plain.run(['sandbox', 'list'])).toBe(0);
     // Through a pipe, standard output holds the table alone, and the headline and tip go to standard error (review of PR 94).
     expect(plain.err()).toContain('2 sandbox organizations on sandbox.sirenaffiliates.com');
-    expect(plain.out()).toMatch(/^acme-sandbox +Acme \(sandbox\) +acme on siren\.acme\.example/m);
-    expect(plain.out().split('\n')[0]).toMatch(/^ORG +NAME/);
+    expect(plain.out()).toMatch(/^acme-sandbox\tAcme \(sandbox\)\tacme on siren\.acme\.example/m);
+    expect(plain.out().split('\n')[0]).toMatch(/^ORG\tNAME/);
     expect(plain.out()).not.toContain('*');
     expect(plain.out()).not.toContain('siren use');
     expect(plain.out()).not.toContain('Pass --org');
@@ -576,7 +577,7 @@ describe('sandbox: siren sandbox inbox', () => {
     expect(h.paths()).toEqual(['GET /sandbox/inbox']);
     expect(new URL(h.http.requests[0]!.url).searchParams.get('number')).toBe('5');
     expect(h.err()).toContain("1 email in acme's sandbox inbox");
-    expect(h.out()).toMatch(/#31 +2026-11-24 17:40 +ana@example\.com +Your commission was approved/);
+    expect(h.out()).toMatch(/#31\t2026-11-24 17:40\tana@example\.com\tYour commission was approved/);
     expect(h.err()).toContain('siren sandbox inbox --org acme 31');
 
     const one = harness([reply(200, { ...email, text: 'Your commission of $12.00 was approved.', html: '<p>…</p>', headers: {} })], { env: { SIREN_ORG: '3' } });
@@ -660,7 +661,8 @@ describe('sandbox: what Siren sends, printed', () => {
   const sly = (text: string) => `${text}\u001b[2J\u001b]8;;https://evil.example\u0007\u009b1A`;
   /** Nothing but line breaks among the control characters, and no line past 80 columns. */
   const clear = (text: string, width = true) => {
-    expect(text).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    // A tab splits the columns of a piped list (review round 1, C12), so only it is let through.
+    expect(text).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
     if (width) for (const line of text.split('\n')) expect([...line].length, line).toBeLessThanOrEqual(80);
   };
 
@@ -669,14 +671,14 @@ describe('sandbox: what Siren sends, printed', () => {
     h.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await h.run(['sandbox', 'list']), h.err()).toBe(0);
     clear(h.out());
-    expect(h.out()).toMatch(/^acme +Acme/m);
+    expect(h.out()).toMatch(/^acme\tAcme/m);
 
     const email = { id: 31, recipients: [sly('ana@example.com')], subject: sly('Your commission'), fromName: sly('Acme'), template: sly('conversion-approved'), createdAt: sly('2026-11-24T17:40:00+00:00') };
     const list = harness([reply(200, { emails: [email], total: 1 })]);
     list.signedIn({ [SANDBOX_BASE_URL]: session({ orgSlug: 'acme' }) });
     expect(await list.run(['sandbox', 'inbox', '--org', 'acme']), list.err()).toBe(0);
     clear(list.out());
-    expect(list.out()).toMatch(/#31 +2026-11-24 17:40 +ana@example\.com +Your commission/);
+    expect(list.out()).toMatch(/#31\t2026-11-24 17:40\tana@example\.com\tYour commission/);
 
     const one = harness([reply(200, { ...email, text: `Hello,\r\n${sly('Your commission was approved.')}\n\tThanks` })], { env: { SIREN_ORG: '3' } });
     one.signedIn();

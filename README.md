@@ -249,6 +249,12 @@ address. `listen` and `trigger` arrive with the command-line tool's next release
 4. In another terminal, `siren trigger ask <app> <feature>` sends a real sample request for one
    feature through it. On a live Siren it needs `--live` and a yes, and it refuses a payout method.
 
+A feature does nothing until a record picks it. A post-conversion action fires only for a program
+that lists it, after the conversion is approved, and a payout method only for an autofulfiller
+whose method it is. `siren apps apply` and `siren apps show` name each feature nothing picks yet,
+with the recipe line that picks it, such as `"postConversionActions":[{"type":"app:11"}]` on a
+program. The feature kinds table below says what picks each kind.
+
 Set `logger: console` on the handler while you work, and it writes one line per request with its
 status and time.
 
@@ -2210,7 +2216,7 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | Command | What it does |
 |---|---|
 | `siren signup` | Makes an organization and logs you in. It asks for the organization's name, your email, the terms and a password, or takes `--org-name`, `--email`, `--accept-terms` and `--password-stdin`. |
-| `siren login` | Logs you in by a code you approve in the browser: it opens the dashboard's approval page, prints the code, the link and the Siren it polls in case the browser does not open, and waits up to 15 minutes. It opens no page on another host than the Siren it logs in to, except the dashboard beside a Siren Cloud API, and no plain http page off this machine. It logs in you, not one organization, and keeps every organization you belong to. `--password` or `--password-stdin` logs in with your email and password instead, on a machine with no browser. The commands after it talk to the Siren it logged in to, unless `--base-url`, `--sandbox` or `SIREN_BASE_URL` names another. |
+| `siren login` | Logs you in by a code you approve in the browser: it opens the dashboard's approval page, prints the code, the link and the Siren it polls in case the browser does not open, and waits up to 15 minutes. It opens no page on another host than the Siren it logs in to, except the dashboard beside a Siren Cloud API, and no plain http page off this machine. It logs in you, not one organization, and keeps every organization you belong to. `--password` or `--password-stdin` logs in with your email and password instead, on a machine with no browser. On a Siren with no browser login yet, it says so in one line and asks for your email and password in the same run. It needs no `--live` on a live Siren, since logging in changes nothing there. The commands after it talk to the Siren it logged in to, unless `--base-url`, `--sandbox` or `SIREN_BASE_URL` names another. |
 | `siren whoami` | Prints which credential the commands use, who it acts as, the organization and role, and the Siren and whether it is live. With `SIREN_TOKEN` set it names the token and asks Siren about it. Otherwise it reads the session file, sends nothing, and exits 1 when you are signed out. `--json` prints the same for a script, with `source` set to `SIREN_TOKEN` or `session`. |
 | `siren logout` | Signs out and forgets the session on this machine, even when Siren refuses. A session made when the Siren was the other edition is forgotten here and its tokens are not sent. |
 | `siren orgs` | Lists your organizations as a table, and marks the one `--org`, `SIREN_ORG` or the app file picks. `--json` prints them. |
@@ -2221,8 +2227,8 @@ siren apps requests --follow         # watch what Siren sends and what comes bac
 | `siren apps events [--json]` | Lists the events Siren can send an app's address, one line each with what it means. |
 | `siren apps diff [file] [--json]` | Reads the app on Siren and prints the plan apply would show, or that the file matches. It sends nothing and asks nothing, and a live organization needs no `--live`. It exits 0 when the file matches and 3 when apply would change something, so a CI check can tell a difference from a failure, which exits 1. `--json` prints the plan as data: `app`, `org`, `new`, `matches`, and `changes`, each with `op` set to `add`, `remove` or `change` and the plan's `text`. |
 | `siren apps list` | Lists the apps as a table: each app's state, how many features it has, how many of its requests need attention, and the host Siren sends its requests to. A tip names the `siren apps requests --app <key> --attention` that lists the requests that need you. `--json` prints what Siren sent. |
-| `siren apps show [key]` | Shows one app, the one siren.app.json names when no key is given: its key, with its name beside it when the two differ, then its state, host, key prefix and events. Then its features as a table of `app:{id}`, key, kind and name. In a narrow terminal the kind drops its code name, which a Kinds row above lists, before the name is cut short, with each archived feature marked beside its name, and how many of its requests need attention when any do. |
-| `siren apps requests` | Lists the requests as a table, oldest first: the latest 50, and every request that needs attention however old. Siren keeps the list to one app when it is one app's, and the tool reads the attention list in pages of 100. When Siren counts more that need attention than the list holds, as an older Siren that answers only its newest 50 does, an amber line says how many, and names the app list that shows the rest. Each row shows the first 8 characters of the id, which every command takes in place of the whole id when no other request starts the same way (a Siren older than the prefix lookup prints and takes whole ids), the local time, the app, the feature, what the request is about, its sends and its state. In a folder whose siren.app.json holds one app, the list is that app's, and `--all` lists every app. `--app <key>` and `--attention` narrow the list, and `--attention` shows why each request needs you. A terminal shows the newest 20 and counts the rest, which `--json` prints. `--follow` asks again every 2 seconds and prints each change as a row, stops with exit code 130 on Ctrl-C, and stops with 1 when the Siren becomes live or becomes a sandbox. `--json` prints the rows Siren sent, or one JSON object a line with `--follow`. |
+| `siren apps show [key]` | Shows one app, the one siren.app.json names when no key is given: its key, with its name beside it when the two differ, then its state, host, key prefix and events. Then its features as a table of `app:{id}`, key, kind, how many records pick it when Siren says, and name, and a line for each feature nothing picks yet that says how to pick it. In a narrow terminal the kind drops its code name, which a Kinds row above lists, before the name is cut short, with each archived feature marked beside its name, and how many of its requests need attention when any do. |
+| `siren apps requests` | Lists the requests as a table, newest first: the latest 50, and every request that needs attention however old. Siren keeps the list to one app when it is one app's, and the tool reads the attention list in pages of 100. When Siren counts more that need attention than the list holds, as an older Siren that answers only its newest 50 does, an amber line says how many, and names the app list that shows the rest. Each row shows the first 8 characters of the id, which every command takes in place of the whole id when no other request starts the same way (a Siren older than the prefix lookup prints and takes whole ids), the local time, the app, the feature, what the request is about, its sends and its state. In a folder whose siren.app.json holds one app, the list is that app's, and `--all` lists every app. `--app <key>` and `--attention` narrow the list, and `--attention` shows why each request needs you. A terminal shows the newest 20 and counts the rest, which `--json` prints. `--follow` asks again every 2 seconds and prints each change as a row, stops with exit code 130 on Ctrl-C, and stops with 1 when the Siren becomes live or becomes a sandbox. `--json` prints the rows newest first, or one JSON object a line with `--follow`. |
 | `siren apps requests <id>` | Shows one request, however old: its state, kind, app and feature, what it is about, when Siren made it, the answer Siren took and who gave it, then its sends as a table with each HTTP status and what the app said back, then the data Siren sent as indented key and value lines, each object in a list under its number, and the commands that answer it or send it again. `--json` prints the whole request as Siren sent it, with `appKey`, `featureKey` and its `sends`, so a saved request can be replayed against a handler. |
 | `siren apps answer <id>` | Answers an ask by hand, with `--body <json>` or `--file <path>`. A person may answer only a request that needs attention, which `siren apps requests --attention` lists. |
 | `siren apps resend <id>` | Sends a request again, and prints its state and how many sends it has had. When Siren refuses because the request's app is off, it names the `siren apps on <key>` that turns it on. |
@@ -2365,17 +2371,22 @@ its line and column, and nothing is sent.
 The tool talks to `SIREN_BASE_URL`, else the Siren you last signed in to, else the sandbox.
 `--base-url <url>` names another Siren, and takes plain http only for `localhost`, `127.0.0.1` and
 `host.docker.internal`. A bare host such as `siren.example.com` gets `https://` and `/siren/v1`.
-Signing in to a live organization and changing one need `--live`. Reading one (`orgs`, `use`,
+Changing a live organization needs `--live`. Logging in doesn't, and neither does reading one (`orgs`, `use`,
 `whoami`, `apps list`, `apps show`, `apps requests`) does not, and `--live` against a sandbox is
 refused. Every
 command that sends anything first asks the Siren whether it is a sandbox or live, and refuses a
 session made when it was the other, so a sandbox session never reaches a Siren that became live.
 The session lives in credentials.json in `SIREN_CONFIG_DIR`, else your config folder's `siren` folder,
 readable by you alone. It never holds your password, an app's key or its secret. The first time you
-run the tool in a terminal it plays Siren's logo animation, under three seconds, with its text printed at once beside it. Any key skips it, and it never
+run the tool in a terminal it plays Siren's logo animation, under three seconds, with its text printed at once beside it. It plays once per machine, `siren` alone included, so every later run answers at once. Any key skips it, and it never
 plays under `--quiet`, `--json`, `NO_COLOR`, `CI` or a pipe. The tool answers 0
 when it did what you asked, 1 when Siren or the tool refused, and 2 for a command line it cannot
 read.
+
+In a terminal every view wraps to the terminal's width at word boundaries, and no name or value is
+ever cut. Through a pipe, standard output holds the data alone: a list prints one line a row, its
+cells split by tabs, and the count line, tips and next steps go to standard error. Lists print newest
+first. `--json` prints the records themselves.
 
 examples/apps/acme in this repository is a small app that checks each request, answers every ask,
 and sends a sale with the app's own key. Its README walks through running it against the sandbox.

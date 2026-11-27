@@ -1,5 +1,8 @@
 import { parseArgs } from 'node:util';
 import type { ParseArgsConfig } from 'node:util';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { APP_FILE_NAME } from './app-file';
 import * as apply from './commands/apply';
 import * as listen from './commands/listen';
 import * as logs from './commands/logs';
@@ -1172,12 +1175,20 @@ async function statusCard(io: CliIo, target: Target): Promise<HookCard> {
   const store = new CredentialStore(io.configDir);
   const token = io.env.SIREN_TOKEN !== undefined && io.env.SIREN_TOKEN !== '';
   const kept = token ? null : await store.get(target.baseUrl).catch(() => null);
+  // Review round 1, C24: in a folder that already holds siren.app.json, init has nothing to do.
+  const hasFile = (await readFile(join(io.cwd, APP_FILE_NAME), 'utf8').catch(() => undefined)) !== undefined;
   const next: Array<readonly [string, string]> = kept || token
-    ? [
-        ['siren apps init', 'write siren.app.json in this folder'],
-        ['siren apps apply', 'declare the app on Siren and save its key'],
-        ['siren apps requests --follow', 'watch what Siren sends it'],
-      ]
+    ? hasFile
+      ? [
+          ['siren apps diff', `show what ${APP_FILE_NAME} would change on Siren`],
+          ['siren apps apply', 'send the changes'],
+          ['siren apps requests --follow', 'watch what Siren sends it'],
+        ]
+      : [
+          ['siren apps init', 'write siren.app.json in this folder'],
+          ['siren apps apply', 'declare the app on Siren and save its key'],
+          ['siren apps requests --follow', 'watch what Siren sends it'],
+        ]
     : [
         ['siren login', 'log in, or siren signup to make an organization'],
         ['siren apps init', 'write siren.app.json in this folder'],
