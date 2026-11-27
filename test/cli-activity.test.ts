@@ -60,14 +60,21 @@ describe('siren activity --on', () => {
     expect(h.err()).not.toContain('--cursor');
   });
 
-  it('prints two lines an item in a terminal, the page dim beneath, within 80 columns', async () => {
+  it('prints the record page once, then each item as a heading and its full text wrapped beneath, within 80 columns', async () => {
     const h = signedIn(all());
     const tty = { ...h.io, stdoutTty: true, env: { ...h.io.env, TERM: 'xterm-256color' } };
     expect(await runCli(['activity', '--on', 'collaborator:208', '--limit', '3'], tty), h.err()).toBe(0);
     const plain = h.out().replace(/\u001b\[[0-9;]*m/g, '').trimEnd().split('\n');
-    expect(plain).toHaveLength(6);
-    expect(plain[1]).toBe(`          ${APP}/collaborators/208/view?org=uat-org`);
+    expect(plain.slice(0, 2)).toEqual(['Activity on collaborator 208', `${APP}/collaborators/208/view?org=uat-org`]);
+    // The page is not repeated under each note.
+    expect(plain.filter((line) => line.includes(APP))).toHaveLength(1);
+    expect(plain[3]).toBe('Nov 27 17:39  note 14334');
+    // The note's whole text, wrapped at spaces and never cut with an ellipsis.
+    const body = plain.slice(4, plain.indexOf('', 4)).map((line) => line.trim()).join(' ');
+    expect(body).toBe('Conversion for sale (€109.00 EUR) in EU Partner Program approved by admin@siren-uat.local');
+    expect(h.out()).not.toContain('…');
     for (const line of plain) expect(line.length).toBeLessThanOrEqual(80);
+    expect(h.err()).toContain('opens its page in Siren.');
   });
 
   it('prints the items, the record, the cursor and what it left out as JSON, amounts as Siren stores them', async () => {
