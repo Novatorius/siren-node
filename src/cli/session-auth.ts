@@ -4,6 +4,7 @@ import type { HttpClient, HttpResponse } from '../http';
 import type { CliIo } from './io';
 import { clean } from './style';
 import { CliRefusal, CliUsageError } from './targets';
+import { SDK_VERSION } from '../version';
 
 /*
  * Signing a person in from a terminal, against Siren's session routes
@@ -145,7 +146,7 @@ export interface RegisterOrgParams {
 }
 
 /** The SDK's `User-Agent`, the one `HttpTransport` sends. */
-const USER_AGENT = 'siren-sdk-typescript/0.4.0';
+const USER_AGENT = `siren-sdk-typescript/${SDK_VERSION}`;
 
 /** How long a session call may take, the SDK's default. */
 const DEFAULT_SESSION_TIMEOUT_MS = 30_000;

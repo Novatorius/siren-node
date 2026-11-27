@@ -3,6 +3,7 @@ import { AppAccessTokens } from './auth/app-access-tokens';
 import type { GrantedToken } from './auth/app-access-tokens';
 import { usableBearerToken } from './auth/bearer-token';
 import { ConnectionError, SirenError, UnexpectedResponseError, errorFromResponse } from './errors';
+import { SDK_VERSION } from './version';
 
 export const DEFAULT_BASE_URL = 'https://api.sirenaffiliates.com/siren/v1';
 /**
@@ -325,7 +326,7 @@ export class HttpTransport {
       url,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'siren-sdk-typescript/0.4.0',
+        'User-Agent': `siren-sdk-typescript/${SDK_VERSION}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(fields),
@@ -513,7 +514,7 @@ export class HttpTransport {
     }
     headers.Authorization = `Bearer ${token}`;
     headers.Accept = 'application/json';
-    headers['User-Agent'] = 'siren-sdk-typescript/0.4.0';
+    headers['User-Agent'] = `siren-sdk-typescript/${SDK_VERSION}`;
     if (body === undefined) return { method, url, headers, timeout };
     headers['Content-Type'] = 'application/json';
     return { method, url, headers, body, timeout };
