@@ -81,7 +81,7 @@ export async function openRecord(input: CommandInput): Promise<number> {
         throw new CliRefusal(`Siren has no ${words} ${id} in ${clean(scope.orgSlug)}.`, {
           why: 'So there is no page to open.',
           fix: input.command(`${resourceOf(type)} list`),
-          fixWords: `lists the ${words}s there are`,
+          fixWords: `to list the ${words}s there are`,
         });
       }
       throw error;
