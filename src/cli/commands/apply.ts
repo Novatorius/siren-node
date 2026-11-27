@@ -722,6 +722,9 @@ export async function appsScopes(input: CommandInput): Promise<number> {
   const allows = (entry: { resource: string; label: string }) => (entry.resource === 'events' ? `Send ${clean(entry.label).toLowerCase()} events` : clean(entry.label));
   const rows = Object.values(groups).flatMap((entries) => (entries ?? []).map((entry) => [clean(entry.scope), allows(entry)]));
   for (const line of out.table(['SCOPE', 'ALLOWS'], rows, widthOf(input, out))) run.print(line);
+  // The review's question on two names for one event (review round 1): say which list each name goes in.
+  run.aside(out, '');
+  run.aside(out, out.next(out.dim(`siren.app.json lists these under "scopes". An event: scope, such as event:sale, lets the key send that event to Siren. The events Siren sends your app have other names, such as sale.created, and go under "events", which ${unbroken(run.command('apps events'))} lists.`)));
   return 0;
 }
 
@@ -741,6 +744,8 @@ export async function appsEvents(input: CommandInput): Promise<number> {
   const out = styleFor(input.io, 'stdout', {});
   const rows = catalog.map((entry) => [clean(entry.event), clean(entry.label)]);
   for (const line of out.table(['EVENT', 'MEANS'], rows, widthOf(input, out))) run.print(line);
+  run.aside(out, '');
+  run.aside(out, out.next(out.dim(`siren.app.json lists these under "events", and Siren sends each to the app's url. Sending an event to Siren takes a scope with another name, such as event:sale for a sale, which goes under "scopes" and ${unbroken(run.command('apps scopes'))} lists.`)));
   return 0;
 }
 
